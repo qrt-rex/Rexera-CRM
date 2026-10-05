@@ -120,6 +120,15 @@ export function downloadCsv(filename: string, rows: Record<string, unknown>[]) {
 }
 
 export function parseCsv(text: string): Record<string, string>[] {
+  const [head, ...body] = parseCsvRows(text)
+  if (!head) return []
+  const keys = head.map((h) => h.trim().toLowerCase())
+  return body.map((r) => Object.fromEntries(keys.map((k, i) => [k, (r[i] ?? '').trim()])))
+}
+
+/** Raw CSV (or other single-character delimiter) → rows of cells; blank lines dropped. */
+export function parseCsvRows(text: string, delimiter = ','): string[][] {
+  text = text.replace(/^﻿/, '')
   const rows: string[][] = []
   let row: string[] = [], cell = '', q = false
   for (let i = 0; i < text.length; i++) {
@@ -129,17 +138,14 @@ export function parseCsv(text: string): Record<string, string>[] {
       else if (c === '"') q = false
       else cell += c
     } else if (c === '"') q = true
-    else if (c === ',') { row.push(cell); cell = '' }
+    else if (c === delimiter) { row.push(cell); cell = '' }
     else if (c === '\n' || c === '\r') {
       if (c === '\r' && text[i + 1] === '\n') i++
       row.push(cell); rows.push(row); row = []; cell = ''
     } else cell += c
   }
   if (cell || row.length) { row.push(cell); rows.push(row) }
-  const [head, ...body] = rows.filter((r) => r.some((x) => x.trim()))
-  if (!head) return []
-  const keys = head.map((h) => h.trim().toLowerCase())
-  return body.map((r) => Object.fromEntries(keys.map((k, i) => [k, (r[i] ?? '').trim()])))
+  return rows.filter((r) => r.some((x) => x.trim()))
 }
 
 export const INDIAN_STATES = [

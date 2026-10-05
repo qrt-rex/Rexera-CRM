@@ -5,7 +5,7 @@ import type { Perm, Role, User } from '../../lib/types'
 import { useDb, resetDemoData } from '../../lib/store'
 import { useMe } from '../../lib/auth'
 import { resetUserPassword, setRolePerms, updateSettings, updateUser, userName } from '../../lib/actions'
-import { ALL_PERMS, DEFAULT_ROLE_PERMS, PERM_GROUPS, RESERVED, ROLES, effectivePerms, roleLabel } from '../../lib/rbac'
+import { ALL_PERMS, DEFAULT_ROLE_PERMS, MASTER_ROLES, PERM_GROUPS, RESERVED, ROLES, effectivePerms, roleLabel, rolesOf } from '../../lib/rbac'
 import { INDIAN_STATES, fmtDate } from '../../lib/format'
 import { Avatar, Badge, Button, Card, CardHeader, Checkbox, cx, Drawer, Input, PageHeader, SearchBox, Select, Table, Tabs, Td, Th, Toggle, useConfirm, useRun } from '../../components/ui'
 
@@ -32,6 +32,7 @@ function UsersTab() {
   const [confirm, node] = useConfirm()
   const [q, setQ] = useState('')
   const [open, setOpen] = useState<User | null>(null)
+  const meSA = rolesOf(me).includes('superadmin')
   const list = db.users.filter((u) => !q || `${u.name} ${u.username} ${u.email}`.toLowerCase().includes(q.toLowerCase()))
   const cur = open ? db.users.find((u) => u.id === open.id)! : null
 
@@ -42,18 +43,19 @@ function UsersTab() {
         <thead><tr><Th>User</Th><Th>Role</Th><Th>Extra roles</Th><Th>Custom</Th><Th>Active</Th><Th className="text-right">Actions</Th></tr></thead>
         <tbody>
           {list.map((u) => {
-            const self = u.id === me.id
+            // Super Admin accounts can only be changed by a Super Admin
+            const self = u.id === me.id || (rolesOf(u).includes('superadmin') && !meSA)
             return (
               <tr key={u.id} className={u.active ? '' : 'opacity-60'}>
-                <Td><span className="flex items-center gap-3"><Avatar name={u.name} photo={u.photo} size={34} /><span><span className="block font-semibold">{u.name}{self && <Badge tone="navy" className="ml-2">you</Badge>}</span><span className="text-xs text-mute">@{u.username} · {u.email}</span></span></span></Td>
+                <Td><span className="flex items-center gap-3"><Avatar name={u.name} photo={u.photo} size={34} /><span><span className="block font-semibold">{u.name}{u.id === me.id && <Badge tone="navy" className="ml-2">you</Badge>}{u.id !== me.id && self && <Badge tone="gray" className="ml-2">protected</Badge>}</span><span className="text-xs text-mute">@{u.username} · {u.email}</span></span></span></Td>
                 <Td><select disabled={self} value={u.role} onChange={(e) => run(() => updateUser(me, u.id, { role: e.target.value as Role }), 'Role changed')} className="h-9 rounded-lg border border-line bg-card px-2 text-sm disabled:opacity-60" aria-label="Role">
-                  {ROLES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}</select></Td>
+                  {ROLES.filter((r) => meSA || r.id !== 'superadmin' || u.role === 'superadmin').map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}</select></Td>
                 <Td className="text-xs">{u.extraRoles.length ? u.extraRoles.map(roleLabel).join(', ') : <span className="text-mute">—</span>}</Td>
                 <Td className="text-xs">{u.grants.length || u.denies.length ? <><Badge tone="green">+{u.grants.length}</Badge> <Badge tone="red">−{u.denies.length}</Badge></> : <span className="text-mute">—</span>}</Td>
                 <Td><Toggle checked={u.active} label="Active" onChange={(v) => !self && run(() => updateUser(me, u.id, { active: v }), v ? 'Activated' : 'Deactivated')} /></Td>
                 <Td className="text-right"><span className="inline-flex gap-1">
                   <Button size="sm" variant="soft" icon={UserCog} disabled={self} onClick={() => setOpen(u)}>Manage access</Button>
-                  <Button size="sm" variant="ghost" icon={RefreshCcw} aria-label="Reset password" title="Reset to demo password" onClick={async () => { if (await confirm('Reset password?', `${u.name}'s password will be reset to the demo password.`)) run(() => resetUserPassword(me, u.id), 'Password reset') }} />
+                  <Button size="sm" variant="ghost" icon={RefreshCcw} aria-label="Reset password" title="Reset to demo password" disabled={u.id !== me.id && self} onClick={async () => { if (await confirm('Reset password?', `${u.name}'s password will be reset to the demo password.`)) run(() => resetUserPassword(me, u.id), 'Password reset') }} />
                 </span></Td>
               </tr>
             )
@@ -124,7 +126,7 @@ function RolesTab() {
   const save = () => run(() => { for (const r of ROLES) if (r.id !== 'superadmin' && JSON.stringify(draft[r.id]) !== JSON.stringify(db.rolePerms[r.id])) setRolePerms(me, r.id, draft[r.id]) }, 'Permissions saved')
   return (
     <Card className="overflow-hidden">
-      <CardHeader title="Role × permission matrix" subtitle="Super Admin always has everything. 🔒 = reserved to specific roles." icon={ShieldCheck}
+      <CardHeader title="Role × permission matrix" subtitle="Super Admin and IT Support (master roles) always have everything. 🔒 = reserved to specific roles." icon={ShieldCheck}
         action={<span className="flex gap-2"><Button size="sm" variant="outline" onClick={() => setDraft(structuredClone(DEFAULT_ROLE_PERMS))}>Defaults</Button><Button size="sm" icon={Save} disabled={!dirty} onClick={save}>Save changes</Button></span>} />
       <Table>
         <thead><tr><Th className="sticky left-0 z-10 bg-card2">Permission</Th>{ROLES.map((r) => <Th key={r.id} className="text-center"><span className="inline-flex items-center gap-1"><span className="size-2 rounded-full" style={{ background: r.color }} />{r.short}</span><span className="block text-[9px] font-normal normal-case">{r.label}</span></Th>)}</tr></thead>
@@ -135,8 +137,9 @@ function RolesTab() {
               <tr key={p.id} className="hover:bg-card2/40">
                 <Td className="sticky left-0 z-10 bg-card text-sm">{p.label}{RESERVED[p.id] && ' 🔒'}<span className="block font-mono text-[10px] text-mute">{p.id}</span></Td>
                 {ROLES.map((r) => {
-                  const locked = r.id === 'superadmin' || (RESERVED[p.id] && !RESERVED[p.id]!.includes(r.id))
-                  return <Td key={r.id} className="text-center"><input type="checkbox" aria-label={`${r.label}: ${p.label}`} className="size-4 accent-[var(--brand)]" disabled={!!locked} checked={r.id === 'superadmin' || draft[r.id].includes(p.id)} onChange={() => toggle(r.id, p.id)} /></Td>
+                  const master = MASTER_ROLES.includes(r.id)
+                  const locked = master || (RESERVED[p.id] && !RESERVED[p.id]!.includes(r.id))
+                  return <Td key={r.id} className="text-center"><input type="checkbox" aria-label={`${r.label}: ${p.label}`} className="size-4 accent-[var(--brand)]" disabled={!!locked} checked={master || draft[r.id].includes(p.id)} onChange={() => toggle(r.id, p.id)} /></Td>
                 })}
               </tr>
             )),

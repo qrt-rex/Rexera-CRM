@@ -35,6 +35,42 @@ const Notifications = lazy(() => import('./pages/modules/Notifications'))
 const Access = lazy(() => import('./pages/modules/Access'))
 const Audit = lazy(() => import('./pages/modules/Audit'))
 const Settings = lazy(() => import('./pages/modules/Settings'))
+const Payroll = lazy(() => import('./pages/hr/Payroll'))
+const Payslips = lazy(() => import('./pages/hr/Payslips'))
+const Pf = lazy(() => import('./pages/hr/Pf'))
+const Incentives = lazy(() => import('./pages/hr/Incentives'))
+const IncentiveSettings = lazy(() => import('./pages/hr/IncentiveSettings'))
+const Performance = lazy(() => import('./pages/hr/Performance'))
+const Recruitment = lazy(() => import('./pages/hr/Recruitment'))
+const ApiKeys = lazy(() => import('./pages/it/ApiKeys'))
+const BackupPage = lazy(() => import('./pages/it/Backup'))
+const EmailCenter = lazy(() => import('./pages/hr/EmailCenter'))
+const InboxPage = lazy(() => import('./pages/modules/Inbox'))
+
+// Pokiee Cute Cartoon HR Suite
+const PokieeDashboard = lazy(() => import('./pokiee/pages/PokieeDashboard'))
+const PokieeEmployees = lazy(() => import('./pokiee/pages/PokieeEmployees'))
+const PokieeEmployeeProfile = lazy(() => import('./pokiee/pages/PokieeEmployeeProfile'))
+const PokieeEmployeeForm = lazy(() => import('./pokiee/pages/PokieeEmployeeForm'))
+const PokieeInterns = lazy(() => import('./pokiee/pages/PokieeInterns'))
+const PokieeRecruitment = lazy(() => import('./pokiee/pages/PokieeRecruitment'))
+const PokieeAttendance = lazy(() => import('./pokiee/pages/PokieeAttendance'))
+const PokieeLeave = lazy(() => import('./pokiee/pages/PokieeLeave'))
+const PokieeProductivity = lazy(() => import('./pokiee/pages/PokieeProductivity'))
+const PokieePerformance = lazy(() => import('./pokiee/pages/PokieePerformance'))
+const PokieePayroll = lazy(() => import('./pokiee/pages/PokieePayroll'))
+const PokieePayslips = lazy(() => import('./pokiee/pages/PokieePayslips'))
+const PokieePF = lazy(() => import('./pokiee/pages/PokieePF'))
+const PokieeIncentives = lazy(() => import('./pokiee/pages/PokieeIncentives'))
+const PokieeLoans = lazy(() => import('./pokiee/pages/PokieeLoans'))
+const PokieeBonuses = lazy(() => import('./pokiee/pages/PokieeBonuses'))
+const PokieeBroadcasts = lazy(() => import('./pokiee/pages/PokieeBroadcasts'))
+const PokieeImport = lazy(() => import('./pokiee/pages/PokieeImport'))
+const PokieeSettings = lazy(() => import('./pokiee/pages/PokieeSettings'))
+const PokieeBackup = lazy(() => import('./pokiee/pages/PokieeBackup'))
+const PokieeCandidatePortal = lazy(() => import('./pokiee/pages/PokieeCandidatePortal'))
+const PokieeNewJoinerPortal = lazy(() => import('./pokiee/pages/PokieeNewJoinerPortal'))
+import { PokieeLayout } from './pokiee/PokieeLayout'
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { user } = useAuth()
@@ -57,8 +93,7 @@ function DashboardRoute() {
 }
 
 function HomeRedirect() {
-  const { user } = useAuth()
-  return <Navigate to={user ? `/dashboard/${user.role}` : '/login'} replace />
+  return <Navigate to="/hr" replace />
 }
 
 function NotFound() {
@@ -86,9 +121,40 @@ export default function App() {
       <ToastProvider>
         <AuthProvider>
           <Routes>
+            {/* Standalone Public Portals (No HR admin sidebar) */}
+            <Route path="/apply" element={<S><PokieeCandidatePortal /></S>} />
+            <Route path="/joining" element={<S><PokieeNewJoinerPortal /></S>} />
+
+            {/* Pokiee Cute Cartoon HR Suite */}
+            <Route path="/hr" element={<PokieeLayout />}>
+              <Route index element={<S><PokieeDashboard /></S>} />
+              <Route path="employees" element={<S><PokieeEmployees /></S>} />
+              <Route path="employees/new" element={<S><PokieeEmployeeForm /></S>} />
+              <Route path="employees/:id" element={<S><PokieeEmployeeProfile /></S>} />
+              <Route path="employees/:id/edit" element={<S><PokieeEmployeeForm /></S>} />
+              <Route path="interns" element={<S><PokieeInterns /></S>} />
+              <Route path="recruitment" element={<S><PokieeRecruitment /></S>} />
+              <Route path="attendance" element={<S><PokieeAttendance /></S>} />
+              <Route path="leave" element={<S><PokieeLeave /></S>} />
+              <Route path="productivity" element={<S><PokieeProductivity /></S>} />
+              <Route path="performance" element={<S><PokieePerformance /></S>} />
+              <Route path="payroll" element={<S><PokieePayroll /></S>} />
+              <Route path="payslips" element={<S><PokieePayslips /></S>} />
+              <Route path="pf" element={<S><PokieePF /></S>} />
+              <Route path="incentives" element={<S><PokieeIncentives /></S>} />
+              <Route path="loans" element={<S><PokieeLoans /></S>} />
+              <Route path="bonuses" element={<S><PokieeBonuses /></S>} />
+              <Route path="broadcasts" element={<S><PokieeBroadcasts /></S>} />
+              <Route path="import" element={<S><PokieeImport /></S>} />
+              <Route path="settings" element={<S><PokieeSettings /></S>} />
+              <Route path="backup" element={<S><PokieeBackup /></S>} />
+            </Route>
+
+            {/* Direct Home Redirects to Pokiee HR */}
+            <Route path="/" element={<HomeRedirect />} />
+
             <Route path="/login" element={<Login />} />
             <Route element={<RequireAuth><Shell /></RequireAuth>}>
-              <Route index element={<HomeRedirect />} />
               <Route path="/dashboard" element={<HomeRedirect />} />
               <Route path="/dashboard/:role" element={<S><DashboardRoute /></S>} />
               <Route path="/leads" element={<Guard m="leads"><S><Leads /></S></Guard>} />
@@ -117,9 +183,20 @@ export default function App() {
               <Route path="/access" element={<Guard m="access"><S><Access /></S></Guard>} />
               <Route path="/audit" element={<Guard m="audit"><S><Audit /></S></Guard>} />
               <Route path="/settings" element={<S><Settings /></S>} />
+              <Route path="/payroll" element={<Guard m="payroll"><S><Payroll /></S></Guard>} />
+              <Route path="/payslips" element={<Guard m="payslips"><S><Payslips /></S></Guard>} />
+              <Route path="/pf" element={<Guard m="pf"><S><Pf /></S></Guard>} />
+              <Route path="/incentives" element={<Guard m="incentives"><S><Incentives /></S></Guard>} />
+              <Route path="/incentive-settings" element={<Guard m="incentive-settings"><S><IncentiveSettings /></S></Guard>} />
+              <Route path="/performance" element={<Guard m="performance"><S><Performance /></S></Guard>} />
+              <Route path="/recruitment" element={<Guard m="recruitment"><S><Recruitment /></S></Guard>} />
+              <Route path="/api-keys" element={<Guard m="api-keys"><S><ApiKeys /></S></Guard>} />
+              <Route path="/backup" element={<Guard m="backup"><S><BackupPage /></S></Guard>} />
+              <Route path="/email-center" element={<Guard m="email-center"><S><EmailCenter /></S></Guard>} />
+              <Route path="/inbox" element={<S><InboxPage /></S>} />
               <Route path="*" element={<NotFound />} />
             </Route>
-            <Route path="*" element={<Navigate to="/login" replace />} />
+            <Route path="*" element={<Navigate to="/hr" replace />} />
           </Routes>
         </AuthProvider>
       </ToastProvider>

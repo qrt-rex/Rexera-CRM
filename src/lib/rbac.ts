@@ -9,7 +9,7 @@ export const ROLES: { id: Role; label: string; short: string; color: string; des
   { id: 'teamlead', label: 'Team Leader', short: 'TL', color: '#DB2777', desc: 'Leads a sales team, first approval of CRM entries' },
   { id: 'sales', label: 'Sales Person', short: 'SP', color: '#F47B20', desc: 'Calls leads, books clients, submits CRM entries' },
   { id: 'hr', label: 'HR', short: 'HR', color: '#059669', desc: 'People, attendance, leave and company updates' },
-  { id: 'it', label: 'IT Support', short: 'IT', color: '#475569', desc: 'Accounts, sign-in security, activity monitoring' },
+  { id: 'it', label: 'IT Support', short: 'IT', color: '#475569', desc: 'Master access: users & access, API keys, backups, system tools' },
   { id: 'support', label: 'Customer Support', short: 'CS', color: '#0D9488', desc: 'Answers client queries, follows up documents and status' },
 ]
 
@@ -70,12 +70,23 @@ export const PERM_GROUPS: { group: string; perms: { id: Perm; label: string }[] 
       { id: 'employees.view', label: 'Employee directory' },
       { id: 'employees.manage', label: 'Add / edit employees' },
       { id: 'events.manage', label: 'Create events' },
+      { id: 'performance.view', label: 'Performance report cards' },
+      { id: 'recruitment.manage', label: 'Recruitment & data import' },
+    ],
+  },
+  {
+    group: 'Payroll',
+    perms: [
+      { id: 'payroll.view', label: "See everyone's payroll & payslips" },
+      { id: 'payroll.manage', label: 'Run payroll, PF settings' },
+      { id: 'incentives.manage', label: 'Sales incentive rules' },
     ],
   },
   {
     group: 'Workspace & admin',
     perms: [
       { id: 'messages.use', label: 'Internal messages' },
+      { id: 'email.send', label: 'Email Center & email automations' },
       { id: 'templates.manage', label: 'Message templates' },
       { id: 'reports.view', label: 'Reports & analytics' },
       { id: 'reports.export', label: 'Export data (CSV)' },
@@ -103,8 +114,9 @@ export const DEFAULT_ROLE_PERMS: Record<Role, Perm[]> = {
   hr: [
     ...common, 'attendance.all', 'leave.approve', 'employees.view', 'employees.manage', 'events.manage', 'broadcasts.manage',
     'templates.manage', 'reports.view', 'reports.export', 'audit.view',
+    'payroll.view', 'payroll.manage', 'incentives.manage', 'recruitment.manage', 'performance.view', 'email.send',
   ],
-  it: [...common, 'employees.view', 'audit.view', 'reports.view'],
+  it: [...ALL_PERMS],
   support: [...common, 'bookings.all', 'documents.forms', 'templates.manage'],
 }
 
@@ -113,16 +125,23 @@ export const RESERVED: Partial<Record<Perm, Role[]>> = {
   'access.manage': ['superadmin'],
   'billing.manage': ['superadmin', 'accounts'],
   'bookings.accounts': ['superadmin', 'accounts'],
+  'payroll.view': ['superadmin', 'hr'],
+  'payroll.manage': ['superadmin', 'hr'],
+  'incentives.manage': ['superadmin', 'hr'],
 }
 
 export function rolesOf(u: User): Role[] {
   return [u.role, ...u.extraRoles.filter((r) => r !== u.role)]
 }
 
+/** Super Admin and IT Support hold every permission and can open every dashboard. */
+export const MASTER_ROLES: Role[] = ['superadmin', 'it']
+export const isMaster = (u: User) => rolesOf(u).some((r) => MASTER_ROLES.includes(r))
+
 export function effectivePerms(db: DB, u: User | null | undefined): Set<Perm> {
   if (!u) return new Set()
   const roles = rolesOf(u)
-  if (roles.includes('superadmin')) return new Set(ALL_PERMS)
+  if (roles.some((r) => MASTER_ROLES.includes(r))) return new Set(ALL_PERMS)
   const s = new Set<Perm>()
   for (const r of roles) for (const p of db.rolePerms[r] ?? DEFAULT_ROLE_PERMS[r]) s.add(p)
   for (const p of u.grants) s.add(p)
@@ -134,5 +153,5 @@ export function effectivePerms(db: DB, u: User | null | undefined): Set<Perm> {
 }
 
 export function canOpenDashboard(u: User, slug: Role) {
-  return rolesOf(u).includes(slug) || u.role === 'superadmin'
+  return rolesOf(u).includes(slug) || isMaster(u)
 }

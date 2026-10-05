@@ -1,12 +1,13 @@
 import type {
   Booking, BookingStatus, BDoc, CallOutcome, DB, EventItem, Invoice, InvoiceItem, Lead, LeaveType, Perm, Post, Role, Scheme, User,
 } from './types'
-import { effectivePerms, rolesOf, roleLabel } from './rbac'
+import { effectivePerms, isMaster, MASTER_ROLES, rolesOf, roleLabel } from './rbac'
 import { getDb, mutate } from './store'
 import { hashPassword } from './crypto'
 import { DEMO_PASSWORD } from './seed'
 import { CALL_OUTCOMES, OPEN_LEAD, STAGES } from './workflow'
-import { addDays, daysBetween, isEmail, isGstin, isPan, isPhone, normPhone, nowIso, round2, today, uid, ymd } from './format'
+import { fireAutomation } from './email'
+import { addDays, daysBetween, fmtDate, isEmail, isGstin, isPan, isPhone, normPhone, nowIso, round2, today, uid, ymd } from './format'
 
 // ============================================================ helpers
 export class ActionError extends Error {}
@@ -67,6 +68,8 @@ export async function loginStep1(login: string, password: string) {
     throw new ActionError('Wrong username or password.')
   }
   assert(u.active, 'This account is deactivated. Contact your administrator.')
+  const mt = d.settings.maintenance
+  assert(!mt?.on || isMaster(u), `Rexera CRM is under maintenance${mt?.message ? `: ${mt.message}` : '.'} Please try again later.`)
   mutate((m) => { delete m.loginFails[key] })
   const token = uid('tmp-')
   const code = genCode()
@@ -717,6 +720,7 @@ export function publishBroadcast(me: User, b: { title: string; body: string; pri
     d.broadcasts.unshift({ ...b, id: uid('br-'), by: me.id, at: nowIso(), acks: [] })
     const to = b.audience === 'ALL' ? d.users.filter((u) => u.active) : usersWithRole(d, ...b.audience)
     notify(d, to.map((u) => u.id).filter((x) => x !== me.id), `📣 ${b.title}`, b.body.slice(0, 100), '/broadcasts', b.priority === 'NORMAL' ? 'info' : 'warning')
+    fireAutomation(d, 'broadcast-copy', to.filter((u) => u.id !== me.id), () => ({ title: b.title, message: b.body }))
     audit(d, me.id, 'BROADCAST', b.title)
   })
 }
@@ -778,6 +782,11 @@ export function decideLeave(me: User, id: string, approve: boolean, remark: stri
     l.status = approve ? 'APPROVED' : 'REJECTED'
     l.decidedBy = me.id; l.decidedAt = nowIso(); l.remark = remark
     notify(d, [l.userId], `Leave ${approve ? 'approved' : 'rejected'}`, `${l.days} day(s) from ${l.from}${remark ? ' · ' + remark : ''}`, '/leave', approve ? 'success' : 'warning')
+    const applicant = d.users.find((u) => u.id === l.userId)
+    if (applicant) fireAutomation(d, 'leave-decision', [applicant], () => ({
+      status: approve ? 'approved' : 'rejected', leave_type: l.type, leave_days: l.days, decided_by: me.name,
+      leave_dates: l.from === l.to ? fmtDate(l.from) : `${fmtDate(l.from)} – ${fmtDate(l.to)}`, remark: remark ? `\nNote: ${remark}` : '',
+    }))
     audit(d, me.id, 'LEAVE_' + l.status, `${userName(d, l.userId)} ${l.from}→${l.to}`)
   })
 }
@@ -830,8 +839,10 @@ export async function createUser(me: User, i: UserInput) {
   assert(!d.users.some((u) => u.email.toLowerCase() === i.email.toLowerCase()), 'Email already used.')
   const passHash = await hashPassword(i.username, DEMO_PASSWORD)
   mutate((m) => {
-    m.users.push({ ...i, id: uid('u-'), phone: i.phone ? normPhone(i.phone) : '', extraRoles: [], grants: [], denies: [], joinedOn: today(), active: true, passHash })
+    const created: User = { ...i, id: uid('u-'), email: i.email.trim().toLowerCase(), phone: i.phone ? normPhone(i.phone) : '', extraRoles: [], grants: [], denies: [], joinedOn: today(), active: true, passHash }
+    m.users.push(created)
     audit(m, me.id, 'USER_CREATE', `${i.name} (${roleLabel(i.role)})`)
+    fireAutomation(m, 'welcome', [created])
   })
 }
 
@@ -841,6 +852,8 @@ export function updateUser(me: User, id: string, patch: Partial<Pick<User, 'name
     const u = d.users.find((x) => x.id === id)
     assert(u, 'User not found.')
     const accessChange = ['role', 'extraRoles', 'grants', 'denies', 'active'].some((k) => k in patch)
+    const touchesSA = rolesOf(u).includes('superadmin') || patch.role === 'superadmin' || !!patch.extraRoles?.includes('superadmin')
+    assert(!touchesSA || isSA(me), 'Only a Super Admin can change Super Admin accounts or make someone a Super Admin.')
     if (accessChange) {
       assert(has(me, 'access.manage'), 'Only access managers can change roles or access.')
       assert(u.id !== me.id, "You can't change your own access.")
@@ -857,13 +870,14 @@ export async function resetUserPassword(me: User, id: string) {
   need(me, 'access.manage')
   const u = getDb().users.find((x) => x.id === id)
   assert(u, 'User not found.')
+  assert(!rolesOf(u).includes('superadmin') || isSA(me), "Only a Super Admin can reset a Super Admin's password.")
   const h = await hashPassword(u.username, DEMO_PASSWORD)
   mutate((d) => { d.users.find((x) => x.id === id)!.passHash = h; audit(d, me.id, 'PASSWORD_RESET', u.name) })
 }
 
 export function setRolePerms(me: User, role: Role, perms: Perm[]) {
   need(me, 'access.manage')
-  assert(role !== 'superadmin', 'Super Admin always has every permission.')
+  assert(!MASTER_ROLES.includes(role), `${roleLabel(role)} always has every permission.`)
   mutate((d) => { d.rolePerms[role] = perms; audit(d, me.id, 'ROLE_PERMS', `${roleLabel(role)}: ${perms.length} permissions`) })
 }
 
@@ -879,6 +893,6 @@ export function updateProfile(me: User, patch: Partial<Pick<User, 'name' | 'phon
 }
 
 export function updateSettings(me: User, patch: Partial<DB['settings']>) {
-  assert(isSA(me), 'Only a Super Admin can change settings.')
+  assert(isMaster(me), 'Only Super Admin or IT Support can change settings.')
   mutate((d) => { Object.assign(d.settings, patch); audit(d, me.id, 'SETTINGS', JSON.stringify(patch)) })
 }

@@ -6,7 +6,7 @@ import { useDb } from '../lib/store'
 import { useAuth, useMe } from '../lib/auth'
 import { MODULES, canSee } from '../lib/modules'
 import { visibleBookings, visibleLeads } from '../lib/actions'
-import { roleLabel, rolesOf, ROLES } from '../lib/rbac'
+import { isMaster, roleLabel, rolesOf, ROLES } from '../lib/rbac'
 import { cx } from '../components/ui'
 
 type Item = { id: string; label: string; sub: string; icon: typeof Search; to: string; group: string }
@@ -26,7 +26,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     const s = q.trim().toLowerCase()
     const match = (...f: (string | undefined)[]) => !s || f.some((x) => x?.toLowerCase().includes(s))
     const out: Item[] = []
-    const dashRoles = me.role === 'superadmin' ? ROLES.map((r) => r.id) : rolesOf(me)
+    const dashRoles = isMaster(me) ? ROLES.map((r) => r.id) : rolesOf(me)
     for (const r of dashRoles) if (match(roleLabel(r), 'dashboard')) out.push({ id: 'd-' + r, label: `${roleLabel(r)} Dashboard`, sub: 'Dashboard', icon: LayoutDashboard, to: `/dashboard/${r}`, group: 'Dashboards' })
     for (const m of MODULES) if (canSee(m, can) && match(m.label, m.desc)) out.push({ id: m.key, label: m.label, sub: m.desc, icon: m.icon, to: m.path, group: 'Pages' })
     if (s.length >= 2) {

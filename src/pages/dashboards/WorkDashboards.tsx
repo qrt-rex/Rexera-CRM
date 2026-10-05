@@ -6,6 +6,7 @@ import {
 import { useDb } from '../../lib/store'
 import { useMe } from '../../lib/auth'
 import { userName } from '../../lib/actions'
+import { isMaster } from '../../lib/rbac'
 import { monthStart, waitingFor } from '../../lib/metrics'
 import { STAGES } from '../../lib/workflow'
 import { fmtDate } from '../../lib/format'
@@ -16,7 +17,7 @@ import { Greeting, LoginLogoutCard, Section, Tile, TileGrid, UpcomingEvents, Vie
 export function OperationsDashboard() {
   const db = useDb()
   const me = useMe()
-  const sa = me.role === 'superadmin'
+  const sa = isMaster(me)
   const mine = db.bookings.filter((b) => (sa || b.opsMemberId === me.id) && b.opsMemberId)
   const active = mine.filter((b) => b.status === 'IN_OPERATIONS')
   const openTasks = mine.flatMap((b) => b.tasks.filter((t) => !t.done)).length
@@ -71,7 +72,7 @@ export function OperationsDashboard() {
 export function AdminDashboard() {
   const db = useDb()
   const me = useMe()
-  const sa = me.role === 'superadmin'
+  const sa = isMaster(me)
   const waiting = waitingFor(db, me).filter((b) => ['WITH_ADMIN', 'ON_HOLD'].includes(b.status))
   const assigned = db.bookings.filter((b) => b.status === 'WITH_ADMIN' && (sa || b.adminId === me.id))
   const completed = db.bookings.filter((b) => b.status === 'COMPLETED' && (sa || b.adminId === me.id))

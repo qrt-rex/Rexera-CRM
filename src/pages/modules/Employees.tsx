@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Briefcase, Mail, Pencil, Phone, Plus, UsersRound } from 'lucide-react'
 import type { Role, User } from '../../lib/types'
@@ -25,6 +25,9 @@ export default function Employees() {
   const manage = can('employees.manage', 'access.manage')
   const list = useMemo(() => db.users.filter((u) => (!role || u.role === role) && (!q || `${u.name} ${u.email} ${u.designation} ${u.department}`.toLowerCase().includes(q.toLowerCase()))), [db.users, q, role])
   const open = params.get('open') ? db.users.find((u) => u.id === params.get('open')) : undefined
+  useEffect(() => {
+    if (params.get('new') && manage) { setForm({ open: true, data: blank }); setParams({}, { replace: true }) }
+  }, [params, setParams, manage])
   const tls = usersWithRole(db, 'teamlead')
 
   const save = async () => {

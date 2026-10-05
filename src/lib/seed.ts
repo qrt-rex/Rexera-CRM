@@ -3,6 +3,7 @@ import { DEFAULT_ROLE_PERMS } from './rbac'
 import { hashPassword } from './crypto'
 import { addDays, round2, ymd } from './format'
 import { STAGES } from './workflow'
+import { DEFAULT_INCENTIVE, DEFAULT_PF } from './hrsuite'
 
 export const SEED_VERSION = 5
 /** Password for the extra sample accounts (local demo only — change or remove before any real use). */
@@ -320,6 +321,17 @@ export async function buildSeed(): Promise<DB> {
     settings: { sessionMinutes: 60, supplierState: 'Gujarat', companyName: 'Rexera Financial Services Pvt. Ltd.', companyGstin: '24AAKCR1234F1Z5' },
     counters: { booking: 120 + flow.length, lead: 1001 + 48, invoice: 41 + invoices.length },
     loginFails: {},
+    payrollRuns: [],
+    pfSettings: { ...DEFAULT_PF },
+    pfAccounts: [],
+    incentiveRules: { ...DEFAULT_INCENTIVE, slabs: DEFAULT_INCENTIVE.slabs.map((x) => ({ ...x })) },
+    incentiveHistory: [],
+    manualIncentives: [],
+    apiKeys: [],
+    backupLog: [],
+    emails: [],
+    emailAutomations: [],
+    upgrades: [],
   }
 
   // starter notifications so the bell is not empty

@@ -1,85 +1,17 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  AlertTriangle, Briefcase, CalendarCheck2, Copy, FileText, HardDrive, Headphones, KeyRound, LogIn, Megaphone, MessageSquare,
-  PauseCircle, ScrollText, Search, ShieldAlert, Sparkles, UserCheck, UserX, Users, UsersRound,
+  AlertTriangle, Briefcase, CalendarCheck2, Copy, FileText, Headphones, Megaphone, MessageSquare, PauseCircle, Search, Sparkles,
 } from 'lucide-react'
 import { useDb } from '../../lib/store'
 import { userName, visibleBookings } from '../../lib/actions'
 import { useMe } from '../../lib/auth'
 import { STAGES } from '../../lib/workflow'
-import { ago, bookingMoney, fmtDateTime, inr, today } from '../../lib/format'
+import { ago, bookingMoney, inr, today } from '../../lib/format'
 import { roleLabel } from '../../lib/rbac'
-import { Badge, Button, EmptyState, Stat, Table, Td, Th, useToast } from '../../components/ui'
+import { Button, EmptyState, Stat, useToast } from '../../components/ui'
 import { BookingStatusBadge } from '../../components/booking'
 import { Greeting, LoginLogoutCard, Section, Tile, TileGrid, ViewAll } from './widgets'
-
-export function ItDashboard() {
-  const db = useDb()
-  const active = db.users.filter((u) => u.active)
-  const signedToday = new Set(db.sessions.filter((s) => s.date === today()).map((s) => s.userId)).size
-  const fails = Object.entries(db.loginFails)
-  const locked = fails.filter(([, f]) => f.until && new Date(f.until) > new Date())
-  const signIns = db.audit.filter((a) => ['SIGN_IN', 'SIGN_OUT', 'PASSWORD', 'PASSWORD_RESET', 'ACCESS_CHANGE', 'USER_CREATE'].includes(a.action)).slice(0, 10)
-  const storageKb = useMemo(() => { try { return Math.round((localStorage.getItem('rexera-crm-db')?.length ?? 0) / 1024) } catch { return 0 } }, [db])
-
-  return (
-    <div>
-      <Greeting subtitle="IT Support · accounts, sign-in security and system health" />
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Active accounts" value={active.length} icon={Users} tone="navy" sub={`${db.users.length - active.length} deactivated`} />
-        <Stat label="Signed in today" value={signedToday} icon={LogIn} tone="green" />
-        <Stat label="Failed sign-in attempts" value={fails.reduce((s, [, f]) => s + f.count, 0)} icon={ShieldAlert} tone="amber" />
-        <Stat label="Locked accounts" value={locked.length} icon={UserX} tone="red" sub="5 wrong passwords = 5 min lock" />
-      </div>
-      <TileGrid>
-        <Tile to="/employees" icon={UsersRound} label="Employee accounts" desc="Directory, roles, teams" tone="cyan" />
-        <Tile to="/audit" icon={ScrollText} label="Activity log" desc="Sign-ins and every change" tone="gray" />
-        <Tile to="/attendance" icon={UserCheck} label="Attendance Board" tone="green" />
-        <Tile to="/messages" icon={MessageSquare} label="Messages" desc="Help requests from the team" tone="blue" />
-        <Tile to="/broadcasts" icon={Megaphone} label="Broadcasts" tone="red" viewOnly />
-        <Tile to="/leave?new=1" icon={CalendarCheck2} label="Request my leave" tone="violet" />
-      </TileGrid>
-      <div className="mt-6 grid gap-6 xl:grid-cols-3">
-        <Section title="Sign-in & access events" subtitle="Latest security-relevant activity" icon={KeyRound} className="xl:col-span-2" action={<ViewAll to="/audit" />}>
-          {!signIns.length ? <EmptyState icon={KeyRound} title="No events yet" /> : (
-            <Table>
-              <thead><tr><Th>When</Th><Th>Who</Th><Th>Event</Th><Th>Detail</Th></tr></thead>
-              <tbody>{signIns.map((a) => (
-                <tr key={a.id}><Td className="whitespace-nowrap text-xs text-mute">{fmtDateTime(a.at)}</Td><Td className="font-semibold">{userName(db, a.by)}</Td>
-                  <Td><Badge tone={a.action === 'SIGN_IN' ? 'green' : a.action === 'SIGN_OUT' ? 'gray' : 'violet'}>{a.action.replace('_', ' ').toLowerCase()}</Badge></Td><Td className="text-sm">{a.detail}</Td></tr>
-              ))}</tbody>
-            </Table>
-          )}
-        </Section>
-        <div className="space-y-6">
-          <Section title="Security watch" icon={ShieldAlert}>
-            <ul className="divide-y divide-line/70">
-              {fails.map(([login, f]) => (
-                <li key={login} className="flex items-center gap-3 px-5 py-3 text-sm">
-                  <AlertTriangle className="size-4 text-warn" />
-                  <span className="min-w-0 flex-1 truncate font-medium">{login}</span>
-                  {f.until && new Date(f.until) > new Date() ? <Badge tone="red">locked until {new Date(f.until).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</Badge> : <Badge tone="amber">{f.count} failed</Badge>}
-                </li>
-              ))}
-              {!fails.length && <li className="px-5 py-4 text-sm text-mute">No failed sign-ins. 🔒</li>}
-            </ul>
-          </Section>
-          <Section title="System" icon={HardDrive}>
-            <dl className="divide-y divide-line/70 text-sm">
-              {[['App version', 'Rexera CRM 2.0'], ['Data stored (this browser)', `${storageKb} KB`], ['Inactivity sign-out', `${db.settings.sessionMinutes} min`],
-                ['Secure hashing', globalThis.crypto?.subtle ? 'SHA-256 available' : 'Unavailable (open over https or localhost)'], ['Roles', `${new Set(db.users.map((u) => u.role)).size} in use`]].map(([k, v]) => (
-                <div key={k} className="flex justify-between gap-3 px-5 py-2.5"><dt className="text-mute">{k}</dt><dd className="text-right font-medium">{v}</dd></div>
-              ))}
-            </dl>
-            <p className="border-t border-line px-5 py-3 text-xs text-mute">Creating accounts, changing roles and resetting passwords is done by a Super Admin in Access Management.</p>
-          </Section>
-          <LoginLogoutCard />
-        </div>
-      </div>
-    </div>
-  )
-}
 
 export function SupportDashboard() {
   const db = useDb()

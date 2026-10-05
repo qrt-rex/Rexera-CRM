@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import type { DB } from './types'
 import { buildSeed, SEED_VERSION } from './seed'
+import { upgradeDb } from './hrsuite'
 
 /**
  * Local document store. Every collection lives in one JSON document persisted to localStorage and
@@ -16,10 +17,10 @@ export async function initStore() {
     const raw = localStorage.getItem(KEY)
     if (raw) {
       const parsed = JSON.parse(raw) as DB
-      if (parsed.version === SEED_VERSION) { db = parsed; return }
+      if (parsed.version === SEED_VERSION) { db = upgradeDb(parsed); save(); return }
     }
   } catch { /* corrupted or blocked storage: reseed */ }
-  db = await buildSeed()
+  db = upgradeDb(await buildSeed())
   save()
 }
 
@@ -47,8 +48,15 @@ export function mutate<T = void>(fn: (d: DB) => T): T {
   return out
 }
 
+/** Replaces all data at once (restore from a backup). */
+export function replaceDb(next: DB) {
+  db = upgradeDb(next)
+  save()
+  emit()
+}
+
 export async function resetDemoData() {
-  db = await buildSeed()
+  db = upgradeDb(await buildSeed())
   save()
   emit()
 }

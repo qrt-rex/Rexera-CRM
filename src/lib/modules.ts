@@ -1,7 +1,7 @@
 import {
   BarChart3, BellRing, BookOpenCheck, Briefcase, CalendarDays, ClipboardCheck, FileText, FolderKanban, Images, IndianRupee,
   KeyRound, Megaphone, MessagesSquare, Phone, Settings, ShieldCheck, Sparkles, UserCheck, UserPlus, Users, UsersRound,
-  CalendarCheck2, Network, ScrollText, type LucideIcon,
+  CalendarCheck2, Network, ScrollText, Wallet, Receipt, Landmark, Trophy, SlidersHorizontal, Gauge, KeySquare, DatabaseBackup, MailPlus, Inbox, type LucideIcon,
 } from 'lucide-react'
 import type { Perm } from './types'
 import type { Tone } from './workflow'
@@ -16,6 +16,8 @@ export interface ModuleDef {
   /** visible when the user has ANY of these (empty = everyone signed in) */
   perms: Perm[]
   group: 'Sales' | 'Client files' | 'Content' | 'People' | 'Finance' | 'Workspace' | 'Admin'
+  /** listed only in the HR sidebar (still searchable with Ctrl K) */
+  hrOnly?: boolean
 }
 
 export const MODULES: ModuleDef[] = [
@@ -34,11 +36,22 @@ export const MODULES: ModuleDef[] = [
   { key: 'attendance', path: '/attendance', label: 'Attendance Board', desc: 'Live day status and history', icon: UserCheck, tone: 'green', perms: [], group: 'People' },
   { key: 'leave', path: '/leave', label: 'Leave', desc: 'Request my leave, approve requests', icon: CalendarCheck2, tone: 'violet', perms: [], group: 'People' },
   { key: 'employees', path: '/employees', label: 'Employee Details', desc: 'Directory, profiles and teams', icon: UsersRound, tone: 'cyan', perms: ['employees.view', 'employees.manage', 'access.manage'], group: 'People' },
+  { key: 'payroll', path: '/payroll', label: 'Payroll', desc: 'Monthly salary runs: calculate, approve, lock, pay', icon: Wallet, tone: 'blue', perms: ['payroll.view', 'payroll.manage'], group: 'People', hrOnly: true },
+  { key: 'payslips', path: '/payslips', label: 'Payslips', desc: 'Printable payslips for finalised months', icon: Receipt, tone: 'cyan', perms: [], group: 'People', hrOnly: true },
+  { key: 'pf', path: '/pf', label: 'PF Management', desc: 'PF rules, UANs, monthly ECR', icon: Landmark, tone: 'green', perms: ['payroll.view', 'payroll.manage'], group: 'People', hrOnly: true },
+  { key: 'incentives', path: '/incentives', label: 'Sales Incentives', desc: 'Daily, weekly and monthly incentive per sales person', icon: Trophy, tone: 'orange', perms: ['incentives.manage', 'payroll.view'], group: 'People', hrOnly: true },
+  { key: 'incentive-settings', path: '/incentive-settings', label: 'Incentive Settings', desc: 'Thresholds and slabs, versioned', icon: SlidersHorizontal, tone: 'amber', perms: ['incentives.manage'], group: 'People', hrOnly: true },
+  { key: 'performance', path: '/performance', label: 'Performance', desc: 'Report cards and scores', icon: Gauge, tone: 'violet', perms: ['performance.view'], group: 'People', hrOnly: true },
+  { key: 'recruitment', path: '/recruitment', label: 'Recruitment', desc: 'Import CSV / Excel files into tables', icon: Briefcase, tone: 'navy', perms: ['recruitment.manage'], group: 'People', hrOnly: true },
   { key: 'events', path: '/events', label: 'Events & Calendar', desc: 'Meetings, trainings, holidays', icon: CalendarDays, tone: 'pink', perms: [], group: 'People' },
   { key: 'messages', path: '/messages', label: 'Messages', desc: 'Team chat and message templates', icon: MessagesSquare, tone: 'blue', perms: ['messages.use'], group: 'Workspace' },
+  { key: 'email-center', path: '/email-center', label: 'Email Center', desc: 'Email people at their login address, automations', icon: MailPlus, tone: 'orange', perms: ['email.send'], group: 'Workspace' },
+  { key: 'inbox', path: '/inbox', label: 'Email', desc: 'Emails sent to your login address', icon: Inbox, tone: 'blue', perms: [], group: 'Workspace' },
   { key: 'reports', path: '/reports', label: 'Reports', desc: 'Analytics, report cards and exports', icon: BookOpenCheck, tone: 'navy', perms: ['reports.view'], group: 'Workspace' },
   { key: 'notifications', path: '/notifications', label: 'Notifications', desc: 'Everything that needs your attention', icon: BellRing, tone: 'orange', perms: [], group: 'Workspace' },
   { key: 'access', path: '/access', label: 'Access Management', desc: 'Users, roles and permissions', icon: KeyRound, tone: 'navy', perms: ['access.manage'], group: 'Admin' },
+  { key: 'api-keys', path: '/api-keys', label: 'API Keys', desc: 'Keys for integrations: create, rotate, revoke', icon: KeySquare, tone: 'orange', perms: ['access.manage'], group: 'Admin' },
+  { key: 'backup', path: '/backup', label: 'Data Backup & Restore', desc: 'Encrypted backups, snapshots, restore', icon: DatabaseBackup, tone: 'cyan', perms: ['access.manage'], group: 'Admin' },
   { key: 'audit', path: '/audit', label: 'Activity Log', desc: 'Who did what and when', icon: ScrollText, tone: 'gray', perms: ['audit.view'], group: 'Admin' },
   { key: 'security', path: '/settings', label: 'Profile & Settings', desc: 'Profile, security, appearance', icon: Settings, tone: 'gray', perms: [], group: 'Workspace' },
   { key: 'users', path: '/access?tab=users', label: 'Users', desc: 'Create and manage accounts', icon: Users, tone: 'navy', perms: ['access.manage'], group: 'Admin' },

@@ -60,6 +60,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (session && !user) signOut('Your account is no longer active.')
   }, [session, user, signOut])
 
+  // IT used "sign out everyone": sessions started before that moment end
+  const validAfter = db.settings.sessionsValidAfter
+  useEffect(() => {
+    if (session && validAfter && session.at < validAfter) signOut('IT Support signed everyone out. Please sign in again.')
+  }, [session, validAfter, signOut])
+
   // ---- inactivity timeout with 1-minute warning
   const timeoutMs = db.settings.sessionMinutes * 60000
   const last = useRef(Date.now())

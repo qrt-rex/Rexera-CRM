@@ -13,6 +13,8 @@ export type Perm =
   | 'events.manage' | 'messages.use' | 'templates.manage'
   | 'documents.forms' | 'reports.view' | 'reports.export'
   | 'access.manage' | 'audit.view'
+  | 'payroll.view' | 'payroll.manage' | 'incentives.manage' | 'recruitment.manage' | 'performance.view'
+  | 'email.send'
 
 export interface Address { line: string; city: string; state: string; pin: string; country: string }
 
@@ -177,7 +179,131 @@ export interface Message { id: string; from: string; to: string; body: string; a
 export interface Template { id: string; name: string; body: string; by: string }
 export interface Audit { id: string; at: string; by: string; action: string; detail: string }
 
-export interface Settings { sessionMinutes: number; supplierState: string; companyName: string; companyGstin: string }
+export interface Settings {
+  sessionMinutes: number
+  supplierState: string
+  companyName: string
+  companyGstin: string
+  /** while on, only IT and Super Admin can sign in or use the app */
+  maintenance?: { on: boolean; message: string; by: string; at: string }
+  /** sessions started before this moment are signed out ("sign out everyone") */
+  sessionsValidAfter?: string
+}
+
+export type ApiScope = 'leads:read' | 'leads:write' | 'bookings:read' | 'billing:read' | 'reports:read' | 'webhooks:send'
+export interface ApiKey {
+  id: string
+  name: string
+  /** first characters, shown so people can tell keys apart; the full key is never stored */
+  prefix: string
+  hash: string
+  scopes: ApiScope[]
+  createdBy: string
+  createdAt: string
+  expiresAt?: string
+  revokedAt?: string
+  revokedBy?: string
+}
+/** One email to one person (personalised). Emails sent together share a batchId. */
+export interface EmailMsg {
+  id: string
+  batchId: string
+  to: string
+  toEmail: string
+  from: string
+  subject: string
+  body: string
+  at: string
+  automation?: string
+  read: boolean
+}
+export type AutomationKey = 'welcome' | 'leave-decision' | 'payslip-ready' | 'start-day-reminder' | 'monthly-attendance' | 'work-anniversary' | 'broadcast-copy'
+export interface EmailAutomation {
+  key: AutomationKey
+  enabled: boolean
+  subject: string
+  body: string
+  lastRunKey?: string
+  lastRunAt?: string
+  sent: number
+}
+
+export interface BackupLogEntry { id: string; at: string; by: string; kind: 'DOWNLOAD' | 'SNAPSHOT' | 'AUTO_SNAPSHOT' | 'RESTORE'; note: string; bytes: number; encrypted?: boolean }
+
+export interface PayRow {
+  userId: string
+  name: string
+  designation: string
+  department: string
+  /** monthly salary (CTC); runs saved before the salary-structure change don't have it */
+  ctc?: number
+  hra?: number
+  otherAllowance?: number
+  /** salary − employer PF */
+  gross: number
+  daysInMonth: number
+  paidDays: number
+  lopDays: number
+  lopAmount: number
+  basic: number
+  pfWages: number
+  pfEmployee: number
+  pfEmployer: number
+  pt: number
+  /** automatic sales incentive for the month — HR reference only, not part of net salary */
+  incentive: number
+  /** net salary (for runs saved before the salary-structure change, this still includes the incentive) */
+  net: number
+}
+export type PayrollStatus = 'CALCULATED' | 'APPROVED' | 'FINALIZED' | 'PAID'
+export interface PayrollRun {
+  id: string
+  month: string
+  status: PayrollStatus
+  provisional: boolean
+  rows: PayRow[]
+  calculatedAt: string
+  calculatedBy: string
+  history: { at: string; by: string; action: string; note: string }[]
+}
+export interface PfSettings {
+  enabled: boolean
+  employeePct: number
+  employerPct: number
+  epsPct: number
+  /** cap PF wages at wageCeiling (off = PF on the full basic) */
+  ceilingEnabled: boolean
+  wageCeiling: number
+  ptEnabled: boolean
+  /** basic as % of monthly salary */
+  basicPct: number
+  /** HRA as % of basic */
+  hraPct: number
+}
+export interface PfAccount { userId: string; uan: string; enrolled: boolean }
+/** Incentive added by HR for a month (also after the month). Shown in the HR pages only, never on payslips. */
+export interface ManualIncentive {
+  id: string
+  userId: string
+  month: string
+  amount: number
+  reason: string
+  addedBy: string
+  addedAt: string
+  paidAt?: string
+}
+export interface IncentiveRules {
+  version: number
+  eligibilityMultiple: number
+  dailyThreshold: number
+  dailyPct: number
+  weeklyThreshold: number
+  weeklyPct: number
+  monthlyMultiple: number
+  slabs: { upTo: number | null; pct: number }[]
+  updatedAt: string
+  updatedBy: string
+}
 
 export interface DB {
   version: number
@@ -200,4 +326,16 @@ export interface DB {
   settings: Settings
   counters: { booking: number; lead: number; invoice: number }
   loginFails: Record<string, { count: number; until?: string }>
+  payrollRuns: PayrollRun[]
+  pfSettings: PfSettings
+  pfAccounts: PfAccount[]
+  incentiveRules: IncentiveRules
+  incentiveHistory: IncentiveRules[]
+  manualIncentives: ManualIncentive[]
+  apiKeys: ApiKey[]
+  backupLog: BackupLogEntry[]
+  emails: EmailMsg[]
+  emailAutomations: EmailAutomation[]
+  /** one-time data upgrades already applied */
+  upgrades: string[]
 }
