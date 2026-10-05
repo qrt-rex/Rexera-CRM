@@ -6,6 +6,7 @@ import { hashPassword } from './crypto'
 import { DEMO_PASSWORD, SEED_VERSION } from './seed'
 import { listDatasets, saveDatasets, type Dataset } from './imports'
 import { addDays, fmtDate, nowIso, uid } from './format'
+import { cloudConfig, pingCloud } from './supabase'
 
 function needMaster(me: User) {
   if (!isMaster(me)) throw new ActionError('Only IT Support or Super Admin can do that.')
@@ -280,6 +281,9 @@ export async function runHealthCheck(): Promise<HealthItem[]> {
   const keys = d.apiKeys.filter((k) => keyStatus(k) === 'active')
   const expiring = keys.filter((k) => k.expiresAt && new Date(k.expiresAt).getTime() - Date.now() < 14 * 86400000)
   add({ id: 'keys', level: expiring.length ? 'warn' : 'ok', title: 'API keys', detail: `${keys.length} active${expiring.length ? ` · ${expiring.length} expire within 14 days: ${expiring.map((k) => k.name).join(', ')}` : ''}` })
+
+  const cloud = await pingCloud()
+  add({ id: 'cloud', level: cloud.ok ? 'ok' : cloudConfig().status === 'not-configured' ? 'warn' : 'error', title: 'Cloud database (Supabase)', detail: cloud.detail })
 
   if (d.settings.maintenance?.on) add({ id: 'maint', level: 'warn', title: 'Maintenance mode is ON', detail: 'Only IT Support and Super Admin can use the app.', fix: { label: 'Turn off', run: (me) => setMaintenance(me, false, '') } })
   return out

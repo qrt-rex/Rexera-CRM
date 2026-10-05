@@ -27,6 +27,9 @@ const SAMPLE_SALARY: Partial<Record<Role, number>> = {
 }
 const HR_SUITE_PERMS: Perm[] = ['payroll.view', 'payroll.manage', 'incentives.manage', 'recruitment.manage', 'performance.view']
 
+/** Sample 12-digit UAN for seeded people (demo data). */
+const sampleUan = (id: string) => `1010${String([...id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 1e8, 7)).padStart(8, '0')}`
+
 /** Brings data saved by an older build up to date. Safe to run repeatedly. */
 export function upgradeDb(d: DB): DB {
   d.payrollRuns ??= []
@@ -40,6 +43,11 @@ export function upgradeDb(d: DB): DB {
   d.emails ??= []
   d.emailAutomations ??= defaultAutomations()
   for (const a of defaultAutomations()) if (!d.emailAutomations.some((x) => x.key === a.key)) d.emailAutomations.push(a)
+  if (!d.upgrades.includes('uan-fix-1')) {
+    // an earlier build generated 13-digit sample UANs; a UAN has 12 digits
+    for (const a of d.pfAccounts) if (a.uan && !/^\d{12}$/.test(a.uan) && a.userId.startsWith('u-')) a.uan = sampleUan(a.userId)
+    d.upgrades.push('uan-fix-1')
+  }
   if (!d.upgrades.includes('email-1')) {
     d.rolePerms.hr = [...new Set([...(d.rolePerms.hr ?? []), 'email.send' as Perm])]
     d.upgrades.push('email-1')
@@ -51,7 +59,7 @@ export function upgradeDb(d: DB): DB {
       if (u.salary == null && u.id.startsWith('u-')) u.salary = SAMPLE_SALARY[u.role]
       if (!d.pfAccounts.some((a) => a.userId === u.id)) {
         const n = [...u.id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 1e9, 7)
-        d.pfAccounts.push({ userId: u.id, uan: `1010${String(n).padStart(8, '0')}`, enrolled: true })
+        d.pfAccounts.push({ userId: u.id, uan: sampleUan(u.id), enrolled: true })
       }
     }
     d.upgrades.push('hr-suite-1')
