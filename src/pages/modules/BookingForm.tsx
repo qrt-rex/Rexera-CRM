@@ -15,7 +15,7 @@ import { FileField } from '../../components/FileField'
 import { DocUploader, type PendingDoc } from '../../components/DocUploader'
 
 const MODES = ['UPI', 'NEFT', 'RTGS', 'IMPS', 'Cheque', 'Card', 'Cash']
-const COMPANY_DOCS = ['PAN card', 'GSTIN certificate', 'CRM', 'Quotation (QT)', 'Agreement', 'Company documents', 'Other']
+const COMPANY_DOCS = ['Company PAN card', 'GST certificate', 'Certificate of Incorporation (COI)', 'MSME / Udyam certificate', 'CRM', 'Quotation (QT)', 'Agreement', 'Company documents', 'Other']
 type Pay = PaymentPartInput & { proof?: FileRef }
 
 export default function BookingForm() {

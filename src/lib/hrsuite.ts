@@ -84,6 +84,11 @@ export function upgradeDb(d: DB): DB {
     }
     d.upgrades.push('stages-11')
   }
+  if (!d.upgrades.includes('doc-categories-2')) {
+    const rename: Record<string, string> = { 'PAN card': 'Company PAN card', 'GSTIN certificate': 'GST certificate' }
+    for (const b of d.bookings) for (const doc of b.documents) if (rename[doc.category]) doc.category = rename[doc.category]!
+    d.upgrades.push('doc-categories-2')
+  }
   if (!d.upgrades.includes('salary-structure-1')) {
     // Basic 50% · HRA 40% of basic · rest other allowance · PF 12% each side on the full basic
     d.pfSettings = { ...DEFAULT_PF, ...d.pfSettings, basicPct: 50, hraPct: 40, ceilingEnabled: false }

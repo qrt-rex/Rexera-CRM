@@ -79,9 +79,28 @@ export const SERVICE_CATEGORIES = [
   'Digital Services',
 ]
 
+/** The client document checklist on Document Forms (one upload slot each). */
+export const DOC_FORM: { cat: string; short: string; hint: string }[] = [
+  { cat: 'Certificate of Incorporation (COI)', short: 'COI', hint: 'Company incorporation certificate' },
+  { cat: 'GST certificate', short: 'GST', hint: 'GST registration certificate' },
+  { cat: 'MSME / Udyam certificate', short: 'MSME', hint: 'Udyam registration' },
+  { cat: 'Aadhaar card', short: 'Aadhaar', hint: 'Director / proprietor Aadhaar' },
+  { cat: 'Company PAN card', short: 'Company PAN', hint: 'PAN card of the company' },
+  { cat: 'Bank statement', short: 'Bank statement', hint: 'Last 6 to 12 months' },
+  { cat: 'ITR', short: 'ITR', hint: 'Income tax returns' },
+  { cat: 'Pitch deck', short: 'Pitch deck', hint: 'Business presentation' },
+  { cat: 'MOU', short: 'MOU', hint: 'Memorandum of understanding' },
+  { cat: 'AOA', short: 'AOA', hint: 'Articles of association' },
+  { cat: 'Passport / photo', short: 'Passport / photo', hint: 'Passport copy or passport-size photo' },
+  { cat: 'CMA report', short: 'CMA', hint: 'Credit monitoring arrangement data' },
+]
+/** Counts as KYC in the missing-KYC lists. */
+export const KYC_CATEGORIES = ['KYC', 'Aadhaar card', 'Company PAN card', 'Passport / photo']
+
 export const DOC_CATEGORIES = [
-  'PAN card', 'GSTIN certificate', 'CRM', 'Quotation (QT)', 'Agreement', 'Payment receipt', 'KYC', 'Company documents',
-  'Government certificates', 'Pitch deck', 'F.R (Financial report)', 'D.P.R (Detailed project report)', 'Financial', 'Other',
+  ...DOC_FORM.map((d) => d.cat),
+  'CRM', 'Quotation (QT)', 'Agreement', 'Payment receipt', 'F.R (Financial report)', 'D.P.R (Detailed project report)', 'KYC', 'Company documents',
+  'Government certificates', 'Financial', 'Other',
 ]
 
 export const LEAD_SOURCES = ['Website', 'Facebook Ads', 'Google Ads', 'Referral', 'Walk-in', 'IVR campaign', 'Exhibition', 'Cold call']

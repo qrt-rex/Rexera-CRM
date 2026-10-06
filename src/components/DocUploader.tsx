@@ -11,8 +11,17 @@ export interface PendingDoc { file: FileRef; category: string }
 /** Best guess of the document type from its file name (the person can change it). */
 export function guessCategory(name: string, fallback = 'Other') {
   const n = name.toLowerCase()
-  if (/\bpan\b|pan[\s_-]?card/.test(n)) return 'PAN card'
-  if (/gst/.test(n)) return 'GSTIN certificate'
+  if (/\bcoi\b|incorporat/.test(n)) return 'Certificate of Incorporation (COI)'
+  if (/msme|udyam|udyog/.test(n)) return 'MSME / Udyam certificate'
+  if (/aadha?r/.test(n)) return 'Aadhaar card'
+  if (/\bpan\b|pan[\s_-]?card/.test(n)) return 'Company PAN card'
+  if (/gst/.test(n)) return 'GST certificate'
+  if (/bank|statement/.test(n)) return 'Bank statement'
+  if (/\bitr\b|income[\s_-]?tax/.test(n)) return 'ITR'
+  if (/\bmou\b|memorandum/.test(n)) return 'MOU'
+  if (/\baoa\b|articles/.test(n)) return 'AOA'
+  if (/\bcma\b/.test(n)) return 'CMA report'
+  if (/passport|photo/.test(n)) return 'Passport / photo'
   if (/agree|contract|mou/.test(n)) return 'Agreement'
   if (/quot|\bqt\b|proposal/.test(n)) return 'Quotation (QT)'
   if (/\bcrm\b/.test(n)) return 'CRM'
@@ -20,7 +29,7 @@ export function guessCategory(name: string, fallback = 'Other') {
   if (/\bdpr\b|project[\s_-]?report/.test(n)) return 'D.P.R (Detailed project report)'
   if (/\bfr\b|financial|balance|p&l|itr/.test(n)) return 'F.R (Financial report)'
   if (/receipt|payment|utr|screenshot/.test(n)) return 'Payment receipt'
-  if (/aadhaar|aadhar|kyc|passport|voter/.test(n)) return 'KYC'
+  if (/kyc|voter/.test(n)) return 'KYC'
   return fallback
 }
 

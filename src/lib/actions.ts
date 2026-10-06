@@ -813,15 +813,30 @@ export function addDocument(me: User, id: string, doc: Omit<BDoc, 'id' | 'at' | 
   })
 }
 /** Several documents at once, each with its own type (files are already in the browser file store). */
-export function addDocuments(me: User, id: string, docs: { file: FileRef; category: string }[]) {
+export function addDocuments(me: User, id: string, docs: { file: FileRef; category: string; note?: string }[]) {
   assert(docs.length, 'Add at least one document.')
   mutate((d) => {
     const b = findB(d, id)
     assert(visibleBookings(d, me).some((x) => x.id === id), 'Not found.')
     const at = nowIso()
-    for (const x of docs) b.documents.push({ id: uid('doc-'), name: x.file.name, category: x.category, size: x.file.size, at, by: me.id, status: 'PENDING', file: x.file })
+    for (const x of docs) b.documents.push({ id: uid('doc-'), name: x.file.name, category: x.category, size: x.file.size, at, by: me.id, status: 'PENDING', file: x.file, ...(x.note?.trim() ? { note: x.note.trim() } : {}) })
     b.updatedAt = at
     audit(d, me.id, 'DOC_UPLOAD', `${b.bookingId}: ${docs.map((x) => `${x.category} (${x.file.name})`).join(', ')}`)
+  })
+}
+/** Document Forms: the client's email, number and website reference, kept on the client file. */
+export function updateClientInfo(me: User, id: string, info: { email: string; mobile: string; website: string }) {
+  need(me, 'documents.forms', 'bookings.process', 'bookings.legal', 'bookings.admin', 'bookings.accounts')
+  assert(!info.email.trim() || isEmail(info.email), 'Enter a valid email.')
+  assert(isPhone(info.mobile), 'Enter a valid 10-digit mobile number.')
+  const site = info.website.trim()
+  assert(!site || /^(https?:\/\/)?[\w-]+(\.[\w-]+)+(\/\S*)?$/i.test(site), 'Enter a website like www.example.com.')
+  mutate((d) => {
+    const b = findB(d, id)
+    assert(visibleBookings(d, me).some((x) => x.id === id), 'Not found.')
+    b.email = info.email.trim().toLowerCase(); b.mobile = normPhone(info.mobile); b.website = site || undefined
+    b.updatedAt = nowIso()
+    audit(d, me.id, 'CLIENT_INFO', `${b.bookingId}: email / number / website updated`)
   })
 }
 export function setDocStatus(me: User, id: string, docId: string, status: 'VERIFIED' | 'REJECTED') {

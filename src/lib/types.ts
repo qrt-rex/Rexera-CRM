@@ -101,7 +101,7 @@ export interface Payment {
 export interface Approval { id: string; level: string; action: string; by: string; at: string; remark: string }
 export interface StageMove { stage: number; at: string; by: string; note: string }
 export interface BComment { id: string; by: string; at: string; text: string; kind: string }
-export interface BDoc { id: string; name: string; category: string; size: number; at: string; by: string; dataUrl?: string; status?: 'PENDING' | 'VERIFIED' | 'REJECTED'; legacyPath?: string; file?: FileRef }
+export interface BDoc { id: string; name: string; category: string; size: number; at: string; by: string; dataUrl?: string; status?: 'PENDING' | 'VERIFIED' | 'REJECTED'; legacyPath?: string; file?: FileRef; note?: string }
 export interface BTask {
   id: string; title: string; done: boolean; due?: string; by: string; assignee?: string
   /** remind the processing person and the admin person every N days (15) until done */

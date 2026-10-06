@@ -6,7 +6,7 @@ import {
 import { useDb } from '../../lib/store'
 import { userName, visibleBookings } from '../../lib/actions'
 import { useMe } from '../../lib/auth'
-import { STAGES } from '../../lib/workflow'
+import { KYC_CATEGORIES, STAGES } from '../../lib/workflow'
 import { ago, bookingMoney, inr, today } from '../../lib/format'
 import { roleLabel } from '../../lib/rbac'
 import { Button, EmptyState, Stat, useToast } from '../../components/ui'
@@ -21,7 +21,7 @@ export function SupportDashboard() {
   const files = visibleBookings(db, me)
   const activeFiles = files.filter((b) => !['COMPLETED', 'REJECTED'].includes(b.status))
   const waiting = files.filter((b) => ['ON_HOLD', 'ACCOUNTS_HOLD'].includes(b.status))
-  const missingKyc = activeFiles.filter((b) => b.opsMemberId && !b.documents.some((d) => d.category === 'KYC'))
+  const missingKyc = activeFiles.filter((b) => b.opsMemberId && !b.documents.some((d) => KYC_CATEGORIES.includes(d.category)))
   const overdue = activeFiles.filter((b) => !!b.deadline && b.deadline < today())
   const found = q.trim().length >= 2
     ? files.filter((b) => `${b.bookingId} ${b.companyName} ${b.contactPerson} ${b.mobile} ${b.email}`.toLowerCase().includes(q.toLowerCase())).slice(0, 8)
