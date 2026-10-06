@@ -9,9 +9,9 @@ export function todaySession(db: DB, userId: string) {
   return db.sessions.find((s) => s.userId === userId && s.date === today())
 }
 
-export function dayStatus(db: DB, userId: string): 'WORKING' | 'DAY_ENDED' | 'ON_LEAVE' | 'NOT_STARTED' {
+export function dayStatus(db: DB, userId: string): 'WORKING' | 'ON_BREAK' | 'DAY_ENDED' | 'ON_LEAVE' | 'NOT_STARTED' {
   const s = todaySession(db, userId)
-  if (s) return s.logoutAt ? 'DAY_ENDED' : 'WORKING'
+  if (s) return s.logoutAt ? 'DAY_ENDED' : s.breaks?.some((b) => !b.end) ? 'ON_BREAK' : 'WORKING'
   const t = today()
   if (db.leaves.some((l) => l.userId === userId && l.status === 'APPROVED' && l.from <= t && l.to >= t)) return 'ON_LEAVE'
   return 'NOT_STARTED'
@@ -30,8 +30,19 @@ export function collections(db: DB, userIds: string[], from: string, to = '9999-
   return Math.round(sum)
 }
 
+/**
+ * Files at the signed-in person's step. Being *able* to act (Super Admin overrides, Legal re-assigning a file already
+ * with Operations) doesn't make a file wait for you when someone else is assigned to it.
+ */
 export function waitingFor(db: DB, me: User) {
-  return visibleBookings(db, me).filter((b) => availableDecisions(db, me, b).length > 0)
+  return visibleBookings(db, me).filter((b) => {
+    const d = availableDecisions(db, me, b)
+    if (!d.length) return false
+    if (b.status === 'IN_OPERATIONS' && (b.opsMemberId ? b.opsMemberId !== me.id : false)) return false
+    if (b.status === 'WITH_ADMIN' && b.adminId && b.adminId !== me.id) return false
+    if (b.status === 'PENDING_TL' && b.teamLeadId && b.teamLeadId !== me.id) return false
+    return true
+  })
 }
 
 export function salesNumbers(db: DB, me: User) {

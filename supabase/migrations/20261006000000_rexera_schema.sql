@@ -32,7 +32,7 @@ do $$ declare spec text[]; specs text[][] := array[
   array['leave_status',       $v$'PENDING','APPROVED','REJECTED','CANCELLED'$v$],
   array['notice_kind',        $v$'info','success','warning','action'$v$],
   array['payroll_status',     $v$'CALCULATED','APPROVED','FINALIZED','PAID'$v$],
-  array['backup_kind',        $v$'DOWNLOAD','SNAPSHOT','AUTO_SNAPSHOT','RESTORE'$v$],
+  array['backup_kind',        $v$'DOWNLOAD','SNAPSHOT','AUTO_SNAPSHOT','RESTORE','IMPORT'$v$],
   array['dataset_kind',       $v$'csv','excel'$v$]
 ]; begin
   foreach spec slice 1 in array specs loop

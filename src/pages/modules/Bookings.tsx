@@ -8,7 +8,7 @@ import { userName, visibleBookings } from '../../lib/actions'
 import { BOOKING_STATUS, STAGES } from '../../lib/workflow'
 import { bookingMoney, downloadCsv, fmtDate, inr, today } from '../../lib/format'
 import { pipelineTotals } from '../../lib/metrics'
-import { Button, Card, EmptyState, PageHeader, SearchBox, Table, Td, Th } from '../../components/ui'
+import { Button, Card, EmptyState, PageHeader, SearchBox, Table, Td, Th, usePaged } from '../../components/ui'
 import { BookingStatusBadge, DeadlineBadge, MoneyBar, PriorityBadge } from '../../components/booking'
 import { MiniStat } from '../dashboards/widgets'
 import { IndianRupee, Wallet, AlertCircle } from 'lucide-react'
@@ -22,7 +22,7 @@ export default function Bookings() {
   const [service, setService] = useState('')
   const [owner, setOwner] = useState('')
   const status = (params.get('status') ?? '') as BookingStatus | ''
-  const all = visibleBookings(db, me)
+  const all = useMemo(() => visibleBookings(db, me), [db, me])
 
   const list = useMemo(() => {
     const s = q.toLowerCase()
@@ -30,6 +30,7 @@ export default function Bookings() {
       (!s || [b.bookingId, b.companyName, b.contactPerson, b.mobile, b.email, b.serviceName, b.gstin, b.pan].some((x) => x.toLowerCase().includes(s))))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   }, [all, q, status, service, owner])
+  const { slice, pager } = usePaged(list, 50, [q, status, service, owner])
   const totals = pipelineTotals(db, list)
   const owners = [...new Set(all.map((b) => b.createdBy))]
   const countBy = (st: BookingStatus) => all.filter((b) => b.status === st).length
@@ -38,7 +39,7 @@ export default function Bookings() {
     <div>
       <PageHeader title="CRM Entries" subtitle="Every client booking: approval chain, processing stage and money" icon={Briefcase}
         actions={<>
-          {can('reports.export', 'bookings.all', 'bookings.team', 'bookings.own') && <Button variant="outline" icon={Download} onClick={() => downloadCsv(`crm-entries-${today()}.csv`, list.map((b) => { const m = bookingMoney(b); return { booking_id: b.bookingId, company: b.companyName, contact: b.contactPerson, mobile: b.mobile, email: b.email, pan: b.pan, gstin: b.gstin, state: b.state, service: b.serviceName, mode: b.mode, status: BOOKING_STATUS[b.status].label, stage: STAGES[b.stage - 1], quoted: b.totalQuoted, quoted_with_gst: m.quotedWithGst, collected: m.collected, outstanding: m.outstanding, sales_person: userName(db, b.createdBy), team_leader: userName(db, b.teamLeadId), operations: userName(db, b.opsMemberId), admin: userName(db, b.adminId), created: b.createdAt.slice(0, 10) } }))}>Export</Button>}
+          {can('reports.export', 'bookings.all', 'bookings.team', 'bookings.own') && <Button variant="outline" icon={Download} onClick={() => downloadCsv(`crm-entries-${today()}.csv`, list.map((b) => { const m = bookingMoney(b); return { booking_id: b.bookingId, company: b.companyName, contact: b.contactPerson, mobile: b.mobile, email: b.email, pan: b.pan, gstin: b.gstin, state: b.state, service: b.serviceName, mode: b.mode, status: BOOKING_STATUS[b.status].label, stage: STAGES[b.stage - 1], quoted: b.totalQuoted, quoted_with_gst: m.quotedWithGst, collected: m.collected, outstanding: m.outstanding, sales_person: b.createdBy ? userName(db, b.createdBy) : b.ownerName ?? '', team_leader: userName(db, b.teamLeadId), operations: userName(db, b.opsMemberId), admin: userName(db, b.adminId), created: b.createdAt.slice(0, 10) } }))}>Export</Button>}
           {can('bookings.create') && <Link to="/bookings/new"><Button variant="accent" icon={Plus}>New CRM entry</Button></Link>}
         </>} />
 
@@ -71,7 +72,7 @@ export default function Bookings() {
           <Table>
             <thead><tr><Th>Client</Th><Th>Service</Th><Th>Status</Th><Th>Stage</Th><Th className="w-52">Payment</Th><Th>Owner</Th><Th>Created</Th></tr></thead>
             <tbody>
-              {list.map((b) => (
+              {slice.map((b) => (
                 <tr key={b.id} className="hover:bg-card2/60">
                   <Td>
                     <Link to={`/bookings/${b.id}`} className="block font-semibold hover:text-brand-ink">{b.companyName}</Link>
@@ -81,13 +82,14 @@ export default function Bookings() {
                   <Td><BookingStatusBadge b={b} /></Td>
                   <Td className="text-xs">{b.opsMemberId ? <>{b.stage}. {STAGES[b.stage - 1]}</> : <span className="text-mute">—</span>}</Td>
                   <Td><MoneyBar b={b} /></Td>
-                  <Td className="text-xs">{userName(db, b.createdBy)}</Td>
+                  <Td className="text-xs">{b.createdBy ? userName(db, b.createdBy) : b.ownerName ?? '—'}</Td>
                   <Td className="text-xs text-mute">{fmtDate(b.createdAt)}</Td>
                 </tr>
               ))}
             </tbody>
           </Table>
         )}
+        {pager}
       </Card>
     </div>
   )

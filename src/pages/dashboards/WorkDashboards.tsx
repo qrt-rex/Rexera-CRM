@@ -1,25 +1,34 @@
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   BookOpenCheck, Briefcase, CalendarCheck2, CheckCircle2, ClipboardList, FileClock, FileText, FolderKanban, Images, PauseCircle,
   Send, ShieldCheck, UserCheck, UsersRound, ListTodo, Inbox,
 } from 'lucide-react'
 import { useDb } from '../../lib/store'
-import { useMe } from '../../lib/auth'
-import { userName } from '../../lib/actions'
+import { useAuth, useMe } from '../../lib/auth'
+import { userName, usersWithRole } from '../../lib/actions'
 import { isMaster } from '../../lib/rbac'
 import { monthStart, waitingFor } from '../../lib/metrics'
 import { STAGES } from '../../lib/workflow'
 import { fmtDate } from '../../lib/format'
 import { EmptyState, Stat } from '../../components/ui'
+import { HBars } from '../../components/charts'
 import { BookingRow, BookingStatusBadge, DeadlineBadge, StageTrack } from '../../components/booking'
 import { Greeting, LoginLogoutCard, Section, Tile, TileGrid, UpcomingEvents, ViewAll } from './widgets'
 
 export function OperationsDashboard() {
   const db = useDb()
   const me = useMe()
+  const { can } = useAuth()
   const sa = isMaster(me)
-  const mine = db.bookings.filter((b) => (sa || b.opsMemberId === me.id) && b.opsMemberId)
-  const active = mine.filter((b) => b.status === 'IN_OPERATIONS')
+  const own = useMemo(() => db.bookings.filter((b) => b.opsMemberId === me.id), [db.bookings, me.id])
+  // a shared team login (or a lead) usually has no files of its own: open on the whole team
+  const canTeam = sa || can('bookings.all')
+  const [scope, setScope] = useState<'mine' | 'team'>(() => (canTeam && !own.length ? 'team' : 'mine'))
+  const team = scope === 'team' && canTeam
+  const mine = useMemo(() => (team ? db.bookings.filter((b) => b.opsMemberId) : own), [team, db.bookings, own])
+  const active = useMemo(() => mine.filter((b) => b.status === 'IN_OPERATIONS').sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), [mine])
+  const workload = useMemo(() => team ? usersWithRole(db, 'operations').map((u) => ({ label: u.name, value: db.bookings.filter((b) => b.opsMemberId === u.id && ['IN_OPERATIONS', 'ON_HOLD'].includes(b.status)).length, sub: 'active files' })).filter((x) => x.value).sort((a, b) => b.value - a.value) : [], [team, db])
   const openTasks = mine.flatMap((b) => b.tasks.filter((t) => !t.done)).length
   const pendingDocs = mine.flatMap((b) => b.documents.filter((d) => d.status === 'PENDING')).length
   const hold = mine.filter((b) => b.status === 'ON_HOLD').length
@@ -27,9 +36,17 @@ export function OperationsDashboard() {
 
   return (
     <div>
-      <Greeting subtitle="Operation Team · process client files through the 9 stages" />
+      <Greeting subtitle="Operation Team · process client files through the 9 stages"
+        right={canTeam ? (
+          <div role="tablist" aria-label="Which files" className="flex gap-1 rounded-2xl bg-white/10 p-1 backdrop-blur">
+            {([['mine', `Assigned to me · ${own.length}`], ['team', 'Whole team']] as const).map(([id, label]) => (
+              <button key={id} role="tab" aria-selected={scope === id} onClick={() => setScope(id)}
+                className={scope === id ? 'rounded-xl bg-white px-3.5 py-2 text-sm font-bold text-[#2E3A8C] shadow-sm' : 'rounded-xl px-3.5 py-2 text-sm font-semibold text-white/85 hover:bg-white/15 hover:text-white'}>{label}</button>
+            ))}
+          </div>
+        ) : undefined} />
       <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
-        <Stat label="Total files" value={mine.length} icon={FileText} tone="violet" sub="assigned to you" />
+        <Stat label="Total files" value={mine.length} icon={FileText} tone="violet" sub={team ? 'across the team' : 'assigned to you'} />
         <Stat label="Active files" value={active.length} icon={FolderKanban} tone="green" sub="in operations" />
         <Stat label="Open tasks" value={openTasks} icon={ListTodo} tone="blue" sub="across files" />
         <Stat label="Pending documents" value={pendingDocs} icon={FileClock} tone="amber" sub="to verify" />
@@ -46,7 +63,7 @@ export function OperationsDashboard() {
         <Tile to="/attendance" icon={UserCheck} label="Attendance Board" tone="green" />
       </TileGrid>
       <div className="mt-6 grid gap-6 xl:grid-cols-3">
-        <Section title="My active files" subtitle="Move stages from the file page" icon={FolderKanban} className="xl:col-span-2" action={<ViewAll to="/work" />}>
+        <Section title={team ? 'Team active files' : 'My active files'} subtitle={team ? `${active.length} in operations · latest activity first` : 'Move stages from the file page'} icon={FolderKanban} className="xl:col-span-2" action={<ViewAll to="/work" />}>
           {!active.length ? <EmptyState icon={Inbox} title="No active files" text="Legal assigns files to you here." /> : (
             <ul className="divide-y divide-line/70">
               {active.slice(0, 6).map((b) => (
@@ -57,13 +74,16 @@ export function OperationsDashboard() {
                     <span className="ml-auto text-xs text-mute">Stage {b.stage}/{STAGES.length} · {STAGES[b.stage - 1]} · max {b.maxStage}</span>
                   </div>
                   <StageTrack b={b} />
-                  <p className="mt-2 text-xs text-mute">{b.serviceName} · due {fmtDate(b.deadline)} · {b.tasks.filter((t) => !t.done).length} open task(s)</p>
+                  <p className="mt-2 text-xs text-mute">{b.serviceName}{team ? ` · ${userName(db, b.opsMemberId)}` : ''}{b.deadline ? ` · due ${fmtDate(b.deadline)}` : ''} · {b.tasks.filter((t) => !t.done).length} open task(s)</p>
                 </li>
               ))}
             </ul>
           )}
         </Section>
-        <div className="space-y-6"><LoginLogoutCard /><UpcomingEvents limit={3} /></div>
+        <div className="space-y-6">
+          {team && <Section title="Team workload" subtitle="Active and on-hold files per person" icon={UsersRound}><div className="max-h-96 overflow-y-auto p-5"><HBars data={workload} /></div></Section>}
+          <LoginLogoutCard /><UpcomingEvents limit={3} />
+        </div>
       </div>
     </div>
   )

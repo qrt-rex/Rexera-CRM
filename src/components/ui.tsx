@@ -204,15 +204,23 @@ export function Tabs<T extends string>({ tabs, value, onChange, className }: { t
 }
 
 // ------------------------------------------------------------------ Modal & Drawer
+// One shared count of open dialogs: the page scrolls again only when the last one closes. (Saving and restoring
+// body.style.overflow per dialog left the page stuck unscrollable when a drawer and a modal overlapped.)
+let scrollLocks = 0
+function lockScroll() {
+  if (scrollLocks++ === 0) document.body.style.overflow = 'hidden'
+  return () => { if (--scrollLocks <= 0) { scrollLocks = 0; document.body.style.overflow = '' } }
+}
 function useEscape(open: boolean, onClose: () => void) {
+  const close = useRef(onClose)
+  close.current = onClose
   useEffect(() => {
     if (!open) return
-    const on = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    const on = (e: KeyboardEvent) => e.key === 'Escape' && close.current()
     window.addEventListener('keydown', on)
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => { window.removeEventListener('keydown', on); document.body.style.overflow = prev }
-  }, [open, onClose])
+    const unlock = lockScroll()
+    return () => { window.removeEventListener('keydown', on); unlock() }
+  }, [open])
 }
 
 export function Modal({ open, onClose, title, subtitle, children, footer, size = 'md' }: { open: boolean; onClose: () => void; title: ReactNode; subtitle?: ReactNode; children: ReactNode; footer?: ReactNode; size?: 'sm' | 'md' | 'lg' | 'xl' }) {
@@ -389,4 +397,28 @@ export function FileButton({ accept, onFile, children, maxBytes = 5 * 1024 * 102
 
 export function readAsDataUrl(f: File) {
   return new Promise<string>((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = rej; r.readAsDataURL(f) })
+}
+
+/** Page through long lists: `const { slice, pager } = usePaged(list, 50, [filters…])`. Resets to page 1 when `deps` change. */
+export function usePaged<T>(items: T[], size: number, deps: unknown[]) {
+  const [page, setPage] = useState(0)
+  const key = JSON.stringify(deps)
+  const [lastKey, setLastKey] = useState(key)
+  if (key !== lastKey) { setLastKey(key); setPage(0) }
+  const pages = Math.max(1, Math.ceil(items.length / size))
+  const p = Math.min(page, pages - 1)
+  const slice = items.slice(p * size, p * size + size)
+  const pager = items.length > size ? (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3 text-sm">
+      <span className="text-mute">{(p * size + 1).toLocaleString('en-IN')}–{Math.min(items.length, p * size + size).toLocaleString('en-IN')} of {items.length.toLocaleString('en-IN')}</span>
+      <span className="flex items-center gap-2">
+        <Button size="sm" variant="outline" disabled={p === 0} onClick={() => setPage(0)}>First</Button>
+        <Button size="sm" variant="outline" disabled={p === 0} onClick={() => setPage(p - 1)}>Previous</Button>
+        <span className="tabular-nums">Page {p + 1} / {pages}</span>
+        <Button size="sm" variant="outline" disabled={p >= pages - 1} onClick={() => setPage(p + 1)}>Next</Button>
+        <Button size="sm" variant="outline" disabled={p >= pages - 1} onClick={() => setPage(pages - 1)}>Last</Button>
+      </span>
+    </div>
+  ) : null
+  return { slice, pager }
 }

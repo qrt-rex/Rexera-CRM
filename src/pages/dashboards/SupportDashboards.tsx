@@ -22,7 +22,7 @@ export function SupportDashboard() {
   const activeFiles = files.filter((b) => !['COMPLETED', 'REJECTED'].includes(b.status))
   const waiting = files.filter((b) => ['ON_HOLD', 'ACCOUNTS_HOLD'].includes(b.status))
   const missingKyc = activeFiles.filter((b) => b.opsMemberId && !b.documents.some((d) => d.category === 'KYC'))
-  const overdue = activeFiles.filter((b) => b.deadline < today())
+  const overdue = activeFiles.filter((b) => !!b.deadline && b.deadline < today())
   const found = q.trim().length >= 2
     ? files.filter((b) => `${b.bookingId} ${b.companyName} ${b.contactPerson} ${b.mobile} ${b.email}`.toLowerCase().includes(q.toLowerCase())).slice(0, 8)
     : []

@@ -38,7 +38,17 @@ export interface User {
   address?: Address
   salary?: number
   target?: number
+  /** imported from the old PHP CRM */
+  legacyId?: number
+  legacyRole?: string
+  /** account came from the old CRM without a password; IT must reset it before first sign-in */
+  needsPasswordReset?: boolean
+  /** resume uploaded when HR added the person */
+  resume?: FileRef
 }
+
+/** Every original column of a record imported from the old CRM, exactly as it was. */
+export type LegacyRow = Record<string, string | null>
 
 export type LeadStatus = 'NEW' | 'ATTEMPTED' | 'CALL_BACK' | 'INTERESTED' | 'NOT_INTERESTED' | 'CONVERTED' | 'INVALID'
 export type CallOutcome = 'NO_ANSWER' | 'BUSY' | 'CALL_BACK' | 'INTERESTED' | 'NOT_INTERESTED' | 'CONVERTED' | 'WRONG_NUMBER'
@@ -64,6 +74,7 @@ export interface Lead {
   createdBy: string
   createdAt: string
   calls: Call[]
+  legacy?: LegacyRow
 }
 
 export type BookingStatus =
@@ -81,12 +92,14 @@ export interface Payment {
   proofName: string
   recordedBy: string
   verified: boolean
+  /** imported from the old CRM without a date: `date` is the booking day */
+  dateUnknown?: boolean
 }
 
 export interface Approval { id: string; level: string; action: string; by: string; at: string; remark: string }
 export interface StageMove { stage: number; at: string; by: string; note: string }
 export interface BComment { id: string; by: string; at: string; text: string; kind: string }
-export interface BDoc { id: string; name: string; category: string; size: number; at: string; by: string; dataUrl?: string; status?: 'PENDING' | 'VERIFIED' | 'REJECTED' }
+export interface BDoc { id: string; name: string; category: string; size: number; at: string; by: string; dataUrl?: string; status?: 'PENDING' | 'VERIFIED' | 'REJECTED'; legacyPath?: string }
 export interface BTask { id: string; title: string; done: boolean; due?: string; by: string; assignee?: string }
 
 export interface Booking {
@@ -128,6 +141,18 @@ export interface Booking {
   leadId?: string
   createdAt: string
   updatedAt: string
+  /** old-CRM id and every original column (crm row + workflow/deduction rows), kept unchanged */
+  legacyId?: number
+  legacy?: { crm: LegacyRow; workflow?: LegacyRow; deductions?: LegacyRow[] }
+  address?: string
+  website?: string
+  /** CIN / LLPIN */
+  cin?: string
+  startupContact?: { phone: string; email: string }
+  /** invoice-to details, only when they differ from the client's own */
+  billing?: { name: string; pan: string; gstin: string; contact: string; email: string }
+  /** closer's name when they aren't a CRM user (old-CRM files) */
+  ownerName?: string
 }
 
 export interface Service { id: string; name: string; category: string; price: number; gstRate: number; deduction: number; active: boolean }
@@ -170,9 +195,57 @@ export interface LeaveRequest {
   decidedAt?: string
   remark?: string
   createdAt: string
+  /** required for leave longer than 2 days (photo or PDF) */
+  attachment?: FileRef
 }
 
-export interface DaySession { id: string; userId: string; date: string; loginAt: string; logoutAt?: string }
+/** A break inside the working day. Breaks share a daily budget (BREAK_MINUTES). */
+export interface DayBreak { start: string; end?: string }
+export interface DaySession {
+  id: string; userId: string; date: string; loginAt: string
+  /** set when the person ends the day — they can't sign in again until tomorrow */
+  logoutAt?: string
+  breaks?: DayBreak[]
+  /** HR/IT re-opened the day after it was ended */
+  reopenedBy?: string
+}
+
+/** An uploaded file kept in the browser's file store (lib/files.ts); records only hold this reference. */
+export interface FileRef { id: string; name: string; type: string; size: number; at: string }
+
+export interface CandidateForm {
+  id: string
+  /** used in the public link /apply/<token> */
+  token: string
+  title: string
+  kind: 'JOB' | 'INTERNSHIP'
+  department: string
+  description: string
+  active: boolean
+  createdAt: string
+  by: string
+}
+export interface CandidateApplication {
+  id: string
+  formId: string
+  name: string
+  email: string
+  phone: string
+  city: string
+  dob?: string
+  qualification: string
+  college?: string
+  experience: string
+  currentCompany?: string
+  expectedSalary?: string
+  noticePeriod?: string
+  linkedin?: string
+  message?: string
+  resume: FileRef
+  submittedAt: string
+  status: 'NEW' | 'SHORTLISTED' | 'REJECTED' | 'HIRED'
+  notes?: string
+}
 
 export interface Notice { id: string; userId: string; title: string; body: string; link?: string; at: string; read: boolean; kind: 'info' | 'success' | 'warning' | 'action' }
 export interface Message { id: string; from: string; to: string; body: string; at: string; read: boolean }
@@ -228,7 +301,7 @@ export interface EmailAutomation {
   sent: number
 }
 
-export interface BackupLogEntry { id: string; at: string; by: string; kind: 'DOWNLOAD' | 'SNAPSHOT' | 'AUTO_SNAPSHOT' | 'RESTORE'; note: string; bytes: number; encrypted?: boolean }
+export interface BackupLogEntry { id: string; at: string; by: string; kind: 'DOWNLOAD' | 'SNAPSHOT' | 'AUTO_SNAPSHOT' | 'RESTORE' | 'IMPORT'; note: string; bytes: number; encrypted?: boolean }
 
 export interface PayRow {
   userId: string
@@ -274,6 +347,9 @@ export interface PfSettings {
   /** cap PF wages at wageCeiling (off = PF on the full basic) */
   ceilingEnabled: boolean
   wageCeiling: number
+  /** PF is calculated on at least wageFloor (when basic is lower) */
+  floorEnabled?: boolean
+  wageFloor?: number
   ptEnabled: boolean
   /** basic as % of monthly salary */
   basicPct: number
@@ -336,6 +412,8 @@ export interface DB {
   backupLog: BackupLogEntry[]
   emails: EmailMsg[]
   emailAutomations: EmailAutomation[]
+  candidateForms: CandidateForm[]
+  candidates: CandidateApplication[]
   /** one-time data upgrades already applied */
   upgrades: string[]
 }

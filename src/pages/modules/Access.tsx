@@ -4,9 +4,10 @@ import { KeyRound, Lock, RefreshCcw, Save, Settings2, ShieldCheck, UserCog, User
 import type { Perm, Role, User } from '../../lib/types'
 import { useDb, resetDemoData } from '../../lib/store'
 import { useMe } from '../../lib/auth'
-import { resetUserPassword, setRolePerms, updateSettings, updateUser, userName } from '../../lib/actions'
+import { setRolePerms, updateSettings, updateUser, userName } from '../../lib/actions'
 import { ALL_PERMS, DEFAULT_ROLE_PERMS, MASTER_ROLES, PERM_GROUPS, RESERVED, ROLES, effectivePerms, roleLabel, rolesOf } from '../../lib/rbac'
 import { INDIAN_STATES, fmtDate } from '../../lib/format'
+import { SetPasswordModal } from '../../components/SetPasswordModal'
 import { Avatar, Badge, Button, Card, CardHeader, Checkbox, cx, Drawer, Input, PageHeader, SearchBox, Select, Table, Tabs, Td, Th, Toggle, useConfirm, useRun } from '../../components/ui'
 
 type Tab = 'users' | 'roles' | 'settings'
@@ -32,6 +33,7 @@ function UsersTab() {
   const [confirm, node] = useConfirm()
   const [q, setQ] = useState('')
   const [open, setOpen] = useState<User | null>(null)
+  const [pwFor, setPwFor] = useState<User | null>(null)
   const meSA = rolesOf(me).includes('superadmin')
   const list = db.users.filter((u) => !q || `${u.name} ${u.username} ${u.email}`.toLowerCase().includes(q.toLowerCase()))
   const cur = open ? db.users.find((u) => u.id === open.id)! : null
@@ -55,7 +57,7 @@ function UsersTab() {
                 <Td><Toggle checked={u.active} label="Active" onChange={(v) => !self && run(() => updateUser(me, u.id, { active: v }), v ? 'Activated' : 'Deactivated')} /></Td>
                 <Td className="text-right"><span className="inline-flex gap-1">
                   <Button size="sm" variant="soft" icon={UserCog} disabled={self} onClick={() => setOpen(u)}>Manage access</Button>
-                  <Button size="sm" variant="ghost" icon={RefreshCcw} aria-label="Reset password" title="Reset to demo password" disabled={u.id !== me.id && self} onClick={async () => { if (await confirm('Reset password?', `${u.name}'s password will be reset to the demo password.`)) run(() => resetUserPassword(me, u.id), 'Password reset') }} />
+                  <Button size="sm" variant="ghost" icon={RefreshCcw} aria-label="Set a new password" title="Set a new password" disabled={self} onClick={() => setPwFor(u)} />
                 </span></Td>
               </tr>
             )
@@ -65,6 +67,7 @@ function UsersTab() {
       <Drawer open={!!cur} onClose={() => setOpen(null)} title={cur ? `Access · ${cur.name}` : ''} subtitle="Effective access = all roles + allow − deny. Reserved permissions stay with their roles.">
         {cur && <ManageAccess user={cur} />}
       </Drawer>
+      <SetPasswordModal open={!!pwFor} onClose={() => setPwFor(null)} user={pwFor ?? undefined} />
       {node}
     </Card>
   )

@@ -1,7 +1,7 @@
 import {
   BarChart3, BellRing, BookOpenCheck, Briefcase, CalendarDays, ClipboardCheck, FileText, FolderKanban, Images, IndianRupee,
   KeyRound, Megaphone, MessagesSquare, Phone, Settings, ShieldCheck, Sparkles, UserCheck, UserPlus, Users, UsersRound,
-  CalendarCheck2, Network, ScrollText, Wallet, Receipt, Landmark, Trophy, SlidersHorizontal, Gauge, KeySquare, DatabaseBackup, MailPlus, Inbox, type LucideIcon,
+  CalendarCheck2, Network, ScrollText, Wallet, Receipt, Landmark, Trophy, SlidersHorizontal, Gauge, KeySquare, DatabaseBackup, DatabaseZap, MailPlus, ClipboardList, FilePen, Inbox, type LucideIcon,
 } from 'lucide-react'
 import type { Perm } from './types'
 import type { Tone } from './workflow'
@@ -38,10 +38,12 @@ export const MODULES: ModuleDef[] = [
   { key: 'employees', path: '/employees', label: 'Employee Details', desc: 'Directory, profiles and teams', icon: UsersRound, tone: 'cyan', perms: ['employees.view', 'employees.manage', 'access.manage'], group: 'People' },
   { key: 'payroll', path: '/payroll', label: 'Payroll', desc: 'Monthly salary runs: calculate, approve, lock, pay', icon: Wallet, tone: 'blue', perms: ['payroll.view', 'payroll.manage'], group: 'People', hrOnly: true },
   { key: 'payslips', path: '/payslips', label: 'Payslips', desc: 'Printable payslips for finalised months', icon: Receipt, tone: 'cyan', perms: [], group: 'People', hrOnly: true },
-  { key: 'pf', path: '/pf', label: 'PF Management', desc: 'PF rules, UANs, monthly ECR', icon: Landmark, tone: 'green', perms: ['payroll.view', 'payroll.manage'], group: 'People', hrOnly: true },
+  { key: 'pf', path: '/pf', label: 'PF Management', desc: 'PF rules, wage limits, UANs', icon: Landmark, tone: 'green', perms: ['payroll.view', 'payroll.manage'], group: 'People', hrOnly: true },
   { key: 'incentives', path: '/incentives', label: 'Sales Incentives', desc: 'Daily, weekly and monthly incentive per sales person', icon: Trophy, tone: 'orange', perms: ['incentives.manage', 'payroll.view'], group: 'People', hrOnly: true },
   { key: 'incentive-settings', path: '/incentive-settings', label: 'Incentive Settings', desc: 'Thresholds and slabs, versioned', icon: SlidersHorizontal, tone: 'amber', perms: ['incentives.manage'], group: 'People', hrOnly: true },
   { key: 'performance', path: '/performance', label: 'Performance', desc: 'Report cards and scores', icon: Gauge, tone: 'violet', perms: ['performance.view'], group: 'People', hrOnly: true },
+  { key: 'candidates', path: '/candidates', label: 'Candidate Forms', desc: 'Share an apply link; resumes come in here', icon: ClipboardList, tone: 'violet', perms: ['recruitment.manage'], group: 'People', hrOnly: true },
+  { key: 'letters', path: '/letters', label: 'Letters', desc: 'Joining, internship and experience letters (PDF)', icon: FilePen, tone: 'pink', perms: ['employees.manage'], group: 'People', hrOnly: true },
   { key: 'recruitment', path: '/recruitment', label: 'Recruitment', desc: 'Import CSV / Excel files into tables', icon: Briefcase, tone: 'navy', perms: ['recruitment.manage'], group: 'People', hrOnly: true },
   { key: 'events', path: '/events', label: 'Events & Calendar', desc: 'Meetings, trainings, holidays', icon: CalendarDays, tone: 'pink', perms: [], group: 'People' },
   { key: 'messages', path: '/messages', label: 'Messages', desc: 'Team chat and message templates', icon: MessagesSquare, tone: 'blue', perms: ['messages.use'], group: 'Workspace' },
@@ -51,6 +53,7 @@ export const MODULES: ModuleDef[] = [
   { key: 'notifications', path: '/notifications', label: 'Notifications', desc: 'Everything that needs your attention', icon: BellRing, tone: 'orange', perms: [], group: 'Workspace' },
   { key: 'access', path: '/access', label: 'Access Management', desc: 'Users, roles and permissions', icon: KeyRound, tone: 'navy', perms: ['access.manage'], group: 'Admin' },
   { key: 'api-keys', path: '/api-keys', label: 'API Keys', desc: 'Keys for integrations: create, rotate, revoke', icon: KeySquare, tone: 'orange', perms: ['access.manage'], group: 'Admin' },
+  { key: 'legacy-import', path: '/legacy-import', label: 'Import from old CRM', desc: 'Load the old PHP CRM .sql dump, checked line by line', icon: DatabaseZap, tone: 'violet', perms: ['access.manage'], group: 'Admin' },
   { key: 'backup', path: '/backup', label: 'Data Backup & Restore', desc: 'Encrypted backups, snapshots, restore', icon: DatabaseBackup, tone: 'cyan', perms: ['access.manage'], group: 'Admin' },
   { key: 'audit', path: '/audit', label: 'Activity Log', desc: 'Who did what and when', icon: ScrollText, tone: 'gray', perms: ['audit.view'], group: 'Admin' },
   { key: 'security', path: '/settings', label: 'Profile & Settings', desc: 'Profile, security, appearance', icon: Settings, tone: 'gray', perms: [], group: 'Workspace' },

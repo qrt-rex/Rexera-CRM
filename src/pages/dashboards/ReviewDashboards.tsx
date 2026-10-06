@@ -69,7 +69,7 @@ export function LegalDashboard() {
   const me = useMe()
   const waiting = waitingFor(db, me).filter((b) => b.status === 'PENDING_LEGAL')
   const withOps = db.bookings.filter((b) => b.status === 'IN_OPERATIONS').length
-  const overdue = db.bookings.filter((b) => !['COMPLETED', 'REJECTED'].includes(b.status) && b.deadline < today()).length
+  const overdue = db.bookings.filter((b) => !['COMPLETED', 'REJECTED'].includes(b.status) && !!b.deadline && b.deadline < today()).length
   const done = db.bookings.filter((b) => b.status === 'COMPLETED' && b.updatedAt.slice(0, 10) >= monthStart()).length
   const ops = usersWithRole(db, 'operations')
   const workload = useMemo(() => ops.map((u) => ({

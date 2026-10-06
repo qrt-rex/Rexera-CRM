@@ -2,7 +2,7 @@ import type { DB, IncentiveRules, Perm, PfSettings, Role } from './types'
 import { defaultAutomations } from './emailTemplates'
 
 export const DEFAULT_PF: PfSettings = {
-  enabled: true, employeePct: 12, employerPct: 12, epsPct: 8.33, ceilingEnabled: false, wageCeiling: 15000, ptEnabled: true, basicPct: 50, hraPct: 40,
+  enabled: true, employeePct: 12, employerPct: 12, epsPct: 8.33, ceilingEnabled: false, wageCeiling: 15000, floorEnabled: false, wageFloor: 0, ptEnabled: true, basicPct: 50, hraPct: 40,
 }
 
 export const DEFAULT_INCENTIVE: IncentiveRules = {
@@ -41,6 +41,8 @@ export function upgradeDb(d: DB): DB {
   d.apiKeys ??= []
   d.backupLog ??= []
   d.emails ??= []
+  d.candidateForms ??= []
+  d.candidates ??= []
   d.emailAutomations ??= defaultAutomations()
   for (const a of defaultAutomations()) if (!d.emailAutomations.some((x) => x.key === a.key)) d.emailAutomations.push(a)
   if (!d.upgrades.includes('uan-fix-1')) {

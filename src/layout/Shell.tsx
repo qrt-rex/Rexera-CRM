@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import {
   Bell, ChevronDown, ChevronRight, Home, LayoutGrid, LogOut, Mail, Menu as MenuIcon, Moon, Search, Settings, ShieldCheck, Sun, UserCheck, X, Monitor,
   HelpCircle, SlidersHorizontal, Users, CalendarCheck2, TrendingUp, GraduationCap, FileText, Inbox, PartyPopper, BarChart3,
-  Wallet, Receipt, Landmark, Trophy, Briefcase, Wrench, MailPlus,
+  Wallet, Receipt, Landmark, Trophy, Briefcase, Wrench, MailPlus, ClipboardList, FilePen,
 } from 'lucide-react'
 import type { Perm } from '../lib/types'
 import { Rexy } from '../components/hr/Mascots'
@@ -17,6 +17,7 @@ import { ago } from '../lib/format'
 import { Avatar, Button, cx, Menu, MenuItem, Modal } from '../components/ui'
 import { Logo } from '../components/Logo'
 import { MiniCalendar } from './MiniCalendar'
+import { BreakBanner } from '../pages/dashboards/widgets'
 import { CommandPalette } from './CommandPalette'
 
 export function useUnread() {
@@ -138,6 +139,7 @@ export function Shell() {
         </header>
 
         <main id="main" className="mx-auto w-full max-w-[1500px] flex-1 px-4 py-6 sm:px-6 lg:px-8">
+          <BreakBanner />
           {maintenance?.on && isMaster(me) && (
             <div className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-warn/40 bg-warn-soft px-4 py-3 text-sm text-warn">
               <Wrench className="size-4" /><b>Maintenance mode is on</b><span className="text-ink/70">Only IT Support and Super Admin can use the app.{maintenance.message ? ` Message: “${maintenance.message}”` : ''}</span>
@@ -233,7 +235,7 @@ function Sidebar() {
   )
 }
 
-const HR_PATHS = ['/payroll', '/payslips', '/pf', '/incentives', '/incentive-settings', '/recruitment', '/performance', '/email-center']
+const HR_PATHS = ['/payroll', '/payslips', '/pf', '/incentives', '/incentive-settings', '/recruitment', '/candidates', '/letters', '/performance', '/email-center']
 
 /** HR navigation: each item keeps its own colour; only pages that exist and the user may open are listed. */
 const HR_MENU: { label: string; to: string; icon: typeof Home; color: string; perms: Perm[] }[] = [
@@ -246,6 +248,8 @@ const HR_MENU: { label: string; to: string; icon: typeof Home; color: string; pe
   { label: 'Sales Incentives', to: '/incentives', icon: Trophy, color: 'text-orange-600 bg-orange-100 dark:bg-orange-500/15 dark:text-orange-300', perms: ['incentives.manage', 'payroll.view'] },
   { label: 'Incentive Settings', to: '/incentive-settings', icon: SlidersHorizontal, color: 'text-amber-600 bg-amber-100 dark:bg-amber-500/15 dark:text-amber-300', perms: ['incentives.manage'] },
   { label: 'Recruitment', to: '/recruitment', icon: Briefcase, color: 'text-blue-600 bg-blue-100 dark:bg-blue-500/15 dark:text-blue-300', perms: ['recruitment.manage'] },
+  { label: 'Candidate Forms', to: '/candidates', icon: ClipboardList, color: 'text-indigo-600 bg-indigo-100 dark:bg-indigo-500/15 dark:text-indigo-300', perms: ['recruitment.manage'] },
+  { label: 'Letters', to: '/letters', icon: FilePen, color: 'text-fuchsia-600 bg-fuchsia-100 dark:bg-fuchsia-500/15 dark:text-fuchsia-300', perms: ['employees.manage'] },
   { label: 'Performance', to: '/performance', icon: TrendingUp, color: 'text-violet-600 bg-violet-100 dark:bg-violet-500/15 dark:text-violet-300', perms: ['performance.view'] },
   { label: 'Training & Development', to: '/events', icon: GraduationCap, color: 'text-amber-600 bg-amber-100 dark:bg-amber-500/15 dark:text-amber-300', perms: [] },
   { label: 'Policies & Documents', to: '/documents', icon: FileText, color: 'text-teal-600 bg-teal-100 dark:bg-teal-500/15 dark:text-teal-300', perms: ['documents.forms'] },

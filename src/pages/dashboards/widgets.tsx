@@ -1,14 +1,14 @@
-import { useMemo, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, CalendarDays, ChevronRight, Clock, Eye, LogIn, LogOut, Play, Square, type LucideIcon } from 'lucide-react'
+import { ArrowRight, CalendarDays, ChevronRight, Clock, Eye, LogIn, LogOut, Pause, Play, Square, type LucideIcon } from 'lucide-react'
 import { useDb } from '../../lib/store'
-import { useMe } from '../../lib/auth'
-import { endDay, startDay, userName } from '../../lib/actions'
+import { useAuth, useMe } from '../../lib/auth'
+import { BREAK_MINUTES, breakLeftMs, breakUsedMs, endDay, onBreak, pauseDay, resumeDay, startDay, userName, workedMs } from '../../lib/actions'
 import { todaySession } from '../../lib/metrics'
 import { ago, fmtDate, fmtTime, today } from '../../lib/format'
 import { roleLabel } from '../../lib/rbac'
 import type { Tone } from '../../lib/workflow'
-import { Badge, Button, Card, CardHeader, cx, EmptyState, useRun } from '../../components/ui'
+import { Badge, Button, Card, CardHeader, cx, EmptyState, useConfirm, useRun } from '../../components/ui'
 
 const chip: Record<Tone, string> = {
   navy: 'bg-brand-soft text-brand-ink', orange: 'bg-accent-soft text-accent', green: 'bg-ok-soft text-ok', red: 'bg-bad-soft text-bad',
@@ -63,18 +63,42 @@ export function TileGrid({ children, cols = 3 }: { children: ReactNode; cols?: 2
   return <div className={cx('grid gap-4', c)}>{children}</div>
 }
 
+/** Re-renders every `ms` while `active` (for live timers). */
+export function useNow(active: boolean, ms = 1000) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!active) return
+    setNow(Date.now())
+    const t = setInterval(() => setNow(Date.now()), ms)
+    return () => clearInterval(t)
+  }, [active, ms])
+  return active ? now : Date.now()
+}
+export const mmss = (ms: number) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` }
+
 export function LoginLogoutCard({ className }: { className?: string }) {
   const db = useDb()
   const me = useMe()
+  const { signOut } = useAuth()
   const run = useRun()
+  const [confirm, confirmNode] = useConfirm()
   const s = todaySession(db, me.id)
-  const hours = s ? ((s.logoutAt ? new Date(s.logoutAt).getTime() : Date.now()) - new Date(s.loginAt).getTime()) / 3600000 : 0
+  const paused = onBreak(s)
+  const now = useNow(!!s && !s.logoutAt, paused ? 1000 : 30000)
+  const left = breakLeftMs(s, now)
+  const used = breakUsedMs(s, now)
+  const hours = workedMs(s, now) / 3600000
+  const logout = async () => {
+    if (!(await confirm('Logout for today?', `You won't be able to sign in again until tomorrow. Worked ${hours.toFixed(1)} h today${used ? `, break ${mmss(used)}` : ''}.`, true))) return
+    if (await run(() => endDay(me), 'Logged out for today. See you tomorrow!')) signOut()
+  }
   return (
     <Card className={cx('p-4', className)}>
       <div className="mb-3 flex items-center gap-2">
         <Clock className="size-[18px] text-info" />
         <h3 className="flex-1 text-sm font-bold">Login – Logout Time</h3>
-        {s && !s.logoutAt && <Badge tone="green" dot>Working · {hours.toFixed(1)} h</Badge>}
+        {s && !s.logoutAt && !paused && <Badge tone="green" dot>Working · {hours.toFixed(1)} h</Badge>}
+        {paused && <Badge tone="amber" dot>On break · {mmss(left)} left</Badge>}
         {s?.logoutAt && <Badge tone="gray">Day ended</Badge>}
       </div>
       <div className="grid grid-cols-2 gap-3">
@@ -89,12 +113,44 @@ export function LoginLogoutCard({ className }: { className?: string }) {
           <p className="text-[11px] text-mute">{s?.logoutAt ? fmtDate(s.logoutAt) : 'Not yet logout'}</p>
         </div>
       </div>
-      <div className="mt-3">
-        {!s || s.logoutAt
-          ? <Button size="sm" variant="success" icon={Play} className="w-full" onClick={() => run(() => startDay(me), s ? 'Day resumed' : 'Day started')}>{s ? 'Resume my day' : 'Start my day'}</Button>
-          : <Button size="sm" variant="outline" icon={Square} className="w-full" onClick={() => run(() => endDay(me), 'Day ended. See you tomorrow!')}>End my day</Button>}
+      {s && !s.logoutAt && (
+        <div className="mt-3">
+          <div className="mb-1 flex justify-between text-[11px] font-semibold text-mute"><span>Break time today</span><span className="tabular-nums">{mmss(used)} / {BREAK_MINUTES}:00</span></div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-card2"><div className={cx('h-full rounded-full transition-all', left > 0 ? 'bg-warn' : 'bg-bad')} style={{ width: `${Math.min(100, (used / (BREAK_MINUTES * 60000)) * 100)}%` }} /></div>
+        </div>
+      )}
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        {!s ? <Button size="sm" variant="success" icon={Play} className="col-span-2" onClick={() => run(() => startDay(me), 'Day started')}>Start my day</Button>
+          : s.logoutAt ? <p className="col-span-2 rounded-xl bg-card2 px-3 py-2 text-center text-xs text-mute">You logged out for today. You can sign in again tomorrow.</p>
+          : <>
+            {paused
+              ? <Button size="sm" variant="success" icon={Play} onClick={() => run(() => resumeDay(me), 'Welcome back — day resumed')}>Resume</Button>
+              : <Button size="sm" variant="soft" icon={Pause} disabled={left <= 0} title={left <= 0 ? `All ${BREAK_MINUTES} minutes of break used today` : `${mmss(left)} of break left`} onClick={() => run(() => pauseDay(me), `Day paused · ${mmss(left)} of break left`)}>{left <= 0 ? 'No break left' : 'Pause'}</Button>}
+            <Button size="sm" variant="outline" icon={Square} onClick={logout}>Logout</Button>
+          </>}
       </div>
+      {confirmNode}
     </Card>
+  )
+}
+
+/** Shown on every page while the person is on a break. */
+export function BreakBanner() {
+  const db = useDb()
+  const me = useMe()
+  const run = useRun()
+  const s = todaySession(db, me.id)
+  const paused = onBreak(s)
+  const now = useNow(paused)
+  if (!paused) return null
+  const left = breakLeftMs(s, now)
+  return (
+    <div role="status" className={cx('mb-5 flex flex-wrap items-center gap-3 rounded-2xl border px-4 py-3 text-sm', left > 0 ? 'border-warn/40 bg-warn-soft text-warn' : 'border-bad/40 bg-bad-soft text-bad')}>
+      <Pause className="size-4" />
+      <b>Your day is paused</b>
+      <span className="text-ink/70">{left > 0 ? `${mmss(left)} of today's ${BREAK_MINUTES}-minute break left` : `Break time is over by ${mmss(breakUsedMs(s, now) - BREAK_MINUTES * 60000)} — please resume`}</span>
+      <Button size="sm" variant="success" icon={Play} className="ml-auto" onClick={() => run(() => resumeDay(me), 'Welcome back — day resumed')}>Resume my day</Button>
+    </div>
   )
 }
 

@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { Calculator, Download, Landmark, Lock, Save, ShieldCheck, Users } from 'lucide-react'
+import { Calculator, Landmark, Lock, Save, ShieldCheck, Users } from 'lucide-react'
 import type { PfSettings } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
 import { canEditPf, monthLabel, prevMonth, salaryStructure, savePfSettings, updatePfAccount } from '../../lib/payroll'
-import { downloadCsv, inr } from '../../lib/format'
+import { inr } from '../../lib/format'
 import { Badge, Button, Card, CardHeader, EmptyState, Input, PageHeader, Table, Td, Th, Toggle, useRun } from '../../components/ui'
 import { MiniStat } from '../dashboards/widgets'
 import { MonthPicker } from './Payroll'
@@ -25,6 +25,7 @@ function Example({ s }: { s: PfSettings }) {
         {line(`Basic (${s.basicPct}%)`, x.basic)}
         {line(`HRA (${s.hraPct}% of basic)`, x.hra)}
         {line('Other allowance', x.otherAllowance)}
+        {x.pfWages !== x.basic && line('PF calculated on', x.pfWages)}
         {line(`Employer PF (${s.employerPct}%)`, -x.pfEmployer, 'text-bad')}
         {line('Gross salary', x.gross, '', true)}
         {line(`Employee PF (${s.employeePct}%)`, -x.pfEmployee, 'text-bad')}
@@ -51,15 +52,10 @@ export default function Pf() {
   const epsOf = (wages: number) => Math.round((wages * db.pfSettings.epsPct) / 100)
   const totals = rows.reduce((t, r) => ({ wages: t.wages + r.pfWages, ee: t.ee + r.pfEmployee, eps: t.eps + epsOf(r.pfWages), er: t.er + r.pfEmployer }), { wages: 0, ee: 0, eps: 0, er: 0 })
 
-  const exportEcr = () => downloadCsv(`pf-ecr-${month}.csv`, rows.map((r) => {
-    const eps = epsOf(r.pfWages)
-    return { uan: db.pfAccounts.find((a) => a.userId === r.userId)?.uan ?? '', member_name: r.name, gross_wages: r.gross - r.lopAmount, epf_wages: r.pfWages, eps_wages: r.pfWages, edli_wages: r.pfWages, epf_contribution_ee: r.pfEmployee, eps_contribution_er: eps, epf_eps_diff_er: r.pfEmployer - eps, ncp_days: r.lopDays }
-  }))
-
   return (
     <div>
-      <PageHeader title="PF Management" subtitle="Provident fund rules, member UANs and the monthly contribution report" icon={ShieldCheck}
-        actions={<><MonthPicker value={month} onChange={setMonth} /><Button variant="outline" icon={Download} disabled={!rows.length} onClick={exportEcr}>ECR file</Button></>} />
+      <PageHeader title="PF Management" subtitle="Provident fund rules, wage limits and member UANs" icon={ShieldCheck}
+        actions={<MonthPicker value={month} onChange={setMonth} />} />
 
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <MiniStat label="Members this month" value={rows.length} icon={Users} />
@@ -83,8 +79,10 @@ export default function Pf() {
                 <Input label="Employer PF %" type="number" step="0.01" value={s.employerPct} onChange={(e) => setS({ ...s, employerPct: Number(e.target.value) })} />
               </div>
               <Input label="of which EPS (pension) %" type="number" step="0.01" value={s.epsPct} onChange={(e) => setS({ ...s, epsPct: Number(e.target.value) })} hint={`EPF part of the employer share = ${(s.employerPct - s.epsPct).toFixed(2)}%`} />
-              <label className="flex items-center justify-between gap-3 text-sm font-semibold">Cap PF wages <Toggle checked={s.ceilingEnabled} onChange={(v) => hr && setS({ ...s, ceilingEnabled: v })} label="Cap PF wages" /></label>
-              {s.ceilingEnabled && <Input label="PF wage ceiling (₹ / month)" type="number" value={s.wageCeiling} onChange={(e) => setS({ ...s, wageCeiling: Number(e.target.value) })} />}
+              <label className="flex items-center justify-between gap-3 text-sm font-semibold">PF lower limit <Toggle checked={!!s.floorEnabled} onChange={(v) => hr && setS({ ...s, floorEnabled: v, wageFloor: s.wageFloor || 15000 })} label="PF lower limit" /></label>
+              {s.floorEnabled && <Input label="Lower limit (₹ / month)" type="number" min={0} value={s.wageFloor ?? ''} onChange={(e) => setS({ ...s, wageFloor: Number(e.target.value) })} hint="PF is calculated on at least this amount when the basic is lower." />}
+              <label className="flex items-center justify-between gap-3 text-sm font-semibold">PF upper limit <Toggle checked={s.ceilingEnabled} onChange={(v) => hr && setS({ ...s, ceilingEnabled: v })} label="PF upper limit" /></label>
+              {s.ceilingEnabled && <Input label="Upper limit (₹ / month)" type="number" min={0} value={s.wageCeiling} onChange={(e) => setS({ ...s, wageCeiling: Number(e.target.value) })} hint="PF is calculated on at most this amount when the basic is higher." />}
               <label className="flex items-center justify-between gap-3 text-sm font-semibold">Professional tax ₹200 <Toggle checked={s.ptEnabled} onChange={(v) => hr && setS({ ...s, ptEnabled: v })} label="Professional tax" /></label>
               {hr && <Button type="button" icon={Save} onClick={() => run(() => savePfSettings(me, s), 'Saved — recalculate open payroll months to apply')}>Save settings</Button>}
             </fieldset>

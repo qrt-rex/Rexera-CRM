@@ -88,12 +88,20 @@ export function salesIncentive(db: DB, u: User, month: string, rules: IncentiveR
 export const isSalesPerson = (u: User) => rolesOf(u).some((r) => r === 'sales' || r === 'teamlead')
 
 // ------------------------------------------------------------------ payroll
+/** Wages PF is calculated on: the basic, raised to the lower limit and capped at the upper limit when those are on. */
+export function pfWagesFor(basic: number, pf: PfSettings) {
+  let w = basic
+  if (pf.floorEnabled && (pf.wageFloor ?? 0) > 0) w = Math.max(w, pf.wageFloor!)
+  if (pf.ceilingEnabled) w = Math.min(w, pf.wageCeiling)
+  return round2(w)
+}
+
 /** Salary split for a monthly salary (CTC), before LOP. */
 export function salaryStructure(ctc: number, pf: PfSettings, enrolled = true) {
   const basic = round2((ctc * pf.basicPct) / 100)
   const hra = round2((basic * pf.hraPct) / 100)
   const otherAllowance = round2(ctc - basic - hra)
-  const pfWages = pf.enabled && enrolled ? (pf.ceilingEnabled ? Math.min(basic, pf.wageCeiling) : basic) : 0
+  const pfWages = pf.enabled && enrolled ? pfWagesFor(basic, pf) : 0
   const pfEmployer = Math.round((pfWages * pf.employerPct) / 100)
   const pfEmployee = Math.round((pfWages * pf.employeePct) / 100)
   const gross = round2(ctc - pfEmployer)
@@ -256,10 +264,12 @@ export function savePfSettings(me: User, s: PfSettings) {
   if (!(s.basicPct > 0 && s.basicPct <= 100)) throw new ActionError('Basic must be between 1% and 100% of salary.')
   if (!(s.hraPct >= 0) || s.basicPct * (1 + s.hraPct / 100) > 100) throw new ActionError('Basic + HRA cannot be more than the salary.')
   if (s.epsPct > s.employerPct) throw new ActionError('EPS cannot be more than the employer share.')
-  if (!(s.wageCeiling > 0)) throw new ActionError('Wage ceiling must be more than 0.')
+  if (!(s.wageCeiling > 0)) throw new ActionError('Upper limit must be more than 0.')
+  if (s.floorEnabled && !((s.wageFloor ?? 0) > 0)) throw new ActionError('Lower limit must be more than 0.')
+  if (s.floorEnabled && s.ceilingEnabled && (s.wageFloor ?? 0) > s.wageCeiling) throw new ActionError('Lower limit cannot be more than the upper limit.')
   mutate((d) => {
     d.pfSettings = { ...s }
-    log(d, me.id, 'PF_SETTINGS', `Basic ${s.basicPct}% · HRA ${s.hraPct}% of basic · PF EE ${s.employeePct}% / ER ${s.employerPct}%${s.ceilingEnabled ? ` · ceiling ₹${s.wageCeiling}` : ''}`)
+    log(d, me.id, 'PF_SETTINGS', `Basic ${s.basicPct}% · HRA ${s.hraPct}% of basic · PF EE ${s.employeePct}% / ER ${s.employerPct}%${s.floorEnabled ? ` · lower limit ₹${s.wageFloor}` : ''}${s.ceilingEnabled ? ` · upper limit ₹${s.wageCeiling}` : ''}`)
   })
 }
 

@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { CalendarCheck2, Check, Plus, X } from 'lucide-react'
-import type { LeaveType } from '../../lib/types'
+import type { FileRef, LeaveType } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useMe } from '../../lib/auth'
-import { applyLeave, canDecideLeave, cancelLeave, decideLeave, leaveApprovers, userName } from '../../lib/actions'
+import { applyLeave, canDecideLeave, cancelLeave, decideLeave, LEAVE_ATTACHMENT_AFTER_DAYS, leaveApprovers, userName } from '../../lib/actions'
+import { DOC_TYPES } from '../../lib/files'
+import { FileField, FileLink } from '../../components/FileField'
 import { daysBetween, fmtDate, today } from '../../lib/format'
 import { roleLabel } from '../../lib/rbac'
 import { Badge, Button, Card, EmptyState, Input, Modal, PageHeader, Select, Table, Tabs, Td, Textarea, Th, useRun } from '../../components/ui'
@@ -19,7 +21,7 @@ export default function Leave() {
   const run = useRun()
   const [params, setParams] = useSearchParams()
   const [open, setOpen] = useState(false)
-  const [f, setF] = useState({ type: 'CL' as LeaveType, from: today(), to: today(), reason: '' })
+  const [f, setF] = useState<{ type: LeaveType; from: string; to: string; reason: string; attachment?: FileRef }>({ type: 'CL', from: today(), to: today(), reason: '' })
   const [decide, setDecide] = useState<{ id: string; approve: boolean } | null>(null)
   const [remark, setRemark] = useState('')
   useEffect(() => { if (params.get('new')) { setOpen(true); setParams({}, { replace: true }) } }, [params, setParams])
@@ -62,7 +64,7 @@ export default function Leave() {
                     <Td><Badge tone="violet">{l.type}</Badge></Td>
                     <Td className="text-sm">{fmtDate(l.from)} → {fmtDate(l.to)}</Td>
                     <Td>{l.days}</Td>
-                    <Td className="max-w-64 text-sm"><span className="line-clamp-2">{l.reason}</span>{l.remark && <span className="block text-xs text-mute">“{l.remark}” — {userName(db, l.decidedBy)}</span>}</Td>
+                    <Td className="max-w-64 text-sm"><span className="line-clamp-2">{l.reason}</span>{l.attachment && <FileLink file={l.attachment} label="Attachment" />}{l.remark && <span className="block text-xs text-mute">“{l.remark}” — {userName(db, l.decidedBy)}</span>}</Td>
                     <Td><Badge tone={tone[l.status]}>{l.status.toLowerCase()}</Badge></Td>
                     <Td className="text-right">
                       {tab === 'approve' && <span className="inline-flex gap-1"><Button size="sm" variant="success" icon={Check} onClick={() => { setDecide({ id: l.id, approve: true }); setRemark('') }}>Approve</Button><Button size="sm" variant="outline" icon={X} onClick={() => { setDecide({ id: l.id, approve: false }); setRemark('') }}>Reject</Button></span>}
@@ -82,7 +84,11 @@ export default function Leave() {
           <Select label="Leave type" value={f.type} onChange={(e) => setF({ ...f, type: e.target.value as LeaveType })} className="sm:col-span-2">{(Object.keys(NAMES) as LeaveType[]).map((t) => <option key={t} value={t}>{NAMES[t]}{t !== 'LOP' ? ` · ${QUOTA[t] - used[t]} left` : ''}</option>)}</Select>
           <Input label="From" type="date" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value, to: e.target.value > f.to ? e.target.value : f.to })} />
           <Input label="To" type="date" value={f.to} min={f.from} onChange={(e) => setF({ ...f, to: e.target.value })} hint={`${days} day(s)`} />
-          <Textarea label="Reason" required value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} className="sm:col-span-2" hint={f.type === 'SL' && days > 2 ? 'Sick leave over 2 days needs a medical certificate — mention it here.' : undefined} />
+          <Textarea label="Reason" required value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} className="sm:col-span-2" />
+          <div className="sm:col-span-2">
+            <FileField label="Attachment" required={days > LEAVE_ATTACHMENT_AFTER_DAYS} accept={DOC_TYPES} acceptLabel="Photo (JPG, PNG) or PDF" value={f.attachment} onChange={(attachment) => setF({ ...f, attachment })}
+              hint={days > LEAVE_ATTACHMENT_AFTER_DAYS ? `Required for leave of more than ${LEAVE_ATTACHMENT_AFTER_DAYS} days (e.g. medical certificate).` : 'Optional for leave of up to 2 days.'} />
+          </div>
         </div>
       </Modal>
       <Modal open={!!decide} onClose={() => setDecide(null)} title={decide?.approve ? 'Approve leave' : 'Reject leave'} size="sm"

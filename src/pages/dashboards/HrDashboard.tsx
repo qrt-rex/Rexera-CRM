@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  BarChart3, CalendarCheck2, CalendarDays, CalendarPlus, ChevronRight, ClipboardCheck, FileText, FolderOpen, Mail, Megaphone, PieChart,
+  Award, BarChart3, CalendarCheck2, CalendarDays, CalendarPlus, ChevronRight, ClipboardCheck, ClipboardList, FileText, FilePen as FileSignature, FolderOpen, GraduationCap, Mail, Megaphone, PieChart,
   UserCheck, UserMinus, UserPlus, Users, type LucideIcon,
 } from 'lucide-react'
 import { useDb } from '../../lib/store'
@@ -384,6 +384,10 @@ function QuickActions() {
   const { can } = useAuth()
   const items: { to: string; label: string; icon: LucideIcon; tone: Pastel; show: boolean }[] = [
     { to: '/employees?new=1', label: 'Add Employee', icon: UserPlus, tone: 'blue', show: can('employees.manage', 'access.manage') },
+    { to: '/letters?type=joining', label: 'Joining Letter', icon: FileSignature, tone: 'violet', show: can('employees.manage') },
+    { to: '/letters?type=internship', label: 'Internship Letter', icon: GraduationCap, tone: 'sky', show: can('employees.manage') },
+    { to: '/letters?type=experience', label: 'Experience Letter', icon: Award, tone: 'emerald', show: can('employees.manage') },
+    { to: '/candidates', label: 'Candidate Form', icon: ClipboardList, tone: 'amber', show: can('recruitment.manage') },
     { to: '/attendance', label: 'Mark Attendance', icon: UserCheck, tone: 'green', show: true },
     { to: '/leave?new=1', label: 'Apply Leave', icon: CalendarPlus, tone: 'pink', show: true },
     { to: '/leave', label: 'Approve Leave', icon: ClipboardCheck, tone: 'amber', show: can('leave.approve') },

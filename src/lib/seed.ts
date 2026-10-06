@@ -269,6 +269,7 @@ export async function buildSeed(): Promise<DB> {
   const db: DB = {
     version: SEED_VERSION,
     users, leads, bookings, services, invoices, sessions,
+    candidateForms: [], candidates: [],
     schemes: [
       { id: 'sc-1', title: 'Startup India Seed Fund', category: 'Grant', summary: 'Up to ₹20 lakh grant for proof of concept and up to ₹50 lakh for market entry through incubators.', benefit: 'Up to ₹70 lakh', eligibility: 'DPIIT-recognised startup, incorporated < 2 years', active: true, createdAt: at(20), by: 'u-sa' },
       { id: 'sc-2', title: 'PMEGP', category: 'Subsidy', summary: 'Credit-linked subsidy for new micro enterprises in manufacturing and services.', benefit: '15–35% subsidy', eligibility: 'Age 18+, project above ₹10 lakh needs VIII pass', active: true, createdAt: at(18), by: 'u-sa' },

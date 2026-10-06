@@ -5,3 +5,6 @@ dist
 !.env.example
 *.log
 *.tsbuildinfo
+
+# local build of scripts/legacy-import-check.ts
+.tmp/

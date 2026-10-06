@@ -12,6 +12,7 @@ export function mapAll(backup) {
     id: u.id, name: u.name, username: u.username, email: u.email.toLowerCase(), phone: PHONE.test(u.phone ?? '') ? u.phone : null,
     role: u.role, team_lead_id: null, department: u.department ?? '', designation: u.designation ?? '', joined_on: u.joinedOn,
     exit_on: s(u.exitOn), active: u.active, salary: u.salary ?? null, sales_target: u.target ?? null, address: u.address ?? {},
+    legacy_id: u.legacyId ?? null, legacy_role: u.legacyRole ?? null, needs_password_reset: !!u.needsPasswordReset, resume: u.resume ?? null,
   }))
   t.app_users_team = d.users.filter((u) => uref(u.teamLeadId)).map((u) => ({ id: u.id, team_lead_id: u.teamLeadId }))
   t.user_extra_roles = d.users.flatMap((u) => u.extraRoles.filter((r) => r !== u.role).map((role) => ({ user_id: u.id, role })))
@@ -23,23 +24,24 @@ export function mapAll(backup) {
   t.leads = d.leads.map((l) => ({
     id: l.id, code: l.code, name: l.name, company: l.company ?? '', phone: l.phone, email: s(l.email), city: l.city ?? '', state: l.state ?? '',
     service: l.service ?? '', source: l.source ?? '', price: l.price ?? null, status: l.status, follow_up: s(l.followUp), notes: l.notes ?? '',
-    assigned_to: uref(l.assignedTo), created_by: uref(l.createdBy), created_at: l.createdAt,
+    assigned_to: uref(l.assignedTo), created_by: uref(l.createdBy), created_at: l.createdAt, legacy: l.legacy ?? null,
   }))
   t.lead_calls = d.leads.flatMap((l) => l.calls.map((c) => ({ id: c.id, lead_id: l.id, called_at: c.at, called_by: uref(c.by), outcome: c.outcome, note: c.note ?? '', duration_sec: c.durationSec ?? 0 })))
 
   t.bookings = d.bookings.map((b) => ({
     id: b.id, booking_code: b.bookingId, company_name: b.companyName, contact_person: b.contactPerson, mobile: b.mobile, email: s(b.email),
-    pan: s(b.pan), gstin: s(b.gstin), city: b.city ?? '', state: b.state ?? '', industry: b.industry ?? '', service_id: b.serviceId, service_name: b.serviceName,
+    pan: s(b.pan), gstin: s(b.gstin), city: b.city ?? '', state: b.state ?? '', industry: b.industry ?? '', service_id: s(b.serviceId), service_name: b.serviceName,
     mode: b.mode, success_fee_pct: b.successFeePct ?? 0, total_quoted: b.totalQuoted, gst_rate: b.gstRate, deduction: b.deduction ?? 0,
     created_by: uref(b.createdBy), team_lead_id: uref(b.teamLeadId), status: b.status, hold_from: s(b.holdFrom), hold_reason: s(b.holdReason),
     ops_member_id: uref(b.opsMemberId), admin_id: uref(b.adminId), stage: b.stage, max_stage: b.maxStage, priority: b.priority, deadline: s(b.deadline),
-    lead_id: s(b.leadId), created_at: b.createdAt, updated_at: b.updatedAt,
+    lead_id: s(b.leadId), created_at: b.createdAt, updated_at: b.updatedAt, legacy_id: b.legacyId ?? null, legacy: b.legacy ?? null,
+    address: s(b.address), website: s(b.website), cin: s(b.cin), startup_contact: b.startupContact ?? null, billing: b.billing ?? null, owner_name: s(b.ownerName),
   }))
-  t.booking_payments = d.bookings.flatMap((b) => b.payments.map((p) => ({ id: p.id, booking_id: b.id, part: p.part, amount: p.amount, gst: p.gst, total: p.total, paid_on: p.date, mode: p.mode, proof_name: p.proofName, recorded_by: uref(p.recordedBy), verified: p.verified })))
+  t.booking_payments = d.bookings.flatMap((b) => b.payments.map((p) => ({ id: p.id, booking_id: b.id, part: p.part, amount: p.amount, gst: p.gst, total: p.total, paid_on: p.date, mode: p.mode, proof_name: p.proofName, recorded_by: uref(p.recordedBy), verified: p.verified, is_adjustment: p.mode === 'Adjustment', date_unknown: !!p.dateUnknown })))
   t.booking_approvals = d.bookings.flatMap((b) => b.approvals.map((a) => ({ id: a.id, booking_id: b.id, level: a.level, action: a.action, decided_by: uref(a.by), decided_at: a.at, remark: a.remark ?? '' })))
   t.booking_stage_moves = d.bookings.flatMap((b) => b.stageHistory.map((h, i) => ({ id: `${b.id}-stage-${i + 1}`, booking_id: b.id, stage: h.stage, moved_at: h.at, moved_by: uref(h.by), note: h.note ?? '' })))
   t.booking_comments = d.bookings.flatMap((b) => b.comments.map((c) => ({ id: c.id, booking_id: b.id, author_id: uref(c.by), created_at: c.at, body: c.text, kind: c.kind ?? '' })))
-  t.booking_documents = d.bookings.flatMap((b) => b.documents.map((x) => ({ id: x.id, booking_id: b.id, name: x.name, category: x.category, size_bytes: x.size ?? 0, uploaded_at: x.at, uploaded_by: uref(x.by), status: x.status ?? 'PENDING', storage_path: null })))
+  t.booking_documents = d.bookings.flatMap((b) => b.documents.map((x) => ({ id: x.id, booking_id: b.id, name: x.name, category: x.category, size_bytes: x.size ?? 0, uploaded_at: x.at, uploaded_by: uref(x.by), status: x.status ?? 'PENDING', storage_path: null, legacy_path: x.legacyPath ?? null })))
   t.booking_tasks = d.bookings.flatMap((b) => b.tasks.map((x) => ({ id: x.id, booking_id: b.id, title: x.title, done: x.done, due_on: s(x.due), created_by: uref(x.by), assignee_id: uref(x.assignee) })))
 
   t.invoices = d.invoices.map((i) => ({ id: i.id, number: i.number, type: i.type, booking_id: s(i.bookingId), client: i.client, gstin: i.gstin ?? '', state: i.state, paid: i.paid, status: i.status, issued_on: i.date, due_on: i.due, sales_person: uref(i.salesPerson), created_by: uref(i.createdBy) }))
@@ -51,8 +53,8 @@ export function mapAll(backup) {
   t.broadcast_acks = d.broadcasts.flatMap((x) => x.acks.filter((u) => userIds.has(u)).map((user_id) => ({ broadcast_id: x.id, user_id, acked_at: x.at })))
   t.events = d.events.map((x) => ({ id: x.id, title: x.title, event_date: x.date, event_time: x.kind === 'HOLIDAY' ? null : x.time, kind: x.kind, description: x.description ?? '', created_by: uref(x.by) }))
 
-  t.day_sessions = d.sessions.filter((x) => userIds.has(x.userId)).map((x) => ({ id: x.id, user_id: x.userId, work_date: x.date, login_at: x.loginAt, logout_at: s(x.logoutAt) }))
-  t.leave_requests = d.leaves.filter((x) => userIds.has(x.userId)).map((x) => ({ id: x.id, user_id: x.userId, type: x.type, from_date: x.from, to_date: x.to, days: x.days, reason: x.reason, status: x.status, approver_roles: x.approvers, decided_by: uref(x.decidedBy), decided_at: s(x.decidedAt), remark: s(x.remark), created_at: x.createdAt }))
+  t.day_sessions = d.sessions.filter((x) => userIds.has(x.userId)).map((x) => ({ id: x.id, user_id: x.userId, work_date: x.date, login_at: x.loginAt, logout_at: s(x.logoutAt), breaks: x.breaks ?? [], reopened_by: uref(x.reopenedBy) }))
+  t.leave_requests = d.leaves.filter((x) => userIds.has(x.userId)).map((x) => ({ id: x.id, user_id: x.userId, type: x.type, from_date: x.from, to_date: x.to, days: x.days, reason: x.reason, status: x.status, approver_roles: x.approvers, decided_by: uref(x.decidedBy), decided_at: s(x.decidedAt), remark: s(x.remark), created_at: x.createdAt, attachment: x.attachment ?? null }))
 
   t.payroll_runs = d.payrollRuns.map((r) => ({ id: r.id, month: r.month, status: r.status, provisional: r.provisional, calculated_at: r.calculatedAt, calculated_by: uref(r.calculatedBy) }))
   t.payroll_rows = d.payrollRuns.flatMap((r) => r.rows.filter((x) => userIds.has(x.userId)).map((x) => ({
@@ -83,6 +85,8 @@ export function mapAll(backup) {
   t.backup_log = (d.backupLog ?? []).map((b) => ({ id: b.id, at: b.at, by_user: uref(b.by), kind: b.kind, note: b.note ?? '', bytes: b.bytes ?? 0, encrypted: !!b.encrypted }))
   t.audit_log = d.audit.map((a) => ({ at: a.at, by_user: uref(a.by), action: a.action, detail: a.detail ?? '' })).reverse()
 
+  t.candidate_forms = (d.candidateForms ?? []).map((f) => ({ id: f.id, token: f.token, title: f.title, kind: f.kind, department: f.department ?? '', description: f.description ?? '', active: f.active, created_at: f.createdAt, created_by: uref(f.by) }))
+  t.candidate_applications = (d.candidates ?? []).map((c) => ({ id: c.id, form_id: c.formId, name: c.name, email: c.email, phone: c.phone, city: c.city ?? '', dob: s(c.dob), qualification: c.qualification, college: s(c.college), experience: c.experience ?? '', current_company: s(c.currentCompany), expected_salary: s(c.expectedSalary), notice_period: s(c.noticePeriod), linkedin: s(c.linkedin), message: s(c.message), resume: c.resume, status: c.status, notes: s(c.notes), submitted_at: c.submittedAt }))
   t.recruitment_datasets = (backup.imports ?? []).map((x) => ({ id: x.id, name: x.name, file_name: x.fileName, sheet: s(x.sheet), kind: x.kind, columns: x.columns, imported_at: x.importedAt, imported_by: uref(x.importedBy), bytes: x.bytes ?? 0 }))
   t.recruitment_rows = (backup.imports ?? []).flatMap((x) => x.rows.map((cells, i) => ({ dataset_id: x.id, row_no: i + 1, cells })))
   return t
@@ -98,6 +102,6 @@ export const ORDER = [
   ['leave_requests', 'id'], ['payroll_runs', 'id'], ['payroll_rows', 'run_id,user_id'], ['pf_accounts', 'user_id'],
   ['incentive_rule_versions', 'version'], ['manual_incentives', 'id'], ['notifications', 'id'], ['messages', 'id'],
   ['message_templates', 'id'], ['emails', 'id'], ['email_automations', 'key'], ['app_settings', 'key'], ['api_keys', 'id'],
-  ['backup_log', 'id'], ['recruitment_datasets', 'id'], ['recruitment_rows', 'dataset_id,row_no'],
+  ['backup_log', 'id'], ['candidate_forms', 'id'], ['candidate_applications', 'id'], ['recruitment_datasets', 'id'], ['recruitment_rows', 'dataset_id,row_no'],
 ]
 export const APPEND_ONLY = ['payroll_history', 'audit_log']   // identity ids: only copied into an empty table

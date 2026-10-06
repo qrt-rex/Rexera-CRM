@@ -14,7 +14,7 @@ import { ROLES, rolesOf } from '../../lib/rbac'
 import { Avatar, Card, cx, Progress } from '../../components/ui'
 import { Bars, Donut, HBars } from '../../components/charts'
 import { useUnread } from '../../layout/Shell'
-import { RecentActivity, Section, Tile } from './widgets'
+import { LoginLogoutCard, RecentActivity, Section, Tile } from './widgets'
 
 export function SuperAdminDashboard() {
   const db = useDb()
@@ -86,6 +86,7 @@ export function SuperAdminDashboard() {
           {tiles.map((t) => <Tile key={t.label} {...t} />)}
         </div>
         <aside className="space-y-4">
+          <LoginLogoutCard />
           <Card className="overflow-hidden">
             <p className="flex items-center gap-2 border-b border-line px-4 py-3 font-bold"><PieChart className="size-5 text-brand-ink" />Reports</p>
             {[['Export Data', Download, '/reports?tab=export'], ['Service Reports', FileText, '/reports?tab=services'], ['Company Report', Briefcase, '/reports'], ['Dashboard Report', LayoutDashboard, '/reports?tab=cards'], ['Profit Reports', TrendingUp, '/reports?tab=revenue']].map(([l, I, to]) => {

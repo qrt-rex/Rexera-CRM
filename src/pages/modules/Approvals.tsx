@@ -4,18 +4,19 @@ import { useDb } from '../../lib/store'
 import { useMe } from '../../lib/auth'
 import { waitingFor } from '../../lib/metrics'
 import { BOOKING_STATUS } from '../../lib/workflow'
-import { Card, EmptyState, PageHeader, SearchBox, Tabs } from '../../components/ui'
+import { Card, EmptyState, PageHeader, SearchBox, Tabs, usePaged } from '../../components/ui'
 import { BookingRow } from '../../components/booking'
 
 export default function Approvals() {
   const db = useDb()
   const me = useMe()
   const [q, setQ] = useState('')
-  const all = waitingFor(db, me)
+  const all = useMemo(() => waitingFor(db, me), [db, me])
   const groups = useMemo(() => [...new Set(all.map((b) => b.status))], [all])
   const [tab, setTab] = useState<string>('all')
-  const list = all.filter((b) => (tab === 'all' || b.status === tab) && (!q || `${b.bookingId} ${b.companyName} ${b.serviceName}`.toLowerCase().includes(q.toLowerCase())))
-    .sort((a, b) => (a.priority === 'HIGH' ? -1 : 0) - (b.priority === 'HIGH' ? -1 : 0) || a.updatedAt.localeCompare(b.updatedAt))
+  const list = useMemo(() => all.filter((b) => (tab === 'all' || b.status === tab) && (!q || `${b.bookingId} ${b.companyName} ${b.serviceName}`.toLowerCase().includes(q.toLowerCase())))
+    .sort((a, b) => (a.priority === 'HIGH' ? -1 : 0) - (b.priority === 'HIGH' ? -1 : 0) || a.updatedAt.localeCompare(b.updatedAt)), [all, tab, q])
+  const { slice, pager } = usePaged(list, 25, [tab, q])
 
   return (
     <div>
@@ -25,7 +26,8 @@ export default function Approvals() {
           <Tabs value={tab} onChange={setTab} tabs={[{ id: 'all', label: 'All', count: all.length }, ...groups.map((g) => ({ id: g, label: BOOKING_STATUS[g].label, count: all.filter((b) => b.status === g).length }))]} />
           <SearchBox value={q} onChange={setQ} className="min-w-52 flex-1" />
         </div>
-        {list.length ? list.map((b) => <BookingRow key={b.id} b={b} />) : <EmptyState icon={CheckCircle2} title="You're all caught up" text="Files that need your decision appear here and in your notifications." />}
+        {list.length ? slice.map((b) => <BookingRow key={b.id} b={b} />) : <EmptyState icon={CheckCircle2} title="You're all caught up" text="Files that need your decision appear here and in your notifications." />}
+        {pager}
       </Card>
     </div>
   )

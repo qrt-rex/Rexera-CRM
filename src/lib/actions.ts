@@ -1,10 +1,9 @@
 import type {
-  Booking, BookingStatus, BDoc, CallOutcome, DB, EventItem, Invoice, InvoiceItem, Lead, LeaveType, Perm, Post, Role, Scheme, User,
+  Booking, BookingStatus, BDoc, CallOutcome, CandidateApplication, CandidateForm, DaySession, DB, EventItem, FileRef, Invoice, InvoiceItem, Lead, LeaveType, Perm, Post, Role, Scheme, User,
 } from './types'
 import { effectivePerms, isMaster, MASTER_ROLES, rolesOf, roleLabel } from './rbac'
 import { getDb, mutate } from './store'
 import { hashPassword } from './crypto'
-import { DEMO_PASSWORD } from './seed'
 import { CALL_OUTCOMES, OPEN_LEAD, STAGES } from './workflow'
 import { fireAutomation } from './email'
 import { addDays, daysBetween, fmtDate, isEmail, isGstin, isPan, isPhone, normPhone, nowIso, round2, today, uid, ymd } from './format'
@@ -68,6 +67,8 @@ export async function loginStep1(login: string, password: string) {
     throw new ActionError('Wrong username or password.')
   }
   assert(u.active, 'This account is deactivated. Contact your administrator.')
+  const ended = d.sessions.find((x) => x.userId === u.id && x.date === today())?.logoutAt
+  assert(!ended || isMaster(u), `You logged out for today at ${ended ? new Date(ended).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }) : ''}. You can sign in again tomorrow — or ask HR to re-open your day.`)
   const mt = d.settings.maintenance
   assert(!mt?.on || isMaster(u), `Rexera CRM is under maintenance${mt?.message ? `: ${mt.message}` : '.'} Please try again later.`)
   mutate((m) => { delete m.loginFails[key] })
@@ -107,28 +108,86 @@ export function verifyCode(token: string, code: string): string {
 
 export async function changePassword(me: User, current: string, next: string) {
   assert((await hashPassword(me.username, current)) === me.passHash, 'Current password is wrong.')
-  assert(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,16}$/.test(next), 'Use 8–16 characters with upper, lower, number and symbol.')
+  assert(PASSWORD_RULE.test(next), `Use ${PASSWORD_HINT}`)
   const h = await hashPassword(me.username, next)
   mutate((d) => {
-    d.users.find((u) => u.id === me.id)!.passHash = h
+    const u = d.users.find((x) => x.id === me.id)!
+    u.passHash = h
+    delete u.needsPasswordReset
     audit(d, me.id, 'PASSWORD', 'Changed own password')
   })
 }
 
 // ============================================================ day attendance
+/** Break budget per day: pause and resume as often as you like until these minutes are used up. */
+export const BREAK_MINUTES = 40
+const BREAK_MS = BREAK_MINUTES * 60000
+
+/** Break time used today (an open break counts up to now). */
+export function breakUsedMs(s: DaySession | undefined, now = Date.now()) {
+  return (s?.breaks ?? []).reduce((t, b) => t + Math.max(0, (b.end ? new Date(b.end).getTime() : now) - new Date(b.start).getTime()), 0)
+}
+export const onBreak = (s: DaySession | undefined) => !!s && !s.logoutAt && !!s.breaks?.some((b) => !b.end)
+export const breakLeftMs = (s: DaySession | undefined, now = Date.now()) => Math.max(0, BREAK_MS - breakUsedMs(s, now))
+/** Working time today, without breaks. */
+export function workedMs(s: DaySession | undefined, now = Date.now()) {
+  if (!s) return 0
+  const end = s.logoutAt ? new Date(s.logoutAt).getTime() : now
+  return Math.max(0, end - new Date(s.loginAt).getTime() - breakUsedMs(s, end))
+}
+/** Ended the day (and not re-opened by HR/IT): no new sign-in until tomorrow. */
+export const dayEnded = (d: DB, userId: string) => !!d.sessions.find((x) => x.userId === userId && x.date === today())?.logoutAt
+
 export function startDay(me: User) {
   mutate((d) => {
     const s = d.sessions.find((x) => x.userId === me.id && x.date === today())
-    if (s) { s.logoutAt = undefined; return }
+    assert(!s?.logoutAt, 'You have logged out for today. You can start again tomorrow.')
+    if (s) return
     d.sessions.push({ id: uid('ds-'), userId: me.id, date: today(), loginAt: nowIso() })
   })
 }
+export function pauseDay(me: User) {
+  mutate((d) => {
+    const s = d.sessions.find((x) => x.userId === me.id && x.date === today())
+    assert(s && !s.logoutAt, 'Start your day first.')
+    assert(!s.breaks?.some((b) => !b.end), 'Your day is already paused.')
+    assert(breakLeftMs(s) > 0, `You have used your ${BREAK_MINUTES} minutes of break time for today.`)
+    ;(s.breaks ??= []).push({ start: nowIso() })
+    audit(d, me.id, 'DAY_PAUSE', `Paused · ${Math.ceil(breakLeftMs(s) / 60000)} min of break left`)
+  })
+}
+export function resumeDay(me: User) {
+  mutate((d) => {
+    const s = d.sessions.find((x) => x.userId === me.id && x.date === today())
+    const open = s?.breaks?.find((b) => !b.end)
+    assert(s && open, 'Your day is not paused.')
+    open.end = nowIso()
+    const over = breakUsedMs(s) - BREAK_MS
+    audit(d, me.id, 'DAY_RESUME', over > 0 ? `Resumed · break time exceeded by ${Math.ceil(over / 60000)} min` : `Resumed · ${Math.floor(breakLeftMs(s) / 60000)} min of break left`)
+  })
+}
+/** Logout for the day: closes an open break; the person can't sign in again until tomorrow. */
 export function endDay(me: User) {
   mutate((d) => {
     const s = d.sessions.find((x) => x.userId === me.id && x.date === today())
     assert(s, 'Start your day first.')
+    assert(!s.logoutAt, 'You have already logged out for today.')
+    const open = s.breaks?.find((b) => !b.end)
+    if (open) open.end = nowIso()
     s.logoutAt = nowIso()
-    audit(d, me.id, 'END_DAY', 'Ended the day')
+    audit(d, me.id, 'END_DAY', `Logged out for the day · worked ${(workedMs(s) / 3600000).toFixed(1)} h`)
+  })
+}
+/** HR / IT / Super Admin can re-open someone's day (e.g. logged out by mistake) so they can sign in again. */
+export function reopenDay(me: User, userId: string) {
+  assert(isMaster(me) || has(me, 'employees.manage'), 'Only HR or IT can re-open a day.')
+  mutate((d) => {
+    const s = d.sessions.find((x) => x.userId === userId && x.date === today())
+    assert(s?.logoutAt, 'Their day is not ended.')
+    s.logoutAt = undefined
+    s.reopenedBy = me.id
+    audit(d, me.id, 'DAY_REOPEN', `Re-opened today for ${userName(d, userId)}`)
+    notify(d, [userId], 'Your day was re-opened', `${me.name} re-opened today — you can sign in again.`, '/attendance', 'info')
   })
 }
 
@@ -749,15 +808,19 @@ export function leaveApprovers(role: Role): Role[] {
   return ['hr', 'superadmin']
 }
 
-export function applyLeave(me: User, l: { type: LeaveType; from: string; to: string; reason: string }) {
+/** Leave longer than this many days needs an attachment (photo or PDF). */
+export const LEAVE_ATTACHMENT_AFTER_DAYS = 2
+
+export function applyLeave(me: User, l: { type: LeaveType; from: string; to: string; reason: string; attachment?: FileRef }) {
   assert(l.from && l.to && l.to >= l.from, 'Pick a valid date range.')
   assert(l.reason.trim().length >= 3, 'Give a short reason.')
   const days = daysBetween(l.from, l.to) + 1
-  assert(!(l.type === 'SL' && days > 2 && !/certificate|medical/i.test(l.reason)), 'Sick leave over 2 days needs a medical certificate (mention it in the reason).')
+  assert(days <= LEAVE_ATTACHMENT_AFTER_DAYS || l.attachment, `Leave of more than ${LEAVE_ATTACHMENT_AFTER_DAYS} days needs an attachment — upload a photo or PDF (e.g. a medical certificate).`)
   mutate((d) => {
     assert(!d.leaves.some((x) => x.userId === me.id && x.status !== 'REJECTED' && x.status !== 'CANCELLED' && !(l.to < x.from || l.from > x.to)), 'You already have leave in these dates.')
     const approvers = leaveApprovers(me.role)
-    d.leaves.unshift({ id: uid('lv-'), userId: me.id, ...l, days, status: 'PENDING', approvers, createdAt: nowIso() })
+    const { attachment, ...rest } = l
+    d.leaves.unshift({ id: uid('lv-'), userId: me.id, ...rest, ...(attachment ? { attachment } : {}), days, status: 'PENDING', approvers, createdAt: nowIso() })
     const targets = usersWithRole(d, ...approvers).filter((u) => u.id !== me.id && (!rolesOf(u).includes('teamlead') || u.id === me.teamLeadId || rolesOf(u).some((r) => r !== 'teamlead' && approvers.includes(r))))
     notify(d, targets.map((u) => u.id), 'Leave request', `${me.name}: ${days} day(s) ${l.type}`, '/leave', 'action')
   })
@@ -798,6 +861,61 @@ export function cancelLeave(me: User, id: string) {
   })
 }
 
+export function logLetter(me: User, kind: string, name: string) {
+  need(me, 'employees.manage')
+  mutate((d) => audit(d, me.id, 'LETTER', `${kind} for ${name}`))
+}
+
+// ============================================================ candidate forms (public apply link)
+const randomToken = () => Array.from(crypto.getRandomValues(new Uint8Array(9)), (b) => b.toString(36).padStart(2, '0')).join('').slice(0, 14)
+
+export function saveCandidateForm(me: User, f: Pick<CandidateForm, 'title' | 'kind' | 'department' | 'description'> & { id?: string }) {
+  need(me, 'recruitment.manage')
+  assert(f.title.trim().length >= 2, 'Give the role a title.')
+  let id = f.id
+  mutate((d) => {
+    if (f.id) { const x = d.candidateForms.find((c) => c.id === f.id); assert(x, 'Form not found.'); Object.assign(x, { title: f.title.trim(), kind: f.kind, department: f.department.trim(), description: f.description.trim() }); return }
+    id = uid('cf-')
+    d.candidateForms.unshift({ id, token: randomToken(), title: f.title.trim(), kind: f.kind, department: f.department.trim(), description: f.description.trim(), active: true, createdAt: nowIso(), by: me.id })
+    audit(d, me.id, 'CANDIDATE_FORM', `Created “${f.title.trim()}”`)
+  })
+  return id!
+}
+export function setCandidateFormActive(me: User, id: string, active: boolean) {
+  need(me, 'recruitment.manage')
+  mutate((d) => { const x = d.candidateForms.find((c) => c.id === id); assert(x, 'Form not found.'); x.active = active })
+}
+export function deleteCandidateForm(me: User, id: string) {
+  need(me, 'recruitment.manage')
+  mutate((d) => {
+    assert(!d.candidates.some((c) => c.formId === id), 'This form has applications — close it instead of deleting.')
+    d.candidateForms = d.candidateForms.filter((c) => c.id !== id)
+  })
+}
+
+export type ApplicationInput = Omit<CandidateApplication, 'id' | 'formId' | 'submittedAt' | 'status' | 'notes' | 'resume'>
+/** Public: anyone with the link can apply while the form is open. Resume is mandatory. */
+export function submitApplication(token: string, a: ApplicationInput, resume: FileRef | undefined) {
+  const d = getDb()
+  const form = d.candidateForms.find((f) => f.token === token)
+  assert(form && form.active, 'This application form is closed.')
+  assert(a.name.trim().length >= 2, 'Enter your full name.')
+  assert(isEmail(a.email), 'Enter a valid email.')
+  assert(isPhone(a.phone), 'Enter a valid 10-digit mobile number.')
+  assert(a.qualification.trim(), 'Enter your highest qualification.')
+  assert(resume, 'Upload your resume (PDF or Word).')
+  assert(!d.candidates.some((c) => c.formId === form.id && c.email.toLowerCase() === a.email.trim().toLowerCase()), 'You have already applied for this role with this email.')
+  mutate((m) => {
+    const clean = Object.fromEntries(Object.entries(a).map(([k, v]) => [k, typeof v === 'string' ? v.trim() : v])) as ApplicationInput
+    m.candidates.unshift({ ...clean, email: clean.email.toLowerCase(), phone: normPhone(clean.phone), id: uid('cand-'), formId: form.id, resume, submittedAt: nowIso(), status: 'NEW' })
+    notify(m, usersWithRole(m, 'hr').map((u) => u.id), 'New application', `${clean.name} applied for ${form.title}`, '/candidates', 'action')
+  })
+}
+export function updateCandidate(me: User, id: string, patch: Partial<Pick<CandidateApplication, 'status' | 'notes'>>) {
+  need(me, 'recruitment.manage')
+  mutate((d) => { const c = d.candidates.find((x) => x.id === id); assert(c, 'Application not found.'); Object.assign(c, patch) })
+}
+
 // ============================================================ notifications & messages
 export function markRead(me: User, id?: string) {
   mutate((d) => { for (const n of d.notices) if (n.userId === me.id && (!id || n.id === id)) n.read = true })
@@ -826,20 +944,27 @@ export function deleteTemplate(me: User, id: string) {
 }
 
 // ============================================================ users & access
-export type UserInput = Pick<User, 'name' | 'username' | 'email' | 'phone' | 'role' | 'department' | 'designation'> & { teamLeadId?: string; salary?: number }
+export type UserInput = Pick<User, 'name' | 'username' | 'email' | 'phone' | 'role' | 'department' | 'designation'> & { teamLeadId?: string; salary?: number; joinedOn?: string }
 
-export async function createUser(me: User, i: UserInput) {
+/** 8–16 characters with upper case, lower case, a number and a symbol. */
+export const PASSWORD_RULE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,16}$/
+export const PASSWORD_HINT = '8–16 characters with upper case, lower case, a number and a symbol.'
+
+/** HR sets the first password and must attach the new joinee's resume. */
+export async function createUser(me: User, i: UserInput, password: string, resume: FileRef | undefined) {
   need(me, 'access.manage', 'employees.manage')
   assert(i.name.trim() && i.username.trim(), 'Name and username are required.')
   assert(isEmail(i.email), 'Enter a valid email.')
   assert(!i.phone || isPhone(i.phone), 'Enter a valid 10-digit phone.')
   assert(i.role !== 'superadmin' || isSA(me), 'Only a Super Admin can create a Super Admin.')
+  assert(PASSWORD_RULE.test(password), `Password: ${PASSWORD_HINT}`)
+  assert(resume, "Attach the new joinee's resume.")
   const d = getDb()
   assert(!d.users.some((u) => u.username.toLowerCase() === i.username.toLowerCase()), 'Username already taken.')
   assert(!d.users.some((u) => u.email.toLowerCase() === i.email.toLowerCase()), 'Email already used.')
-  const passHash = await hashPassword(i.username, DEMO_PASSWORD)
+  const passHash = await hashPassword(i.username.trim(), password)
   mutate((m) => {
-    const created: User = { ...i, id: uid('u-'), email: i.email.trim().toLowerCase(), phone: i.phone ? normPhone(i.phone) : '', extraRoles: [], grants: [], denies: [], joinedOn: today(), active: true, passHash }
+    const created: User = { ...i, id: uid('u-'), username: i.username.trim(), email: i.email.trim().toLowerCase(), phone: i.phone ? normPhone(i.phone) : '', extraRoles: [], grants: [], denies: [], joinedOn: i.joinedOn || today(), active: true, passHash, resume }
     m.users.push(created)
     audit(m, me.id, 'USER_CREATE', `${i.name} (${roleLabel(i.role)})`)
     fireAutomation(m, 'welcome', [created])
@@ -866,13 +991,15 @@ export function updateUser(me: User, id: string, patch: Partial<Pick<User, 'name
   })
 }
 
-export async function resetUserPassword(me: User, id: string) {
+/** Sets a new password typed by HR / IT (no shared default password). */
+export async function resetUserPassword(me: User, id: string, password: string) {
   need(me, 'access.manage')
   const u = getDb().users.find((x) => x.id === id)
   assert(u, 'User not found.')
   assert(!rolesOf(u).includes('superadmin') || isSA(me), "Only a Super Admin can reset a Super Admin's password.")
-  const h = await hashPassword(u.username, DEMO_PASSWORD)
-  mutate((d) => { d.users.find((x) => x.id === id)!.passHash = h; audit(d, me.id, 'PASSWORD_RESET', u.name) })
+  assert(PASSWORD_RULE.test(password), `Password: ${PASSWORD_HINT}`)
+  const h = await hashPassword(u.username, password)
+  mutate((d) => { const x = d.users.find((y) => y.id === id)!; x.passHash = h; delete x.needsPasswordReset; audit(d, me.id, 'PASSWORD_RESET', u.name) })
 }
 
 export function setRolePerms(me: User, role: Role, perms: Perm[]) {

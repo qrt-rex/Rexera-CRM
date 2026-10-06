@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  Activity, AlertTriangle, Camera, CheckCircle2, DatabaseBackup, Download, Eraser, HardDrive, KeyRound, LayoutGrid, Lock, LogOut, RefreshCcw,
+  Activity, AlertTriangle, Camera, CheckCircle2, DatabaseBackup, DatabaseZap, Download, Eraser, HardDrive, KeyRound, LayoutGrid, Lock, LogOut, RefreshCcw,
   ScrollText, ShieldAlert, ShieldCheck, Stethoscope, Unlock, UserCog, Users, Wrench, XCircle, type LucideIcon,
 } from 'lucide-react'
 import type { Role } from '../../lib/types'
-import { useDb } from '../../lib/store'
+import { approxDataBytes, storageBackend, useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
-import { resetUserPassword, updateUser, userName } from '../../lib/actions'
+import { updateUser, userName } from '../../lib/actions'
+import { SetPasswordModal } from '../../components/SetPasswordModal'
 import { ROLES, isMaster, roleLabel, rolesOf } from '../../lib/rbac'
 import {
   autoSnapshotIfDue, cleanupOldData, createSnapshot, downloadBackup, keyStatus, runHealthCheck, setMaintenance, signOutEveryone, unlockAllAccounts,
@@ -71,6 +72,7 @@ export function ItDashboard() {
   const maint = db.settings.maintenance
   const events = db.audit.filter((a) => /SIGN_IN|SIGN_OUT|PASSWORD|ACCESS|USER_|ROLE_|API_KEY|BACKUP|MAINTENANCE|UNLOCK|SETTINGS/.test(a.action)).slice(0, 10)
   const custom = db.users.filter((u) => u.grants.length || u.denies.length || u.extraRoles.length)
+  const dataSize = useMemo(() => { const b = approxDataBytes(); return b > 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.round(b / 1024)} KB` }, [db])
 
   const doAndRecheck = async (key: string, fn: () => unknown, ok: string) => { setBusy(key); const r = await run(fn, ok); setBusy(''); if (r !== undefined) check() }
 
@@ -97,7 +99,7 @@ export function ItDashboard() {
         <Stat icon={ShieldAlert} tone={locked.length ? 'red' : 'amber'} label="Locked / failed" value={`${locked.length} / ${fails.reduce((s, [, f]) => s + f.count, 0)}`} sub="sign-ins" />
         <Stat icon={KeyRound} tone="violet" label="API keys" value={`${keys.length}`} sub={`${db.apiKeys.length - keys.length} revoked/expired`} />
         <Stat icon={DatabaseBackup} tone="cyan" label="Last backup" value={lastBackup ? ago(lastBackup.at) : 'never'} sub={lastBackup?.kind.toLowerCase().replace('_', ' ') ?? 'take one now'} />
-        <Stat icon={HardDrive} tone="gray" label="Data size" value={`${Math.round((localStorage.getItem('rexera-crm-db')?.length ?? 0) / 1024)} KB`} sub="of ~5,000 KB" />
+        <Stat icon={HardDrive} tone="gray" label="Data size" value={dataSize} sub={storageBackend() === 'indexeddb' ? 'stored in IndexedDB' : 'localStorage fallback'} />
       </div>
 
       <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-mute">One-click actions</h2>
@@ -108,7 +110,7 @@ export function ItDashboard() {
         <Action icon={UserCog} tone="violet" label="Assign access" hint="Role, extra roles, active" onClick={() => setAssignOpen(true)} />
         <Action icon={KeyRound} tone="orange" label="API keys" hint="Create, rotate, revoke" to="/api-keys" />
         <Action icon={Unlock} tone="amber" label="Unlock all accounts" hint={`${fails.length} with failed sign-ins`} busy={busy === 'unlock'} onClick={() => doAndRecheck('unlock', () => unlockAllAccounts(me), 'All sign-in locks cleared')} />
-        <Action icon={RefreshCcw} tone="blue" label="Reset a password" hint="Back to the default password" onClick={() => setResetOpen(true)} />
+        <Action icon={RefreshCcw} tone="blue" label="Set a password" hint="Type a new password for someone" onClick={() => setResetOpen(true)} />
         <Action icon={Wrench} tone={maint?.on ? 'red' : 'amber'} label={maint?.on ? 'End maintenance' : 'Maintenance mode'} hint={maint?.on ? 'Let everyone back in' : 'Only IT & Super Admin can sign in'} onClick={() => maint?.on ? doAndRecheck('maint', () => setMaintenance(me, false, ''), 'Maintenance mode off') : setMaintOpen(true)} />
         <Action icon={LogOut} tone="red" label="Sign out everyone" hint="Ends every session (you stay in)" danger onClick={async () => {
           if (await confirm('Sign out everyone?', 'Every signed-in person is signed out and must sign in again. You stay signed in.', true)) {
@@ -120,6 +122,7 @@ export function ItDashboard() {
         }} />
         <Action icon={ScrollText} tone="gray" label="Export activity log" hint={`${db.audit.length} entries as CSV`} onClick={() => downloadCsv(`activity-${today()}.csv`, db.audit.map((a) => ({ at: a.at, by: userName(db, a.by), action: a.action, detail: a.detail })))} />
         <Action icon={LayoutGrid} tone="navy" label="Access management" hint="Permission matrix, users, settings" to="/access" />
+        <Action icon={DatabaseZap} tone="violet" label="Import from old CRM" hint="Old PHP CRM .sql dump · verified before saving" to="/legacy-import" />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-3">
@@ -184,7 +187,7 @@ export function ItDashboard() {
         <Input label="Passphrase (8+ characters)" type="password" autoComplete="new-password" value={pass} onChange={(e) => setPass(e.target.value)} autoFocus hint="Needed to restore. Keep it somewhere safe." />
       </Modal>
       <AssignAccess open={assignOpen} onClose={() => setAssignOpen(false)} />
-      <ResetPassword open={resetOpen} onClose={() => setResetOpen(false)} />
+      <SetPasswordModal open={resetOpen} onClose={() => setResetOpen(false)} people={db.users.filter((u) => u.id !== me.id && (rolesOf(me).includes('superadmin') || !rolesOf(u).includes('superadmin'))).sort((a, b) => a.name.localeCompare(b.name))} />
       <Modal open={maintOpen} onClose={() => setMaintOpen(false)} title="Turn on maintenance mode" size="sm"
         footer={<><Button variant="outline" onClick={() => setMaintOpen(false)}>Cancel</Button><Button variant="danger" icon={Wrench} onClick={async () => { if (await run(() => setMaintenance(me, true, maintMsg), 'Maintenance mode on')) { setMaintOpen(false); check() } }}>Turn on</Button></>}>
         <p className="mb-3 text-sm text-mute">Everyone except IT Support and Super Admin sees a maintenance screen and can't sign in until you turn it off.</p>
@@ -235,24 +238,6 @@ function AssignAccess({ open, onClose }: { open: boolean; onClose: () => void })
           <label className="flex items-center justify-between rounded-xl bg-card2 px-3 py-2.5 text-sm font-semibold">Account active <Toggle checked={activeFlag} onChange={setActiveFlag} label="Account active" /></label>
         </>}
       </div>
-    </Modal>
-  )
-}
-
-function ResetPassword({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const db = useDb()
-  const me = useMe()
-  const run = useRun()
-  const sa = rolesOf(me).includes('superadmin')
-  const [userId, setUserId] = useState('')
-  const people = db.users.filter((u) => u.id !== me.id && (sa || !rolesOf(u).includes('superadmin'))).sort((a, b) => a.name.localeCompare(b.name))
-  return (
-    <Modal open={open} onClose={onClose} title="Reset a password" size="sm"
-      footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button icon={RefreshCcw} disabled={!userId} onClick={async () => { if (await run(() => resetUserPassword(me, userId), 'Password reset to the default — ask them to change it in Settings → Security')) { setUserId(''); onClose() } }}>Reset password</Button></>}>
-      <Select label="Person" value={userId} onChange={(e) => setUserId(e.target.value)}>
-        <option value="">— Select —</option>{people.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.email}</option>)}
-      </Select>
-      <p className="mt-3 text-xs text-mute">Their password becomes the shared default password, and they should change it right after signing in. Super Admin passwords can only be reset by a Super Admin.</p>
     </Modal>
   )
 }

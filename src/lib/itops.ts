@@ -1,5 +1,6 @@
 import type { ApiKey, ApiScope, BackupLogEntry, DB, User } from './types'
-import { getDb, mutate, replaceDb } from './store'
+import { approxDataBytes, flushSaves, getDb, mutate, replaceDb, storageBackend } from './store'
+import { buildImport, type DumpTables, type ImportOptions } from './legacyImport'
 import { ActionError } from './actions'
 import { isMaster } from './rbac'
 import { hashPassword } from './crypto'
@@ -7,6 +8,7 @@ import { DEMO_PASSWORD, SEED_VERSION } from './seed'
 import { listDatasets, saveDatasets, type Dataset } from './imports'
 import { addDays, fmtDate, nowIso, uid } from './format'
 import { cloudConfig, pingCloud } from './supabase'
+import { exportFiles, importFiles, type StoredFile } from './files'
 
 function needMaster(me: User) {
   if (!isMaster(me)) throw new ActionError('Only IT Support or Super Admin can do that.')
@@ -78,7 +80,7 @@ export async function verifyApiKey(secret: string) {
 export const keyStatus = (k: ApiKey) => (k.revokedAt ? 'revoked' : k.expiresAt && new Date(k.expiresAt) < new Date() ? 'expired' : 'active')
 
 // ================================================================== backups
-interface BackupFile { app: 'rexera-crm'; format: 1; exportedAt: string; exportedBy: string; seedVersion: number; db: DB; imports: Dataset[] }
+interface BackupFile { app: 'rexera-crm'; format: 1; exportedAt: string; exportedBy: string; seedVersion: number; db: DB; imports: Dataset[]; files?: StoredFile[] }
 interface EncryptedFile { app: 'rexera-crm'; format: 1; encrypted: true; exportedAt: string; salt: string; iv: string; data: string }
 
 async function keyFrom(pass: string, salt: Uint8Array) {
@@ -86,15 +88,16 @@ async function keyFrom(pass: string, salt: Uint8Array) {
   return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: salt as BufferSource, iterations: 210000, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
 }
 
-async function buildBackup(me: User): Promise<BackupFile> {
-  return { app: 'rexera-crm', format: 1, exportedAt: nowIso(), exportedBy: me.name, seedVersion: SEED_VERSION, db: getDb(), imports: await listDatasets().catch(() => []) }
+/** Downloads include uploaded files (resumes, leave attachments); in-browser snapshots don't need them (restores never delete files). */
+async function buildBackup(me: User, withFiles = false): Promise<BackupFile> {
+  return { app: 'rexera-crm', format: 1, exportedAt: nowIso(), exportedBy: me.name, seedVersion: SEED_VERSION, db: getDb(), imports: await listDatasets().catch(() => []), files: withFiles ? await exportFiles().catch(() => []) : undefined }
 }
 
 /** Full backup (all CRM data + imported recruitment tables), optionally encrypted with AES-256-GCM. */
 export async function downloadBackup(me: User, passphrase?: string) {
   needMaster(me)
   if (passphrase !== undefined && passphrase.length < 8) throw new ActionError('Use a passphrase of at least 8 characters.')
-  let text = JSON.stringify(await buildBackup(me))
+  let text = JSON.stringify(await buildBackup(me, true))
   if (passphrase) {
     const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12))
     const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await keyFrom(passphrase, salt), new TextEncoder().encode(text))
@@ -146,6 +149,7 @@ export async function restoreBackup(me: User, b: BackupFile, label: string) {
   next.audit = [{ id: uid('a-'), at: nowIso(), by: me.id, action: 'BACKUP_RESTORE', detail: `${label} (exported ${new Date(b.exportedAt).toLocaleString('en-IN')} by ${b.exportedBy})` }, ...(next.audit ?? [])]
   replaceDb(next)
   if (b.imports.length) await saveDatasets(b.imports)
+  if (b.files?.length) await importFiles(b.files)
 }
 
 // ------------------------------------------------------------------ snapshots (kept in this browser)
@@ -185,6 +189,22 @@ export async function restoreSnapshot(me: User, id: string) {
   const snap = await snapTx<Snapshot>('readonly', (s) => s.get(id) as IDBRequest<Snapshot>)
   if (!snap) throw new ActionError('Snapshot not found.')
   await restoreBackup(me, validate(JSON.parse(snap.payload)), `snapshot “${snap.label}”`)
+}
+
+// ------------------------------------------------------------------ import from the old PHP CRM
+/** Snapshot first, then rebuild the import against the data as it is right now (so nothing typed since the preview is lost). */
+export async function importLegacy(me: User, tables: DumpTables, opts: ImportOptions, fileName: string) {
+  needMaster(me)
+  await createSnapshot(me, `Before importing ${fileName}`, 'SNAPSHOT')
+  const { next, report } = buildImport(tables, getDb(), opts)
+  const failed = report.checks.filter((c) => !c.ok)
+  if (failed.length) throw new ActionError(`Import stopped — ${failed.length} check(s) did not match: ${failed.map((c) => c.label).join(', ')}. Nothing was changed.`)
+  const bytes = JSON.stringify(next).length
+  logBackup(next, { by: me.id, kind: 'IMPORT', note: `${fileName}: ${report.imported.clientFiles} client files, ${report.imported.users} new users`, bytes })
+  log(next, me.id, 'LEGACY_IMPORT', `${fileName} — ${Object.entries(report.imported).map(([k, v]) => `${k} ${v}`).join(', ')}${opts.replaceSampleData ? ' · sample data removed' : ''}`)
+  replaceDb(next)
+  await flushSaves()
+  return report
 }
 export async function deleteSnapshot(me: User, id: string) {
   needMaster(me)
@@ -243,9 +263,12 @@ export async function runHealthCheck(): Promise<HealthItem[]> {
   const add = (i: HealthItem) => out.push(i)
   const active = d.users.filter((u) => u.active)
 
-  const bytes = (() => { try { return localStorage.getItem('rexera-crm-db')?.length ?? 0 } catch { return 0 } })()
+  const bytes = approxDataBytes()
   const est = await navigator.storage?.estimate?.().catch(() => undefined)
-  add({ id: 'storage', level: bytes > 4_000_000 ? 'error' : bytes > 3_000_000 ? 'warn' : 'ok', title: 'Data storage', detail: `${(bytes / 1024).toFixed(0)} KB of about 5,000 KB in use${est?.quota ? ` · browser quota ${(est.quota / 1048576).toFixed(0)} MB` : ''}` })
+  const idbStore = storageBackend() === 'indexeddb'
+  const nearFull = idbStore ? !!(est?.quota && est.usage && est.usage / est.quota > 0.8) : bytes > 4_000_000
+  add({ id: 'storage', level: nearFull ? 'error' : !idbStore && bytes > 3_000_000 ? 'warn' : 'ok', title: 'Data storage',
+    detail: `${(bytes / 1048576).toFixed(1)} MB of CRM data · ${idbStore ? `IndexedDB${est?.quota ? `, browser quota ${(est.quota / 1048576).toFixed(0)} MB` : ''}` : 'localStorage fallback (about 5 MB max) — IndexedDB is blocked in this browser'}` })
 
   const sas = active.filter((u) => u.role === 'superadmin')
   add({ id: 'sa', level: sas.length ? 'ok' : 'error', title: 'Super Admin', detail: sas.length ? `${sas.length} active Super Admin account(s)` : 'No active Super Admin!' })

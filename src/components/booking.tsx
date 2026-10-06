@@ -19,7 +19,7 @@ export function PriorityBadge({ p }: { p: Booking['priority'] }) {
 }
 
 export function DeadlineBadge({ b }: { b: Booking }) {
-  if (['COMPLETED', 'REJECTED'].includes(b.status)) return null
+  if (['COMPLETED', 'REJECTED'].includes(b.status) || !b.deadline) return null
   const t = ymd()
   const soon = ymd(addDays(new Date(), 3))
   if (b.deadline < t) return <Badge tone="red">Overdue</Badge>
@@ -140,7 +140,7 @@ export function DecisionModal({ b, kind, onClose }: { b: Booking; kind: Decision
   const admins = usersWithRole(db, 'admin')
   useEffect(() => {
     if (!kind) return
-    setRemark(''); setOps(b.opsMemberId ?? ''); setAdmin(b.adminId ?? ''); setMaxStage(Math.max(b.maxStage, 6)); setDeadline(b.deadline)
+    setRemark(''); setOps(b.opsMemberId ?? ''); setAdmin(b.adminId ?? ''); setMaxStage(Math.max(b.maxStage, 6)); setDeadline(b.deadline || '')
   }, [kind, b])
   if (!kind) return null
   const m = DEC_META[kind]

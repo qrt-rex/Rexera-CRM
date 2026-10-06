@@ -4,12 +4,13 @@ import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
 import { dayStatus, presentToday } from '../../lib/metrics'
 import { addDays, downloadCsv, fmtDate, fmtTime, today, ymd } from '../../lib/format'
-import { roleLabel } from '../../lib/rbac'
-import { Avatar, Badge, Button, Card, CardHeader, cx, PageHeader, SearchBox, Table, Tabs, Td, Th } from '../../components/ui'
+import { isMaster, roleLabel } from '../../lib/rbac'
+import { breakUsedMs, reopenDay, workedMs } from '../../lib/actions'
+import { Avatar, Badge, Button, Card, CardHeader, cx, PageHeader, SearchBox, Table, Tabs, Td, Th, useRun } from '../../components/ui'
 import { LoginLogoutCard, MiniStat } from '../dashboards/widgets'
 
 const STATUS = {
-  WORKING: { label: 'Working', tone: 'green' as const }, DAY_ENDED: { label: 'Day ended', tone: 'gray' as const },
+  WORKING: { label: 'Working', tone: 'green' as const }, ON_BREAK: { label: 'On break', tone: 'amber' as const }, DAY_ENDED: { label: 'Logged out', tone: 'gray' as const },
   ON_LEAVE: { label: 'On leave', tone: 'amber' as const }, NOT_STARTED: { label: 'Not started', tone: 'red' as const },
 }
 
@@ -17,14 +18,16 @@ export default function Attendance() {
   const db = useDb()
   const me = useMe()
   const { can } = useAuth()
+  const run = useRun()
   const all = can('attendance.all')
+  const canReopen = isMaster(me) || can('employees.manage')
   const [tab, setTab] = useState<'live' | 'history'>(all ? 'live' : 'history')
   const [q, setQ] = useState('')
   const [days, setDays] = useState(14)
   const users = db.users.filter((u) => u.active && (all || u.id === me.id) && (!q || u.name.toLowerCase().includes(q.toLowerCase())))
   const att = presentToday(db)
   const counts = useMemo(() => {
-    const c = { WORKING: 0, DAY_ENDED: 0, ON_LEAVE: 0, NOT_STARTED: 0 }
+    const c = { WORKING: 0, ON_BREAK: 0, DAY_ENDED: 0, ON_LEAVE: 0, NOT_STARTED: 0 }
     for (const u of db.users.filter((x) => x.active)) c[dayStatus(db, u.id)]++
     return c
   }, [db])
@@ -36,8 +39,8 @@ export default function Attendance() {
     const leave = db.leaves.some((l) => l.userId === uid && l.status === 'APPROVED' && l.from <= d && l.to >= d)
     if (s) {
       const late = new Date(s.loginAt).getHours() * 60 + new Date(s.loginAt).getMinutes() > 9 * 60 + 30
-      const half = s.logoutAt ? (new Date(s.logoutAt).getTime() - new Date(s.loginAt).getTime()) / 3600000 < 5 : d < today()
-      return { code: half ? 'H' : late ? 'L' : 'P', cls: half ? 'bg-warn-soft text-warn' : late ? 'bg-info-soft text-info' : 'bg-ok-soft text-ok', title: `${fmtTime(s.loginAt)} – ${fmtTime(s.logoutAt)}` }
+      const half = s.logoutAt ? workedMs(s) / 3600000 < 5 : d < today()
+      return { code: half ? 'H' : late ? 'L' : 'P', cls: half ? 'bg-warn-soft text-warn' : late ? 'bg-info-soft text-info' : 'bg-ok-soft text-ok', title: `${fmtTime(s.loginAt)} – ${fmtTime(s.logoutAt)}${s.breaks?.length ? ` · break ${Math.round(breakUsedMs(s) / 60000)} min` : ''}` }
     }
     if (leave) return { code: 'LV', cls: 'bg-violet-500/12 text-violet-600', title: 'Leave' }
     if (sunday) return { code: '—', cls: 'text-mute', title: 'Sunday' }
@@ -50,11 +53,11 @@ export default function Attendance() {
       <PageHeader title="Attendance Board" subtitle={all ? 'Live day status of everyone, and history' : 'Your attendance (only HR, Admin roles see others)'} icon={UserCheck}
         actions={<>
           {all && <Tabs value={tab} onChange={setTab} tabs={[{ id: 'live', label: 'Live today' }, { id: 'history', label: 'History' }]} />}
-          <Button variant="outline" icon={Download} onClick={() => downloadCsv(`attendance-${today()}.csv`, db.sessions.filter((s) => users.some((u) => u.id === s.userId) && dates.includes(s.date)).map((s) => ({ date: s.date, name: db.users.find((u) => u.id === s.userId)?.name, login: fmtTime(s.loginAt), logout: fmtTime(s.logoutAt) })))}>Export</Button>
+          <Button variant="outline" icon={Download} onClick={() => downloadCsv(`attendance-${today()}.csv`, db.sessions.filter((s) => users.some((u) => u.id === s.userId) && dates.includes(s.date)).map((s) => ({ date: s.date, name: db.users.find((u) => u.id === s.userId)?.name, login: fmtTime(s.loginAt), logout: fmtTime(s.logoutAt), break_minutes: Math.round(breakUsedMs(s) / 60000), worked_hours: (workedMs(s) / 3600000).toFixed(2) })))}>Export</Button>
         </>} />
       {all && <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
         <MiniStat label="Present today" value={`${att.present}/${att.total}`} icon={Users} />
-        <MiniStat label="Working now" value={counts.WORKING} icon={UserCheck} tone="green" />
+        <MiniStat label="Working now · on break" value={`${counts.WORKING} · ${counts.ON_BREAK}`} icon={UserCheck} tone="green" />
         <MiniStat label="Day ended" value={counts.DAY_ENDED} icon={LogOut} tone="gray" />
         <MiniStat label="On leave" value={counts.ON_LEAVE} icon={Coffee} tone="amber" />
         <MiniStat label="Not started" value={counts.NOT_STARTED} icon={UserX} tone="red" />
@@ -69,9 +72,10 @@ export default function Attendance() {
               const s = db.sessions.find((x) => x.userId === u.id && x.date === today())
               return (
                 <div key={u.id} className="flex items-center gap-3 rounded-2xl border border-line p-3">
-                  <div className="relative"><Avatar name={u.name} photo={u.photo} size={44} /><span className={cx('absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full ring-2 ring-card', st === 'WORKING' ? 'bg-ok' : st === 'ON_LEAVE' ? 'bg-warn' : st === 'DAY_ENDED' ? 'bg-mute' : 'bg-bad')} /></div>
-                  <div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{u.name}</p><p className="truncate text-xs text-mute">{roleLabel(u.role)} · {s ? `${fmtTime(s.loginAt)} – ${s.logoutAt ? fmtTime(s.logoutAt) : 'now'}` : '—'}</p></div>
-                  <Badge tone={STATUS[st].tone}>{STATUS[st].label}</Badge>
+                  <div className="relative"><Avatar name={u.name} photo={u.photo} size={44} /><span className={cx('absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full ring-2 ring-card', st === 'WORKING' ? 'bg-ok' : st === 'ON_LEAVE' || st === 'ON_BREAK' ? 'bg-warn' : st === 'DAY_ENDED' ? 'bg-mute' : 'bg-bad')} /></div>
+                  <div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{u.name}</p><p className="truncate text-xs text-mute">{roleLabel(u.role)} · {s ? `${fmtTime(s.loginAt)} – ${s.logoutAt ? fmtTime(s.logoutAt) : 'now'}` : '—'}{s?.breaks?.length ? ` · break ${Math.round(breakUsedMs(s) / 60000)} min` : ''}</p></div>
+                  <span className="flex flex-col items-end gap-1"><Badge tone={STATUS[st].tone}>{STATUS[st].label}</Badge>
+                    {st === 'DAY_ENDED' && canReopen && u.id !== me.id && <button className="text-[11px] font-semibold text-brand-ink hover:underline" onClick={() => run(() => reopenDay(me, u.id), `Re-opened today for ${u.name}`)}>Re-open day</button>}</span>
                 </div>
               )
             })}

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
-  ArrowLeft, Building2, Check, CheckCircle2, ChevronRight, CircleDot, Download, FileText, FolderKanban, History, IndianRupee, ListTodo,
+  Archive, ArrowLeft, Building2, Check, CheckCircle2, ChevronRight, CircleDot, Download, FileText, FolderKanban, History, IndianRupee, ListTodo,
   MessageSquare, Pencil, Plus, Receipt, Send, ShieldCheck, Trash2, Upload, X, Lock,
 } from 'lucide-react'
 import { useDb } from '../../lib/store'
@@ -13,12 +13,13 @@ import {
 import { DOC_CATEGORIES, STAGES } from '../../lib/workflow'
 import { ago, bookingMoney, fmtDate, fmtDateTime, gstSplit, inr, today } from '../../lib/format'
 import { roleLabel } from '../../lib/rbac'
+import type { LegacyRow } from '../../lib/types'
 import {
   Avatar, Badge, Button, Card, CardHeader, cx, EmptyState, FileButton, Input, Modal, Select, Table, Tabs, Td, Textarea, Th, readAsDataUrl, useRun,
 } from '../../components/ui'
 import { BookingStatusBadge, ChainStepper, DeadlineBadge, DecisionButtons, PriorityBadge, StageTrack } from '../../components/booking'
 
-type Tab = 'overview' | 'processing' | 'documents' | 'timeline'
+type Tab = 'overview' | 'processing' | 'documents' | 'timeline' | 'legacy'
 
 export default function BookingDetail() {
   const { id } = useParams()
@@ -41,7 +42,7 @@ export default function BookingDetail() {
           <span className="grid size-14 place-items-center rounded-2xl bg-gradient-to-br from-brand to-[#5b6ee1] text-white"><Building2 className="size-7" /></span>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2"><h1 className="text-2xl font-extrabold">{b.companyName}</h1><BookingStatusBadge b={b} /><PriorityBadge p={b.priority} /><DeadlineBadge b={b} /></div>
-            <p className="mt-1 text-sm text-mute"><span className="font-mono font-semibold text-ink">{b.bookingId}</span> · {b.serviceName} · {b.mode} · created {fmtDate(b.createdAt)} by {userName(db, b.createdBy)}</p>
+            <p className="mt-1 text-sm text-mute"><span className="font-mono font-semibold text-ink">{b.bookingId}</span> · {b.serviceName} · {b.mode} · created {fmtDate(b.createdAt)} by {b.createdBy ? userName(db, b.createdBy) : b.ownerName ?? '—'}</p>
             {b.holdReason && <p className="mt-2 inline-flex rounded-lg bg-warn-soft px-3 py-1 text-sm font-medium text-warn">On hold: {b.holdReason}</p>}
           </div>
           <div className="flex flex-wrap gap-2">
@@ -68,11 +69,13 @@ export default function BookingDetail() {
       <Tabs value={tab} onChange={setTab} className="mb-5 w-fit" tabs={[
         { id: 'overview', label: 'Overview', icon: Building2 }, { id: 'processing', label: 'Processing', icon: FolderKanban, count: b.tasks.filter((t) => !t.done).length },
         { id: 'documents', label: 'Documents', icon: FileText, count: b.documents.length }, { id: 'timeline', label: 'Timeline', icon: History, count: b.comments.length + b.approvals.length },
+        ...(b.legacy ? [{ id: 'legacy' as const, label: 'Old CRM record', icon: Archive }] : []),
       ]} />
       {tab === 'overview' && <Overview id={b.id} />}
       {tab === 'processing' && <Processing id={b.id} />}
       {tab === 'documents' && <Documents id={b.id} />}
       {tab === 'timeline' && <Timeline id={b.id} />}
+      {tab === 'legacy' && <LegacyRecord id={b.id} />}
     </div>
   )
 }
@@ -107,12 +110,17 @@ function Overview({ id }: { id: string }) {
     ['Location', `${b.city || '—'}, ${b.state}`], ['Industry', b.industry || '—'], ['Success fee', b.successFeePct ? `${b.successFeePct}%` : '—'],
     ['Team leader', userName(db, b.teamLeadId)], ['Operations', userName(db, b.opsMemberId)], ['Admin', userName(db, b.adminId)], ['Deadline', fmtDate(b.deadline)],
   ]
+  if (b.address) details.splice(6, 0, ['Address', b.address])
+  if (b.cin) details.push(['CIN / LLPIN', b.cin])
+  if (b.website) details.push(['Website', b.website])
+  if (b.startupContact) details.push(['Startup contact', [b.startupContact.phone, b.startupContact.email].filter(Boolean).join(' · ')])
+  if (b.billing) details.push(['Invoice to', [b.billing.name, b.billing.pan, b.billing.gstin, b.billing.contact, b.billing.email].filter(Boolean).join(' · ')])
   return (
     <div className="grid gap-6 xl:grid-cols-3">
       <Card className="overflow-hidden">
         <CardHeader title="Client details" icon={Building2} />
         <dl className="divide-y divide-line/70 text-sm">
-          {details.map(([k, v]) => <div key={k} className="flex justify-between gap-3 px-5 py-2.5"><dt className="text-mute">{k}</dt><dd className="truncate text-right font-medium">{v}</dd></div>)}
+          {details.map(([k, v]) => <div key={k} className="flex justify-between gap-3 px-5 py-2.5"><dt className="shrink-0 text-mute">{k}</dt><dd className="min-w-0 break-words text-right font-medium" title={v}>{v}</dd></div>)}
         </dl>
       </Card>
       <Card className="overflow-hidden xl:col-span-2">
@@ -123,7 +131,7 @@ function Overview({ id }: { id: string }) {
           <tbody>
             {b.payments.map((p) => (
               <tr key={p.id}>
-                <Td className="font-semibold">{p.part === 1 ? 'Advance' : `Part ${p.part}`}</Td><Td>{fmtDate(p.date)}</Td><Td>{p.mode}</Td>
+                <Td className="font-semibold">{p.part === 1 ? 'Advance' : `Part ${p.part}`}</Td><Td>{p.dateUnknown ? <span className="text-xs text-mute" title={`Shown as the booking day, ${fmtDate(p.date)}`}>date not recorded</span> : fmtDate(p.date)}</Td><Td>{p.mode}</Td>
                 <Td className="text-right tabular-nums">{inr(p.amount)}</Td><Td className="text-right tabular-nums text-mute">{inr(p.gst)}</Td><Td className="text-right font-bold tabular-nums">{inr(p.total)}</Td>
                 <Td><span className="inline-flex max-w-32 items-center gap-1 truncate text-xs text-info"><FileText className="size-3.5" />{p.proofName}</span></Td>
                 <Td>{p.verified ? <Badge tone="green">Verified</Badge> : can('bookings.accounts') ? (
@@ -257,7 +265,8 @@ function Documents({ id }: { id: string }) {
               <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-info-soft text-info"><FileText className="size-5" /></span>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold">{d.name}</p>
-                <p className="text-[11px] text-mute">{d.category} · {Math.round(d.size / 1024)} KB · {userName(db, d.by)} · {ago(d.at)}</p>
+                <p className="text-[11px] text-mute">{d.category} · {d.size ? `${Math.round(d.size / 1024)} KB · ` : ''}{userName(db, d.by)} · {ago(d.at)}</p>
+                {d.legacyPath && <p className="truncate font-mono text-[10px] text-mute" title={d.legacyPath}>old CRM: {d.legacyPath}</p>}
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
                   <Badge tone={d.status === 'VERIFIED' ? 'green' : d.status === 'REJECTED' ? 'red' : 'amber'}>{(d.status ?? 'PENDING').toLowerCase()}</Badge>
                   {verifier && d.status !== 'VERIFIED' && <button className="text-[11px] font-semibold text-ok hover:underline" onClick={() => setDocStatus(me, b.id, d.id, 'VERIFIED')}>Verify</button>}
@@ -271,6 +280,47 @@ function Documents({ id }: { id: string }) {
         </div>
       )}
     </Card>
+  )
+}
+
+/** Every column of the original old-CRM rows, exactly as they were in the dump (read-only). */
+function LegacyRecord({ id }: { id: string }) {
+  const b = useBooking(id)
+  const [q, setQ] = useState('')
+  const [empty, setEmpty] = useState(false)
+  const lg = b.legacy!
+  const groups: { title: string; rows: LegacyRow[] }[] = [
+    { title: `Client file · crm #${b.legacyId ?? ''}`, rows: [lg.crm] },
+    ...(lg.workflow ? [{ title: 'Workflow (stage timestamps)', rows: [lg.workflow] }] : []),
+    ...(lg.deductions?.length ? [{ title: 'Deductions', rows: lg.deductions }] : []),
+  ]
+  const show = (k: string, v: string | null) => (empty || (v != null && v.trim() !== '')) && (!q || `${k} ${v ?? ''}`.toLowerCase().includes(q.toLowerCase()))
+  return (
+    <div className="space-y-6">
+      <Card className="flex flex-wrap items-center gap-3 p-4">
+        <Archive className="size-5 text-mute" />
+        <p className="min-w-0 flex-1 text-sm text-mute">Imported from the old CRM. Values are shown exactly as stored there; times are as the old database wrote them.</p>
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a field…" aria-label="Find a field" className="h-9 w-48 rounded-lg border border-line bg-card px-3 text-sm" />
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={empty} onChange={(e) => setEmpty(e.target.checked)} className="accent-[var(--brand)]" />Show empty fields</label>
+      </Card>
+      {groups.map((g) => g.rows.map((row, i) => {
+        const entries = Object.entries(row).filter(([k, v]) => show(k, v))
+        return (
+          <Card key={g.title + i} className="overflow-hidden">
+            <CardHeader title={g.rows.length > 1 ? `${g.title} ${i + 1}` : g.title} subtitle={`${entries.length} of ${Object.keys(row).length} fields`} icon={Archive} />
+            <dl className="grid text-sm sm:grid-cols-2">
+              {entries.map(([k, v]) => (
+                <div key={k} className="flex gap-3 border-b border-line/70 px-5 py-2 sm:odd:border-r">
+                  <dt className="w-40 shrink-0 font-mono text-xs text-mute">{k}</dt>
+                  <dd className="min-w-0 flex-1 whitespace-pre-wrap break-words">{v == null ? <i className="text-mute">NULL</i> : v === '' ? <i className="text-mute">(empty)</i> : v}</dd>
+                </div>
+              ))}
+              {!entries.length && <p className="px-5 py-4 text-mute">No fields match.</p>}
+            </dl>
+          </Card>
+        )
+      }))}
+    </div>
   )
 }
 

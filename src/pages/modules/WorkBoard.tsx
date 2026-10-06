@@ -6,23 +6,29 @@ import { useMe } from '../../lib/auth'
 import { userName, usersWithRole, visibleBookings } from '../../lib/actions'
 import { STAGES } from '../../lib/workflow'
 import { bookingMoney, fmtDate, inr, today } from '../../lib/format'
-import { Avatar, Badge, Card, cx, EmptyState, PageHeader, SearchBox, Table, Tabs, Td, Th } from '../../components/ui'
+import { Avatar, Badge, Card, cx, EmptyState, PageHeader, SearchBox, Table, Tabs, Td, Th, usePaged } from '../../components/ui'
 import { BookingStatusBadge, DeadlineBadge, PriorityBadge, StageTrack } from '../../components/booking'
+
+/** Cards drawn per column before "Show all" — keeps the board quick with thousands of imported files. */
+const COLUMN_CAP = 30
 
 export default function WorkBoard() {
   const db = useDb()
   const me = useMe()
   const [view, setView] = useState<'board' | 'table'>('board')
-  const [scope, setScope] = useState<'mine' | 'all'>(me.role === 'operations' || me.role === 'admin' ? 'mine' : 'all')
+  // operations/admin open on their own files — unless they have none (e.g. a shared team login), then the whole board
+  const [scope, setScope] = useState<'mine' | 'all'>(() => (me.role === 'operations' || me.role === 'admin') && db.bookings.some((b) => b.opsMemberId === me.id || b.adminId === me.id) ? 'mine' : 'all')
   const [member, setMember] = useState('')
   const [q, setQ] = useState('')
   const [overdue, setOverdue] = useState(false)
   const files = useMemo(() => visibleBookings(db, me).filter((b) => b.opsMemberId && ['IN_OPERATIONS', 'WITH_ADMIN', 'ON_HOLD', 'COMPLETED'].includes(b.status))
     .filter((b) => scope === 'all' || b.opsMemberId === me.id || b.adminId === me.id)
     .filter((b) => !member || b.opsMemberId === member || b.adminId === member)
-    .filter((b) => !overdue || (b.deadline < today() && b.status !== 'COMPLETED'))
+    .filter((b) => !overdue || (!!b.deadline && b.deadline < today() && b.status !== 'COMPLETED'))
     .filter((b) => !q || `${b.bookingId} ${b.companyName} ${b.serviceName}`.toLowerCase().includes(q.toLowerCase())), [db, me, scope, member, q, overdue])
   const members = [...usersWithRole(db, 'operations'), ...usersWithRole(db, 'admin')]
+  const [expanded, setExpanded] = useState<string[]>([])
+  const { slice, pager } = usePaged(files, 50, [scope, member, q, overdue])
 
   return (
     <div>
@@ -47,7 +53,7 @@ export default function WorkBoard() {
                 <span className="truncate">{col.title}</span><span className="rounded-full bg-card px-2 text-xs">{col.items.length}</span>
               </div>
               <div className="space-y-3">
-                {col.items.map((b) => (
+                {(expanded.includes(col.key) ? col.items : col.items.slice(0, COLUMN_CAP)).map((b) => (
                   <Link key={b.id} to={`/bookings/${b.id}`} className="block rounded-2xl border border-line bg-card p-4 shadow-card transition hover:-translate-y-0.5 hover:shadow-pop">
                     <div className="mb-1 flex items-center gap-1.5"><PriorityBadge p={b.priority} /><DeadlineBadge b={b} /></div>
                     <p className="truncate font-bold">{b.companyName}</p>
@@ -62,6 +68,11 @@ export default function WorkBoard() {
                     {b.status === 'WITH_ADMIN' && <Badge tone="blue" className="mt-2">With Admin</Badge>}
                   </Link>
                 ))}
+                {col.items.length > COLUMN_CAP && (
+                  <button onClick={() => setExpanded((x) => x.includes(col.key) ? x.filter((k) => k !== col.key) : [...x, col.key])} className="w-full rounded-xl border border-dashed border-line py-2 text-xs font-semibold text-brand-ink hover:bg-card2">
+                    {expanded.includes(col.key) ? 'Show fewer' : `Show all ${col.items.length} (${col.items.length - COLUMN_CAP} more)`}
+                  </button>
+                )}
                 {!col.items.length && <p className="rounded-2xl border border-dashed border-line p-4 text-center text-xs text-mute">Empty</p>}
               </div>
             </div>
@@ -72,7 +83,7 @@ export default function WorkBoard() {
           <Table>
             <thead><tr><Th>Client</Th><Th>Status</Th><Th>Stage</Th><Th>Operations</Th><Th>Admin</Th><Th>Deadline</Th><Th className="text-right">Collected</Th></tr></thead>
             <tbody>
-              {files.map((b) => (
+              {slice.map((b) => (
                 <tr key={b.id} className="hover:bg-card2/60">
                   <Td><Link to={`/bookings/${b.id}`} className="font-semibold hover:underline">{b.companyName}</Link><p className="text-xs text-mute">{b.serviceName}</p></Td>
                   <Td><BookingStatusBadge b={b} /></Td>
@@ -84,6 +95,7 @@ export default function WorkBoard() {
               ))}
             </tbody>
           </Table>
+          {pager}
         </Card>
       )}
     </div>

@@ -38,6 +38,8 @@ export default function Payroll() {
   const preview = useMemo(() => (saved ? null : payrollPeople(db, month).map((u) => computeRow(db, u, month))), [db, month, saved])
   const rows = saved?.rows ?? preview ?? []
   const open = openId ? rows.find((r) => r.userId === openId) ?? null : null
+  // everyone active who isn't in this month's payroll yet (no salary set, or joined later) — listed so HR sees all employees
+  const notPaid = useMemo(() => db.users.filter((u) => u.active && !rows.some((r) => r.userId === u.id)).sort((a, b) => a.name.localeCompare(b.name)), [db.users, rows])
   const locked = !!saved && ['FINALIZED', 'PAID'].includes(saved.status)
   const incentiveOf = (r: PayRow) => round2(r.incentive + manualTotal(db, r.userId, month))
   const tot = rows.reduce((t, r) => ({
@@ -91,7 +93,7 @@ export default function Payroll() {
       </Card>
 
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <MiniStat label={`Employees · salary ${inr(tot.salary)}`} value={rows.length} icon={Users} />
+        <MiniStat label={`In payroll · salary ${inr(tot.salary)}`} value={notPaid.length ? `${rows.length} of ${rows.length + notPaid.length}` : rows.length} icon={Users} />
         <MiniStat label="Gross (after employer PF)" value={inr(tot.gross)} icon={Wallet} tone="blue" />
         <MiniStat label="Deductions (LOP + employee PF + PT)" value={inr(tot.ded)} icon={IndianRupee} tone="red" />
         <MiniStat label="Net salary payable" value={inr(tot.net)} icon={CheckCircle2} tone="green" />
@@ -99,8 +101,8 @@ export default function Payroll() {
       </div>
 
       <Card className="overflow-hidden">
-        {!rows.length ? <EmptyState icon={Users} title="Nobody to pay this month" text="Set monthly salaries with the pencil next to each name, or in Employee Details." /> : (
-          <Table>
+        {!rows.length && !notPaid.length ? <EmptyState icon={Users} title="Nobody to pay this month" text="Add employees in Employee Details." /> : (
+          <Table className="max-h-[70vh] overflow-y-auto">
             <thead><tr>
               <Th>Employee</Th><Th className="text-right">Paid / LOP days</Th><Th className="text-right">Salary</Th><Th className="text-right">Employer PF</Th><Th className="text-right">Gross</Th>
               <Th className="text-right">LOP</Th><Th className="text-right">Employee PF</Th><Th className="text-right">PT</Th><Th className="text-right">Net salary</Th>
@@ -131,6 +133,14 @@ export default function Payroll() {
                   </tr>
                 )
               })}
+              {notPaid.length > 0 && <tr><Td colSpan={10} className="bg-card2/60 py-2 text-xs font-bold uppercase tracking-wide text-mute">Not in this month's payroll · {notPaid.length} — set a salary, then {saved ? 'recalculate' : 'calculate'}</Td></tr>}
+              {notPaid.map((u) => (
+                <tr key={u.id} className="text-mute">
+                  <Td><p className="font-semibold text-ink">{u.name}</p><p className="text-xs">{u.designation}</p></Td>
+                  <Td colSpan={8} className="text-xs">{!u.salary ? 'No salary set' : u.joinedOn.slice(0, 7) > month ? `Joins ${u.joinedOn} — after this month` : `Salary ${inr(u.salary)} set — ${saved ? 'recalculate' : 'calculate'} to include`}</Td>
+                  <Td className="text-right">{manage && !u.salary && <Button size="sm" variant="soft" icon={Pencil} onClick={() => setSalaryFor({ userId: u.id, name: u.name, amount: '' })}>Set salary</Button>}</Td>
+                </tr>
+              ))}
             </tbody>
           </Table>
         )}
