@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import { INITIAL_LEAVES, LeaveRequest } from '../data'
 
-export default function PookieeLeave() {
+export default function PookieLeave() {
   const [leaves, setLeaves] = useState<LeaveRequest[]>(INITIAL_LEAVES)
   const [applyForm, setApplyForm] = useState({
     leaveType: 'Casual Leave',
@@ -69,7 +69,7 @@ export default function PookieeLeave() {
       </div>
 
       {/* Row 1: Leave Balances (Panda holding small CL, SL, EL and LOP cards) */}
-      <div className="Pookiee-card p-6 relative overflow-hidden bg-gradient-to-r from-blue-50/40 via-white to-pink-50/30 dark:from-blue-950/20 dark:to-pink-950/20">
+      <div className="Pookie-card p-6 relative overflow-hidden bg-gradient-to-r from-blue-50/40 via-white to-pink-50/30 dark:from-blue-950/20 dark:to-pink-950/20">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-3">
             <img
@@ -157,7 +157,7 @@ export default function PookieeLeave() {
       {/* Row 3: Apply Leave (Schoolgirl filling out form) + Approval Workflow */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Apply Leave Form */}
-        <div className="Pookiee-card p-6">
+        <div className="Pookie-card p-6">
           <div className="flex items-center gap-3 pb-4 border-b border-slate-100 dark:border-slate-800 mb-4">
             <img
               src="/mascots/schoolgirl.png"
@@ -240,7 +240,7 @@ export default function PookieeLeave() {
         </div>
 
         {/* Multi-tier Approval Workflow Diagram */}
-        <div className="lg:col-span-2 Pookiee-card p-6 flex flex-col justify-between">
+        <div className="lg:col-span-2 Pookie-card p-6 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-black text-sm text-slate-800 dark:text-white">

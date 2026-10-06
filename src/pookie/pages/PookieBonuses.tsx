@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import { CuteSparkle, CuteStar } from '../mascots'
 
-export default function PookieeBonuses() {
+export default function PookieBonuses() {
   const [bonuses, setBonuses] = useState([
     { id: 'B-1', employee: 'Riya Mehta', type: 'Diwali Festive Bonus', amount: 25000, status: 'Approved' },
     { id: 'B-2', employee: 'Aman Shah', type: 'Q3 Star Campaign Bonus', amount: 35000, status: 'Approved' },
@@ -26,7 +26,7 @@ export default function PookieeBonuses() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="Pookiee-card p-6 sm:p-8 bg-gradient-to-r from-pink-50/60 via-white to-amber-50/50 dark:from-pink-950/20 dark:to-amber-950/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="Pookie-card p-6 sm:p-8 bg-gradient-to-r from-pink-50/60 via-white to-amber-50/50 dark:from-pink-950/20 dark:to-amber-950/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="p-1.5 rounded-xl bg-pink-100 text-[#ff4b72] dark:bg-pink-950 font-bold text-xs">
@@ -54,7 +54,7 @@ export default function PookieeBonuses() {
       {/* Row 1: Bonus Pool (Blonde with gift box) + Overtime (Schoolboy beside clock) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Bonus Pool: Blonde character holding small gift box */}
-        <div className="Pookiee-card p-6 relative overflow-hidden flex flex-col justify-between">
+        <div className="Pookie-card p-6 relative overflow-hidden flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-black text-sm text-slate-800 dark:text-white flex items-center gap-2">
@@ -103,7 +103,7 @@ export default function PookieeBonuses() {
         </div>
 
         {/* Overtime Tracker: Funny schoolboy working beside clock */}
-        <div className="Pookiee-card p-6 relative overflow-hidden flex flex-col justify-between">
+        <div className="Pookie-card p-6 relative overflow-hidden flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-black text-sm text-slate-800 dark:text-white flex items-center gap-2">
@@ -153,7 +153,7 @@ export default function PookieeBonuses() {
       </div>
 
       {/* Row 2: Approval (Blue Cat) & Payroll Integration (Panda carrying payroll file) */}
-      <div className="Pookiee-card p-6 flex flex-col md:flex-row items-center justify-between gap-6 bg-gradient-to-r from-blue-50/50 via-white to-purple-50/50 dark:from-blue-950/20 dark:to-purple-950/20">
+      <div className="Pookie-card p-6 flex flex-col md:flex-row items-center justify-between gap-6 bg-gradient-to-r from-blue-50/50 via-white to-purple-50/50 dark:from-blue-950/20 dark:to-purple-950/20">
         <div className="flex items-center gap-4">
           <img src="/mascots/bluecat.png" alt="Bluecat Approval" className="size-14 object-contain anim-float-subtle" />
           <div>

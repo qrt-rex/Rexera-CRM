@@ -11,7 +11,7 @@ import {
   ArrowUpRight,
 } from 'lucide-react'
 
-export default function PookieeProductivity() {
+export default function PookieProductivity() {
   const [tasks, setTasks] = useState([
     { id: 'TSK-1', client: 'Acme Retail Corp', title: 'Q3 Tax Deductions & Filing', due: 'Today', status: 'In Progress', progress: 75 },
     { id: 'TSK-2', client: 'Starlight Tech', title: 'Payroll Slips Generation & Dispatch', due: 'Tomorrow', status: 'Completed', progress: 100 },
@@ -22,7 +22,7 @@ export default function PookieeProductivity() {
   return (
     <div className="space-y-6">
       {/* Top Banner */}
-      <div className="Pookiee-card p-6 sm:p-8 bg-gradient-to-r from-blue-50/60 via-white to-purple-50/50 dark:from-blue-950/20 dark:to-purple-950/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="Pookie-card p-6 sm:p-8 bg-gradient-to-r from-blue-50/60 via-white to-purple-50/50 dark:from-blue-950/20 dark:to-purple-950/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="p-1.5 rounded-xl bg-blue-100 dark:bg-blue-950 text-[#1d5cc8] font-bold text-xs">
@@ -52,7 +52,7 @@ export default function PookieeProductivity() {
       {/* Grid: 4 Core Sections */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* 1. Client Tasks: Funny schoolboy working on a laptop in card corner */}
-        <div className="Pookiee-card p-5 relative overflow-hidden flex flex-col justify-between">
+        <div className="Pookie-card p-5 relative overflow-hidden flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-black text-sm text-slate-800 dark:text-white flex items-center gap-2">
@@ -109,7 +109,7 @@ export default function PookieeProductivity() {
         </div>
 
         {/* 2. Timesheets: Blue robotic cat beside a clock and timesheet in corner */}
-        <div className="Pookiee-card p-5 relative overflow-hidden flex flex-col justify-between">
+        <div className="Pookie-card p-5 relative overflow-hidden flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-black text-sm text-slate-800 dark:text-white flex items-center gap-2">
@@ -156,7 +156,7 @@ export default function PookieeProductivity() {
         </div>
 
         {/* 3. Blockers: Panda sitting beside small roadblock sign in corner */}
-        <div className="Pookiee-card p-5 relative overflow-hidden flex flex-col justify-between">
+        <div className="Pookie-card p-5 relative overflow-hidden flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-black text-sm text-slate-800 dark:text-white flex items-center gap-2">
@@ -208,7 +208,7 @@ export default function PookieeProductivity() {
         </div>
 
         {/* 4. Productivity Charts: Blonde character holding upward-trending chart */}
-        <div className="Pookiee-card p-5 relative overflow-hidden flex flex-col justify-between">
+        <div className="Pookie-card p-5 relative overflow-hidden flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-black text-sm text-slate-800 dark:text-white flex items-center gap-2">

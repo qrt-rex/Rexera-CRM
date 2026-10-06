@@ -29,7 +29,7 @@ const PIPELINE_COLUMNS: {
   { id: 'Rejected', title: 'Archived', mascot: '/mascots/panda.png', mascotAlt: 'Neutral Panda Closed Folder', color: 'border-t-rose-300' },
 ]
 
-export default function PookieeRecruitment() {
+export default function PookieRecruitment() {
   const [candidates, setCandidates] = useState<Candidate[]>(INITIAL_CANDIDATES)
   const [search, setSearch] = useState('')
   const [activeStage, setActiveStage] = useState<string>('All')
@@ -88,7 +88,7 @@ export default function PookieeRecruitment() {
           return (
             <div
               key={col.id}
-              className={`Pookiee-card p-3 flex flex-col justify-between border-t-4 ${col.color} bg-slate-50/40 dark:bg-[#131b30] min-w-[210px]`}
+              className={`Pookie-card p-3 flex flex-col justify-between border-t-4 ${col.color} bg-slate-50/40 dark:bg-[#131b30] min-w-[210px]`}
             >
               <div>
                 {/* Column Mascot Header matching prompt assignment */}

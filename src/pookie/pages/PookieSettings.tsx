@@ -9,7 +9,7 @@ import {
   CheckCircle2,
 } from 'lucide-react'
 
-export default function PookieeSettings() {
+export default function PookieSettings() {
   const [saved, setSaved] = useState(false)
 
   const handleSave = (e: React.FormEvent) => {
@@ -21,7 +21,7 @@ export default function PookieeSettings() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="Pookiee-card p-6 sm:p-8 bg-gradient-to-r from-slate-50 via-white to-blue-50/50 dark:from-slate-900/40 dark:to-blue-950/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="Pookie-card p-6 sm:p-8 bg-gradient-to-r from-slate-50 via-white to-blue-50/50 dark:from-slate-900/40 dark:to-blue-950/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="p-1.5 rounded-xl bg-blue-100 text-[#1d5cc8] dark:bg-blue-950 font-bold text-xs">
@@ -47,7 +47,7 @@ export default function PookieeSettings() {
 
       <form onSubmit={handleSave} className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* 1. Rules: Blue robotic cat holding a settings gear */}
-        <div className="Pookiee-card p-5 relative overflow-hidden flex flex-col justify-between">
+        <div className="Pookie-card p-5 relative overflow-hidden flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-black text-sm text-slate-800 dark:text-white">
@@ -93,7 +93,7 @@ export default function PookieeSettings() {
         </div>
 
         {/* 2. SMTP: Panda holding email envelope */}
-        <div className="Pookiee-card p-5 relative overflow-hidden flex flex-col justify-between">
+        <div className="Pookie-card p-5 relative overflow-hidden flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-black text-sm text-slate-800 dark:text-white">
@@ -133,7 +133,7 @@ export default function PookieeSettings() {
                 <label className="block text-[11px] font-bold text-slate-500 mb-1">From Email Address</label>
                 <input
                   type="email"
-                  defaultValue="payroll@Pookiee.com"
+                  defaultValue="payroll@Pookie.com"
                   className="w-full h-9 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900"
                 />
               </div>
@@ -150,7 +150,7 @@ export default function PookieeSettings() {
         </div>
 
         {/* 3. Templates: Schoolgirl editing document template */}
-        <div className="Pookiee-card p-5 relative overflow-hidden flex flex-col justify-between">
+        <div className="Pookie-card p-5 relative overflow-hidden flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-black text-sm text-slate-800 dark:text-white">
@@ -162,7 +162,7 @@ export default function PookieeSettings() {
               <div>
                 <label className="block text-[11px] font-bold text-slate-500 mb-1">Active Payslip Theme</label>
                 <select className="w-full h-9 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">
-                  <option>Pookiee Modern Pastel (Default)</option>
+                  <option>Pookie Modern Pastel (Default)</option>
                   <option>Corporate Minimalist</option>
                   <option>Detailed Tax Breakdown</option>
                 </select>
@@ -188,7 +188,7 @@ export default function PookieeSettings() {
         </div>
 
         {/* 4. Audit & Email Logs: Funny schoolboy & Blonde */}
-        <div className="Pookiee-card p-5 relative overflow-hidden flex flex-col justify-between">
+        <div className="Pookie-card p-5 relative overflow-hidden flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-black text-sm text-slate-800 dark:text-white">

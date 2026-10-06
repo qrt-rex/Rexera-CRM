@@ -10,11 +10,11 @@ import {
   UserCheck,
   ArrowRight,
 } from 'lucide-react'
-import { CuteHeart, CuteSparkle, CuteStar, PookieeLogoMark } from '../mascots'
+import { CuteHeart, CuteSparkle, CuteStar, PookieLogoMark } from '../mascots'
 
-export default function PookieeNewJoinerPortal() {
+export default function PookieNewJoinerPortal() {
   const [step, setStep] = useState<'auth' | 'checklist' | 'bank' | 'complete'>('auth')
-  const [token, setToken] = useState('Pookiee-JOIN-9942')
+  const [token, setToken] = useState('Pookie-JOIN-9942')
   const [otp, setOtp] = useState('')
 
   const [checklist, setChecklist] = useState({
@@ -26,13 +26,13 @@ export default function PookieeNewJoinerPortal() {
   })
 
   return (
-    <div className="min-h-screen bg-[#f7f9fd] dark:bg-[#0c1222] font-Pookiee text-slate-800 dark:text-slate-100 antialiased flex flex-col justify-between">
+    <div className="min-h-screen bg-[#f7f9fd] dark:bg-[#0c1222] font-Pookie text-slate-800 dark:text-slate-100 antialiased flex flex-col justify-between">
       {/* Simple Public Header (No admin sidebar) */}
       <header className="sticky top-0 z-30 bg-white/80 dark:bg-[#12192e]/80 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 px-6 py-4">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <PookieeLogoMark size={36} />
-            <span className="font-black text-2xl tracking-tight text-[#1e60d5]">Pookiee</span>
+            <PookieLogoMark size={36} />
+            <span className="font-black text-2xl tracking-tight text-[#1e60d5]">Pookie</span>
             <CuteHeart className="text-[#ff4b72]" size={16} />
             <span className="text-xs font-bold text-slate-400 pl-2 border-l border-slate-200 dark:border-slate-800 hidden sm:inline">
               Welcome Onboarding Experience
@@ -54,13 +54,13 @@ export default function PookieeNewJoinerPortal() {
             "Blonde character welcoming the new employee.
              Blue robotic cat holding a welcome sign.
              Panda holding an employee ID card." */}
-        <div className="Pookiee-card p-6 sm:p-8 bg-gradient-to-r from-pink-50/60 via-white to-blue-50/60 dark:from-pink-950/20 dark:to-blue-950/20 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
+        <div className="Pookie-card p-6 sm:p-8 bg-gradient-to-r from-pink-50/60 via-white to-blue-50/60 dark:from-pink-950/20 dark:to-blue-950/20 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
           <div className="space-y-2 text-center md:text-left">
             <span className="px-3 py-1 rounded-full bg-pink-100 text-[#ff4b72] dark:bg-pink-950 text-xs font-black uppercase">
               Welcome to your new team! 🌟
             </span>
             <h1 className="text-2xl sm:text-3xl font-black text-slate-800 dark:text-white tracking-tight">
-              Welcome to Pookiee Family!
+              Welcome to Pookie Family!
             </h1>
             <p className="text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300 max-w-md">
               We are thrilled to welcome you aboard. Complete your welcome setup, upload statutory documents, and activate your salary account.
@@ -77,7 +77,7 @@ export default function PookieeNewJoinerPortal() {
 
         {/* Step 1: Token + OTP Verification Screen (Blue robotic cat beside phone verification screen) */}
         {step === 'auth' && (
-          <div className="Pookiee-card p-8 max-w-md mx-auto text-center space-y-6 anim-pop">
+          <div className="Pookie-card p-8 max-w-md mx-auto text-center space-y-6 anim-pop">
             <div className="size-20 rounded-full bg-blue-50 dark:bg-blue-950 flex items-center justify-center mx-auto">
               <img src="/mascots/bluecat.png" alt="Bluecat Token Verification" className="size-16 object-contain anim-float-subtle" />
             </div>
@@ -125,7 +125,7 @@ export default function PookieeNewJoinerPortal() {
 
         {/* Step 2: Onboarding Checklist (Schoolgirl checking documents, Funny schoolboy completing profile) */}
         {step === 'checklist' && (
-          <div className="Pookiee-card p-6 sm:p-8 space-y-6 anim-fade-up">
+          <div className="Pookie-card p-6 sm:p-8 space-y-6 anim-fade-up">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
               <div>
                 <h3 className="font-black text-lg text-slate-800 dark:text-white">
@@ -196,7 +196,7 @@ export default function PookieeNewJoinerPortal() {
 
         {/* Step 3: Bank Details (Panda beside secure lock) */}
         {step === 'bank' && (
-          <div className="Pookiee-card p-6 sm:p-8 max-w-xl mx-auto space-y-6 anim-pop">
+          <div className="Pookie-card p-6 sm:p-8 max-w-xl mx-auto space-y-6 anim-pop">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
               <div>
                 <h3 className="font-black text-lg text-slate-800 dark:text-white">
@@ -267,7 +267,7 @@ export default function PookieeNewJoinerPortal() {
 
         {/* Step 4: Completed Onboarding (Entire mascot group celebrating with stars & confetti) */}
         {step === 'complete' && (
-          <div className="Pookiee-card p-8 sm:p-10 max-w-2xl mx-auto text-center space-y-6 anim-fade-up bg-gradient-to-b from-white via-pink-50/20 to-blue-50/40 dark:from-[#12192e] dark:to-blue-950/20 relative overflow-hidden">
+          <div className="Pookie-card p-8 sm:p-10 max-w-2xl mx-auto text-center space-y-6 anim-fade-up bg-gradient-to-b from-white via-pink-50/20 to-blue-50/40 dark:from-[#12192e] dark:to-blue-950/20 relative overflow-hidden">
             {/* Mascot group celebrating */}
             <div className="flex items-center justify-center py-2 relative">
               <img
@@ -285,7 +285,7 @@ export default function PookieeNewJoinerPortal() {
                 <span>Onboarding Completed Successfully!</span>
               </span>
               <h2 className="text-2xl sm:text-3xl font-black text-slate-800 dark:text-white">
-                You're Officially Part of Pookiee! 🎉
+                You're Officially Part of Pookie! 🎉
               </h2>
               <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 max-w-md mx-auto leading-relaxed">
                 Your employee ID and credentials have been issued. Your reporting manager and buddy have been notified. Welcome to an incredible journey ahead!
@@ -303,7 +303,7 @@ export default function PookieeNewJoinerPortal() {
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Office Location:</span>
-                <span className="font-bold text-slate-800 dark:text-white">Tower B, Pookiee Campus, Mumbai</span>
+                <span className="font-bold text-slate-800 dark:text-white">Tower B, Pookie Campus, Mumbai</span>
               </div>
             </div>
 
@@ -321,7 +321,7 @@ export default function PookieeNewJoinerPortal() {
 
       {/* Public Footer */}
       <footer className="text-center py-6 text-xs text-slate-400 border-t border-slate-200/60 dark:border-slate-800">
-        © 2026 Pookiee HR Technologies • Welcome Experience
+        © 2026 Pookie HR Technologies • Welcome Experience
       </footer>
     </div>
   )

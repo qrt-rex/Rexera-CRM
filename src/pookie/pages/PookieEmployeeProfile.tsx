@@ -17,7 +17,7 @@ import {
 } from 'lucide-react'
 import { INITIAL_EMPLOYEES } from '../data'
 
-export default function PookieeEmployeeProfile() {
+export default function PookieEmployeeProfile() {
   const { id } = useParams()
   const employee =
     INITIAL_EMPLOYEES.find((e) => e.id === id) || INITIAL_EMPLOYEES[0]
@@ -44,7 +44,7 @@ export default function PookieeEmployeeProfile() {
       </div>
 
       {/* Profile Header Card */}
-      <div className="Pookiee-card p-6 sm:p-8 relative overflow-hidden bg-gradient-to-r from-white via-white to-blue-50/40 dark:from-[#12192e] dark:to-blue-950/20">
+      <div className="Pookie-card p-6 sm:p-8 relative overflow-hidden bg-gradient-to-r from-white via-white to-blue-50/40 dark:from-[#12192e] dark:to-blue-950/20">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 relative z-10">
           <div className="flex items-center gap-5">
             <img
@@ -124,7 +124,7 @@ export default function PookieeEmployeeProfile() {
       {/* Tab Contents */}
       {activeTab === 'overview' && (
         /* Personal Information: Small schoolgirl illustration with a clipboard */
-        <div className="Pookiee-card p-6 relative">
+        <div className="Pookie-card p-6 relative">
           <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 mb-6">
             <div className="flex items-center gap-3">
               <div className="size-10 rounded-xl bg-pink-50 dark:bg-pink-950 flex items-center justify-center">
@@ -209,7 +209,7 @@ export default function PookieeEmployeeProfile() {
       {activeTab === 'bank' && (
         /* Bank Details: Blue robotic cat holding a secure lock.
            Visual message: "Sensitive information protected." */
-        <div className="Pookiee-card p-6 relative">
+        <div className="Pookie-card p-6 relative">
           <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 mb-6">
             <div className="flex items-center gap-3">
               <div className="size-10 rounded-xl bg-blue-50 dark:bg-blue-950 flex items-center justify-center">
@@ -286,7 +286,7 @@ export default function PookieeEmployeeProfile() {
 
       {activeTab === 'docs' && (
         /* Documents: Panda organizing documents */
-        <div className="Pookiee-card p-6 relative">
+        <div className="Pookie-card p-6 relative">
           <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 mb-6">
             <div className="flex items-center gap-3">
               <div className="size-10 rounded-xl bg-purple-50 dark:bg-purple-950 flex items-center justify-center">
@@ -338,7 +338,7 @@ export default function PookieeEmployeeProfile() {
 
       {activeTab === 'performance' && (
         /* Performance section: Funny schoolboy holding a small chart */
-        <div className="Pookiee-card p-6 relative">
+        <div className="Pookie-card p-6 relative">
           <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 mb-6">
             <div className="flex items-center gap-3">
               <div className="size-10 rounded-xl bg-amber-50 dark:bg-amber-950 flex items-center justify-center">

@@ -11,13 +11,13 @@ import {
 } from 'lucide-react'
 import { CuteSparkle, CuteStar } from '../mascots'
 
-export default function PookieeIncentives() {
+export default function PookieIncentives() {
   const [activeTab, setActiveTab] = useState<'Daily' | 'Weekly' | 'Monthly'>('Monthly')
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="Pookiee-card p-6 sm:p-8 bg-gradient-to-r from-amber-50/70 via-white to-pink-50/50 dark:from-amber-950/20 dark:to-pink-950/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="Pookie-card p-6 sm:p-8 bg-gradient-to-r from-amber-50/70 via-white to-pink-50/50 dark:from-amber-950/20 dark:to-pink-950/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="p-1.5 rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-950 font-bold text-xs">
@@ -45,7 +45,7 @@ export default function PookieeIncentives() {
       {/* Row 1: Slabs (Schoolboy climbing 3 steps) + Settings (Blonde) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Daily / Weekly / Monthly slabs with Funny schoolboy */}
-        <div className="lg:col-span-2 Pookiee-card p-6 relative overflow-hidden flex flex-col justify-between">
+        <div className="lg:col-span-2 Pookie-card p-6 relative overflow-hidden flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-black text-sm text-slate-800 dark:text-white flex items-center gap-2">
@@ -109,7 +109,7 @@ export default function PookieeIncentives() {
         </div>
 
         {/* Incentive Settings with Blonde Character */}
-        <div className="Pookiee-card p-5 relative overflow-hidden flex flex-col justify-between">
+        <div className="Pookie-card p-5 relative overflow-hidden flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-black text-sm text-slate-800 dark:text-white flex items-center gap-2">
@@ -147,7 +147,7 @@ export default function PookieeIncentives() {
       {/* Row 2: Sales Performance Leaderboard (Schoolgirl celebrating) + Payout (Panda with reward card) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Sales Performance Leaderboard */}
-        <div className="lg:col-span-2 Pookiee-card p-6 relative overflow-hidden flex flex-col justify-between">
+        <div className="lg:col-span-2 Pookie-card p-6 relative overflow-hidden flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-black text-sm text-slate-800 dark:text-white flex items-center gap-2">
@@ -200,7 +200,7 @@ export default function PookieeIncentives() {
         </div>
 
         {/* Payout Card (Panda holding small reward card) */}
-        <div className="Pookiee-card p-6 relative overflow-hidden flex flex-col justify-between">
+        <div className="Pookie-card p-6 relative overflow-hidden flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-black text-sm text-slate-800 dark:text-white">

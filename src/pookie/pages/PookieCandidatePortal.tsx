@@ -11,9 +11,9 @@ import {
   Mail,
   Sparkles,
 } from 'lucide-react'
-import { CuteHeart, CuteSparkle, PookieeLogoMark } from '../mascots'
+import { CuteHeart, CuteSparkle, PookieLogoMark } from '../mascots'
 
-export default function PookieeCandidatePortal() {
+export default function PookieCandidatePortal() {
   const [step, setStep] = useState<'form' | 'otp' | 'success'>('form')
   const [otp, setOtp] = useState(['', '', '', ''])
   const [formData, setFormData] = useState({
@@ -36,13 +36,13 @@ export default function PookieeCandidatePortal() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f7f9fd] dark:bg-[#0c1222] font-Pookiee text-slate-800 dark:text-slate-100 antialiased flex flex-col justify-between">
+    <div className="min-h-screen bg-[#f7f9fd] dark:bg-[#0c1222] font-Pookie text-slate-800 dark:text-slate-100 antialiased flex flex-col justify-between">
       {/* Top Simple Public Header (NO HR Admin sidebar) */}
       <header className="sticky top-0 z-30 bg-white/80 dark:bg-[#12192e]/80 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 px-6 py-4">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <PookieeLogoMark size={36} />
-            <span className="font-black text-2xl tracking-tight text-[#1e60d5]">Pookiee</span>
+            <PookieLogoMark size={36} />
+            <span className="font-black text-2xl tracking-tight text-[#1e60d5]">Pookie</span>
             <CuteHeart className="text-[#ff4b72]" size={16} />
             <span className="text-xs font-bold text-slate-400 pl-2 border-l border-slate-200 dark:border-slate-800 hidden sm:inline">
               Careers Portal
@@ -63,10 +63,10 @@ export default function PookieeCandidatePortal() {
         {/* Hero Section matching prompt:
             "Schoolgirl and funny schoolboy applying for a job using a laptop.
              Panda holding a resume." */}
-        <div className="Pookiee-card p-6 sm:p-8 bg-gradient-to-r from-blue-50/70 via-white to-pink-50/50 dark:from-blue-950/20 dark:to-pink-950/20 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
+        <div className="Pookie-card p-6 sm:p-8 bg-gradient-to-r from-blue-50/70 via-white to-pink-50/50 dark:from-blue-950/20 dark:to-pink-950/20 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
           <div className="space-y-2 text-center md:text-left">
             <span className="px-3 py-1 rounded-full bg-blue-100 text-[#1d5cc8] dark:bg-blue-950 text-xs font-black uppercase">
-              Join Team Pookiee ✨
+              Join Team Pookie ✨
             </span>
             <h1 className="text-2xl sm:text-3xl font-black text-slate-800 dark:text-white tracking-tight">
               Build the Future of People & Happiness
@@ -87,7 +87,7 @@ export default function PookieeCandidatePortal() {
         {/* Form View */}
         {step === 'form' && (
           <form onSubmit={handleSubmitForm} className="space-y-6">
-            <div className="Pookiee-card p-6 sm:p-8 space-y-5">
+            <div className="Pookie-card p-6 sm:p-8 space-y-5">
               <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
                 <span className="p-1.5 rounded-lg bg-blue-50 text-[#1d5cc8]">
                   <Briefcase className="size-4" />
@@ -195,7 +195,7 @@ export default function PookieeCandidatePortal() {
 
         {/* OTP Screen: Blue robotic cat holding phone displaying OTP */}
         {step === 'otp' && (
-          <div className="Pookiee-card p-8 max-w-md mx-auto text-center space-y-6 anim-pop">
+          <div className="Pookie-card p-8 max-w-md mx-auto text-center space-y-6 anim-pop">
             <div className="size-20 rounded-full bg-blue-50 dark:bg-blue-950 flex items-center justify-center mx-auto">
               <img src="/mascots/bluecat.png" alt="Bluecat Phone OTP" className="size-16 object-contain anim-float-subtle" />
             </div>
@@ -236,7 +236,7 @@ export default function PookieeCandidatePortal() {
             "Blonde character holding a large checkmark.
              Panda celebrating beside a small 'Application Submitted' card." */}
         {step === 'success' && (
-          <div className="Pookiee-card p-8 max-w-lg mx-auto text-center space-y-6 anim-fade-up bg-gradient-to-b from-white to-emerald-50/40 dark:from-[#12192e] dark:to-emerald-950/20">
+          <div className="Pookie-card p-8 max-w-lg mx-auto text-center space-y-6 anim-fade-up bg-gradient-to-b from-white to-emerald-50/40 dark:from-[#12192e] dark:to-emerald-950/20">
             <div className="flex items-center justify-center gap-4 py-2">
               <img src="/mascots/blonde.png" alt="Blonde Celebrating Checkmark" className="size-20 object-contain anim-float-subtle" />
               <img src="/mascots/panda.png" alt="Panda Celebrating" className="size-20 object-contain anim-float-subtle" />
@@ -270,7 +270,7 @@ export default function PookieeCandidatePortal() {
               to="/hr"
               className="inline-block px-6 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition"
             >
-              Return to Pookiee Home
+              Return to Pookie Home
             </Link>
           </div>
         )}
@@ -278,7 +278,7 @@ export default function PookieeCandidatePortal() {
 
       {/* Public Footer */}
       <footer className="text-center py-6 text-xs text-slate-400 border-t border-slate-200/60 dark:border-slate-800">
-        © 2026 Pookiee HR Technologies • Equal Opportunity Employer
+        © 2026 Pookie HR Technologies • Equal Opportunity Employer
       </footer>
     </div>
   )
