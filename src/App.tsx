@@ -93,7 +93,8 @@ function DashboardRoute() {
 }
 
 function HomeRedirect() {
-  return <Navigate to="/hr" replace />
+  const { user } = useAuth()
+  return <Navigate to={user ? `/dashboard/${user.role}` : '/login'} replace />
 }
 
 function NotFound() {
@@ -150,11 +151,12 @@ export default function App() {
               <Route path="backup" element={<S><PookieeBackup /></S>} />
             </Route>
 
-            {/* Direct Home Redirects to Pookiee HR */}
+            {/* Direct Home Redirects */}
             <Route path="/" element={<HomeRedirect />} />
 
             <Route path="/login" element={<Login />} />
             <Route element={<RequireAuth><Shell /></RequireAuth>}>
+              <Route index element={<HomeRedirect />} />
               <Route path="/dashboard" element={<HomeRedirect />} />
               <Route path="/dashboard/:role" element={<S><DashboardRoute /></S>} />
               <Route path="/leads" element={<Guard m="leads"><S><Leads /></S></Guard>} />
@@ -196,7 +198,7 @@ export default function App() {
               <Route path="/inbox" element={<S><InboxPage /></S>} />
               <Route path="*" element={<NotFound />} />
             </Route>
-            <Route path="*" element={<Navigate to="/hr" replace />} />
+            <Route path="*" element={<HomeRedirect />} />
           </Routes>
         </AuthProvider>
       </ToastProvider>
