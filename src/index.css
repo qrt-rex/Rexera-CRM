@@ -109,28 +109,28 @@ body {
 .anim-float-subtle { animation: float-subtle 3.5s ease-in-out infinite; }
 .anim-pulse-soft { animation: pulse-soft 2.5s ease-in-out infinite; }
 .anim-sparkle { animation: sparkle 2s ease-in-out infinite; }
-.font-pokiee { font-family: "Nunito", "Plus Jakarta Sans", system-ui, sans-serif; }
+.font-Pookiee { font-family: "Nunito", "Plus Jakarta Sans", system-ui, sans-serif; }
 
-.pokiee-card {
+.Pookiee-card {
   background: #ffffff;
   border: 1px solid rgba(230, 235, 245, 0.9);
   border-radius: 1.25rem;
   box-shadow: 0 4px 20px -2px rgba(66, 120, 225, 0.05);
   transition: all 0.2s ease;
 }
-.pokiee-card:hover {
+.Pookiee-card:hover {
   box-shadow: 0 8px 28px -4px rgba(66, 120, 225, 0.09);
 }
-.dark .pokiee-card {
+.dark .Pookiee-card {
   background: #151d33;
   border-color: rgba(45, 58, 92, 0.7);
   box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.35);
 }
 
-.pokiee-hero-gradient {
+.Pookiee-hero-gradient {
   background: linear-gradient(135deg, #e8f2ff 0%, #fae8f6 45%, #fff5e6 100%);
 }
-.dark .pokiee-hero-gradient {
+.dark .Pookiee-hero-gradient {
   background: linear-gradient(135deg, #182245 0%, #2b1f3c 45%, #35251a 100%);
 }
 

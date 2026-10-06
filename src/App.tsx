@@ -51,6 +51,30 @@ const Apply = lazy(() => import('./pages/Apply'))
 const EmailCenter = lazy(() => import('./pages/hr/EmailCenter'))
 const InboxPage = lazy(() => import('./pages/modules/Inbox'))
 
+// Pookiee Cute Cartoon HR Suite
+const PookieeDashboard = lazy(() => import('./pokiee/pages/PokieeDashboard'))
+const PookieeEmployees = lazy(() => import('./pokiee/pages/PokieeEmployees'))
+const PookieeEmployeeProfile = lazy(() => import('./pokiee/pages/PokieeEmployeeProfile'))
+const PookieeEmployeeForm = lazy(() => import('./pokiee/pages/PokieeEmployeeForm'))
+const PookieeInterns = lazy(() => import('./pokiee/pages/PokieeInterns'))
+const PookieeRecruitment = lazy(() => import('./pokiee/pages/PokieeRecruitment'))
+const PookieeAttendance = lazy(() => import('./pokiee/pages/PokieeAttendance'))
+const PookieeLeave = lazy(() => import('./pokiee/pages/PokieeLeave'))
+const PookieeProductivity = lazy(() => import('./pokiee/pages/PokieeProductivity'))
+const PookieePerformance = lazy(() => import('./pokiee/pages/PokieePerformance'))
+const PookieePayroll = lazy(() => import('./pokiee/pages/PokieePayroll'))
+const PookieePayslips = lazy(() => import('./pokiee/pages/PokieePayslips'))
+const PookieePF = lazy(() => import('./pokiee/pages/PokieePF'))
+const PookieeIncentives = lazy(() => import('./pokiee/pages/PokieeIncentives'))
+const PookieeLoans = lazy(() => import('./pokiee/pages/PokieeLoans'))
+const PookieeBonuses = lazy(() => import('./pokiee/pages/PokieeBonuses'))
+const PookieeBroadcasts = lazy(() => import('./pokiee/pages/PokieeBroadcasts'))
+const PookieeImport = lazy(() => import('./pokiee/pages/PokieeImport'))
+const PookieeSettings = lazy(() => import('./pokiee/pages/PokieeSettings'))
+const PookieeBackup = lazy(() => import('./pokiee/pages/PokieeBackup'))
+const PookieeCandidatePortal = lazy(() => import('./pokiee/pages/PokieeCandidatePortal'))
+const PookieeNewJoinerPortal = lazy(() => import('./pokiee/pages/PokieeNewJoinerPortal'))
+import { PookieeLayout } from './pokiee/PokieeLayout'
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { user } = useAuth()
@@ -102,12 +126,43 @@ export default function App() {
       <ToastProvider>
         <AuthProvider>
           <Routes>
+            {/* Standalone Public Portals (No HR admin sidebar) */}
+            <Route path="/apply" element={<S><PookieeCandidatePortal /></S>} />
+            <Route path="/joining" element={<S><PookieeNewJoinerPortal /></S>} />
+
+            {/* Pookiee Cute Cartoon HR Suite */}
+            <Route path="/hr" element={<PookieeLayout />}>
+              <Route index element={<S><PookieeDashboard /></S>} />
+              <Route path="employees" element={<S><PookieeEmployees /></S>} />
+              <Route path="employees/new" element={<S><PookieeEmployeeForm /></S>} />
+              <Route path="employees/:id" element={<S><PookieeEmployeeProfile /></S>} />
+              <Route path="employees/:id/edit" element={<S><PookieeEmployeeForm /></S>} />
+              <Route path="interns" element={<S><PookieeInterns /></S>} />
+              <Route path="recruitment" element={<S><PookieeRecruitment /></S>} />
+              <Route path="attendance" element={<S><PookieeAttendance /></S>} />
+              <Route path="leave" element={<S><PookieeLeave /></S>} />
+              <Route path="productivity" element={<S><PookieeProductivity /></S>} />
+              <Route path="performance" element={<S><PookieePerformance /></S>} />
+              <Route path="payroll" element={<S><PookieePayroll /></S>} />
+              <Route path="payslips" element={<S><PookieePayslips /></S>} />
+              <Route path="pf" element={<S><PookieePF /></S>} />
+              <Route path="incentives" element={<S><PookieeIncentives /></S>} />
+              <Route path="loans" element={<S><PookieeLoans /></S>} />
+              <Route path="bonuses" element={<S><PookieeBonuses /></S>} />
+              <Route path="broadcasts" element={<S><PookieeBroadcasts /></S>} />
+              <Route path="import" element={<S><PookieeImport /></S>} />
+              <Route path="settings" element={<S><PookieeSettings /></S>} />
+              <Route path="backup" element={<S><PookieeBackup /></S>} />
+            </Route>
+
+            {/* Direct Home Redirects */}
             <Route path="/" element={<HomeRedirect />} />
 
             <Route path="/login" element={<Login />} />
             {/* public: candidates apply without signing in */}
             <Route path="/apply/:token" element={<S><Apply /></S>} />
             <Route element={<RequireAuth><Shell /></RequireAuth>}>
+              <Route index element={<HomeRedirect />} />
               <Route path="/dashboard" element={<HomeRedirect />} />
               <Route path="/dashboard/:role" element={<S><DashboardRoute /></S>} />
               <Route path="/leads" element={<Guard m="leads"><S><Leads /></S></Guard>} />
@@ -152,7 +207,7 @@ export default function App() {
               <Route path="/inbox" element={<S><InboxPage /></S>} />
               <Route path="*" element={<NotFound />} />
             </Route>
-            <Route path="*" element={<Navigate to="/login" replace />} />
+            <Route path="*" element={<HomeRedirect />} />
           </Routes>
         </AuthProvider>
       </ToastProvider>
