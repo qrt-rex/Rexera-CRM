@@ -79,7 +79,7 @@ export interface Lead {
 
 export type BookingStatus =
   | 'PENDING_TL' | 'PENDING_ACCOUNTS' | 'ACCOUNTS_HOLD' | 'PENDING_LEGAL'
-  | 'IN_OPERATIONS' | 'WITH_ADMIN' | 'ON_HOLD' | 'COMPLETED' | 'REJECTED'
+  | 'IN_OPERATIONS' | 'WITH_ADMIN' | 'OPS_REVIEW' | 'ON_HOLD' | 'COMPLETED' | 'REJECTED'
 
 export interface Payment {
   id: string
@@ -94,13 +94,21 @@ export interface Payment {
   verified: boolean
   /** imported from the old CRM without a date: `date` is the booking day */
   dateUnknown?: boolean
+  /** attachment proving the payment was received */
+  proof?: FileRef
 }
 
 export interface Approval { id: string; level: string; action: string; by: string; at: string; remark: string }
 export interface StageMove { stage: number; at: string; by: string; note: string }
 export interface BComment { id: string; by: string; at: string; text: string; kind: string }
-export interface BDoc { id: string; name: string; category: string; size: number; at: string; by: string; dataUrl?: string; status?: 'PENDING' | 'VERIFIED' | 'REJECTED'; legacyPath?: string }
-export interface BTask { id: string; title: string; done: boolean; due?: string; by: string; assignee?: string }
+export interface BDoc { id: string; name: string; category: string; size: number; at: string; by: string; dataUrl?: string; status?: 'PENDING' | 'VERIFIED' | 'REJECTED'; legacyPath?: string; file?: FileRef }
+export interface BTask {
+  id: string; title: string; done: boolean; due?: string; by: string; assignee?: string
+  /** remind the processing person and the admin person every N days (15) until done */
+  remindEveryDays?: number
+  createdAt?: string
+  lastRemindedAt?: string
+}
 
 export interface Booking {
   id: string
@@ -153,6 +161,20 @@ export interface Booking {
   billing?: { name: string; pan: string; gstin: string; contact: string; email: string }
   /** closer's name when they aren't a CRM user (old-CRM files) */
   ownerName?: string
+  /** every service on the entry with its price (bifurcation); serviceId / serviceName mirror the first / all names */
+  services?: { serviceId: string; name: string; price: number }[]
+  /** combo booking: services can be added until the deadline (3, 6 or 12 months from the booking date) */
+  combo?: { months: 3 | 6 | 12; startedOn: string; deadline: string; deadlineNotified?: boolean }
+  paymentContact?: string
+  paymentEmail?: string
+  /** booking date entered by sales (createdAt keeps the exact date and time of entry) */
+  bookingDate?: string
+  /** after-discount success fee: an amount or a percentage (0 = client did not agree) */
+  successFee?: { type: 'AMOUNT' | 'PCT'; value: number }
+  /** sales person's remarks (mandatory on new entries) */
+  remarks?: string
+  /** who closed the lead (defaults to the person entering it) */
+  closedBy?: string
 }
 
 export interface Service { id: string; name: string; category: string; price: number; gstRate: number; deduction: number; active: boolean }
@@ -173,7 +195,14 @@ export interface Invoice {
   due: string
   salesPerson?: string
   createdBy: string
+  /** branch the invoice is issued from (Accounts chooses it before printing a tax invoice) */
+  branchId?: string
+  clientAddress?: string
+  clientPan?: string
 }
+
+/** Company branch: invoices show its address and GSTIN. */
+export interface Branch { id: string; name: string; address: string; city: string; state: string; pin: string; gstin: string; phone: string; email: string }
 
 export interface Scheme { id: string; title: string; category: string; summary: string; benefit: string; eligibility: string; active: boolean; createdAt: string; by: string }
 export interface Post { id: string; kind: 'FLYER' | 'POST' | 'SALES_INFO'; title: string; body: string; theme: string; createdAt: string; by: string; pinned?: boolean }
@@ -248,7 +277,7 @@ export interface CandidateApplication {
 }
 
 export interface Notice { id: string; userId: string; title: string; body: string; link?: string; at: string; read: boolean; kind: 'info' | 'success' | 'warning' | 'action' }
-export interface Message { id: string; from: string; to: string; body: string; at: string; read: boolean }
+export interface Message { id: string; from: string; to: string; body: string; at: string; read: boolean; attachments?: FileRef[] }
 export interface Template { id: string; name: string; body: string; by: string }
 export interface Audit { id: string; at: string; by: string; action: string; detail: string }
 
@@ -263,6 +292,7 @@ export interface Settings {
   sessionsValidAfter?: string
   /** after Logout, no sign-in until the next day (IT / Super Admin always can). Off = testing: people can sign in again. */
   dayLock?: boolean
+  branches?: Branch[]
 }
 
 export type ApiScope = 'leads:read' | 'leads:write' | 'bookings:read' | 'billing:read' | 'reports:read' | 'webhooks:send'

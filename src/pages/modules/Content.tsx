@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Copy, Download, Eye, Images, Lightbulb, Megaphone, Pencil, Pin, Plus, Trash2 } from 'lucide-react'
+import { Copy, Download, Eye, FileDown, ImageDown, Images, Lightbulb, Megaphone, Pencil, Pin, Plus, Trash2 } from 'lucide-react'
 import type { Post } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
 import { deletePost, upsertPost, userName } from '../../lib/actions'
 import { ago } from '../../lib/format'
-import { Badge, Button, Card, cx, EmptyState, Input, Modal, PageHeader, Select, Tabs, Textarea, useConfirm, useRun, useToast, Checkbox } from '../../components/ui'
+import { Badge, Button, Card, cx, EmptyState, Input, Menu, MenuItem, Modal, PageHeader, Select, Tabs, Textarea, useConfirm, useRun, useToast, Checkbox } from '../../components/ui'
+import { downloadFlyerJpeg, downloadFlyerPdf } from '../../lib/flyer'
 import { Mark } from '../../components/Logo'
 
 const THEMES: Record<string, string> = {
@@ -29,11 +30,6 @@ export default function Content() {
   const list = db.posts.filter((p) => p.kind === tab).sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || b.createdAt.localeCompare(a.createdAt))
 
   const share = (p: Post) => { navigator.clipboard?.writeText(`${p.title}\n\n${p.body}\n\n— Rexera Financial Services`).then(() => toast('success', 'Copied — paste it into WhatsApp or email'), () => toast('error', 'Copy blocked by the browser')) }
-  const download = (p: Post) => {
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2E3A8C"/><stop offset="1" stop-color="#4b5bc4"/></linearGradient></defs><rect width="1080" height="1080" fill="url(#g)"/><text x="80" y="200" font-family="Inter,Arial" font-size="40" fill="#F4A12A" font-weight="700" letter-spacing="12">REXERA</text><foreignObject x="80" y="260" width="920" height="700"><div xmlns="http://www.w3.org/1999/xhtml" style="font-family:Inter,Arial;color:#fff"><h1 style="font-size:84px;margin:0 0 30px;line-height:1.05">${p.title.replace(/</g, '&lt;')}</h1><p style="font-size:40px;line-height:1.4;opacity:.9">${p.body.replace(/</g, '&lt;')}</p></div></foreignObject><text x="80" y="1000" font-family="Inter,Arial" font-size="30" fill="#fff" opacity=".8">rexera.co.in · Government grants, certifications &amp; funding</text></svg>`
-    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' })); a.download = `${p.title.slice(0, 40)}.svg`; a.click()
-  }
-
   return (
     <div>
       <PageHeader title="Flyers, Posts & Sales Info" subtitle={manage ? 'Create material — sales teams are notified' : 'Ready-to-share material (view only)'} icon={Images}
@@ -70,7 +66,12 @@ export default function Content() {
               </div>
               <div className="flex items-center gap-2 p-4">
                 <p className="min-w-0 flex-1 truncate text-xs text-mute">{userName(db, p.by)} · {ago(p.createdAt)}</p>
-                <Button size="sm" variant="ghost" icon={Download} aria-label="Download" onClick={() => download(p)} />
+                <Menu width="w-48" trigger={(o) => <Button size="sm" variant="ghost" icon={Download} aria-label="Download" aria-expanded={o} />}>
+                  {(close) => <>
+                    <MenuItem icon={ImageDown} onClick={() => { close(); run(() => downloadFlyerJpeg(p), 'JPEG downloaded') }}>Download JPEG</MenuItem>
+                    <MenuItem icon={FileDown} onClick={() => { close(); run(() => downloadFlyerPdf(p), 'PDF downloaded') }}>Download PDF</MenuItem>
+                  </>}
+                </Menu>
                 <Actions p={p} manage={manage} onEdit={() => setEdit(p)} onDelete={async () => { if (await confirm('Delete?', p.title, true)) run(() => deletePost(me, p.id)) }} onShare={() => share(p)} />
               </div>
             </Card>

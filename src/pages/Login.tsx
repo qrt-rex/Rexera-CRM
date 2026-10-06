@@ -8,6 +8,7 @@ import { DEMO_PASSWORD, PRESET_USERS } from '../lib/seed'
 import { ROLES } from '../lib/rbac'
 import { isEmail } from '../lib/format'
 import { Logo } from '../components/Logo'
+import { ResetPasswordModal } from '../components/ResetPasswordModal'
 import { Button, Modal, Input, cx } from '../components/ui'
 
 const DEV_MODE = import.meta.env.DEV || import.meta.env.VITE_DEMO === '1'
@@ -32,7 +33,8 @@ export default function Login() {
   const boxes = useRef<(HTMLInputElement | null)[]>([])
 
   useEffect(() => { if (step === 'code') setTimeout(() => boxes.current[0]?.focus(), 50) }, [step])
-  if (user) return <Navigate to={(loc.state as { from?: string } | null)?.from ?? `/dashboard/${user.role}`} replace />
+  // signing in always lands on the person's dashboard
+  if (user) return <Navigate to={`/dashboard/${user.role}`} replace />
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -53,7 +55,7 @@ export default function Login() {
       const uid = verifyCode(token, digits)
       signIn(uid)
       const u = db.users.find((x) => x.id === uid)!
-      nav((loc.state as { from?: string } | null)?.from ?? `/dashboard/${u.role}`, { replace: true })
+      nav(`/dashboard/${u.role}`, { replace: true })
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Verification failed')
       if (e instanceof Error && /Sign in again/.test(e.message)) setStep('password')
@@ -130,7 +132,7 @@ export default function Login() {
                     {busy ? <Loader2 className="size-6 animate-spin" /> : 'Login'}
                   </button>
                 </div>
-                <button type="button" onClick={() => setForgot(true)} className="mt-6 text-sm text-white/85 hover:text-white hover:underline">Forget account?</button>
+                <button type="button" onClick={() => setForgot(true)} className="mt-6 text-sm text-white/85 hover:text-white hover:underline">Forgot password?</button>
 
                 {DEV_MODE && (
                   <div className="mt-8 rounded-2xl border border-white/15 bg-white/5 p-4">
@@ -185,29 +187,8 @@ export default function Login() {
           <p className="relative mt-10 text-center text-[11px] text-white/50">© {new Date().getFullYear()} Rexera Financial Services Pvt. Ltd.</p>
         </section>
       </div>
-      <ForgotModal open={forgot} onClose={() => setForgot(false)} />
+      <ResetPasswordModal open={forgot} onClose={() => setForgot(false)} />
     </div>
-  )
-}
-
-function ForgotModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [email, setEmail] = useState('')
-  const [err, setErr] = useState('')
-  const [sent, setSent] = useState(false)
-  const submit = () => {
-    if (!isEmail(email)) return setErr('Enter a valid email.')
-    if (!/@rexera\.(co\.in|in|com)$/i.test(email)) return setErr('Use your company email (@rexera.co.in, .in or .com).')
-    setErr(''); setSent(true)
-  }
-  return (
-    <Modal open={open} onClose={() => { onClose(); setSent(false); setEmail('') }} title="Forgot your account?" size="sm"
-      footer={sent ? <Button onClick={onClose}>Back to sign in</Button> : <><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={submit} icon={Mail}>Send reset link</Button></>}>
-      {sent ? (
-        <p className="text-sm text-mute">If an account exists for <b className="text-ink">{email}</b>, a reset link valid for 15 minutes is on its way. In this local demo no email is sent — ask a Super Admin to reset your password from Access Management.</p>
-      ) : (
-        <Input label="Company email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} error={err} placeholder="you@rexera.co.in" autoFocus />
-      )}
-    </Modal>
   )
 }
 

@@ -35,8 +35,9 @@ function chainIndex(b: Booking) {
     case 'PENDING_LEGAL': return 3
     case 'IN_OPERATIONS': return 4
     case 'WITH_ADMIN': return 5
+    case 'OPS_REVIEW': return 6
     case 'ON_HOLD': return b.holdFrom === 'WITH_ADMIN' ? 5 : 4
-    case 'COMPLETED': return 7
+    case 'COMPLETED': return 8
   }
 }
 
@@ -48,7 +49,8 @@ export function ChainStepper({ b, compact }: { b: Booking; compact?: boolean }) 
     if (key === 'SUBMITTED') return userName(db, b.createdBy)
     if (key === 'TL') return userName(db, b.teamLeadId)
     if (key === 'OPS') return b.opsMemberId ? userName(db, b.opsMemberId) : ''
-    if (key === 'ADMIN' || key === 'DONE') return b.adminId ? userName(db, b.adminId) : ''
+    if (key === 'ADMIN') return b.adminId ? userName(db, b.adminId) : ''
+    if (key === 'REVIEW' || key === 'DONE') return b.opsMemberId ? userName(db, b.opsMemberId) : ''
     return ''
   }
   return (
@@ -108,7 +110,9 @@ const DEC_META: Record<Decision['kind'], { label: string; icon: LucideIcon; vari
   ASSIGN_OPS: { label: 'Assign to Operations', icon: UserCog, variant: 'accent' },
   ASSIGN_ADMIN: { label: 'Assign to Admin', icon: Send, variant: 'accent' },
   RETURN_OPS: { label: 'Return to Operations', icon: RotateCcw, variant: 'outline' },
-  COMPLETE: { label: 'Complete client work', icon: ShieldCheck, variant: 'success' },
+  COMPLETE: { label: 'Work done · send to Operations', icon: Send, variant: 'success' },
+  APPROVE_DONE: { label: 'Approve & complete', icon: ShieldCheck, variant: 'success' },
+  RETURN_ADMIN: { label: 'Return to Admin', icon: RotateCcw, variant: 'outline' },
 }
 
 export function DecisionButtons({ b, size = 'md' }: { b: Booking; size?: 'sm' | 'md' }) {
@@ -144,7 +148,7 @@ export function DecisionModal({ b, kind, onClose }: { b: Booking; kind: Decision
   }, [kind, b])
   if (!kind) return null
   const m = DEC_META[kind]
-  const needsReason = ['REJECT', 'HOLD', 'RETURN_OPS'].includes(kind)
+  const needsReason = ['REJECT', 'HOLD', 'RETURN_OPS', 'RETURN_ADMIN'].includes(kind)
   const load = (id: string) => db.bookings.filter((x) => (x.opsMemberId === id && x.status === 'IN_OPERATIONS') || (x.adminId === id && x.status === 'WITH_ADMIN')).length
 
   const submit = async () => {

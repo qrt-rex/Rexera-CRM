@@ -68,7 +68,7 @@ export function SupportDashboard() {
       <TileGrid>
         <Tile to="/bookings" icon={Briefcase} label="Client files" desc="Status, payments, documents (view)" tone="violet" />
         <Tile to="/documents" icon={FileText} label="Document forms" desc="Upload what clients send" tone="blue" badge={missingKyc.length} />
-        <Tile to="/messages?tab=templates" icon={MessageSquare} label="Reply templates" desc="Payment reminders, document requests" tone="green" />
+        <Tile to="/messages" icon={MessageSquare} label="Messages" desc="Team chat and shared documents" tone="green" />
         <Tile to="/schemes" icon={Sparkles} label="Schemes" tone="green" viewOnly />
         <Tile to="/broadcasts" icon={Megaphone} label="Broadcasts" tone="red" viewOnly />
         <Tile to="/leave?new=1" icon={CalendarCheck2} label="Request my leave" tone="violet" />
@@ -91,16 +91,6 @@ export function SupportDashboard() {
           )}
         </Section>
         <div className="space-y-6">
-          <Section title="Quick replies" icon={Copy} action={<ViewAll to="/messages?tab=templates" />}>
-            <ul className="divide-y divide-line/70">
-              {db.templates.map((t) => (
-                <li key={t.id} className="flex items-center gap-3 px-5 py-3">
-                  <span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{t.name}</span><span className="block truncate text-xs text-mute">{t.body}</span></span>
-                  <Button size="sm" variant="ghost" icon={Copy} aria-label={`Copy ${t.name}`} onClick={() => navigator.clipboard?.writeText(t.body).then(() => toast('success', 'Copied'), () => toast('error', 'Copy blocked'))} />
-                </li>
-              ))}
-            </ul>
-          </Section>
           <LoginLogoutCard />
         </div>
       </div>

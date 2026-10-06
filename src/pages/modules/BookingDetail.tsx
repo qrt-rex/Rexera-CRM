@@ -1,19 +1,23 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
-  Archive, ArrowLeft, Building2, Check, CheckCircle2, ChevronRight, CircleDot, Download, FileText, FolderKanban, History, IndianRupee, ListTodo,
+  Archive, ArrowLeft, Building2, Layers, Check, CheckCircle2, ChevronRight, CircleDot, Download, FileText, FolderKanban, History, IndianRupee, ListTodo,
   MessageSquare, Pencil, Plus, Receipt, Send, ShieldCheck, Trash2, Upload, X, Lock,
 } from 'lucide-react'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
 import {
-  addComment, addDocument, addPayment, addTask, canEditBooking, canMoveStage, deleteDocument, deleteTask, invoiceFromBooking, moveStage,
+  addComboService, addComment, addDocuments, addPayment, needsPriceSplit, addTask, canEditBooking, canMoveStage, deleteDocument, deleteTask, invoiceFromBooking, moveStage,
   setDeduction, setDocStatus, toggleTask, userName, verifyPayment, visibleBookings,
 } from '../../lib/actions'
 import { DOC_CATEGORIES, STAGES } from '../../lib/workflow'
 import { ago, bookingMoney, fmtDate, fmtDateTime, gstSplit, inr, today } from '../../lib/format'
 import { roleLabel } from '../../lib/rbac'
-import type { LegacyRow } from '../../lib/types'
+import type { FileRef, LegacyRow } from '../../lib/types'
+import { DOC_TYPES } from '../../lib/files'
+import { FileField } from '../../components/FileField'
+import { DocUploader, type PendingDoc } from '../../components/DocUploader'
+import { FileLink } from '../../components/FileField'
 import {
   Avatar, Badge, Button, Card, CardHeader, cx, EmptyState, FileButton, Input, Modal, Select, Table, Tabs, Td, Textarea, Th, readAsDataUrl, useRun,
 } from '../../components/ui'
@@ -42,7 +46,7 @@ export default function BookingDetail() {
           <span className="grid size-14 place-items-center rounded-2xl bg-gradient-to-br from-brand to-[#5b6ee1] text-white"><Building2 className="size-7" /></span>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2"><h1 className="text-2xl font-extrabold">{b.companyName}</h1><BookingStatusBadge b={b} /><PriorityBadge p={b.priority} /><DeadlineBadge b={b} /></div>
-            <p className="mt-1 text-sm text-mute"><span className="font-mono font-semibold text-ink">{b.bookingId}</span> · {b.serviceName} · {b.mode} · created {fmtDate(b.createdAt)} by {b.createdBy ? userName(db, b.createdBy) : b.ownerName ?? '—'}</p>
+            <p className="mt-1 text-sm text-mute"><span className="font-mono font-semibold text-ink">{b.bookingId}</span> · {b.serviceName} · {b.mode} · entered {fmtDateTime(b.createdAt)} by {b.createdBy ? userName(db, b.createdBy) : b.ownerName ?? '—'}</p>
             {b.holdReason && <p className="mt-2 inline-flex rounded-lg bg-warn-soft px-3 py-1 text-sm font-medium text-warn">On hold: {b.holdReason}</p>}
           </div>
           <div className="flex flex-wrap gap-2">
@@ -101,16 +105,20 @@ function Overview({ id }: { id: string }) {
   const run = useRun()
   const b = useBooking(id)
   const [payOpen, setPayOpen] = useState(false)
-  const [pay, setPay] = useState({ amount: 0, date: today(), mode: 'UPI', proofName: '' })
+  const [pay, setPay] = useState<{ amount: number; date: string; mode: string; proofName: string; proof?: FileRef }>({ amount: 0, date: today(), mode: 'UPI', proofName: '' })
   const [ded, setDed] = useState<number | null>(null)
   const canPay = b.createdBy === me.id || b.teamLeadId === me.id || can('bookings.accounts')
   const g = gstSplit(pay.amount || 0, b.gstRate, b.state, db.settings.supplierState)
   const details: [string, string][] = [
     ['Contact person', b.contactPerson], ['Mobile', b.mobile], ['Email', b.email || '—'], ['PAN', b.pan || '—'], ['GSTIN', b.gstin || '—'],
-    ['Location', `${b.city || '—'}, ${b.state}`], ['Industry', b.industry || '—'], ['Success fee', b.successFeePct ? `${b.successFeePct}%` : '—'],
+    ['Location', `${b.city || '—'}, ${b.state}`], ['Industry', b.industry || '—'],
+    ['Success fee (after discount)', b.successFee ? (b.successFee.value ? (b.successFee.type === 'PCT' ? `${b.successFee.value}%` : inr(b.successFee.value)) : 'None (0)') : b.successFeePct ? `${b.successFeePct}%` : '—'],
     ['Team leader', userName(db, b.teamLeadId)], ['Operations', userName(db, b.opsMemberId)], ['Admin', userName(db, b.adminId)], ['Deadline', fmtDate(b.deadline)],
   ]
   if (b.address) details.splice(6, 0, ['Address', b.address])
+  if (b.paymentContact) details.push(['Payment contact', [b.paymentContact, b.paymentEmail].filter(Boolean).join(' · ')])
+  details.push(['Booking date', fmtDate(b.bookingDate ?? b.createdAt)], ['Entered on', fmtDateTime(b.createdAt)])
+  if (b.closedBy) details.push(['Lead closed by', userName(db, b.closedBy)])
   if (b.cin) details.push(['CIN / LLPIN', b.cin])
   if (b.website) details.push(['Website', b.website])
   if (b.startupContact) details.push(['Startup contact', [b.startupContact.phone, b.startupContact.email].filter(Boolean).join(' · ')])
@@ -122,7 +130,9 @@ function Overview({ id }: { id: string }) {
         <dl className="divide-y divide-line/70 text-sm">
           {details.map(([k, v]) => <div key={k} className="flex justify-between gap-3 px-5 py-2.5"><dt className="shrink-0 text-mute">{k}</dt><dd className="min-w-0 break-words text-right font-medium" title={v}>{v}</dd></div>)}
         </dl>
+        {b.remarks && <div className="border-t border-line px-5 py-3"><p className="text-[11px] font-semibold text-mute">Remarks</p><p className="whitespace-pre-line text-sm">{b.remarks}</p></div>}
       </Card>
+      {(b.services?.length ?? 0) > 0 && <ServicesCard id={b.id} />}
       <Card className="overflow-hidden xl:col-span-2">
         <CardHeader title="Payments & instalments" subtitle={`GST ${b.gstRate}% · ${b.state === db.settings.supplierState ? 'CGST + SGST' : 'IGST'}`} icon={IndianRupee}
           action={canPay && b.status !== 'COMPLETED' && <Button size="sm" icon={Plus} onClick={() => setPayOpen(true)}>Balance payment</Button>} />
@@ -133,7 +143,7 @@ function Overview({ id }: { id: string }) {
               <tr key={p.id}>
                 <Td className="font-semibold">{p.part === 1 ? 'Advance' : `Part ${p.part}`}</Td><Td>{p.dateUnknown ? <span className="text-xs text-mute" title={`Shown as the booking day, ${fmtDate(p.date)}`}>date not recorded</span> : fmtDate(p.date)}</Td><Td>{p.mode}</Td>
                 <Td className="text-right tabular-nums">{inr(p.amount)}</Td><Td className="text-right tabular-nums text-mute">{inr(p.gst)}</Td><Td className="text-right font-bold tabular-nums">{inr(p.total)}</Td>
-                <Td><span className="inline-flex max-w-32 items-center gap-1 truncate text-xs text-info"><FileText className="size-3.5" />{p.proofName}</span></Td>
+                <Td>{p.proof ? <FileLink file={p.proof} label="Proof" /> : <span className="inline-flex max-w-32 items-center gap-1 truncate text-xs text-info"><FileText className="size-3.5" />{p.proofName || '—'}</span>}</Td>
                 <Td>{p.verified ? <Badge tone="green">Verified</Badge> : can('bookings.accounts') ? (
                   <span className="flex gap-1"><Button size="sm" variant="success" icon={Check} onClick={() => run(() => verifyPayment(me, b.id, p.id, true), 'Verified')}>Verify</Button><Button size="sm" variant="ghost" icon={X} aria-label="Remove" onClick={() => confirm('Remove this payment?') && run(() => verifyPayment(me, b.id, p.id, false), 'Removed')} /></span>
                 ) : <Badge tone="amber">Unverified</Badge>}</Td>
@@ -155,10 +165,49 @@ function Overview({ id }: { id: string }) {
           <Input label="Amount (before GST)" type="number" min={0} value={pay.amount || ''} onChange={(e) => setPay({ ...pay, amount: Number(e.target.value) })} hint={`+ GST ${inr(g.tax)} = ${inr((pay.amount || 0) + g.tax)} · outstanding ${inr(bookingMoney(b).outstanding)}`} />
           <Input label="Date" type="date" value={pay.date} onChange={(e) => setPay({ ...pay, date: e.target.value })} />
           <Select label="Mode" value={pay.mode} onChange={(e) => setPay({ ...pay, mode: e.target.value })}>{['UPI', 'NEFT', 'RTGS', 'IMPS', 'Cheque', 'Card', 'Cash'].map((x) => <option key={x}>{x}</option>)}</Select>
-          <div><span className="mb-1.5 block text-xs font-semibold text-mute">Proof *</span><FileButton accept="image/*,application/pdf" onFile={(f) => setPay({ ...pay, proofName: f.name })}><Button variant="outline" icon={Upload} className="w-full justify-start">{pay.proofName || 'Attach file'}</Button></FileButton></div>
+          <div className="sm:col-span-2"><FileField label="Payment proof" required accept={DOC_TYPES} acceptLabel="Screenshot or PDF" value={pay.proof} onChange={(proof) => setPay({ ...pay, proof, proofName: proof?.name ?? '' })} /></div>
         </div>
       </Modal>
     </div>
+  )
+}
+
+/** Services on the entry with their prices; a combo booking can add more until its deadline. */
+function ServicesCard({ id }: { id: string }) {
+  const db = useDb()
+  const me = useMe()
+  const { can } = useAuth()
+  const run = useRun()
+  const b = useBooking(id)
+  const [add, setAdd] = useState<{ serviceId: string; price: string } | null>(null)
+  const open = !!b.combo && today() <= b.combo.deadline
+  const canAdd = open && (b.createdBy === me.id || b.teamLeadId === me.id || can('bookings.accounts') || me.role === 'superadmin')
+  const daysLeft = b.combo ? Math.ceil((new Date(b.combo.deadline + 'T23:59:59').getTime() - Date.now()) / 86400000) : 0
+  return (
+    <Card className="overflow-hidden xl:col-span-3">
+      <CardHeader title={b.combo ? `Combo booking · ${b.combo.months === 12 ? '1 year' : `${b.combo.months} months`}` : 'Services'} icon={Layers}
+        subtitle={b.combo ? (open ? `Services can be added until ${fmtDate(b.combo.deadline)} · ${daysLeft} day(s) left` : `Combo period ended on ${fmtDate(b.combo.deadline)}`) : 'Price bifurcation'}
+        action={canAdd && <Button size="sm" icon={Plus} onClick={() => setAdd({ serviceId: '', price: '' })}>Add service</Button>} />
+      <ul className="divide-y divide-line/70">
+        {b.services!.map((s) => (
+          <li key={s.serviceId} className="flex items-center justify-between gap-3 px-5 py-2.5 text-sm">
+            <span>{s.name}{needsPriceSplit(s) && <span className="ml-2 rounded-full bg-card2 px-2 py-0.5 text-[10px] text-mute">price required</span>}</span>
+            <b className="tabular-nums">{s.price ? inr(s.price) : '—'}</b>
+          </li>
+        ))}
+        <li className="flex justify-between gap-3 bg-card2/50 px-5 py-2.5 text-sm"><span className="font-semibold">Total quoted</span><b className="tabular-nums">{inr(b.totalQuoted)}</b></li>
+      </ul>
+      {b.combo && open && daysLeft <= 7 && <p className="border-t border-line bg-warn-soft px-5 py-2 text-xs text-warn">The combo deadline is near — add any remaining services before {fmtDate(b.combo.deadline)}.</p>}
+      <Modal open={!!add} onClose={() => setAdd(null)} title="Add a service to this combo" size="sm"
+        footer={<><Button variant="outline" onClick={() => setAdd(null)}>Cancel</Button><Button icon={Plus} onClick={async () => { if (add && await run(() => addComboService(me, b.id, add.serviceId, Number(add.price) || 0), 'Service added')) setAdd(null) }}>Add</Button></>}>
+        {add && <div className="grid gap-4">
+          <Select label="Service" required value={add.serviceId} onChange={(e) => { const s = db.services.find((x) => x.id === e.target.value); setAdd({ serviceId: e.target.value, price: add.price || String(s?.price ?? '') }) }}>
+            <option value="">— Select —</option>{db.services.filter((s) => s.active && !b.services!.some((x) => x.serviceId === s.id)).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </Select>
+          <Input label="Price (₹, before GST)" type="number" inputMode="decimal" min={0} value={add.price} onChange={(e) => setAdd({ ...add, price: e.target.value })} hint="Added to the total quoted. Required for certification, website, logo and trade services." />
+        </div>}
+      </Modal>
+    </Card>
   )
 }
 
@@ -247,17 +296,12 @@ function Documents({ id }: { id: string }) {
   const { can } = useAuth()
   const run = useRun()
   const b = useBooking(id)
-  const [cat, setCat] = useState(DOC_CATEGORIES[0]!)
-  const upload = async (f: File) => {
-    const dataUrl = f.size <= 400 * 1024 ? await readAsDataUrl(f) : undefined
-    run(() => addDocument(me, b.id, { name: f.name, category: cat, size: f.size, dataUrl }), 'Uploaded')
-  }
+  const [pending, setPending] = useState<PendingDoc[]>([])
   const verifier = can('bookings.process', 'bookings.legal', 'bookings.admin')
   return (
     <Card className="overflow-hidden">
-      <CardHeader title="Client documents" subtitle="Stored with uploader and time; files ≤ 400 KB keep a preview in this demo" icon={FileText}
-        action={<div className="flex gap-2"><select value={cat} onChange={(e) => setCat(e.target.value)} className="h-9 rounded-lg border border-line bg-card px-2 text-sm" aria-label="Category">{DOC_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select>
-          <FileButton accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx" onFile={upload}><Button size="sm" icon={Upload}>Upload</Button></FileButton></div>} />
+      <CardHeader title="Client documents" subtitle="PAN card, GSTIN, CRM, QT, Agreement, pitch deck, F.R, D.P.R… — stored with uploader, date and time" icon={FileText} />
+      <div className="border-b border-line p-5"><DocUploader label="Add documents" value={pending} onChange={setPending} onUpload={async (docs) => !!(await run(() => addDocuments(me, b.id, docs), `${docs.length} document(s) added`))} /></div>
       {!b.documents.length ? <EmptyState icon={FileText} title="No documents yet" text="Upload KYC, company documents, certificates, pitch deck or financials." /> : (
         <div className="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-3">
           {b.documents.map((d) => (
@@ -271,6 +315,7 @@ function Documents({ id }: { id: string }) {
                   <Badge tone={d.status === 'VERIFIED' ? 'green' : d.status === 'REJECTED' ? 'red' : 'amber'}>{(d.status ?? 'PENDING').toLowerCase()}</Badge>
                   {verifier && d.status !== 'VERIFIED' && <button className="text-[11px] font-semibold text-ok hover:underline" onClick={() => setDocStatus(me, b.id, d.id, 'VERIFIED')}>Verify</button>}
                   {verifier && d.status !== 'REJECTED' && <button className="text-[11px] font-semibold text-bad hover:underline" onClick={() => setDocStatus(me, b.id, d.id, 'REJECTED')}>Reject</button>}
+                  {d.file && <FileLink file={d.file} label="Open" />}
                   {d.dataUrl && <a href={d.dataUrl} download={d.name} className="text-[11px] font-semibold text-brand-ink hover:underline"><Download className="inline size-3" /> Download</a>}
                   <button aria-label="Delete" className="ml-auto text-mute hover:text-bad" onClick={() => confirm(`Delete ${d.name}?`) && run(() => deleteDocument(me, b.id, d.id), 'Deleted')}><Trash2 className="size-3.5" /></button>
                 </div>

@@ -41,6 +41,12 @@ export function upgradeDb(d: DB): DB {
   d.apiKeys ??= []
   d.backupLog ??= []
   d.emails ??= []
+  // invoice branches — addresses are filled in by Super Admin / IT under Access → Settings
+  d.settings.branches ??= [
+    { id: 'br-amd-a', name: 'Ahmedabad (A)', address: '', city: 'Ahmedabad', state: 'Gujarat', pin: '', gstin: d.settings.companyGstin ?? '', phone: '', email: '' },
+    { id: 'br-amd-y', name: 'Ahmedabad (Y)', address: '', city: 'Ahmedabad', state: 'Gujarat', pin: '', gstin: d.settings.companyGstin ?? '', phone: '', email: '' },
+    { id: 'br-vdr', name: 'Vadodara', address: '', city: 'Vadodara', state: 'Gujarat', pin: '', gstin: d.settings.companyGstin ?? '', phone: '', email: '' },
+  ]
   d.candidateForms ??= []
   d.candidates ??= []
   d.emailAutomations ??= defaultAutomations()
@@ -65,6 +71,18 @@ export function upgradeDb(d: DB): DB {
       }
     }
     d.upgrades.push('hr-suite-1')
+  }
+  if (!d.upgrades.includes('stages-11')) {
+    // 9 → 11 work stages: "Company Information Under Process" was inserted at 8 (and "Hold – client not responding" added at 11),
+    // so saved stages 8 (Approved/Rejected) and 9 (Re-submission) move up by one
+    const up = (n: number) => (n >= 8 ? n + 1 : n)
+    for (const b of d.bookings) {
+      b.stage = up(b.stage)
+      b.maxStage = b.maxStage >= 9 ? 11 : up(b.maxStage)
+      for (const h of b.stageHistory) h.stage = up(h.stage)
+      for (const doc of b.documents) if (doc.category === 'Pitch deck / DPR') doc.category = 'Pitch deck'
+    }
+    d.upgrades.push('stages-11')
   }
   if (!d.upgrades.includes('salary-structure-1')) {
     // Basic 50% · HRA 40% of basic · rest other allowance · PF 12% each side on the full basic

@@ -128,14 +128,7 @@ function Compose({ onSent }: { onSent: () => void }) {
             {to.length > 0 && <p className="mt-1 flex items-center gap-2 text-xs text-mute"><Users className="size-3.5" />{to.length} recipient{to.length === 1 ? '' : 's'} · <button className="hover:underline" onClick={() => setTo([])}>clear</button></p>}
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-[1fr_200px]">
-            <Input label="Subject" required value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="e.g. Office closed on Friday" />
-            <label className="block"><span className="mb-1.5 block text-xs font-semibold text-mute">Template</span>
-              <select className="h-10 w-full rounded-xl border border-line bg-card px-3 text-sm" value="" onChange={(e) => { const t = db.templates.find((x) => x.id === e.target.value); if (t) { setSubject(t.name); setBody(t.body.replace(/\{client\}/g, '{first_name}')) } }}>
-                <option value="">Use a template…</option>{db.templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
-            </label>
-          </div>
+          <Input label="Subject" required value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="e.g. Office closed on Friday" />
 
           <div className="relative">
             <span className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-mute">Message <span className="text-bad">*</span> · type <AtSign className="size-3" /> to mention and add someone</span>

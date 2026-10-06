@@ -1,20 +1,24 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Briefcase, Download, Pencil, Phone, Plus, Trash2, Upload, UserPlus, Users } from 'lucide-react'
+import { Briefcase, ChevronDown, Download, Pencil, Phone, Plus, RefreshCcw, Trash2, Upload, UserPlus, Users } from 'lucide-react'
 import type { Lead, LeadStatus } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
-import { assignLeads, deleteLeads, importLeads, userName, visibleLeads } from '../../lib/actions'
+import { assignLeads, deleteLeads, importLeads, setLeadStatus, userName, visibleLeads } from '../../lib/actions'
 import { LEAD_STATUS, OPEN_LEAD } from '../../lib/workflow'
 import { ago, downloadCsv, fmtDate, fmtDateTime, inr, parseCsv, today } from '../../lib/format'
 import { rolesOf } from '../../lib/rbac'
 import {
-  Badge, Button, Card, Checkbox, Drawer, EmptyState, FileButton, Modal, PageHeader, SearchBox, Select, Table, Td, Th, Tabs, useConfirm, useRun, useToast,
+  Button, Card, Checkbox, Drawer, EmptyState, FileButton, Input, Menu, MenuItem, Modal, PageHeader, SearchBox, Select, Table, Td, Textarea, Th, Tabs, useConfirm, useRun, useToast, Badge,
 } from '../../components/ui'
 import { LeadFormModal } from '../../components/LeadForm'
 import { CallLogger } from './Dialer'
 
 type View = 'open' | 'due' | 'all' | 'CONVERTED' | 'closed'
+const STATUS_CLS: Record<string, string> = {
+  blue: 'border-info/30 bg-info-soft text-info', gray: 'border-line bg-card2 text-mute', amber: 'border-warn/30 bg-warn-soft text-warn',
+  violet: 'border-violet-300 bg-violet-500/10 text-violet-700 dark:text-violet-300', red: 'border-bad/30 bg-bad-soft text-bad', green: 'border-ok/30 bg-ok-soft text-ok',
+}
 
 export default function Leads() {
   const db = useDb()
@@ -32,6 +36,13 @@ export default function Leads() {
   const [form, setForm] = useState<{ open: boolean; lead?: Lead }>({ open: false })
   const [assignTo, setAssignTo] = useState('')
   const [assignOpen, setAssignOpen] = useState(false)
+  const [quick, setQuick] = useState<{ lead: Lead; status: LeadStatus; note: string; followUp: string } | null>(null)
+  // changing the status from the list; an interested (hot) lead can go straight to a CRM entry
+  const changeStatus = async (l: Lead, status: LeadStatus, note = '', followUp?: string) => {
+    if (await run(() => setLeadStatus(me, l.id, status, note, followUp || undefined), `${l.name}: ${LEAD_STATUS[status].label}`) && status === 'INTERESTED' && can('bookings.create')) {
+      if (await confirm('Hot prospect — create a CRM entry?', `${l.name}'s details will be filled in for you; you can change anything before saving.`)) nav(`/bookings/new?lead=${l.id}`)
+    }
+  }
   const openId = params.get('open')
   const all = visibleLeads(db, me)
   const t = today()
@@ -117,13 +128,24 @@ export default function Leads() {
                     </button>
                   </Td>
                   <Td><span className="block max-w-48 truncate">{l.service || '—'}</span><span className="text-xs text-mute">{l.price != null ? inr(l.price) : 'No price'} · {l.source}</span></Td>
-                  <Td><Badge tone={LEAD_STATUS[l.status].tone} dot>{LEAD_STATUS[l.status].label}</Badge></Td>
+                  <Td>
+                    <select value={l.status} aria-label={`Status of ${l.name}`} onChange={(e) => changeStatus(l, e.target.value as LeadStatus)}
+                      className={`h-8 rounded-lg border px-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand/20 ${STATUS_CLS[LEAD_STATUS[l.status].tone] ?? 'border-line bg-card'}`}>
+                      {(Object.keys(LEAD_STATUS) as LeadStatus[]).map((s) => <option key={s} value={s}>{LEAD_STATUS[s].label}</option>)}
+                    </select>
+                  </Td>
                   <Td>{l.followUp ? <span className={l.followUp < t ? 'font-semibold text-bad' : l.followUp === t ? 'font-semibold text-warn' : ''}>{fmtDate(l.followUp)}</span> : <span className="text-mute">—</span>}</Td>
                   <Td className="text-xs">{l.assignedTo ? userName(db, l.assignedTo) : <Badge tone="amber">Unassigned</Badge>}</Td>
                   <Td className="text-right">
                     <div className="flex justify-end gap-1">
                       <Button size="sm" variant="soft" icon={Phone} onClick={() => setParams({ open: l.id })}>Call</Button>
-                      <Button size="sm" variant="ghost" icon={Pencil} aria-label="Edit" onClick={() => setForm({ open: true, lead: l })} />
+                      <Menu width="w-56" trigger={(o) => <Button size="sm" variant="outline" icon={ChevronDown} aria-expanded={o}>Update</Button>}>
+                        {(close) => <>
+                          <MenuItem icon={RefreshCcw} onClick={() => { close(); setQuick({ lead: l, status: l.status, note: '', followUp: l.followUp ?? '' }) }}>Change status</MenuItem>
+                          <MenuItem icon={Pencil} onClick={() => { close(); setForm({ open: true, lead: l }) }}>Change info</MenuItem>
+                          {l.status !== 'CONVERTED' && can('bookings.create') && <MenuItem icon={Briefcase} onClick={() => { close(); nav(`/bookings/new?lead=${l.id}`) }}>Book as CRM entry</MenuItem>}
+                        </>}
+                      </Menu>
                     </div>
                   </Td>
                 </tr>
@@ -135,6 +157,15 @@ export default function Leads() {
       </Card>
 
       <LeadFormModal open={form.open} lead={form.lead} onClose={() => setForm({ open: false })} />
+
+      <Modal open={!!quick} onClose={() => setQuick(null)} title={quick ? `Update ${quick.lead.name}` : ''} subtitle={quick?.lead.code} size="sm"
+        footer={<><Button variant="outline" onClick={() => setQuick(null)}>Cancel</Button><Button onClick={async () => { if (quick) { const q2 = quick; setQuick(null); await changeStatus(q2.lead, q2.status, q2.note, q2.followUp) } }}>Save</Button></>}>
+        {quick && <div className="grid gap-4">
+          <Select label="Status" value={quick.status} onChange={(e) => setQuick({ ...quick, status: e.target.value as LeadStatus })}>{(Object.keys(LEAD_STATUS) as LeadStatus[]).map((s) => <option key={s} value={s}>{LEAD_STATUS[s].label}</option>)}</Select>
+          {OPEN_LEAD.includes(quick.status) && <Input label="Next follow-up" type="date" min={t} value={quick.followUp} onChange={(e) => setQuick({ ...quick, followUp: e.target.value })} />}
+          <Textarea label="Note" rows={2} value={quick.note} onChange={(e) => setQuick({ ...quick, note: e.target.value })} placeholder="What happened?" />
+        </div>}
+      </Modal>
 
       <Modal open={assignOpen} onClose={() => setAssignOpen(false)} title={`Assign ${sel.length} lead(s)`} size="sm"
         footer={<><Button variant="outline" onClick={() => setAssignOpen(false)}>Cancel</Button><Button onClick={async () => { if (await run(() => assignLeads(me, sel, assignTo), 'Leads assigned')) { setAssignOpen(false); setSel([]) } }}>Assign</Button></>}>

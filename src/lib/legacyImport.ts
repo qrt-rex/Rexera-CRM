@@ -1,6 +1,7 @@
 import type { BComment, BDoc, Booking, BookingStatus, DB, Lead, LeadStatus, LegacyRow, Notice, Payment, Role, Service, StageMove, User, Approval } from './types'
 import { normPhone, round2 } from './format'
 import { PRESET_USERS } from './seed'
+import { STAGES } from './workflow'
 
 /**
  * Import from the old PHP CRM (phpMyAdmin / MariaDB .sql dump).
@@ -62,6 +63,8 @@ export function parseDump(sql: string): DumpTables {
 }
 
 // ================================================================== helpers
+/** Old CRM stages 1–9 → the new 11-stage list ("Company Information Under Process" was inserted at 8). */
+const newStage = (n: number) => (n >= 8 ? n + 1 : n)
 const blank = (v: string | null | undefined) => v == null || v.trim() === '' || /^0000-00-00/.test(v)
 const num = (v: string | null | undefined) => { const n = Number(v); return v != null && v !== '' && Number.isFinite(n) ? n : 0 }
 /** TIMESTAMP columns: the dump was written with time_zone = +00:00. */
@@ -251,7 +254,7 @@ export function buildImport(tables: DumpTables, current: DB, opts: ImportOptions
     if (wf) for (let n = 1; n <= 9; n++) {
       const key = Object.keys(wf).find((k) => k.startsWith(`stage_${n}_`))
       const at = key ? utc(wf[key]) : undefined
-      if (at) stageHistory.push({ stage: n, at, by: ops?.id ?? owner?.id ?? '', note: `Stage ${n} (old CRM)` })
+      if (at) stageHistory.push({ stage: newStage(n), at, by: ops?.id ?? owner?.id ?? '', note: `Stage ${n} (old CRM)` })
     }
     stageHistory.sort((a, b) => a.at.localeCompare(b.at))
     const highestStage = stageHistory.reduce((m, s) => Math.max(m, s.stage), 0)
@@ -260,7 +263,8 @@ export function buildImport(tables: DumpTables, current: DB, opts: ImportOptions
     const raw = (r.status ?? '').trim()
     let status: BookingStatus, stage = Math.max(1, highestStage), holdReason: string | undefined, holdFrom: BookingStatus | undefined
     const stageMatch = raw.match(/^stage\s*-?\s*([1-9])(?:\s*-|\s*$)/i)
-    if (stageMatch) { status = 'IN_OPERATIONS'; stage = Number(stageMatch[1]) }
+    if (stageMatch) { status = 'IN_OPERATIONS'; stage = newStage(Number(stageMatch[1])) }
+    else if (/^company\s+inc/i.test(raw)) { status = 'IN_OPERATIONS'; stage = STAGES.indexOf('Company Information Under Process') + 1 }
     else if (/^approved$/i.test(raw)) status = r.legal_approved_at ? 'IN_OPERATIONS' : 'PENDING_LEGAL'
     else if (/^rejected$/i.test(raw)) status = 'REJECTED'
     else if (/^pending$/i.test(raw) || raw === '') status = r.approved_at ? 'PENDING_LEGAL' : 'PENDING_TL'
@@ -270,7 +274,7 @@ export function buildImport(tables: DumpTables, current: DB, opts: ImportOptions
     const sc = statusCount.get(key) ?? { count: 0, becomes }
     sc.count++; statusCount.set(key, sc)
     const maxMatch = (r.max_allowed_step ?? '').match(/stage\s*-\s*(\d)/i)
-    const maxStage = Math.max(stage, maxMatch ? Number(maxMatch[1]) : 9)
+    const maxStage = Math.max(stage, maxMatch ? newStage(Number(maxMatch[1])) : STAGES.length)
 
     // approvals timeline
     const approvals: Approval[] = []

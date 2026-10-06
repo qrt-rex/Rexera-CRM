@@ -1,13 +1,17 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Bell, KeyRound, LogOut, Monitor, Moon, Palette, Save, Settings as SettingsIcon, ShieldCheck, Sun, Trash2, Upload, User as UserIcon } from 'lucide-react'
 import { useDb } from '../../lib/store'
 import { applyTheme, getTheme, useAuth, useMe, type Theme } from '../../lib/auth'
-import { changePassword, updateProfile } from '../../lib/actions'
-import { INDIAN_STATES, fmtDateTime } from '../../lib/format'
+import { changePassword, PASSWORD_HINT, PASSWORD_RULE, updateProfile } from '../../lib/actions'
+import { fmtDateTime } from '../../lib/format'
 import { roleLabel, rolesOf } from '../../lib/rbac'
 import { POPUP_KEY } from '../../layout/Shell'
-import { Avatar, Badge, Button, Card, CardHeader, cx, FileButton, Input, PageHeader, Select, Toggle, readAsDataUrl, useRun } from '../../components/ui'
+import { Badge, Button, Card, CardHeader, cx, Input, PageHeader, Toggle, useRun, useToast } from '../../components/ui'
+import { CityInput, PhoneInput, StateSelect } from '../../components/fields'
+import { PhotoCropper, PHOTO_MAX_BYTES } from '../../components/PhotoCropper'
+import { ZoomAvatar } from '../../components/PhotoZoom'
+import { ResetPasswordModal } from '../../components/ResetPasswordModal'
 
 type Tab = 'profile' | 'security' | 'notifications' | 'appearance'
 
@@ -39,38 +43,48 @@ export default function Settings() {
 function Profile() {
   const me = useMe()
   const run = useRun()
-  const init = { name: me.name, phone: me.phone, line: me.address?.line ?? '', city: me.address?.city ?? '', state: me.address?.state ?? 'Gujarat', pin: me.address?.pin ?? '', country: me.address?.country ?? 'India' }
+  const toast = useToast()
+  const init = { name: me.name, phone: me.phone, line: me.address?.line ?? '', city: me.address?.city ?? '', state: me.address?.state ?? 'Gujarat', pin: me.address?.pin ?? '' }
   const [f, setF] = useState(init)
+  const [crop, setCrop] = useState<File | null>(null)
+  const pick = useRef<HTMLInputElement>(null)
   const dirty = JSON.stringify(f) !== JSON.stringify(init)
-  const save = () => run(() => updateProfile(me, { name: f.name, phone: f.phone, address: { line: f.line, city: f.city, state: f.state, pin: f.pin, country: f.country } }), 'Profile saved')
+  const save = () => run(() => updateProfile(me, { name: f.name, phone: f.phone, address: { line: f.line, city: f.city, state: f.state, pin: f.pin, country: 'India' } }), 'Profile saved')
+  const choose = (file: File) => {
+    if (!/^image\/(png|jpe?g|webp|gif)$/.test(file.type)) { toast('error', 'Choose a JPG, PNG, WebP or GIF image.'); return }
+    if (file.size > PHOTO_MAX_BYTES) { toast('error', 'The photo must be under 5 MB.'); return }
+    setCrop(file)
+  }
   return (
     <Card className="overflow-hidden">
       <CardHeader title="Employee information" icon={UserIcon} />
       <div className="flex flex-wrap items-center gap-5 border-b border-line p-5">
-        <Avatar name={me.name} photo={me.photo} size={84} />
+        <ZoomAvatar name={me.name} photo={me.photo} size={84} sub={me.designation} />
         <div>
+          <input ref={pick} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ''; if (file) choose(file) }} />
           <div className="flex flex-wrap gap-2">
-            <FileButton accept="image/png,image/jpeg,image/gif" maxBytes={800 * 1024} onFile={async (file) => { const url = await readAsDataUrl(file); run(() => updateProfile(me, { photo: url }), 'Photo updated') }}><Button size="sm" icon={Upload}>Upload file</Button></FileButton>
+            <Button size="sm" icon={Upload} onClick={() => pick.current?.click()}>{me.photo ? 'Change photo' : 'Upload photo'}</Button>
             {me.photo && <Button size="sm" variant="outline" icon={Trash2} onClick={() => run(() => updateProfile(me, { photo: undefined }), 'Photo removed')}>Remove</Button>}
           </div>
-          <p className="mt-2 text-xs text-mute">JPG, GIF or PNG. Max 800 KB. Shown as your avatar everywhere.</p>
+          <p className="mt-2 text-xs text-mute">JPG, PNG, WebP or GIF, up to 5 MB. You can position and zoom it before saving.</p>
         </div>
       </div>
       <div className="grid gap-4 p-5 sm:grid-cols-2">
         <Input label="Full name" required value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
         <Input label="User name" value={me.username} disabled hint="Ask an admin to change it" />
-        <Input label="Phone number" required value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} />
+        <PhoneInput label="Phone number" required value={f.phone} onChange={(v) => setF({ ...f, phone: v })} />
         <Input label="Email" value={me.email} disabled hint="Your sign-in address (read-only)" />
         <Input label="Address" value={f.line} onChange={(e) => setF({ ...f, line: e.target.value })} className="sm:col-span-2" />
-        <Select label="Country" value={f.country} onChange={(e) => setF({ ...f, country: e.target.value })}><option>India</option><option>Other</option></Select>
-        <Select label="State / Province" value={f.state} onChange={(e) => setF({ ...f, state: e.target.value })}>{INDIAN_STATES.map((s) => <option key={s}>{s}</option>)}</Select>
-        <Input label="City" value={f.city} onChange={(e) => setF({ ...f, city: e.target.value })} />
-        <Input label="Postal code" value={f.pin} onChange={(e) => setF({ ...f, pin: e.target.value })} maxLength={6} />
+        <Input label="Country" value="India" disabled hint="Fixed for all accounts" />
+        <CityInput value={f.city} onChange={(v) => setF({ ...f, city: v })} onState={(s) => setF((x) => ({ ...x, state: s }))} />
+        <StateSelect value={f.state} onChange={(v) => setF({ ...f, state: v })} />
+        <Input label="PIN code" inputMode="numeric" value={f.pin} onChange={(e) => setF({ ...f, pin: e.target.value.replace(/\D/g, '').slice(0, 6) })} maxLength={6} error={f.pin && !/^[1-9]\d{5}$/.test(f.pin) ? '6 digits' : undefined} />
       </div>
       <div className="flex justify-end gap-2 border-t border-line p-4">
         <Button variant="outline" disabled={!dirty} onClick={() => setF(init)}>Cancel</Button>
         <Button icon={Save} disabled={!dirty} onClick={save}>Save changes</Button>
       </div>
+      <PhotoCropper file={crop} onCancel={() => setCrop(null)} onDone={async (url) => { setCrop(null); await run(() => updateProfile(me, { photo: url }), 'Photo updated') }} />
     </Card>
   )
 }
@@ -80,18 +94,23 @@ function Security() {
   const me = useMe()
   const { signOut, perms } = useAuth()
   const run = useRun()
-  const [p, setP] = useState({ cur: '', next: '', again: '' })
+  const [p, setP] = useState({ next: '', again: '', show: false })
+  const [forgot, setForgot] = useState(false)
   const lastSignIn = db.audit.find((a) => a.by === me.id && a.action === 'SIGN_IN')
+  const err = p.next && !PASSWORD_RULE.test(p.next) ? PASSWORD_HINT : p.again && p.again !== p.next ? 'Does not match' : ''
   return (
     <div className="space-y-6">
       <Card className="overflow-hidden">
         <CardHeader title="Change password" icon={KeyRound} />
-        <div className="grid gap-4 p-5 sm:grid-cols-3">
-          <Input label="Current password" type="password" autoComplete="current-password" value={p.cur} onChange={(e) => setP({ ...p, cur: e.target.value })} />
-          <Input label="New password" type="password" autoComplete="new-password" value={p.next} onChange={(e) => setP({ ...p, next: e.target.value })} hint="8–16 chars, upper, lower, number, symbol" />
-          <Input label="Repeat new password" type="password" autoComplete="new-password" value={p.again} onChange={(e) => setP({ ...p, again: e.target.value })} error={p.again && p.again !== p.next ? 'Does not match' : undefined} />
+        <div className="grid gap-4 p-5 sm:grid-cols-2">
+          <Input label="New password" type={p.show ? 'text' : 'password'} autoComplete="new-password" value={p.next} onChange={(e) => setP({ ...p, next: e.target.value })} hint={PASSWORD_HINT} error={err === PASSWORD_HINT ? err : undefined} />
+          <Input label="Re-type new password" type={p.show ? 'text' : 'password'} autoComplete="new-password" value={p.again} onChange={(e) => setP({ ...p, again: e.target.value })} error={err === 'Does not match' ? err : undefined} />
+          <label className="flex items-center gap-2 text-xs text-mute sm:col-span-2"><input type="checkbox" checked={p.show} onChange={(e) => setP({ ...p, show: e.target.checked })} className="accent-[var(--brand)]" />Show password</label>
         </div>
-        <div className="flex justify-end border-t border-line p-4"><Button disabled={!p.cur || !p.next || p.next !== p.again} onClick={async () => { if (await run(() => changePassword(me, p.cur, p.next), 'Password changed')) setP({ cur: '', next: '', again: '' }) }}>Update password</Button></div>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line p-4">
+          <button className="text-sm font-semibold text-brand-ink hover:underline" onClick={() => setForgot(true)}>Forgot password? Get a code on {me.email}</button>
+          <Button disabled={!p.next || !!err || p.next !== p.again} onClick={async () => { if (await run(() => changePassword(me, p.next, p.again), 'Password changed')) setP({ next: '', again: '', show: false }) }}>Update password</Button>
+        </div>
       </Card>
       <Card className="overflow-hidden">
         <CardHeader title="Sign-in & access" icon={ShieldCheck} />
@@ -103,17 +122,17 @@ function Security() {
         </div>
         <div className="border-t border-line p-4"><Button variant="outline" icon={LogOut} onClick={() => signOut()}>Sign out everywhere</Button></div>
       </Card>
+      <ResetPasswordModal open={forgot} onClose={() => setForgot(false)} email={me.email} />
     </div>
   )
 }
-
 function Notifs() {
   const [off, setOff] = useState(() => { try { return localStorage.getItem(POPUP_KEY) === '1' } catch { return false } })
   return (
     <Card className="overflow-hidden">
       <CardHeader title="Notifications" icon={Bell} />
       <div className="flex items-center justify-between gap-4 p-5">
-        <div><p className="font-semibold">Dashboard pop-up bubble</p><p className="text-sm text-mute">Show the newest unread notification at the bottom-right (this device only). Takes effect on next page load.</p></div>
+        <div><p className="font-semibold">Dashboard pop-up bubble</p><p className="text-sm text-mute">Show the newest unread notification under the bell at the top (this device only). Takes effect on next page load.</p></div>
         <Toggle checked={!off} onChange={(v) => { setOff(!v); try { localStorage.setItem(POPUP_KEY, v ? '0' : '1') } catch { /* ignore */ } }} label="Pop-up" />
       </div>
     </Card>

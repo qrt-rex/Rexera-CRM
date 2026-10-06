@@ -7,7 +7,10 @@ import { useDb } from '../../lib/store'
 import { useMe } from '../../lib/auth'
 import { usersWithRole } from '../../lib/actions'
 import { collections, monthStart, pipelineTotals, revenueByMonth, waitingFor } from '../../lib/metrics'
-import { inr, inrShort, today } from '../../lib/format'
+import { fmtDateTime, inr, inrShort, today } from '../../lib/format'
+import { Link } from 'react-router-dom'
+import { FileLink } from '../../components/FileField'
+import { TasksPanel } from '../../components/TasksPanel'
 import { EmptyState } from '../../components/ui'
 import { Bars, HBars } from '../../components/charts'
 import { BookingRow } from '../../components/booking'
@@ -76,6 +79,7 @@ export function LegalDashboard() {
     label: u.name, value: db.bookings.filter((b) => b.opsMemberId === u.id && ['IN_OPERATIONS', 'ON_HOLD'].includes(b.status)).length, sub: 'active files',
   })), [db.bookings, ops])
   const pendingLeave = db.leaves.filter((l) => l.status === 'PENDING' && l.approvers.includes('legal')).length
+  const recentDocs = useMemo(() => db.bookings.flatMap((b) => b.documents.map((d) => ({ d, b }))).sort((x, y) => y.d.at.localeCompare(x.d.at)).slice(0, 15), [db.bookings])
 
   return (
     <div>
@@ -99,10 +103,27 @@ export function LegalDashboard() {
           {waiting.length ? waiting.slice(0, 6).map((b) => <BookingRow key={b.id} b={b} />) : <EmptyState icon={CheckCircle2} title="Nothing to review" text="Files approved by Accounts appear here." />}
         </Section>
         <div className="space-y-6">
-          <Section title="Operation team workload" icon={UserCog}><div className="p-5"><HBars data={workload} /></div></Section>
+          <Section title="Operation team workload" icon={UserCog}><div className="max-h-96 overflow-y-auto p-5"><HBars data={workload} /></div></Section>
           <LoginLogoutCard />
           <UpcomingEvents limit={3} />
         </div>
+      </div>
+      <div className="mt-6 grid gap-6 xl:grid-cols-2">
+        <Section title="Client documents" subtitle="Latest uploads across client files" icon={FileText} action={<ViewAll to="/documents" />}>
+          <ul className="max-h-96 divide-y divide-line/70 overflow-y-auto">
+            {recentDocs.map(({ d, b }) => (
+              <li key={d.id} className="flex items-center gap-3 px-5 py-2.5">
+                <div className="min-w-0 flex-1">
+                  {d.file ? <FileLink file={d.file} label={d.name} /> : <span className="text-sm font-semibold">{d.name}</span>}
+                  <p className="truncate text-xs text-mute">{d.category} · <Link to={`/bookings/${b.id}`} className="hover:underline">{b.companyName}</Link> · {fmtDateTime(d.at)}</p>
+                </div>
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${d.status === 'VERIFIED' ? 'bg-ok-soft text-ok' : d.status === 'REJECTED' ? 'bg-bad-soft text-bad' : 'bg-warn-soft text-warn'}`}>{(d.status ?? 'PENDING').toLowerCase()}</span>
+              </li>
+            ))}
+            {!recentDocs.length && <li className="px-5 py-6 text-center text-sm text-mute">No documents yet.</li>}
+          </ul>
+        </Section>
+        <TasksPanel scope="all" />
       </div>
     </div>
   )

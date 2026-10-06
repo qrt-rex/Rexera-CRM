@@ -1,15 +1,18 @@
 import type { BookingStatus, CallOutcome, LeadStatus, Role } from './types'
 
+/** Client work stages (Admin and Operations move files through these). */
 export const STAGES = [
   'Data Collection',
   'Data Received',
-  'Documents In-process',
-  'Documents In-review',
-  'Documents Approved',
+  'Document In-process',
+  'Document In-review',
+  'Document Approved',
   'Ready to Submit',
-  'Submitted',
+  'Submission',
+  'Company Information Under Process',
   'Approved / Rejected',
   'Re-submission',
+  'Hold – Client Not Responding',
 ] as const
 
 export const HOLD_REASONS = [
@@ -29,8 +32,9 @@ export const BOOKING_STATUS: Record<BookingStatus, { label: string; tone: Tone; 
   PENDING_LEGAL: { label: 'Pending Legal', tone: 'violet', owner: 'legal', step: 3 },
   IN_OPERATIONS: { label: 'With Operations', tone: 'cyan', owner: 'operations', step: 4 },
   WITH_ADMIN: { label: 'With Admin', tone: 'blue', owner: 'admin', step: 5 },
+  OPS_REVIEW: { label: 'Pending Operations approval', tone: 'violet', owner: 'operations', step: 6 },
   ON_HOLD: { label: 'On hold', tone: 'orange', owner: null, step: -1 },
-  COMPLETED: { label: 'Completed', tone: 'green', owner: null, step: 6 },
+  COMPLETED: { label: 'Completed', tone: 'green', owner: null, step: 7 },
   REJECTED: { label: 'Rejected', tone: 'red', owner: 'sales', step: 0 },
 }
 
@@ -42,14 +46,15 @@ export const CHAIN = [
   { key: 'LEGAL', label: 'Legal', role: 'legal' as Role },
   { key: 'OPS', label: 'Operations', role: 'operations' as Role },
   { key: 'ADMIN', label: 'Admin', role: 'admin' as Role },
-  { key: 'DONE', label: 'Completed', role: 'admin' as Role },
+  { key: 'REVIEW', label: 'Ops approval', role: 'operations' as Role },
+  { key: 'DONE', label: 'Completed', role: 'operations' as Role },
 ]
 
 export const LEAD_STATUS: Record<LeadStatus, { label: string; tone: Tone }> = {
   NEW: { label: 'New', tone: 'blue' },
   ATTEMPTED: { label: 'Attempted', tone: 'gray' },
   CALL_BACK: { label: 'Call back', tone: 'amber' },
-  INTERESTED: { label: 'Interested', tone: 'violet' },
+  INTERESTED: { label: 'Interested · hot prospect', tone: 'violet' },
   NOT_INTERESTED: { label: 'Not interested', tone: 'red' },
   CONVERTED: { label: 'Converted', tone: 'green' },
   INVALID: { label: 'Invalid', tone: 'gray' },
@@ -74,7 +79,10 @@ export const SERVICE_CATEGORIES = [
   'Digital Services',
 ]
 
-export const DOC_CATEGORIES = ['KYC', 'Company documents', 'Government certificates', 'Pitch deck / DPR', 'Financial', 'Other']
+export const DOC_CATEGORIES = [
+  'PAN card', 'GSTIN certificate', 'CRM', 'Quotation (QT)', 'Agreement', 'Payment receipt', 'KYC', 'Company documents',
+  'Government certificates', 'Pitch deck', 'F.R (Financial report)', 'D.P.R (Detailed project report)', 'Financial', 'Other',
+]
 
 export const LEAD_SOURCES = ['Website', 'Facebook Ads', 'Google Ads', 'Referral', 'Walk-in', 'IVR campaign', 'Exhibition', 'Cold call']
 

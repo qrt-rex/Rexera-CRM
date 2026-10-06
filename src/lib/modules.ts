@@ -46,7 +46,7 @@ export const MODULES: ModuleDef[] = [
   { key: 'letters', path: '/letters', label: 'Letters', desc: 'Joining, internship and experience letters (PDF)', icon: FilePen, tone: 'pink', perms: ['employees.manage'], group: 'People', hrOnly: true },
   { key: 'recruitment', path: '/recruitment', label: 'Recruitment', desc: 'Import CSV / Excel files into tables', icon: Briefcase, tone: 'navy', perms: ['recruitment.manage'], group: 'People', hrOnly: true },
   { key: 'events', path: '/events', label: 'Events & Calendar', desc: 'Meetings, trainings, holidays', icon: CalendarDays, tone: 'pink', perms: [], group: 'People' },
-  { key: 'messages', path: '/messages', label: 'Messages', desc: 'Team chat and message templates', icon: MessagesSquare, tone: 'blue', perms: ['messages.use'], group: 'Workspace' },
+  { key: 'messages', path: '/messages', label: 'Messages', desc: 'Team chat and document sharing', icon: MessagesSquare, tone: 'blue', perms: ['messages.use'], group: 'Workspace' },
   { key: 'email-center', path: '/email-center', label: 'Email Center', desc: 'Email people at their login address, automations', icon: MailPlus, tone: 'orange', perms: ['email.send'], group: 'Workspace' },
   { key: 'inbox', path: '/inbox', label: 'Email', desc: 'Emails sent to your login address', icon: Inbox, tone: 'blue', perms: [], group: 'Workspace' },
   { key: 'reports', path: '/reports', label: 'Reports', desc: 'Analytics, report cards and exports', icon: BookOpenCheck, tone: 'navy', perms: ['reports.view'], group: 'Workspace' },

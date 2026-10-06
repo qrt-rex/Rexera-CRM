@@ -11,13 +11,13 @@ import { useDb } from '../lib/store'
 import { applyTheme, getTheme, useAuth, useMe, type Theme } from '../lib/auth'
 import { MODULES, canSee } from '../lib/modules'
 import { isMaster, ROLES, roleLabel } from '../lib/rbac'
-import { markRead } from '../lib/actions'
+import { markRead, runComboReminders, runTaskReminders } from '../lib/actions'
 import { runScheduledAutomations } from '../lib/email'
 import { ago } from '../lib/format'
 import { Avatar, Button, cx, Menu, MenuItem, Modal } from '../components/ui'
 import { Logo } from '../components/Logo'
 import { MiniCalendar } from './MiniCalendar'
-import { BreakBanner } from '../pages/dashboards/widgets'
+import { BreakBanner, BreakReminder } from '../pages/dashboards/widgets'
 import { CommandPalette } from './CommandPalette'
 
 export function useUnread() {
@@ -52,7 +52,7 @@ export function Shell() {
   useEffect(() => { setMobileNav(false); window.scrollTo(0, 0) }, [loc.pathname])
   // scheduled email automations (daily reminders, monthly summaries) run while anyone has the app open
   useEffect(() => {
-    const tick = () => { try { runScheduledAutomations() } catch { /* never block the app */ } }
+    const tick = () => { try { runScheduledAutomations(); runTaskReminders(); runComboReminders() } catch { /* never block the app */ } }
     tick()
     const t = setInterval(tick, 5 * 60000)
     return () => clearInterval(t)
@@ -95,10 +95,10 @@ export function Shell() {
         <header className="no-print sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-line bg-card/85 px-4 backdrop-blur-xl sm:px-6">
           <button className="text-mute lg:hidden" onClick={() => setMobileNav(true)} aria-label="Open menu"><MenuIcon className="size-6" /></button>
           <h1 className="hidden min-w-0 truncate text-lg font-extrabold tracking-tight md:block md:w-64">{title}</h1>
-          <button onClick={() => setPalette(true)} className="mx-auto flex h-11 w-full max-w-md items-center gap-3 rounded-full border-2 border-ink/80 bg-card px-4 text-sm text-mute transition hover:border-brand dark:border-line">
-            <span className="flex-1 truncate text-left">{hrMode ? 'Search employee, leave, policy…' : 'Search clients, leads, pages…'}</span>
-            <kbd className="hidden rounded-md border border-line px-1.5 py-0.5 text-[10px] sm:inline">Ctrl K</kbd>
-            <Search className="size-5 text-ink" strokeWidth={2.5} />
+          <button onClick={() => setPalette(true)} className="mx-auto flex h-10 w-full max-w-md items-center gap-3 rounded-xl border border-line bg-card2 px-3.5 text-sm text-mute transition hover:border-brand/50 hover:bg-card hover:shadow-card">
+            <Search className="size-4 shrink-0 text-mute" />
+            <span className="flex-1 truncate text-left">{hrMode ? 'Search employees, leads, pages…' : 'Search clients, leads, people…'}</span>
+            <kbd className="hidden rounded-md border border-line bg-card px-1.5 py-0.5 text-[10px] font-semibold sm:inline">Ctrl K</kbd>
           </button>
           <div className="flex items-center gap-1">
             <button onClick={cycleTheme} title={`Theme: ${theme}`} aria-label="Change theme" className="hidden size-10 place-items-center rounded-xl text-mute hover:bg-card2 hover:text-ink sm:grid"><ThemeIcon className="size-5" /></button>
@@ -166,6 +166,7 @@ export function Shell() {
         </ul>
       </Modal>
       <NotificationBubble />
+      <BreakReminder />
       {warnIn !== null && (
         <div className="anim-pop fixed bottom-6 left-1/2 z-[95] flex -translate-x-1/2 items-center gap-3 rounded-2xl border border-line bg-card px-5 py-3 shadow-pop">
           <span className="text-sm">You'll be signed out in <b>{Math.ceil(warnIn / 1000)}s</b> for inactivity.</span>
@@ -221,7 +222,7 @@ function Sidebar() {
         <div className="pt-3"><MiniCalendar /></div>
       </nav>
       <div className="space-y-0.5 border-t border-line p-3">
-        <NavLink to="/settings" className={({ isActive }) => cx(item, isActive ? active : idle)}><Settings className="size-5" />Profile setting</NavLink>
+        <NavLink to="/settings" className={({ isActive }) => cx(item, isActive ? active : idle)}><Settings className="size-5" />Profile Settings</NavLink>
         <NavLink to="/inbox" className={({ isActive }) => cx(item, isActive ? active : idle)}>
           <Mail className="size-5" /><span className="flex-1">Email</span>
           <span className={cx('grid h-6 min-w-6 place-items-center rounded-full px-1.5 text-[11px] font-bold', unread.emails ? 'bg-accent text-white' : 'bg-brand-soft text-brand-ink')}>{unread.emails}</span>
@@ -287,7 +288,7 @@ function HrSidebar() {
         </div>
       </nav>
       <div className="space-y-0.5 border-t border-line/70 p-3">
-        <NavLink to="/settings" className={({ isActive }) => cx(item, 'text-sm', isActive ? 'bg-white dark:bg-white/10' : 'text-ink/80 hover:bg-white/70 dark:hover:bg-white/5')}><Settings className="size-5" />Profile setting</NavLink>
+        <NavLink to="/settings" className={({ isActive }) => cx(item, 'text-sm', isActive ? 'bg-white dark:bg-white/10' : 'text-ink/80 hover:bg-white/70 dark:hover:bg-white/5')}><Settings className="size-5" />Profile Settings</NavLink>
         <NavLink to="/inbox" className={({ isActive }) => cx(item, 'text-sm', isActive ? 'bg-white dark:bg-white/10' : 'text-ink/80 hover:bg-white/70 dark:hover:bg-white/5')}>
           <Mail className="size-5" /><span className="flex-1">Email</span>
           <span className={cx('grid h-6 min-w-6 place-items-center rounded-full px-1.5 text-[11px] font-bold', unread.emails ? 'bg-accent text-white' : 'bg-white text-brand-ink dark:bg-white/10')}>{unread.emails}</span>
@@ -364,8 +365,10 @@ function NotificationBubble() {
   const n = unread.notices[0]
   if (off || !n || dismissed === n.id) return null
   return (
-    <div className="no-print anim-fade-up fixed bottom-5 right-5 z-[60] w-[min(88vw,320px)]">
+    // sits just under the header's bell icon, pointing up at it
+    <div className="no-print anim-fade-up fixed right-3 top-[76px] z-[60] w-[min(88vw,320px)] sm:right-20 lg:right-[168px]">
       <div className="relative rounded-[28px] border-[3px] border-ink bg-card p-4 pr-9 shadow-[6px_6px_0_var(--ink)] dark:border-line dark:shadow-pop">
+        <svg className="absolute -top-[22px] right-8 text-ink dark:text-line" width="34" height="24" viewBox="0 0 34 24"><path d="M2 24 L30 2 L20 24" fill="var(--card)" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" /></svg>
         <button aria-label="Dismiss" className="absolute right-3 top-3 text-mute hover:text-ink" onClick={() => setDismissed(n.id)}><X className="size-4" /></button>
         <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-accent"><Bell className="size-3.5 anim-float" />New notification</p>
         <p className="mt-1 text-sm font-bold">{n.title}</p>
@@ -374,7 +377,6 @@ function NotificationBubble() {
           <Button size="sm" variant="accent" onClick={() => { markRead(me, n.id); if (n.link) nav(n.link) }}>View</Button>
           <Button size="sm" variant="ghost" onClick={() => markRead(me, n.id)}>Mark read</Button>
         </div>
-        <svg className="absolute -bottom-[22px] right-8 text-ink dark:text-line" width="34" height="24" viewBox="0 0 34 24"><path d="M2 0 L30 22 L20 0" fill="var(--card)" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" /></svg>
       </div>
     </div>
   )

@@ -92,6 +92,10 @@ body {
   font-feature-settings: "cv11", "ss01";
 }
 * { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+/* numbers are typed, never stepped: no up/down arrows anywhere */
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type='number'] { -moz-appearance: textfield; appearance: textfield; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
 ::selection { background: var(--accent-soft); color: var(--ink); }
 

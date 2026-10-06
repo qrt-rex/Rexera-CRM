@@ -4,10 +4,10 @@ import type { Lead } from '../lib/types'
 import { useDb } from '../lib/store'
 import { useAuth, useMe } from '../lib/auth'
 import { createLead, updateLead, visibleLeads, type LeadInput } from '../lib/actions'
-import { INDIAN_STATES } from '../lib/format'
 import { LEAD_SOURCES } from '../lib/workflow'
 import { rolesOf } from '../lib/rbac'
 import { Button, Input, Modal, Select, Textarea, useRun } from './ui'
+import { CityInput, PhoneInput, StateSelect } from './fields'
 
 const empty: LeadInput = { name: '', company: '', phone: '', email: '', city: '', state: 'Gujarat', service: '', source: 'Website', notes: '' }
 
@@ -40,11 +40,10 @@ export function LeadFormModal({ open, onClose, lead }: { open: boolean; onClose:
       <div className="grid gap-4 sm:grid-cols-2">
         <Input label="Client name" required value={f.name} onChange={(e) => set('name', e.target.value)} autoFocus />
         <Input label="Company" value={f.company} onChange={(e) => set('company', e.target.value)} />
-        <Input label="Mobile" required inputMode="tel" value={f.phone} onChange={(e) => set('phone', e.target.value)} placeholder="98XXXXXXXX"
-          error={dup ? `Already a lead: ${dup.code} · ${dup.name}` : undefined} />
+        <div><PhoneInput label="Mobile" required value={f.phone} onChange={(v) => set('phone', v)} />{dup && <p className="mt-1 text-[11px] text-bad">Already a lead: {dup.code} · {dup.name}</p>}</div>
         <Input label="Email" type="email" value={f.email} onChange={(e) => set('email', e.target.value)} />
-        <Input label="City" value={f.city} onChange={(e) => set('city', e.target.value)} />
-        <Select label="State" value={f.state} onChange={(e) => set('state', e.target.value)}>{INDIAN_STATES.map((s) => <option key={s}>{s}</option>)}</Select>
+        <CityInput value={f.city} onChange={(v) => set('city', v)} onState={(s) => set('state', s)} />
+        <StateSelect value={f.state} onChange={(v) => set('state', v)} />
         <Select label="Service interest" value={f.service} onChange={(e) => set('service', e.target.value)}>
           <option value="">— Select —</option>
           {db.services.filter((s) => s.active).map((s) => <option key={s.id}>{s.name}</option>)}

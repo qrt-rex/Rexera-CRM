@@ -21,7 +21,7 @@ export default function WorkBoard() {
   const [member, setMember] = useState('')
   const [q, setQ] = useState('')
   const [overdue, setOverdue] = useState(false)
-  const files = useMemo(() => visibleBookings(db, me).filter((b) => b.opsMemberId && ['IN_OPERATIONS', 'WITH_ADMIN', 'ON_HOLD', 'COMPLETED'].includes(b.status))
+  const files = useMemo(() => visibleBookings(db, me).filter((b) => b.opsMemberId && ['IN_OPERATIONS', 'WITH_ADMIN', 'OPS_REVIEW', 'ON_HOLD', 'COMPLETED'].includes(b.status))
     .filter((b) => scope === 'all' || b.opsMemberId === me.id || b.adminId === me.id)
     .filter((b) => !member || b.opsMemberId === member || b.adminId === member)
     .filter((b) => !overdue || (!!b.deadline && b.deadline < today() && b.status !== 'COMPLETED'))
@@ -66,6 +66,7 @@ export default function WorkBoard() {
                       <span>{b.tasks.filter((t) => !t.done).length} tasks · {fmtDate(b.deadline)}</span>
                     </div>
                     {b.status === 'WITH_ADMIN' && <Badge tone="blue" className="mt-2">With Admin</Badge>}
+                    {b.status === 'OPS_REVIEW' && <Badge tone="violet" className="mt-2">Waiting for Operations approval</Badge>}
                   </Link>
                 ))}
                 {col.items.length > COLUMN_CAP && (

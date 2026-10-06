@@ -36,15 +36,17 @@ export function mapAll(backup) {
     ops_member_id: uref(b.opsMemberId), admin_id: uref(b.adminId), stage: b.stage, max_stage: b.maxStage, priority: b.priority, deadline: s(b.deadline),
     lead_id: s(b.leadId), created_at: b.createdAt, updated_at: b.updatedAt, legacy_id: b.legacyId ?? null, legacy: b.legacy ?? null,
     address: s(b.address), website: s(b.website), cin: s(b.cin), startup_contact: b.startupContact ?? null, billing: b.billing ?? null, owner_name: s(b.ownerName),
+    services: b.services ?? null, combo: b.combo ?? null, payment_contact: s(b.paymentContact), payment_email: s(b.paymentEmail), booking_date: s(b.bookingDate),
+    success_fee: b.successFee ?? null, remarks: s(b.remarks), closed_by: uref(b.closedBy),
   }))
-  t.booking_payments = d.bookings.flatMap((b) => b.payments.map((p) => ({ id: p.id, booking_id: b.id, part: p.part, amount: p.amount, gst: p.gst, total: p.total, paid_on: p.date, mode: p.mode, proof_name: p.proofName, recorded_by: uref(p.recordedBy), verified: p.verified, is_adjustment: p.mode === 'Adjustment', date_unknown: !!p.dateUnknown })))
+  t.booking_payments = d.bookings.flatMap((b) => b.payments.map((p) => ({ id: p.id, booking_id: b.id, part: p.part, amount: p.amount, gst: p.gst, total: p.total, paid_on: p.date, mode: p.mode, proof_name: p.proofName, recorded_by: uref(p.recordedBy), verified: p.verified, is_adjustment: p.mode === 'Adjustment', date_unknown: !!p.dateUnknown, proof: p.proof ?? null })))
   t.booking_approvals = d.bookings.flatMap((b) => b.approvals.map((a) => ({ id: a.id, booking_id: b.id, level: a.level, action: a.action, decided_by: uref(a.by), decided_at: a.at, remark: a.remark ?? '' })))
   t.booking_stage_moves = d.bookings.flatMap((b) => b.stageHistory.map((h, i) => ({ id: `${b.id}-stage-${i + 1}`, booking_id: b.id, stage: h.stage, moved_at: h.at, moved_by: uref(h.by), note: h.note ?? '' })))
   t.booking_comments = d.bookings.flatMap((b) => b.comments.map((c) => ({ id: c.id, booking_id: b.id, author_id: uref(c.by), created_at: c.at, body: c.text, kind: c.kind ?? '' })))
-  t.booking_documents = d.bookings.flatMap((b) => b.documents.map((x) => ({ id: x.id, booking_id: b.id, name: x.name, category: x.category, size_bytes: x.size ?? 0, uploaded_at: x.at, uploaded_by: uref(x.by), status: x.status ?? 'PENDING', storage_path: null, legacy_path: x.legacyPath ?? null })))
-  t.booking_tasks = d.bookings.flatMap((b) => b.tasks.map((x) => ({ id: x.id, booking_id: b.id, title: x.title, done: x.done, due_on: s(x.due), created_by: uref(x.by), assignee_id: uref(x.assignee) })))
+  t.booking_documents = d.bookings.flatMap((b) => b.documents.map((x) => ({ id: x.id, booking_id: b.id, name: x.name, category: x.category, size_bytes: x.size ?? 0, uploaded_at: x.at, uploaded_by: uref(x.by), status: x.status ?? 'PENDING', storage_path: null, legacy_path: x.legacyPath ?? null, file: x.file ?? null })))
+  t.booking_tasks = d.bookings.flatMap((b) => b.tasks.map((x) => ({ id: x.id, booking_id: b.id, title: x.title, done: x.done, due_on: s(x.due), created_by: uref(x.by), assignee_id: uref(x.assignee), remind_every_days: x.remindEveryDays ?? null, last_reminded_at: s(x.lastRemindedAt), created_at: x.createdAt ?? b.createdAt })))
 
-  t.invoices = d.invoices.map((i) => ({ id: i.id, number: i.number, type: i.type, booking_id: s(i.bookingId), client: i.client, gstin: i.gstin ?? '', state: i.state, paid: i.paid, status: i.status, issued_on: i.date, due_on: i.due, sales_person: uref(i.salesPerson), created_by: uref(i.createdBy) }))
+  t.invoices = d.invoices.map((i) => ({ id: i.id, number: i.number, type: i.type, booking_id: s(i.bookingId), client: i.client, gstin: i.gstin ?? '', state: i.state, paid: i.paid, status: i.status, issued_on: i.date, due_on: i.due, sales_person: uref(i.salesPerson), created_by: uref(i.createdBy), branch_id: s(i.branchId), client_address: s(i.clientAddress), client_pan: s(i.clientPan) }))
   t.invoice_items = d.invoices.flatMap((i) => i.items.map((it, n) => ({ invoice_id: i.id, position: n + 1, description: it.desc, sac: it.sac ?? '', qty: it.qty, rate: it.rate, gst_rate: it.gstRate })))
 
   t.schemes = d.schemes.map((x) => ({ id: x.id, title: x.title, category: x.category, summary: x.summary, benefit: x.benefit, eligibility: x.eligibility, active: x.active, created_at: x.createdAt, created_by: uref(x.by) }))
@@ -70,7 +72,7 @@ export function mapAll(backup) {
   t.manual_incentives = (d.manualIncentives ?? []).filter((m) => userIds.has(m.userId)).map((m) => ({ id: m.id, user_id: m.userId, month: m.month, amount: m.amount, reason: m.reason, added_by: uref(m.addedBy), added_at: m.addedAt, paid_at: s(m.paidAt) }))
 
   t.notifications = d.notices.filter((n) => userIds.has(n.userId)).map((n) => ({ id: n.id, user_id: n.userId, title: n.title, body: n.body ?? '', link: s(n.link), kind: n.kind, created_at: n.at, read: n.read }))
-  t.messages = d.messages.filter((m) => userIds.has(m.from) && userIds.has(m.to)).map((m) => ({ id: m.id, from_user: m.from, to_user: m.to, body: m.body, sent_at: m.at, read: m.read }))
+  t.messages = d.messages.filter((m) => userIds.has(m.from) && userIds.has(m.to)).map((m) => ({ id: m.id, from_user: m.from, to_user: m.to, body: m.body, sent_at: m.at, read: m.read, attachments: m.attachments ?? null }))
   t.message_templates = d.templates.map((x) => ({ id: x.id, name: x.name, body: x.body, created_by: uref(x.by) }))
   t.emails = (d.emails ?? []).filter((e) => userIds.has(e.to)).map((e) => ({ id: e.id, batch_id: e.batchId, to_user: e.to, to_email: e.toEmail, from_user: uref(e.from), subject: e.subject, body: e.body, sent_at: e.at, automation: s(e.automation), read: e.read }))
   t.email_automations = (d.emailAutomations ?? []).map((a) => ({ key: a.key, enabled: a.enabled, subject: a.subject, body: a.body, last_run_key: s(a.lastRunKey), last_run_at: s(a.lastRunAt), sent: a.sent }))
@@ -80,6 +82,8 @@ export function mapAll(backup) {
     { key: 'session', value: { minutes: d.settings.sessionMinutes, validAfter: d.settings.sessionsValidAfter ?? null } },
     { key: 'maintenance', value: d.settings.maintenance ?? { on: false, message: '' } },
     { key: 'pf', value: d.pfSettings },
+    { key: 'branches', value: d.settings.branches ?? [] },
+    { key: 'attendance', value: { dayLock: d.settings.dayLock === true } },
   ]
   t.api_keys = (d.apiKeys ?? []).map((k) => ({ id: k.id, name: k.name, prefix: k.prefix, key_hash: k.hash, scopes: k.scopes, created_by: uref(k.createdBy), created_at: k.createdAt, expires_at: s(k.expiresAt), revoked_at: s(k.revokedAt), revoked_by: uref(k.revokedBy) }))
   t.backup_log = (d.backupLog ?? []).map((b) => ({ id: b.id, at: b.at, by_user: uref(b.by), kind: b.kind, note: b.note ?? '', bytes: b.bytes ?? 0, encrypted: !!b.encrypted }))

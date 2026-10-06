@@ -3,12 +3,12 @@ import { Link } from 'react-router-dom'
 import { ArrowRight, CalendarDays, ChevronRight, Clock, Eye, LogIn, LogOut, Pause, Play, Square, type LucideIcon } from 'lucide-react'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
-import { BREAK_MINUTES, breakLeftMs, breakUsedMs, dayLockOn, endDay, onBreak, pauseDay, resumeDay, startDay, userName, workedMs } from '../../lib/actions'
+import { BREAK_MINUTES, breakLabel, breakLeftMs, breakUsedMs, breakWindow, dayLockOn, endDay, inBreakWindow, remindBreak, onBreak, pauseDay, resumeDay, startDay, userName, workedMs } from '../../lib/actions'
 import { todaySession } from '../../lib/metrics'
 import { ago, fmtDate, fmtTime, today } from '../../lib/format'
 import { roleLabel } from '../../lib/rbac'
 import type { Tone } from '../../lib/workflow'
-import { Badge, Button, Card, CardHeader, cx, EmptyState, useConfirm, useRun } from '../../components/ui'
+import { Badge, Button, Card, CardHeader, cx, EmptyState, useConfirm, useRun, useToast } from '../../components/ui'
 
 const chip: Record<Tone, string> = {
   navy: 'bg-brand-soft text-brand-ink', orange: 'bg-accent-soft text-accent', green: 'bg-ok-soft text-ok', red: 'bg-bad-soft text-bad',
@@ -41,10 +41,10 @@ export function Tile({ to, onClick, icon: Icon, label, desc, tone = 'navy', badg
 }) {
   const inner = (
     <>
-      <span className={cx('grid size-12 shrink-0 place-items-center rounded-2xl transition group-hover:scale-105', highlight ? 'bg-accent text-white anim-ring' : chip[tone])}><Icon className="size-6" /></span>
+      <span className={cx('grid size-12 shrink-0 place-items-center rounded-2xl transition group-hover:scale-105', highlight ? 'bg-accent text-white' : chip[tone])}><Icon className="size-6" /></span>
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-2">
-          <span className={cx('truncate font-bold', highlight ? 'text-lg' : 'text-[15px]')}>{label}</span>
+          <span className="truncate text-[15px] font-bold">{label}</span>
           {viewOnly && <span title="View only" className="inline-flex items-center gap-1 rounded-full bg-card2 px-1.5 py-0.5 text-[10px] font-semibold text-mute"><Eye className="size-3" />view</span>}
         </span>
         {desc && <span className="block truncate text-xs text-mute">{desc}</span>}
@@ -53,8 +53,8 @@ export function Tile({ to, onClick, icon: Icon, label, desc, tone = 'navy', badg
       <ChevronRight className="size-5 shrink-0 text-mute transition group-hover:translate-x-0.5 group-hover:text-ink" />
     </>
   )
-  const cls = cx('group flex items-center gap-4 rounded-2xl border bg-card p-4 text-left shadow-card transition hover:-translate-y-0.5 hover:shadow-pop',
-    highlight ? 'border-2 border-ink shadow-[5px_5px_0_var(--ink)] hover:shadow-[7px_7px_0_var(--ink)] dark:border-accent dark:shadow-none' : 'border-line', className)
+  // every tile looks the same (no heavy outline); a highlighted tile only gets the orange icon
+  const cls = cx('group flex items-center gap-4 rounded-2xl border border-line bg-card p-4 text-left shadow-card transition hover:-translate-y-0.5 hover:shadow-pop', className)
   return to ? <Link to={to} className={cls}>{inner}</Link> : <button onClick={onClick} className={cls}>{inner}</button>
 }
 
@@ -90,7 +90,7 @@ export function LoginLogoutCard({ className }: { className?: string }) {
   const hours = workedMs(s, now) / 3600000
   const logout = async () => {
     const lock = dayLockOn(db)
-    if (!(await confirm('Logout for today?', `${lock ? "You won't be able to sign in again until tomorrow. " : ''}Worked ${hours.toFixed(1)} h today${used ? `, break ${mmss(used)}` : ''}.`, true))) return
+    if (!(await confirm('End your day?', `${lock ? "You won't be able to sign in again until tomorrow. " : ''}Worked ${hours.toFixed(1)} h today${used ? `, break ${mmss(used)}` : ''}.`, true))) return
     if (await run(() => endDay(me), 'Logged out for today. See you tomorrow!')) signOut()
   }
   return (
@@ -116,7 +116,7 @@ export function LoginLogoutCard({ className }: { className?: string }) {
       </div>
       {s && !s.logoutAt && (
         <div className="mt-3">
-          <div className="mb-1 flex justify-between text-[11px] font-semibold text-mute"><span>Break time today</span><span className="tabular-nums">{mmss(used)} / {BREAK_MINUTES}:00</span></div>
+          <div className="mb-1 flex justify-between text-[11px] font-semibold text-mute"><span>Lunch break · {breakLabel()}</span><span className="tabular-nums">{mmss(used)} / {BREAK_MINUTES}:00</span></div>
           <div className="h-1.5 overflow-hidden rounded-full bg-card2"><div className={cx('h-full rounded-full transition-all', left > 0 ? 'bg-warn' : 'bg-bad')} style={{ width: `${Math.min(100, (used / (BREAK_MINUTES * 60000)) * 100)}%` }} /></div>
         </div>
       )}
@@ -128,13 +128,28 @@ export function LoginLogoutCard({ className }: { className?: string }) {
           : <>
             {paused
               ? <Button size="sm" variant="success" icon={Play} onClick={() => run(() => resumeDay(me), 'Welcome back — day resumed')}>Resume</Button>
-              : <Button size="sm" variant="soft" icon={Pause} disabled={left <= 0} title={left <= 0 ? `All ${BREAK_MINUTES} minutes of break used today` : `${mmss(left)} of break left`} onClick={() => run(() => pauseDay(me), `Day paused · ${mmss(left)} of break left`)}>{left <= 0 ? 'No break left' : 'Pause'}</Button>}
-            <Button size="sm" variant="outline" icon={Square} onClick={logout}>Logout</Button>
+              : <Button size="sm" variant="soft" icon={Pause} disabled={!inBreakWindow(now) || left <= 0} title={`Lunch break: ${breakLabel()}`} onClick={() => run(() => pauseDay(me), `Day paused · ${mmss(left)} of break left`)}>{inBreakWindow(now) ? (left <= 0 ? 'Break used' : 'Pause') : `Break ${breakLabel()}`}</Button>}
+            <Button size="sm" variant="outline" icon={Square} onClick={logout}>End my day</Button>
           </>}
       </div>
       {confirmNode}
     </Card>
   )
+}
+
+/** 5 minutes before lunch: a pop-up and a bell notification, once a day, for anyone whose day is running. */
+export function BreakReminder() {
+  const db = useDb()
+  const me = useMe()
+  const toast = useToast()
+  const s = todaySession(db, me.id)
+  const working = !!s && !s.logoutAt
+  const now = useNow(working, 20000)
+  const w = breakWindow(now)
+  useEffect(() => {
+    if (working && now >= w.start - 5 * 60000 && now < w.start && remindBreak(me)) toast('info', `Lunch break starts at ${new Date(w.start).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })} — in about 5 minutes`)
+  }, [working, now, w.start, me, toast])
+  return null
 }
 
 /** Shown on every page while the person is on a break. */
@@ -151,7 +166,7 @@ export function BreakBanner() {
     <div role="status" className={cx('mb-5 flex flex-wrap items-center gap-3 rounded-2xl border px-4 py-3 text-sm', left > 0 ? 'border-warn/40 bg-warn-soft text-warn' : 'border-bad/40 bg-bad-soft text-bad')}>
       <Pause className="size-4" />
       <b>Your day is paused</b>
-      <span className="text-ink/70">{left > 0 ? `${mmss(left)} of today's ${BREAK_MINUTES}-minute break left` : `Break time is over by ${mmss(breakUsedMs(s, now) - BREAK_MINUTES * 60000)} — please resume`}</span>
+      <span className="text-ink/70">{left > 0 ? `${mmss(left)} of lunch break left (${breakLabel()})` : `Lunch break ended — please resume your day`}</span>
       <Button size="sm" variant="success" icon={Play} className="ml-auto" onClick={() => run(() => resumeDay(me), 'Welcome back — day resumed')}>Resume my day</Button>
     </div>
   )

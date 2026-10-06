@@ -14,6 +14,8 @@ import { fmtDate } from '../../lib/format'
 import { EmptyState, Stat } from '../../components/ui'
 import { HBars } from '../../components/charts'
 import { BookingRow, BookingStatusBadge, DeadlineBadge, StageTrack } from '../../components/booking'
+import { ClientWorkRow } from '../../components/ClientWork'
+import { TasksPanel } from '../../components/TasksPanel'
 import { Greeting, LoginLogoutCard, Section, Tile, TileGrid, UpcomingEvents, ViewAll } from './widgets'
 
 export function OperationsDashboard() {
@@ -33,6 +35,8 @@ export function OperationsDashboard() {
   const pendingDocs = mine.flatMap((b) => b.documents.filter((d) => d.status === 'PENDING')).length
   const hold = mine.filter((b) => b.status === 'ON_HOLD').length
   const toAdmin = mine.filter((b) => b.status === 'WITH_ADMIN').length
+  // Admin finished these: the Operations member approves completion
+  const toApprove = useMemo(() => db.bookings.filter((b) => b.status === 'OPS_REVIEW' && (team || b.opsMemberId === me.id)), [db.bookings, team, me.id])
 
   return (
     <div>
@@ -45,12 +49,13 @@ export function OperationsDashboard() {
             ))}
           </div>
         ) : undefined} />
-      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <Stat label="Total files" value={mine.length} icon={FileText} tone="violet" sub={team ? 'across the team' : 'assigned to you'} />
         <Stat label="Active files" value={active.length} icon={FolderKanban} tone="green" sub="in operations" />
         <Stat label="Open tasks" value={openTasks} icon={ListTodo} tone="blue" sub="across files" />
         <Stat label="Pending documents" value={pendingDocs} icon={FileClock} tone="amber" sub="to verify" />
         <Stat label="On hold / with Admin" value={`${hold} / ${toAdmin}`} icon={PauseCircle} tone="pink" />
+        <Stat label="Waiting for my approval" value={toApprove.length} icon={CheckCircle2} tone="green" sub="work done by Admin" />
       </div>
       <TileGrid>
         <Tile to="/documents" icon={FileText} label="Document Management" desc="Upload & verify client documents" tone="blue" badge={pendingDocs} />
@@ -62,25 +67,21 @@ export function OperationsDashboard() {
         <Tile to="/leave?new=1" icon={CalendarCheck2} label="Request my leave" tone="violet" />
         <Tile to="/attendance" icon={UserCheck} label="Attendance Board" tone="green" />
       </TileGrid>
+      {toApprove.length > 0 && (
+        <Section title="Approve completed client work" subtitle="Admin has finished these — approve to complete, or send back" icon={CheckCircle2} className="mt-6">
+          {toApprove.slice(0, 8).map((b) => <BookingRow key={b.id} b={b} />)}
+        </Section>
+      )}
       <div className="mt-6 grid gap-6 xl:grid-cols-3">
-        <Section title={team ? 'Team active files' : 'My active files'} subtitle={team ? `${active.length} in operations · latest activity first` : 'Move stages from the file page'} icon={FolderKanban} className="xl:col-span-2" action={<ViewAll to="/work" />}>
+        <Section title={team ? 'Team active files' : 'My active files'} subtitle={`${active.length} in operations · client documents shown on each file`} icon={FolderKanban} className="xl:col-span-2" action={<ViewAll to="/work" />}>
           {!active.length ? <EmptyState icon={Inbox} title="No active files" text="Legal assigns files to you here." /> : (
             <ul className="divide-y divide-line/70">
-              {active.slice(0, 6).map((b) => (
-                <li key={b.id} className="px-5 py-4">
-                  <div className="mb-2 flex flex-wrap items-center gap-2">
-                    <Link to={`/bookings/${b.id}`} className="font-bold hover:underline">{b.companyName}</Link>
-                    <DeadlineBadge b={b} />
-                    <span className="ml-auto text-xs text-mute">Stage {b.stage}/{STAGES.length} · {STAGES[b.stage - 1]} · max {b.maxStage}</span>
-                  </div>
-                  <StageTrack b={b} />
-                  <p className="mt-2 text-xs text-mute">{b.serviceName}{team ? ` · ${userName(db, b.opsMemberId)}` : ''}{b.deadline ? ` · due ${fmtDate(b.deadline)}` : ''} · {b.tasks.filter((t) => !t.done).length} open task(s)</p>
-                </li>
-              ))}
+              {active.slice(0, 6).map((b) => <ClientWorkRow key={b.id} b={b} showDocs />)}
             </ul>
           )}
         </Section>
         <div className="space-y-6">
+          <TasksPanel scope={team ? 'all' : 'mine'} />
           {team && <Section title="Team workload" subtitle="Active and on-hold files per person" icon={UsersRound}><div className="max-h-96 overflow-y-auto p-5"><HBars data={workload} /></div></Section>}
           <LoginLogoutCard /><UpcomingEvents limit={3} />
         </div>
@@ -98,13 +99,15 @@ export function AdminDashboard() {
   const completed = db.bookings.filter((b) => b.status === 'COMPLETED' && (sa || b.adminId === me.id))
   const hold = db.bookings.filter((b) => b.status === 'ON_HOLD' && (sa || b.adminId === me.id || b.holdFrom === 'WITH_ADMIN'))
   const monthDone = completed.filter((b) => b.updatedAt.slice(0, 10) >= monthStart()).length
+  const sentForApproval = db.bookings.filter((b) => b.status === 'OPS_REVIEW' && (sa || b.adminId === me.id)).length
 
   return (
     <div>
-      <Greeting subtitle="Admin · finish client work handed over by Operations" />
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <Greeting subtitle="Admin · move client work through the stages, add documents, then send it to Operations for approval" />
+      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Stat label="Assigned to me" value={assigned.length} icon={Inbox} tone="blue" />
         <Stat label="On hold clients" value={hold.length} icon={PauseCircle} tone="orange" />
+        <Stat label="Sent for Ops approval" value={sentForApproval} icon={Inbox} tone="violet" />
         <Stat label="Completed (all time)" value={completed.length} icon={CheckCircle2} tone="green" />
         <Stat label="Completed this month" value={monthDone} icon={ShieldCheck} tone="violet" />
       </div>
@@ -117,8 +120,8 @@ export function AdminDashboard() {
         <Tile to="/leave?new=1" icon={CalendarCheck2} label="Request my leave" tone="violet" />
       </TileGrid>
       <div className="mt-6 grid gap-6 xl:grid-cols-3">
-        <Section title="Waiting for me" subtitle="Complete, hold or return to Operations" icon={Inbox} className="xl:col-span-2" action={<ViewAll to="/approvals" />}>
-          {waiting.length ? waiting.slice(0, 6).map((b) => <BookingRow key={b.id} b={b} />) : <EmptyState icon={CheckCircle2} title="Nothing waiting" text="Operations will assign files to you." />}
+        <Section title="My client work" subtitle={`Stages: ${STAGES.join(' → ')}`} icon={Inbox} className="xl:col-span-2" action={<ViewAll to="/work" />}>
+          {waiting.length ? <ul className="divide-y divide-line/70">{waiting.slice(0, 8).map((b) => <ClientWorkRow key={b.id} b={b} showDocs />)}</ul> : <EmptyState icon={CheckCircle2} title="Nothing waiting" text="Operations will assign files to you." />}
         </Section>
         <div className="space-y-6">
           <LoginLogoutCard />

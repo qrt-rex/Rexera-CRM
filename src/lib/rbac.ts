@@ -87,7 +87,6 @@ export const PERM_GROUPS: { group: string; perms: { id: Perm; label: string }[] 
     perms: [
       { id: 'messages.use', label: 'Internal messages' },
       { id: 'email.send', label: 'Email Center & email automations' },
-      { id: 'templates.manage', label: 'Message templates' },
       { id: 'reports.view', label: 'Reports & analytics' },
       { id: 'reports.export', label: 'Export data (CSV)' },
       { id: 'access.manage', label: 'Roles, users & permissions' },

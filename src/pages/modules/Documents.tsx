@@ -3,10 +3,11 @@ import { Link } from 'react-router-dom'
 import { Check, FileCheck2, FileText, Upload, X } from 'lucide-react'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
-import { addDocument, setDocStatus, userName, visibleBookings } from '../../lib/actions'
-import { DOC_CATEGORIES } from '../../lib/workflow'
+import { addDocuments, setDocStatus, userName, visibleBookings } from '../../lib/actions'
 import { ago } from '../../lib/format'
-import { Badge, Button, Card, CardHeader, EmptyState, FileButton, PageHeader, SearchBox, Select, Table, Tabs, Td, Th, readAsDataUrl, useRun } from '../../components/ui'
+import { Badge, Button, Card, CardHeader, EmptyState, PageHeader, SearchBox, Select, Table, Tabs, Td, Th, useRun } from '../../components/ui'
+import { DocUploader, type PendingDoc } from '../../components/DocUploader'
+import { FileLink } from '../../components/FileField'
 
 export default function Documents() {
   const db = useDb()
@@ -15,7 +16,7 @@ export default function Documents() {
   const run = useRun()
   const bookings = visibleBookings(db, me).filter((b) => b.status !== 'REJECTED')
   const [bookingId, setBookingId] = useState('')
-  const [cat, setCat] = useState(DOC_CATEGORIES[0]!)
+  const [pending, setPending] = useState<PendingDoc[]>([])
   const [tab, setTab] = useState<'all' | 'PENDING' | 'VERIFIED' | 'REJECTED'>('PENDING')
   const [q, setQ] = useState('')
   const docs = useMemo(() => bookings.flatMap((b) => b.documents.map((d) => ({ ...d, b }))).sort((x, y) => y.at.localeCompare(x.at)), [bookings])
@@ -23,10 +24,9 @@ export default function Documents() {
   const verifier = can('bookings.process', 'bookings.legal', 'bookings.admin')
   const missing = bookings.filter((b) => ['IN_OPERATIONS', 'PENDING_LEGAL'].includes(b.status) && !b.documents.some((d) => d.category === 'KYC'))
 
-  const upload = async (f: File) => {
-    if (!bookingId) return run(() => { throw new Error('Pick the client first.') })
-    const dataUrl = f.size <= 400 * 1024 ? await readAsDataUrl(f) : undefined
-    run(() => addDocument(me, bookingId, { name: f.name, category: cat, size: f.size, dataUrl }), 'Document uploaded')
+  const upload = async (docs: PendingDoc[]) => {
+    if (!bookingId) { await run(() => { throw new Error('Pick the client first.') }); return false }
+    return !!(await run(() => addDocuments(me, bookingId, docs), `${docs.length} document(s) uploaded`))
   }
 
   return (
@@ -34,17 +34,12 @@ export default function Documents() {
       <PageHeader title="Document Forms" subtitle="Collect, upload and verify client documents" icon={FileText} />
       <div className="mb-6 grid gap-6 lg:grid-cols-3">
         <Card className="overflow-hidden lg:col-span-2">
-          <CardHeader title="Upload a client document" icon={Upload} />
-          <div className="grid gap-4 p-5 sm:grid-cols-3">
-            <Select label="Client (CRM entry)" value={bookingId} onChange={(e) => setBookingId(e.target.value)} className="sm:col-span-2">
+          <CardHeader title="Upload client documents" subtitle="Add them one after another — PAN card, GSTIN, CRM, QT, Agreement, pitch deck, F.R, D.P.R…" icon={Upload} />
+          <div className="grid gap-4 p-5">
+            <Select label="Client (CRM entry)" value={bookingId} onChange={(e) => setBookingId(e.target.value)}>
               <option value="">— Select —</option>{bookings.map((b) => <option key={b.id} value={b.id}>{b.bookingId} · {b.companyName}</option>)}
             </Select>
-            <Select label="Category" value={cat} onChange={(e) => setCat(e.target.value)}>{DOC_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</Select>
-            <div className="sm:col-span-3"><FileButton accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx" onFile={upload}>
-              <button className="flex w-full flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-line p-8 text-sm text-mute transition hover:border-brand hover:bg-brand-soft/40">
-                <Upload className="size-7 text-brand-ink" /><b className="text-ink">Click to choose a file</b>PDF, image, Word or Excel · max 5 MB
-              </button>
-            </FileButton></div>
+            <DocUploader value={pending} onChange={setPending} onUpload={upload} />
           </div>
         </Card>
         <Card className="overflow-hidden">
@@ -66,7 +61,7 @@ export default function Documents() {
             <tbody>
               {list.map((d) => (
                 <tr key={d.id}>
-                  <Td><span className="flex items-center gap-2 font-semibold"><FileText className="size-4 text-info" />{d.name}</span></Td>
+                  <Td>{d.file ? <FileLink file={d.file} label={d.name} /> : <span className="flex items-center gap-2 font-semibold"><FileText className="size-4 text-info" />{d.name}</span>}</Td>
                   <Td><Link to={`/bookings/${d.b.id}`} className="hover:underline">{d.b.companyName}</Link></Td>
                   <Td>{d.category}</Td>
                   <Td className="text-xs text-mute">{userName(db, d.by)} · {ago(d.at)}</Td>

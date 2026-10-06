@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import {
   BarChart3, Briefcase, CalendarCheck2, ClipboardCheck, FileText, Images, IndianRupee, Megaphone, Network, Phone, PhoneCall,
@@ -11,14 +11,12 @@ import { collections, monthStart, salesNumbers, waitingFor } from '../../lib/met
 import { inr, inrShort } from '../../lib/format'
 import { EmptyState } from '../../components/ui'
 import { Ring } from '../../components/charts'
-import { LeadFormModal } from '../../components/LeadForm'
 import { BookingRow, BookingStatusBadge, ChainStepper } from '../../components/booking'
 import { Greeting, LoginLogoutCard, MiniStat, Section, Tile, TileGrid, UpcomingEvents, ViewAll } from './widgets'
 
 export function SalesDashboard({ lead }: { lead: boolean }) {
   const db = useDb()
   const me = useMe()
-  const [leadOpen, setLeadOpen] = useState(false)
   const n = salesNumbers(db, me)
   const team = useMemo(() => db.users.filter((u) => u.teamLeadId === me.id && u.active), [db.users, me.id])
   const ids = lead ? [me.id, ...team.map((u) => u.id)] : [me.id]
@@ -54,7 +52,7 @@ export function SalesDashboard({ lead }: { lead: boolean }) {
       </div>
 
       <TileGrid>
-        <Tile onClick={() => setLeadOpen(true)} icon={UserPlus} label="New CRM Leads" desc="Add a lead in seconds" tone="navy" badge={n.toCall} />
+        <Tile to="/leads" icon={UserPlus} label="CRM Leads" desc="Your leads — add, call, update status" tone="navy" badge={n.toCall} />
         <Tile to="/dialer" icon={Phone} label="Dialer" desc="Call your queue, log outcomes" highlight />
         <Tile to="/documents" icon={FileText} label="Document Form" desc="Collect client documents" tone="blue" />
         <Tile to="/content?tab=FLYER" icon={Images} label="Flyer & Post" desc="Latest marketing material" tone="orange" viewOnly={!lead} badge={newPosts || undefined} />
@@ -106,7 +104,6 @@ export function SalesDashboard({ lead }: { lead: boolean }) {
           </Section>
         </div>
       </div>
-      <LeadFormModal open={leadOpen} onClose={() => setLeadOpen(false)} />
     </div>
   )
 }

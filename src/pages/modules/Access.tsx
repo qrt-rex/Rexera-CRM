@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { KeyRound, Lock, RefreshCcw, Save, Settings2, ShieldCheck, UserCog, Users } from 'lucide-react'
-import type { Perm, Role, User } from '../../lib/types'
+import { Building2, KeyRound, Lock, RefreshCcw, Save, Settings2, ShieldCheck, UserCog, Users } from 'lucide-react'
+import type { Branch, Perm, Role, User } from '../../lib/types'
 import { useDb, resetDemoData } from '../../lib/store'
 import { useMe } from '../../lib/auth'
-import { setRolePerms, updateSettings, updateUser, userName } from '../../lib/actions'
+import { saveBranches, setRolePerms, updateSettings, updateUser, userName } from '../../lib/actions'
+import { CityInput, PhoneInput, StateSelect } from '../../components/fields'
 import { ALL_PERMS, DEFAULT_ROLE_PERMS, MASTER_ROLES, PERM_GROUPS, RESERVED, ROLES, effectivePerms, roleLabel, rolesOf } from '../../lib/rbac'
 import { INDIAN_STATES, fmtDate } from '../../lib/format'
 import { SetPasswordModal } from '../../components/SetPasswordModal'
@@ -154,6 +155,39 @@ function RolesTab() {
   )
 }
 
+/** Branches printed on tax invoices (Accounts picks one per invoice). */
+function BranchesCard() {
+  const db = useDb()
+  const me = useMe()
+  const run = useRun()
+  const [list, setList] = useState<Branch[]>(() => db.settings.branches ?? [])
+  const set = (i: number, patch: Partial<Branch>) => setList((l) => l.map((b, j) => (j === i ? { ...b, ...patch } : b)))
+  return (
+    <Card className="overflow-hidden lg:col-span-2">
+      <CardHeader title="Invoice branches" subtitle="Accounts chooses the branch on each tax invoice; its address and GSTIN print on it" icon={Building2} />
+      <div className="grid gap-4 p-5 xl:grid-cols-3">
+        {list.map((b, i) => (
+          <div key={b.id} className="grid gap-3 rounded-2xl border border-line p-4">
+            <Input label="Branch name" value={b.name} onChange={(e) => set(i, { name: e.target.value })} />
+            <Input label="Address" value={b.address} onChange={(e) => set(i, { address: e.target.value })} placeholder="Building, street, area" />
+            <div className="grid grid-cols-2 gap-3">
+              <CityInput value={b.city} onChange={(v) => set(i, { city: v })} onState={(s) => set(i, { state: s })} />
+              <Input label="PIN" inputMode="numeric" maxLength={6} value={b.pin} onChange={(e) => set(i, { pin: e.target.value.replace(/\D/g, '').slice(0, 6) })} />
+            </div>
+            <StateSelect value={b.state} onChange={(v) => set(i, { state: v })} />
+            <Input label="GSTIN" value={b.gstin} onChange={(e) => set(i, { gstin: e.target.value.toUpperCase() })} maxLength={15} />
+            <div className="grid grid-cols-2 gap-3">
+              <PhoneInput label="Phone" value={b.phone} onChange={(v) => set(i, { phone: v })} />
+              <Input label="Email" type="email" value={b.email} onChange={(e) => set(i, { email: e.target.value })} />
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="flex justify-end border-t border-line p-4"><Button icon={Save} onClick={() => run(() => saveBranches(me, list), 'Branches saved')}>Save branches</Button></div>
+    </Card>
+  )
+}
+
 function SettingsTab() {
   const db = useDb()
   const me = useMe()
@@ -172,6 +206,7 @@ function SettingsTab() {
           <Button icon={Save} className="w-fit" onClick={() => run(() => updateSettings(me, { companyName: s.companyName, companyGstin: s.companyGstin, supplierState: s.supplierState, sessionMinutes: Math.max(5, s.sessionMinutes || 60) }), 'Settings saved')}>Save settings</Button>
         </div>
       </Card>
+      <BranchesCard />
       <Card className="overflow-hidden">
         <CardHeader title="Attendance rules" icon={Lock} />
         <div className="space-y-3 p-5 text-sm">

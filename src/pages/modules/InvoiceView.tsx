@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Ban, IndianRupee, Printer, Receipt } from 'lucide-react'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
-import { cancelInvoice, recordInvoicePayment, userName, visibleInvoices } from '../../lib/actions'
+import { cancelInvoice, recordInvoicePayment, setInvoiceBranch, userName, visibleInvoices } from '../../lib/actions'
 import { fmtDate, gstSplit, inr, invoiceTotals, rupeesInWords } from '../../lib/format'
 import { Badge, Button, Card, EmptyState, Input, Modal, useConfirm, useRun } from '../../components/ui'
 import { Logo } from '../../components/Logo'
@@ -19,8 +19,14 @@ export default function InvoiceView() {
   const [amt, setAmt] = useState(0)
   const inv = visibleInvoices(db, me).find((x) => x.id === id)
   if (!inv) return <Card><EmptyState icon={Receipt} title="Invoice not found" action={<Link to="/billing"><Button>All invoices</Button></Link>} /></Card>
-  const st = db.settings.supplierState
+  const branches = db.settings.branches ?? []
+  const branch = branches.find((x) => x.id === inv.branchId)
+  const st = branch?.state || db.settings.supplierState
   const t = invoiceTotals(inv, st)
+  const booking = inv.bookingId ? db.bookings.find((x) => x.id === inv.bookingId) : undefined
+  const clientAddress = inv.clientAddress || [booking?.address, booking?.city, booking?.state].filter(Boolean).join(', ')
+  const creator = db.users.find((u) => u.id === inv.createdBy)
+  const needBranch = inv.type === 'TAX' && !branch
   const intra = inv.state.toLowerCase() === st.toLowerCase()
 
   return (
@@ -29,11 +35,24 @@ export default function InvoiceView() {
         <Link to="/billing" className="mr-auto flex items-center gap-1.5 text-sm text-mute hover:text-ink"><ArrowLeft className="size-4" />All invoices</Link>
         {can('billing.manage') && inv.status !== 'CANCELLED' && inv.status !== 'PAID' && <Button variant="success" icon={IndianRupee} onClick={() => { setAmt(t.balance); setPayOpen(true) }}>Record payment</Button>}
         {can('billing.manage') && inv.status !== 'CANCELLED' && <Button variant="outline" icon={Ban} onClick={async () => { if (await confirm('Cancel invoice?', `${inv.number} will stay in the register as cancelled.`, true)) run(() => cancelInvoice(me, inv.id), 'Invoice cancelled') }}>Cancel</Button>}
-        <Button icon={Printer} onClick={() => window.print()}>Print / PDF</Button>
+        {can('billing.manage', 'billing.create') && inv.status !== 'CANCELLED' && (
+          <select aria-label="Branch" value={inv.branchId ?? ''} onChange={(e) => run(() => setInvoiceBranch(me, inv.id, e.target.value), 'Branch set')}
+            className={`h-10 rounded-xl border bg-card px-3 text-sm font-semibold ${needBranch ? 'border-warn ring-2 ring-warn/20' : 'border-line'}`}>
+            <option value="">Choose branch…</option>{branches.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+          </select>
+        )}
+        <Button icon={Printer} disabled={needBranch} title={needBranch ? 'Choose the branch first' : undefined} onClick={() => window.print()}>Print / PDF</Button>
       </div>
+      {needBranch && <p className="no-print mb-3 rounded-xl bg-warn-soft px-4 py-2 text-sm text-warn">Choose the branch this tax invoice is issued from — its address and GSTIN print on the invoice.</p>}
+      {branch && !branch.address && <p className="no-print mb-3 rounded-xl bg-warn-soft px-4 py-2 text-sm text-warn">The {branch.name} address isn't filled in yet — Super Admin / IT can add it under Access → Settings → Branches.</p>}
       <Card className="print-area overflow-hidden bg-white text-[#111827]">
         <div className="flex flex-wrap items-start justify-between gap-4 border-b-4 border-[#F47B20] p-8">
-          <div><Logo size="md" fixed /><p className="mt-3 text-sm font-semibold">{db.settings.companyName}</p><p className="text-xs text-[#6B7280]">GSTIN {db.settings.companyGstin} · {st}, India</p></div>
+          <div className="max-w-sm"><Logo size="md" fixed /><p className="mt-3 text-sm font-semibold">{db.settings.companyName}{branch ? ` — ${branch.name}` : ''}</p>
+            {branch ? <>
+              <p className="whitespace-pre-line text-xs text-[#374151]">{[branch.address, [branch.city, branch.state, branch.pin].filter(Boolean).join(', ')].filter(Boolean).join('\n') || 'Branch address not set'}</p>
+              <p className="text-xs text-[#6B7280]">GSTIN {branch.gstin || db.settings.companyGstin}{branch.phone ? ` · ${branch.phone}` : ''}{branch.email ? ` · ${branch.email}` : ''}</p>
+            </> : <p className="text-xs text-[#6B7280]">GSTIN {db.settings.companyGstin} · {st}, India</p>}
+          </div>
           <div className="text-right">
             <p className="text-2xl font-extrabold text-[#2E3A8C]">{inv.type === 'TAX' ? 'TAX INVOICE' : 'PROFORMA INVOICE'}</p>
             <p className="font-mono text-sm">{inv.number}</p>
@@ -42,8 +61,13 @@ export default function InvoiceView() {
           </div>
         </div>
         <div className="grid gap-6 p-8 sm:grid-cols-2">
-          <div><p className="text-[11px] font-bold uppercase tracking-wider text-[#6B7280]">Bill to</p><p className="mt-1 font-bold">{inv.client}</p><p className="text-sm">GSTIN: {inv.gstin || 'Unregistered'}</p><p className="text-sm">Place of supply: {inv.state}</p></div>
-          <div className="sm:text-right"><p className="text-[11px] font-bold uppercase tracking-wider text-[#6B7280]">Sales person</p><p className="mt-1 font-semibold">{userName(db, inv.salesPerson)}</p></div>
+          <div><p className="text-[11px] font-bold uppercase tracking-wider text-[#6B7280]">Bill to</p><p className="mt-1 font-bold">{inv.client}</p>
+            {clientAddress && <p className="text-sm">{clientAddress}</p>}
+            <p className="text-sm">GSTIN: {inv.gstin || 'Unregistered'}{(inv.clientPan || booking?.pan) ? ` · PAN: ${inv.clientPan || booking?.pan}` : ''}</p>
+            <p className="text-sm">Place of supply: {inv.state}</p>
+            {booking && <p className="text-sm">{booking.contactPerson}{booking.mobile ? ` · ${booking.mobile}` : ''}{booking.email ? ` · ${booking.email}` : ''}</p>}</div>
+          <div className="sm:text-right"><p className="text-[11px] font-bold uppercase tracking-wider text-[#6B7280]">Sales person</p><p className="mt-1 font-semibold">{userName(db, inv.salesPerson)}</p>
+            {booking && <p className="text-sm text-[#6B7280]">CRM entry {booking.bookingId}</p>}</div>
         </div>
         <div className="overflow-x-auto px-8">
           <table className="w-full min-w-[560px] text-sm">
@@ -59,7 +83,8 @@ export default function InvoiceView() {
         </div>
         <div className="grid gap-6 p-8 sm:grid-cols-2">
           <div><p className="text-[11px] font-bold uppercase tracking-wider text-[#6B7280]">Amount in words</p><p className="mt-1 text-sm font-semibold">{rupeesInWords(t.grand)}</p>
-            <p className="mt-6 text-[11px] text-[#6B7280]">Bank: HDFC Bank · A/c 50200012345678 · IFSC HDFC0001234<br />This is a computer-generated invoice.</p></div>
+            <p className="mt-6 text-[11px] text-[#6B7280]">Bank: HDFC Bank · A/c 50200012345678 · IFSC HDFC0001234<br />This is a computer-generated invoice.</p>
+            <p className="mt-2 text-[11px] text-[#6B7280]">Generated by: <b className="text-[#111827]">{creator ? `${creator.name} (@${creator.username})` : '—'}</b>{branch ? ` · Branch: ${branch.name}` : ''}</p></div>
           <div className="space-y-1.5 text-sm">
             <div className="flex justify-between"><span className="text-[#6B7280]">Taxable value</span>{inr(t.taxable)}</div>
             {intra ? <><div className="flex justify-between"><span className="text-[#6B7280]">CGST</span>{inr(t.cgst)}</div><div className="flex justify-between"><span className="text-[#6B7280]">SGST</span>{inr(t.sgst)}</div></> : <div className="flex justify-between"><span className="text-[#6B7280]">IGST</span>{inr(t.igst)}</div>}

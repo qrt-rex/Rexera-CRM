@@ -48,7 +48,6 @@ export function SuperAdminDashboard() {
     { to: '/team', icon: BarChart3, label: 'Sales View Process', desc: 'Sales process & tracking', tone: 'pink' as const },
     { to: '/attendance', icon: Eye, label: 'HR View Process', desc: 'Attendance, leave & people', tone: 'violet' as const },
     { to: '/access', icon: KeyRound, label: 'Access Manage', desc: 'Role & permission management', tone: 'green' as const },
-    { to: '/messages?tab=templates', icon: MessageSquare, label: 'Create a Template Message', desc: 'Manage template messages', tone: 'blue' as const },
     { to: '/broadcasts', icon: Megaphone, label: 'New Update by Company', desc: 'Create & view updates', tone: 'orange' as const },
     { to: '/work', icon: Workflow, label: 'Admin Process', desc: 'Client work processing', tone: 'violet' as const },
     { to: '/reports?tab=cards', icon: FileBarChart, label: 'Report Card Generate', desc: 'Reports card & analysis', tone: 'navy' as const },

@@ -1,5 +1,5 @@
 import type {
-  Booking, BookingStatus, BDoc, CallOutcome, CandidateApplication, CandidateForm, DaySession, DB, EventItem, FileRef, Invoice, InvoiceItem, Lead, LeaveType, Perm, Post, Role, Scheme, User,
+  Booking, BookingStatus, BDoc, Branch, CallOutcome, CandidateApplication, CandidateForm, DaySession, DB, EventItem, FileRef, Invoice, InvoiceItem, Lead, LeaveType, Perm, Post, Role, Scheme, User,
 } from './types'
 import { effectivePerms, isMaster, MASTER_ROLES, rolesOf, roleLabel } from './rbac'
 import { getDb, mutate } from './store'
@@ -107,9 +107,10 @@ export function verifyCode(token: string, code: string): string {
   return p.userId
 }
 
-export async function changePassword(me: User, current: string, next: string) {
-  assert((await hashPassword(me.username, current)) === me.passHash, 'Current password is wrong.')
+/** Signed-in people set a new password by typing it twice (no current password needed). */
+export async function changePassword(me: User, next: string, again: string) {
   assert(PASSWORD_RULE.test(next), `Use ${PASSWORD_HINT}`)
+  assert(next === again, 'The two passwords do not match.')
   const h = await hashPassword(me.username, next)
   mutate((d) => {
     const u = d.users.find((x) => x.id === me.id)!
@@ -119,17 +120,71 @@ export async function changePassword(me: User, current: string, next: string) {
   })
 }
 
+// ------------------------------------------------------------ forgotten password: one-time code to the account's email
+const resets = new Map<string, Pending>()
+/** Sends a 6-digit code to the account's email. Always answers the same way, so it doesn't reveal which emails exist. */
+export function requestPasswordReset(email: string) {
+  assert(isEmail(email), 'Enter a valid email.')
+  const u = getDb().users.find((x) => x.email.toLowerCase() === email.trim().toLowerCase() && x.active)
+  const token = uid('rst-')
+  const code = genCode()
+  if (u) {
+    resets.set(token, { userId: u.id, code, expires: Date.now() + 10 * 60000, attempts: 0, resends: 0 })
+    mutate((d) => audit(d, u.id, 'PASSWORD_RESET_REQUEST', `Reset code sent to ${u.email}`))
+  }
+  // no mail server in this build: the code is returned so the screen can show it (like the sign-in code)
+  return { token, devCode: u ? code : undefined }
+}
+export async function resetPasswordWithCode(token: string, code: string, next: string, again: string) {
+  const p = resets.get(token)
+  assert(p, 'That code is not valid. Request a new one.')
+  if (Date.now() > p.expires) { resets.delete(token); throw new ActionError('The code expired. Request a new one.') }
+  p.attempts += 1
+  if (p.code !== code.trim()) {
+    if (p.attempts >= 5) { resets.delete(token); throw new ActionError('Too many wrong codes. Request a new one.') }
+    throw new ActionError(`Wrong code. ${5 - p.attempts} attempts left.`)
+  }
+  assert(PASSWORD_RULE.test(next), `Use ${PASSWORD_HINT}`)
+  assert(next === again, 'The two passwords do not match.')
+  const u = getDb().users.find((x) => x.id === p.userId)!
+  const h = await hashPassword(u.username, next)
+  resets.delete(token)
+  mutate((d) => {
+    const x = d.users.find((y) => y.id === u.id)!
+    x.passHash = h
+    delete x.needsPasswordReset
+    delete d.loginFails[u.username.toLowerCase()]; delete d.loginFails[u.email.toLowerCase()]
+    audit(d, u.id, 'PASSWORD', 'Reset password with an emailed code')
+  })
+}
+
 // ============================================================ day attendance
-/** Break budget per day: pause and resume as often as you like until these minutes are used up. */
+/** Lunch break: 40 minutes, from 1:00 to 1:40 pm. Pause and resume as often as you like inside that window. */
 export const BREAK_MINUTES = 40
+export const BREAK_START = { h: 13, m: 0 }
 const BREAK_MS = BREAK_MINUTES * 60000
+/** Today's break window (local time). */
+export function breakWindow(now = Date.now()) {
+  const s = new Date(now); s.setHours(BREAK_START.h, BREAK_START.m, 0, 0)
+  return { start: s.getTime(), end: s.getTime() + BREAK_MS }
+}
+export const inBreakWindow = (now = Date.now()) => { const w = breakWindow(now); return now >= w.start && now < w.end }
+export const breakLabel = () => {
+  const t = (ms: number) => new Date(ms).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })
+  const w = breakWindow(); return `${t(w.start)} – ${t(w.end)}`
+}
 
 /** Break time used today (an open break counts up to now). */
 export function breakUsedMs(s: DaySession | undefined, now = Date.now()) {
   return (s?.breaks ?? []).reduce((t, b) => t + Math.max(0, (b.end ? new Date(b.end).getTime() : now) - new Date(b.start).getTime()), 0)
 }
 export const onBreak = (s: DaySession | undefined) => !!s && !s.logoutAt && !!s.breaks?.some((b) => !b.end)
-export const breakLeftMs = (s: DaySession | undefined, now = Date.now()) => Math.max(0, BREAK_MS - breakUsedMs(s, now))
+/** Break time still available now: the unused budget, but never past the end of the lunch window. */
+export const breakLeftMs = (s: DaySession | undefined, now = Date.now()) => {
+  const w = breakWindow(now)
+  if (now >= w.end) return 0
+  return Math.max(0, Math.min(BREAK_MS - breakUsedMs(s, now), w.end - Math.max(now, w.start)))
+}
 /** Working time today, without breaks. */
 export function workedMs(s: DaySession | undefined, now = Date.now()) {
   if (!s) return 0
@@ -154,6 +209,7 @@ export function pauseDay(me: User) {
     const s = d.sessions.find((x) => x.userId === me.id && x.date === today())
     assert(s && !s.logoutAt, 'Start your day first.')
     assert(!s.breaks?.some((b) => !b.end), 'Your day is already paused.')
+    assert(inBreakWindow(), `Lunch break is ${breakLabel()}. You can pause then.`)
     assert(breakLeftMs(s) > 0, `You have used your ${BREAK_MINUTES} minutes of break time for today.`)
     ;(s.breaks ??= []).push({ start: nowIso() })
     audit(d, me.id, 'DAY_PAUSE', `Paused · ${Math.ceil(breakLeftMs(s) / 60000)} min of break left`)
@@ -168,6 +224,13 @@ export function resumeDay(me: User) {
     const over = breakUsedMs(s) - BREAK_MS
     audit(d, me.id, 'DAY_RESUME', over > 0 ? `Resumed · break time exceeded by ${Math.ceil(over / 60000)} min` : `Resumed · ${Math.floor(breakLeftMs(s) / 60000)} min of break left`)
   })
+}
+/** Once a day, 5 minutes before lunch: a notification in the bell (the caller also shows a pop-up). */
+export function remindBreak(me: User) {
+  const id = `n-break-${today()}-${me.id}`
+  if (getDb().notices.some((n) => n.id === id)) return false
+  mutate((d) => { d.notices.unshift({ id, userId: me.id, title: 'Lunch break in 5 minutes', body: `Your 40-minute break is ${breakLabel()}. Pause your day when you go.`, at: nowIso(), read: false, kind: 'info' }) })
+  return true
 }
 /** Logout for the day: closes an open break; the person can't sign in again until tomorrow. */
 export function endDay(me: User) {
@@ -267,6 +330,21 @@ export function assignLeads(me: User, ids: string[], userId: string) {
   })
 }
 
+/** Change a lead's status straight from the list (with an optional note and follow-up date). */
+export function setLeadStatus(me: User, id: string, status: Lead['status'], note = '', followUp?: string) {
+  mutate((d) => {
+    const l = d.leads.find((x) => x.id === id)
+    assert(l && visibleLeads(d, me).some((x) => x.id === id), 'Lead not found.')
+    if (l.status === status && !note && !followUp) return
+    const stamp = new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: 'numeric', minute: '2-digit' })
+    const line = `[${stamp}] ${me.name}: status ${l.status.replace('_', ' ').toLowerCase()} → ${status.replace('_', ' ').toLowerCase()}${note.trim() ? ` — ${note.trim()}` : ''}`
+    l.status = status
+    l.notes = l.notes ? `${l.notes}\n${line}` : line
+    if (followUp) l.followUp = followUp
+    else if (!OPEN_LEAD.includes(status)) l.followUp = undefined
+  })
+}
+
 export function logCall(me: User, leadId: string, outcome: CallOutcome, note: string, followUp?: string, durationSec = 0) {
   need(me, 'dialer.use', 'leads.manage')
   mutate((d) => {
@@ -315,11 +393,26 @@ export function visibleBookings(d: DB, me: User): Booking[] {
   return d.bookings.filter((b) => b.createdBy === me.id || (p.has('bookings.team') && (b.teamLeadId === me.id || team.has(b.createdBy))))
 }
 
+/** Services whose price must be split out per service (certification, website, logo, trade-related). */
+export const needsPriceSplit = (s: { name: string; category?: string }) =>
+  /certif|registration|iso\b|website|web\s|logo|trade|trademark|\biec\b|import|export|fssai|udyam|gem\b/i.test(`${s.name} ${s.category ?? ''}`)
+
+export type PaymentPartInput = { amount: number; date: string; mode: string; proof?: FileRef }
 export type BookingInput = {
-  companyName: string; contactPerson: string; mobile: string; email: string; pan: string; gstin: string
-  city: string; state: string; industry: string; serviceId: string; mode: Booking['mode']; successFeePct: number
-  totalQuoted: number; priority: Booking['priority']; teamLeadId?: string; leadId?: string; note?: string
-  advance: { amount: number; date: string; mode: string; proofName: string }
+  companyName: string; companyAddress: string; city: string; state: string; industry: string
+  contactPerson: string; mobile: string; email: string; pan: string; gstin: string
+  paymentContact: string; paymentEmail: string
+  services: { serviceId: string; price: number }[]
+  combo?: 3 | 6 | 12
+  totalQuoted: number; mode: Booking['mode']
+  bookingDate: string
+  payments: PaymentPartInput[]
+  closedBy: string
+  successFee: { type: 'AMOUNT' | 'PCT'; value: number }
+  remarks: string
+  note?: string
+  priority: Booking['priority']; teamLeadId?: string; leadId?: string
+  documents?: { file: FileRef; category: string }[]
 }
 
 export function findDuplicates(d: DB, i: Partial<BookingInput>, excludeId?: string) {
@@ -331,54 +424,128 @@ export function findDuplicates(d: DB, i: Partial<BookingInput>, excludeId?: stri
     (i.gstin && b.gstin && b.gstin === i.gstin.toUpperCase())))
 }
 
-function checkBooking(i: BookingInput) {
+/** Every rule of a new CRM entry; returns the services resolved from the catalogue. */
+function checkBooking(d: DB, i: BookingInput, isNew: boolean) {
   assert(i.companyName.trim().length >= 2, 'Company name is required.')
+  assert(i.companyAddress.trim().length >= 5, 'Company address is required.')
+  assert(i.city.trim(), 'City is required.')
+  assert(i.state, 'Company state is required.')
   assert(i.contactPerson.trim().length >= 2, 'Contact person is required.')
   assert(isPhone(i.mobile), 'Enter a valid 10-digit company mobile.')
-  assert(!i.email || isEmail(i.email), 'Enter a valid email.')
-  assert(!i.pan || isPan(i.pan), 'PAN must look like ABCDE1234F.')
+  assert(isEmail(i.email), 'Company email is required.')
+  assert(isPhone(i.paymentContact), 'Payment contact must be a valid 10-digit mobile.')
+  assert(!i.paymentEmail || isEmail(i.paymentEmail), 'Payment email is not valid.')
+  assert(isPan(i.pan), 'Company PAN is required (format ABCDE1234F).')
   assert(!i.gstin || isGstin(i.gstin), 'GSTIN must be 15 characters (e.g. 24ABCDE1234F1Z5).')
-  assert(i.serviceId, 'Pick a service.')
-  assert(i.totalQuoted > 0, 'Total quoted must be more than 0.')
-  assert(i.advance.amount > 0, 'Enter the advance received.')
-  assert(i.advance.amount <= i.totalQuoted, 'Advance cannot exceed the total quoted.')
-  assert(i.advance.proofName, 'Attach the payment proof.')
+  assert(i.services.length >= 1, 'Pick at least one service.')
+  if (i.combo) assert(i.services.length >= 3, 'A combo booking needs at least 3 services.')
+  assert(new Set(i.services.map((s) => s.serviceId)).size === i.services.length, 'A service is listed twice.')
+  const svcs = i.services.map((x) => { const s = d.services.find((y) => y.id === x.serviceId); assert(s, 'Pick each service from the list.'); return { s, price: round2(x.price || 0) } })
+  for (const { s, price } of svcs) assert(!needsPriceSplit(s) || price > 0, `Enter the price for ${s.name} (price bifurcation is required for certification, website, logo and trade services).`)
+  assert(i.totalQuoted > 0, 'Total quoted is required.')
+  const priced = round2(svcs.reduce((t, x) => t + x.price, 0))
+  if (svcs.every((x) => x.price > 0)) assert(Math.abs(priced - i.totalQuoted) < 0.01, `The service prices add up to ${priced} — they must equal the total quoted (${round2(i.totalQuoted)}).`)
+  else assert(priced <= i.totalQuoted, 'Service prices are more than the total quoted.')
+  assert(i.mode === 'Refundable' || i.mode === 'Non-Refundable', 'Pick the mode.')
+  assert(i.bookingDate, 'Booking date is required.')
+  if (isNew) {
+    assert(i.payments.length >= 1, 'Payment part 1 is required.')
+    i.payments.forEach((p, k) => {
+      assert(p.amount > 0, `Enter the amount of payment part ${k + 1}.`)
+      assert(p.date, `Enter the date of payment part ${k + 1}.`)
+    })
+    assert(i.payments[0]!.proof, 'Attach the proof of receiving payment part 1.')
+    assert(round2(i.payments.reduce((t, p) => t + p.amount, 0)) <= round2(i.totalQuoted), 'Payments cannot be more than the total quoted.')
+  }
+  assert(i.closedBy, 'Pick who closed the lead.')
+  assert(i.successFee.value >= 0 && (i.successFee.type === 'AMOUNT' || i.successFee.value <= 100), 'Success fee must be 0 or more (a percentage up to 100). Enter 0 if the client did not agree.')
+  assert(i.remarks.trim().length >= 3, 'Remarks are required.')
+  return svcs
 }
+
+const comboDeadline = (from: string, months: number) => { const x = new Date(from + 'T00:00:00'); x.setMonth(x.getMonth() + months); return ymd(x) }
+const serviceTitle = (names: string[], combo?: number) => (combo ? `Combo ${combo === 12 ? '1 year' : `${combo} months`}: ` : '') + names.join(' + ')
 
 export function createBooking(me: User, i: BookingInput) {
   need(me, 'bookings.create')
-  checkBooking(i)
+  const svcs = checkBooking(getDb(), i, true)
   return mutate((d) => {
-    const svc = d.services.find((s) => s.id === i.serviceId)!
+    const first = svcs[0]!.s
+    const gstRate = Math.max(...svcs.map((x) => x.s.gstRate))
     const isTL = rolesOf(me).includes('teamlead')
     const tl = isTL ? me.id : i.teamLeadId || me.teamLeadId
     assert(tl, 'Pick the team leader this client goes to.')
-    const amount = round2(i.advance.amount)
-    const gst = round2((amount * svc.gstRate) / 100)
     const at = nowIso()
+    const payments = i.payments.map((p, k) => {
+      const amount = round2(p.amount), gst = round2((amount * gstRate) / 100)
+      return { id: uid('pay-'), part: k + 1, amount, gst, total: round2(amount + gst), date: p.date, mode: p.mode, proofName: p.proof?.name ?? '', proof: p.proof, recordedBy: me.id, verified: false }
+    })
     const b: Booking = {
       id: uid('bk-'), bookingId: `RX-${new Date().getFullYear()}-${String(d.counters.booking++).padStart(6, '0')}`,
-      companyName: i.companyName.trim(), contactPerson: i.contactPerson.trim(), mobile: normPhone(i.mobile), email: i.email.trim(),
-      pan: i.pan.toUpperCase(), gstin: i.gstin.toUpperCase(), city: i.city, state: i.state, industry: i.industry,
-      serviceId: svc.id, serviceName: svc.name, mode: i.mode, successFeePct: i.successFeePct || 0,
-      totalQuoted: round2(i.totalQuoted), gstRate: svc.gstRate, deduction: svc.deduction,
-      payments: [{ id: uid('pay-'), part: 1, amount, gst, total: round2(amount + gst), date: i.advance.date, mode: i.advance.mode, proofName: i.advance.proofName, recordedBy: me.id, verified: false }],
+      companyName: i.companyName.trim(), address: i.companyAddress.trim(), contactPerson: i.contactPerson.trim(), mobile: normPhone(i.mobile), email: i.email.trim().toLowerCase(),
+      pan: i.pan.toUpperCase(), gstin: i.gstin.toUpperCase(), city: i.city.trim(), state: i.state, industry: i.industry.trim(),
+      serviceId: first.id, serviceName: serviceTitle(svcs.map((x) => x.s.name), i.combo),
+      services: svcs.map((x) => ({ serviceId: x.s.id, name: x.s.name, price: x.price })),
+      ...(i.combo ? { combo: { months: i.combo, startedOn: i.bookingDate, deadline: comboDeadline(i.bookingDate, i.combo) } } : {}),
+      mode: i.mode, successFeePct: i.successFee.type === 'PCT' ? i.successFee.value : 0, successFee: { ...i.successFee },
+      totalQuoted: round2(i.totalQuoted), gstRate, deduction: Math.max(...svcs.map((x) => x.s.deduction)),
+      paymentContact: normPhone(i.paymentContact), paymentEmail: i.paymentEmail.trim().toLowerCase() || undefined,
+      bookingDate: i.bookingDate, closedBy: i.closedBy, remarks: i.remarks.trim(),
+      payments,
       createdBy: me.id, teamLeadId: tl, status: isTL ? 'PENDING_ACCOUNTS' : 'PENDING_TL',
       approvals: isTL ? [{ id: uid('ap-'), level: 'Team Leader', action: 'APPROVED', by: me.id, at, remark: 'Submitted by team leader' }] : [],
       stage: 1, maxStage: 1, stageHistory: [],
-      comments: i.note ? [{ id: uid('c-'), by: me.id, at, text: i.note, kind: 'BDE' }] : [],
-      documents: [], tasks: [], priority: i.priority, deadline: ymd(addDays(new Date(), 30)), leadId: i.leadId,
+      comments: [
+        { id: uid('c-'), by: me.id, at, text: i.remarks.trim(), kind: 'Remarks' },
+        ...(i.note?.trim() ? [{ id: uid('c-'), by: me.id, at, text: i.note.trim(), kind: 'Note for approvers' }] : []),
+      ],
+      documents: (i.documents ?? []).map((x) => ({ id: uid('doc-'), name: x.file.name, category: x.category, size: x.file.size, at, by: me.id, status: 'PENDING' as const, file: x.file })),
+      tasks: [], priority: i.priority, deadline: i.combo ? comboDeadline(i.bookingDate, i.combo) : ymd(addDays(new Date(), 30)), leadId: i.leadId,
       createdAt: at, updatedAt: at,
     }
     d.bookings.unshift(b)
     if (i.leadId) { const l = d.leads.find((x) => x.id === i.leadId); if (l) l.status = 'CONVERTED' }
     if (isTL) notify(d, usersWithRole(d, 'accounts').map((u) => u.id), 'New file for accounts', `${b.bookingId} · ${b.companyName}`, `/bookings/${b.id}`, 'action')
     else notify(d, [tl], 'CRM entry waiting for you', `${b.bookingId} · ${b.companyName} by ${me.name}`, `/bookings/${b.id}`, 'action')
-    audit(d, me.id, 'BOOKING_CREATE', `${b.bookingId} ${b.companyName} · ${svc.name}`)
+    audit(d, me.id, 'BOOKING_CREATE', `${b.bookingId} ${b.companyName} · ${b.serviceName}`)
     return b.id
   })
 }
 
+/** Combo booking: add another service (with its price) until the combo deadline. */
+export function addComboService(me: User, id: string, serviceId: string, price: number) {
+  mutate((d) => {
+    const b = findB(d, id)
+    assert(b.combo, 'This is not a combo booking.')
+    assert(b.createdBy === me.id || b.teamLeadId === me.id || has(me, 'bookings.accounts') || isSA(me), 'Only the sales owner, team leader or accounts can add services.')
+    assert(today() <= b.combo.deadline, `The combo period ended on ${fmtDate(b.combo.deadline)}.`)
+    const s = d.services.find((x) => x.id === serviceId)
+    assert(s, 'Pick a service.')
+    assert(!b.services?.some((x) => x.serviceId === serviceId), 'That service is already on this booking.')
+    assert(!needsPriceSplit(s) || price > 0, `Enter the price for ${s.name}.`)
+    b.services = [...(b.services ?? []), { serviceId: s.id, name: s.name, price: round2(price || 0) }]
+    b.totalQuoted = round2(b.totalQuoted + (price || 0))
+    b.serviceName = serviceTitle(b.services.map((x) => x.name), b.combo.months)
+    b.updatedAt = nowIso()
+    notify(d, usersWithRole(d, 'accounts').map((u) => u.id), 'Service added to a combo booking', `${b.bookingId} · ${s.name}${price ? ` · ₹${price}` : ''}`, `/bookings/${b.id}`, 'info')
+    audit(d, me.id, 'COMBO_ADD', `${b.bookingId}: ${s.name} ₹${price || 0}`)
+  })
+}
+
+/** Warn the sales owner and team leader 7 days before a combo period ends (runs on the app timer). */
+export function runComboReminders(now = Date.now()) {
+  const soon = ymd(new Date(now + 7 * 86400000)), t = ymd(new Date(now))
+  const due = getDb().bookings.filter((b) => b.combo && !b.combo.deadlineNotified && b.combo.deadline >= t && b.combo.deadline <= soon && !['REJECTED', 'COMPLETED'].includes(b.status))
+  if (!due.length) return 0
+  mutate((d) => {
+    for (const x of due) {
+      const b = d.bookings.find((y) => y.id === x.id)!
+      b.combo!.deadlineNotified = true
+      notify(d, [b.createdBy, b.teamLeadId], 'Combo period ending soon', `${b.bookingId} · ${b.companyName} — services can be added until ${fmtDate(b.combo!.deadline)}`, `/bookings/${b.id}`, 'warning')
+    }
+  })
+  return due.length
+}
 export function canEditBooking(d: DB, me: User, b: Booking) {
   if (isSA(me)) return true
   if (b.status === 'COMPLETED') return false
@@ -386,19 +553,19 @@ export function canEditBooking(d: DB, me: User, b: Booking) {
   return b.createdBy === me.id && ['PENDING_TL', 'REJECTED'].includes(b.status)
 }
 
-export function updateBooking(me: User, id: string, patch: Partial<Omit<BookingInput, 'advance'>>) {
+export type BookingPatch = Partial<Pick<Booking, 'companyName' | 'address' | 'contactPerson' | 'mobile' | 'email' | 'pan' | 'gstin' | 'city' | 'state' | 'industry' | 'mode' | 'priority' | 'paymentContact' | 'paymentEmail' | 'bookingDate' | 'closedBy' | 'remarks' | 'successFee' | 'teamLeadId'>>
+export function updateBooking(me: User, id: string, patch: BookingPatch) {
   mutate((d) => {
     const b = findB(d, id)
     assert(canEditBooking(d, me, b), 'This CRM entry is locked for you.')
     if (patch.mobile !== undefined) { assert(isPhone(patch.mobile), 'Enter a valid 10-digit mobile.'); patch.mobile = normPhone(patch.mobile) }
     if (patch.pan) { assert(isPan(patch.pan), 'PAN must look like ABCDE1234F.'); patch.pan = patch.pan.toUpperCase() }
     if (patch.gstin) { assert(isGstin(patch.gstin), 'GSTIN format is invalid.'); patch.gstin = patch.gstin.toUpperCase() }
-    if (patch.serviceId && patch.serviceId !== b.serviceId) {
-      const svc = d.services.find((s) => s.id === patch.serviceId)!
-      b.serviceName = svc.name; b.gstRate = svc.gstRate; b.deduction = svc.deduction
-    }
-    const { note: _n, leadId: _l, ...rest } = patch
-    Object.assign(b, rest)
+    if (patch.paymentContact !== undefined) { assert(isPhone(patch.paymentContact), 'Payment contact must be a valid 10-digit mobile.'); patch.paymentContact = normPhone(patch.paymentContact) }
+    if (patch.email !== undefined) assert(isEmail(patch.email), 'Enter a valid company email.')
+    if (patch.remarks !== undefined) assert(patch.remarks.trim().length >= 3, 'Remarks are required.')
+    if (patch.successFee) b.successFeePct = patch.successFee.type === 'PCT' ? patch.successFee.value : 0
+    Object.assign(b, patch)
     b.updatedAt = nowIso()
     audit(d, me.id, 'BOOKING_EDIT', `${b.bookingId} edited`)
   })
@@ -414,6 +581,8 @@ export type Decision =
   | { kind: 'ASSIGN_ADMIN'; remark: string; adminId: string }
   | { kind: 'RETURN_OPS'; remark: string }
   | { kind: 'COMPLETE'; remark: string }
+  | { kind: 'APPROVE_DONE'; remark: string }
+  | { kind: 'RETURN_ADMIN'; remark: string }
 
 /** Which decisions this user may take on this entry right now. */
 export function availableDecisions(d: DB, me: User, b: Booking): Decision['kind'][] {
@@ -440,6 +609,10 @@ export function availableDecisions(d: DB, me: User, b: Booking): Decision['kind'
     case 'WITH_ADMIN':
       if (p.has('bookings.admin') && (b.adminId === me.id || sa)) out.push('COMPLETE', 'HOLD', 'RETURN_OPS')
       break
+    case 'OPS_REVIEW':
+      // Admin finished the client work: the assigned Operations member approves it (or sends it back)
+      if (p.has('bookings.process') && (b.opsMemberId === me.id || sa)) out.push('APPROVE_DONE', 'RETURN_ADMIN')
+      break
     case 'ON_HOLD':
       if ((p.has('bookings.process') && b.opsMemberId === me.id) || (p.has('bookings.admin') && b.adminId === me.id) || sa) out.push('RESUME')
       break
@@ -457,10 +630,10 @@ export function decide(me: User, id: string, dec: Decision) {
     const at = nowIso()
     const levelOf: Partial<Record<BookingStatus, string>> = {
       PENDING_TL: 'Team Leader', PENDING_ACCOUNTS: 'Accounts', ACCOUNTS_HOLD: 'Accounts', PENDING_LEGAL: 'Legal',
-      IN_OPERATIONS: 'Operations', WITH_ADMIN: 'Admin', ON_HOLD: 'Hold', REJECTED: 'Sales',
+      IN_OPERATIONS: 'Operations', WITH_ADMIN: 'Admin', OPS_REVIEW: 'Operations approval', ON_HOLD: 'Hold', REJECTED: 'Sales',
     }
     const level = levelOf[b.status] ?? b.status
-    if (['REJECT', 'HOLD', 'RETURN_OPS'].includes(dec.kind)) assert(dec.remark.trim().length >= 3, 'A reason is required.')
+    if (['REJECT', 'HOLD', 'RETURN_OPS', 'RETURN_ADMIN'].includes(dec.kind)) assert(dec.remark.trim().length >= 3, 'A reason is required.')
     const link = `/bookings/${b.id}`
     const label = `${b.bookingId} · ${b.companyName}`
     const toRole = (r: Role) => usersWithRole(d, r).map((u) => u.id)
@@ -525,13 +698,22 @@ export function decide(me: User, id: string, dec: Decision) {
         notify(d, [b.opsMemberId], 'Admin returned a file', `${label}: ${dec.remark}`, link, 'warning')
         break
       case 'COMPLETE':
-        b.status = 'COMPLETED'
-        b.stage = Math.max(b.stage, 8)
-        b.stageHistory.push({ stage: 8, at, by: me.id, note: dec.remark || 'Completed' })
-        notify(d, [b.createdBy, b.teamLeadId, b.opsMemberId, ...toRole('superadmin').map((x) => x)], 'Client work completed 🎉', label, link, 'success')
+        b.status = 'OPS_REVIEW'
+        notify(d, [b.opsMemberId], 'Admin finished the client work — please approve', label, link, 'action')
         break
+      case 'RETURN_ADMIN':
+        b.status = 'WITH_ADMIN'
+        notify(d, [b.adminId], 'Operations sent the file back', `${label}: ${dec.remark}`, link, 'warning')
+        break
+      case 'APPROVE_DONE': {
+        const approved = STAGES.indexOf('Approved / Rejected') + 1
+        b.status = 'COMPLETED'
+        if (b.stage < approved) { b.stage = approved; b.stageHistory.push({ stage: approved, at, by: me.id, note: dec.remark || 'Approved by Operations' }) }
+        notify(d, [b.createdBy, b.teamLeadId, b.adminId, ...toRole('superadmin')], 'Client work completed 🎉', label, link, 'success')
+        break
+      }
     }
-    b.approvals.push({ id: uid('ap-'), level, action: dec.kind === 'APPROVE' ? 'APPROVED' : dec.kind === 'REJECT' ? 'REJECTED' : dec.kind === 'COMPLETE' ? 'COMPLETED' : dec.kind, by: me.id, at, remark: dec.remark })
+    b.approvals.push({ id: uid('ap-'), level, action: dec.kind === 'APPROVE' ? 'APPROVED' : dec.kind === 'REJECT' ? 'REJECTED' : dec.kind === 'COMPLETE' ? 'WORK_DONE' : dec.kind === 'APPROVE_DONE' ? 'COMPLETED' : dec.kind, by: me.id, at, remark: dec.remark })
     b.updatedAt = at
     audit(d, me.id, `BOOKING_${dec.kind}`, `${b.bookingId}: ${dec.remark || '—'}`)
   })
@@ -568,16 +750,16 @@ export function setMaxStage(me: User, id: string, max: number) {
   })
 }
 
-export function addPayment(me: User, id: string, p: { amount: number; date: string; mode: string; proofName: string }) {
+export function addPayment(me: User, id: string, p: { amount: number; date: string; mode: string; proofName: string; proof?: FileRef }) {
   mutate((d) => {
     const b = findB(d, id)
     const pr = effectivePerms(d, me)
     assert(b.createdBy === me.id || b.teamLeadId === me.id || pr.has('bookings.accounts'), 'Only the sales owner or accounts can add payments.')
     assert(p.amount > 0, 'Amount must be more than 0.')
-    assert(p.proofName, 'Attach the payment proof.')
+    assert(p.proofName || p.proof, 'Attach the payment proof.')
     const amount = round2(p.amount)
     const gst = round2((amount * b.gstRate) / 100)
-    b.payments.push({ id: uid('pay-'), part: b.payments.length + 1, amount, gst, total: round2(amount + gst), date: p.date, mode: p.mode, proofName: p.proofName, recordedBy: me.id, verified: pr.has('bookings.accounts') })
+    b.payments.push({ id: uid('pay-'), part: b.payments.length + 1, amount, gst, total: round2(amount + gst), date: p.date, mode: p.mode, proofName: p.proof?.name ?? p.proofName, proof: p.proof, recordedBy: me.id, verified: pr.has('bookings.accounts') })
     b.updatedAt = nowIso()
     if (!pr.has('bookings.accounts')) notify(d, usersWithRole(d, 'accounts').map((u) => u.id), 'Balance payment to verify', `${b.bookingId} · ₹${amount}`, `/bookings/${b.id}`, 'action')
     audit(d, me.id, 'PAYMENT_ADD', `${b.bookingId} part ${b.payments.length} ₹${amount}`)
@@ -630,6 +812,18 @@ export function addDocument(me: User, id: string, doc: Omit<BDoc, 'id' | 'at' | 
     audit(d, me.id, 'DOC_UPLOAD', `${b.bookingId}: ${doc.name}`)
   })
 }
+/** Several documents at once, each with its own type (files are already in the browser file store). */
+export function addDocuments(me: User, id: string, docs: { file: FileRef; category: string }[]) {
+  assert(docs.length, 'Add at least one document.')
+  mutate((d) => {
+    const b = findB(d, id)
+    assert(visibleBookings(d, me).some((x) => x.id === id), 'Not found.')
+    const at = nowIso()
+    for (const x of docs) b.documents.push({ id: uid('doc-'), name: x.file.name, category: x.category, size: x.file.size, at, by: me.id, status: 'PENDING', file: x.file })
+    b.updatedAt = at
+    audit(d, me.id, 'DOC_UPLOAD', `${b.bookingId}: ${docs.map((x) => `${x.category} (${x.file.name})`).join(', ')}`)
+  })
+}
 export function setDocStatus(me: User, id: string, docId: string, status: 'VERIFIED' | 'REJECTED') {
   need(me, 'bookings.process', 'bookings.legal', 'bookings.admin')
   mutate((d) => { const doc = findB(d, id).documents.find((x) => x.id === docId); if (doc) doc.status = status })
@@ -644,9 +838,39 @@ export function deleteDocument(me: User, id: string, docId: string) {
   })
 }
 
-export function addTask(me: User, id: string, title: string, due?: string) {
+export const TASK_REMIND_DAYS = 15
+export function addTask(me: User, id: string, title: string, due?: string, opts: { assignee?: string; remind?: boolean } = {}) {
   assert(title.trim(), 'Task title is required.')
-  mutate((d) => { findB(d, id).tasks.push({ id: uid('t-'), title: title.trim(), done: false, due, by: me.id }) })
+  mutate((d) => {
+    const b = findB(d, id)
+    b.tasks.push({ id: uid('t-'), title: title.trim(), done: false, due, by: me.id, assignee: opts.assignee, createdAt: nowIso(), ...(opts.remind ? { remindEveryDays: TASK_REMIND_DAYS } : {}) })
+    if (opts.assignee && opts.assignee !== me.id) notify(d, [opts.assignee], 'New task for you', `${b.bookingId} · ${title.trim()}`, `/bookings/${b.id}`, 'action')
+  })
+}
+/**
+ * Reminders for open tasks that repeat every 15 days: the client's processing person (Operations), the admin person and
+ * whoever the task is assigned to get a notification. Runs on a timer while anyone is signed in.
+ */
+export function runTaskReminders(now = Date.now()) {
+  const d = getDb()
+  const due: { b: string; t: string }[] = []
+  for (const b of d.bookings) {
+    if (['COMPLETED', 'REJECTED'].includes(b.status)) continue
+    for (const t of b.tasks) {
+      if (t.done || !t.remindEveryDays) continue
+      const last = new Date(t.lastRemindedAt ?? t.createdAt ?? b.createdAt).getTime()
+      if (now - last >= t.remindEveryDays * 86400000) due.push({ b: b.id, t: t.id })
+    }
+  }
+  if (!due.length) return 0
+  mutate((m) => {
+    for (const x of due) {
+      const b = m.bookings.find((y) => y.id === x.b)!, t = b.tasks.find((y) => y.id === x.t)!
+      t.lastRemindedAt = new Date(now).toISOString()
+      notify(m, [b.opsMemberId, b.adminId, t.assignee], `Reminder: ${t.title}`, `${b.bookingId} · ${b.companyName} — repeats every ${t.remindEveryDays} days until done`, `/bookings/${b.id}`, 'warning')
+    }
+  })
+  return due.length
 }
 export function toggleTask(_me: User, id: string, taskId: string) {
   mutate((d) => { const t = findB(d, id).tasks.find((x) => x.id === taskId); if (t) t.done = !t.done })
@@ -696,7 +920,7 @@ export function visibleInvoices(d: DB, me: User) {
   return d.invoices.filter((i) => i.salesPerson === me.id || i.createdBy === me.id)
 }
 
-export function createInvoice(me: User, i: { type: Invoice['type']; client: string; gstin: string; state: string; items: InvoiceItem[]; bookingId?: string; salesPerson?: string; due: string }) {
+export function createInvoice(me: User, i: { type: Invoice['type']; client: string; gstin: string; state: string; items: InvoiceItem[]; bookingId?: string; salesPerson?: string; due: string; clientAddress?: string; clientPan?: string; branchId?: string }) {
   need(me, 'billing.create', 'billing.manage')
   assert(i.client.trim(), 'Client name is required.')
   assert(!i.gstin || isGstin(i.gstin), 'GSTIN format is invalid.')
@@ -708,6 +932,7 @@ export function createInvoice(me: User, i: { type: Invoice['type']; client: stri
       id: uid('inv-'), number: `${i.type === 'TAX' ? 'RX' : 'PF'}/${fy}/${String(d.counters.invoice++).padStart(4, '0')}`,
       type: i.type, bookingId: i.bookingId, client: i.client.trim(), gstin: i.gstin.toUpperCase(), state: i.state, items: i.items,
       paid: 0, status: 'ISSUED', date: today(), due: i.due, salesPerson: i.salesPerson ?? me.id, createdBy: me.id,
+      clientAddress: i.clientAddress?.trim() || undefined, clientPan: i.clientPan?.trim().toUpperCase() || undefined, branchId: i.branchId,
     }
     d.invoices.unshift(inv)
     audit(d, me.id, 'INVOICE_CREATE', inv.number)
@@ -721,7 +946,12 @@ export function invoiceFromBooking(me: User, bookingId: string, type: Invoice['t
   assert(b, 'CRM entry not found.')
   return createInvoice(me, {
     type, client: b.companyName, gstin: b.gstin, state: b.state, bookingId: b.id, salesPerson: b.createdBy,
-    due: ymd(addDays(new Date(), 15)), items: [{ desc: b.serviceName, sac: '998311', qty: 1, rate: b.totalQuoted, gstRate: b.gstRate }],
+    clientAddress: [b.address, b.city, b.state].filter(Boolean).join(', '), clientPan: b.pan,
+    due: ymd(addDays(new Date(), 15)),
+    // one line per service when the entry has a price bifurcation, else one line for the whole quote
+    items: b.services?.length && b.services.every((s) => s.price > 0)
+      ? b.services.map((s) => ({ desc: s.name, sac: '998311', qty: 1, rate: s.price, gstRate: b.gstRate }))
+      : [{ desc: b.serviceName, sac: '998311', qty: 1, rate: b.totalQuoted, gstRate: b.gstRate }],
   })
 }
 
@@ -735,6 +965,23 @@ export function recordInvoicePayment(me: User, id: string, amount: number, grand
     inv.status = inv.paid >= grand - 0.5 ? 'PAID' : 'PARTIALLY_PAID'
     audit(d, me.id, 'INVOICE_PAYMENT', `${inv.number} ₹${amount}`)
   })
+}
+/** Accounts chooses the branch an invoice is issued from (its address and GSTIN print on the invoice). */
+export function setInvoiceBranch(me: User, id: string, branchId: string) {
+  need(me, 'billing.manage', 'billing.create')
+  mutate((d) => {
+    const inv = d.invoices.find((x) => x.id === id)
+    assert(inv, 'Invoice not found.')
+    assert(d.settings.branches?.some((b) => b.id === branchId), 'Pick a branch.')
+    inv.branchId = branchId
+  })
+}
+export function saveBranches(me: User, branches: Branch[]) {
+  assert(isMaster(me), 'Only Super Admin or IT Support can change branches.')
+  assert(branches.every((b) => b.name.trim()), 'Every branch needs a name.')
+  assert(branches.every((b) => !b.gstin || isGstin(b.gstin)), 'A branch GSTIN is not valid.')
+  assert(branches.every((b) => !b.phone || isPhone(b.phone)), 'A branch phone must be a 10-digit number.')
+  mutate((d) => { d.settings.branches = branches.map((b) => ({ ...b, gstin: b.gstin.toUpperCase().trim() })); audit(d, me.id, 'SETTINGS', 'Updated invoice branches') })
 }
 export function cancelInvoice(me: User, id: string) {
   need(me, 'billing.manage')
@@ -923,27 +1170,16 @@ export function updateCandidate(me: User, id: string, patch: Partial<Pick<Candid
 export function markRead(me: User, id?: string) {
   mutate((d) => { for (const n of d.notices) if (n.userId === me.id && (!id || n.id === id)) n.read = true })
 }
-export function sendMessage(me: User, to: string, body: string) {
+/** A message can carry documents (PDF, images, Word, Excel) shared inside the CRM. */
+export function sendMessage(me: User, to: string, body: string, attachments: FileRef[] = []) {
   need(me, 'messages.use')
-  assert(body.trim(), 'Write a message.')
+  assert(body.trim() || attachments.length, 'Write a message or attach a document.')
   mutate((d) => {
-    d.messages.push({ id: uid('m-'), from: me.id, to, body: body.trim(), at: nowIso(), read: false })
+    d.messages.push({ id: uid('m-'), from: me.id, to, body: body.trim(), at: nowIso(), read: false, ...(attachments.length ? { attachments } : {}) })
   })
 }
 export function markThreadRead(me: User, other: string) {
   mutate((d) => { for (const m of d.messages) if (m.to === me.id && m.from === other) m.read = true })
-}
-export function upsertTemplate(me: User, t: { id?: string; name: string; body: string }) {
-  need(me, 'templates.manage')
-  assert(t.name.trim() && t.body.trim(), 'Name and text are required.')
-  mutate((d) => {
-    if (t.id) { Object.assign(d.templates.find((x) => x.id === t.id)!, t); return }
-    d.templates.push({ id: uid('tp-'), name: t.name, body: t.body, by: me.id })
-  })
-}
-export function deleteTemplate(me: User, id: string) {
-  need(me, 'templates.manage')
-  mutate((d) => { d.templates = d.templates.filter((x) => x.id !== id) })
 }
 
 // ============================================================ users & access

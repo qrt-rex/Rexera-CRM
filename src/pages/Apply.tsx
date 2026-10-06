@@ -7,6 +7,7 @@ import { submitApplication, type ApplicationInput } from '../lib/actions'
 import { RESUME_TYPES } from '../lib/files'
 import { Logo } from '../components/Logo'
 import { FileField } from '../components/FileField'
+import { CityInput, PhoneInput } from '../components/fields'
 import { Button, Card, Input, Select, Textarea, useRun } from '../components/ui'
 
 const blank: ApplicationInput = { name: '', email: '', phone: '', city: '', dob: '', qualification: '', college: '', experience: 'Fresher', currentCompany: '', expectedSalary: '', noticePeriod: '', linkedin: '', message: '' }
@@ -55,8 +56,8 @@ export default function Apply() {
             <form className="grid gap-4 p-6 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); submit() }}>
               <Input label="Full name" required autoComplete="name" value={a.name} onChange={(e) => set({ name: e.target.value })} className="sm:col-span-2" />
               <Input label="Email" required type="email" autoComplete="email" value={a.email} onChange={(e) => set({ email: e.target.value })} />
-              <Input label="Mobile number" required type="tel" inputMode="numeric" autoComplete="tel" value={a.phone} onChange={(e) => set({ phone: e.target.value })} placeholder="10 digits" />
-              <Input label="City" value={a.city} onChange={(e) => set({ city: e.target.value })} />
+              <PhoneInput label="Mobile number" required value={a.phone} onChange={(v) => set({ phone: v })} />
+              <CityInput value={a.city} onChange={(v) => set({ city: v })} />
               <Input label="Date of birth" type="date" value={a.dob} onChange={(e) => set({ dob: e.target.value })} />
               <Input label="Highest qualification" required value={a.qualification} onChange={(e) => set({ qualification: e.target.value })} placeholder="e.g. B.Com, MBA (Finance)" />
               <Input label={intern ? 'College / university' : 'College / university (optional)'} value={a.college} onChange={(e) => set({ college: e.target.value })} />

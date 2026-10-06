@@ -6,7 +6,7 @@ import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
 import { userName, visibleBookings } from '../../lib/actions'
 import { BOOKING_STATUS, STAGES } from '../../lib/workflow'
-import { bookingMoney, downloadCsv, fmtDate, inr, today } from '../../lib/format'
+import { bookingMoney, downloadCsv, fmtDateTime, inr, today } from '../../lib/format'
 import { pipelineTotals } from '../../lib/metrics'
 import { Button, Card, EmptyState, PageHeader, SearchBox, Table, Td, Th, usePaged } from '../../components/ui'
 import { BookingStatusBadge, DeadlineBadge, MoneyBar, PriorityBadge } from '../../components/booking'
@@ -39,7 +39,7 @@ export default function Bookings() {
     <div>
       <PageHeader title="CRM Entries" subtitle="Every client booking: approval chain, processing stage and money" icon={Briefcase}
         actions={<>
-          {can('reports.export', 'bookings.all', 'bookings.team', 'bookings.own') && <Button variant="outline" icon={Download} onClick={() => downloadCsv(`crm-entries-${today()}.csv`, list.map((b) => { const m = bookingMoney(b); return { booking_id: b.bookingId, company: b.companyName, contact: b.contactPerson, mobile: b.mobile, email: b.email, pan: b.pan, gstin: b.gstin, state: b.state, service: b.serviceName, mode: b.mode, status: BOOKING_STATUS[b.status].label, stage: STAGES[b.stage - 1], quoted: b.totalQuoted, quoted_with_gst: m.quotedWithGst, collected: m.collected, outstanding: m.outstanding, sales_person: b.createdBy ? userName(db, b.createdBy) : b.ownerName ?? '', team_leader: userName(db, b.teamLeadId), operations: userName(db, b.opsMemberId), admin: userName(db, b.adminId), created: b.createdAt.slice(0, 10) } }))}>Export</Button>}
+          {can('reports.export', 'bookings.all', 'bookings.team', 'bookings.own') && <Button variant="outline" icon={Download} onClick={() => downloadCsv(`crm-entries-${today()}.csv`, list.map((b) => { const m = bookingMoney(b); return { booking_id: b.bookingId, company: b.companyName, contact: b.contactPerson, mobile: b.mobile, email: b.email, pan: b.pan, gstin: b.gstin, state: b.state, service: b.serviceName, mode: b.mode, status: BOOKING_STATUS[b.status].label, stage: STAGES[b.stage - 1], quoted: b.totalQuoted, quoted_with_gst: m.quotedWithGst, collected: m.collected, outstanding: m.outstanding, sales_person: b.createdBy ? userName(db, b.createdBy) : b.ownerName ?? '', team_leader: userName(db, b.teamLeadId), operations: userName(db, b.opsMemberId), admin: userName(db, b.adminId), booking_date: b.bookingDate ?? b.createdAt.slice(0, 10), entered_at: fmtDateTime(b.createdAt), remarks: b.remarks ?? '' } }))}>Export</Button>}
           {can('bookings.create') && <Link to="/bookings/new"><Button variant="accent" icon={Plus}>New CRM entry</Button></Link>}
         </>} />
 
@@ -83,7 +83,7 @@ export default function Bookings() {
                   <Td className="text-xs">{b.opsMemberId ? <>{b.stage}. {STAGES[b.stage - 1]}</> : <span className="text-mute">—</span>}</Td>
                   <Td><MoneyBar b={b} /></Td>
                   <Td className="text-xs">{b.createdBy ? userName(db, b.createdBy) : b.ownerName ?? '—'}</Td>
-                  <Td className="text-xs text-mute">{fmtDate(b.createdAt)}</Td>
+                  <Td className="text-xs text-mute">{fmtDateTime(b.createdAt)}</Td>
                 </tr>
               ))}
             </tbody>
