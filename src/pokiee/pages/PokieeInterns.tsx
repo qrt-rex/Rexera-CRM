@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import { INITIAL_INTERNS, Intern } from '../data'
 
-export default function PokieeInterns() {
+export default function PookieeInterns() {
   const [interns, setInterns] = useState<Intern[]>(INITIAL_INTERNS)
   const [convertedId, setConvertedId] = useState<string | null>(null)
 
@@ -28,7 +28,7 @@ export default function PokieeInterns() {
       {/* Hero Banner matching spec:
           "Funny schoolboy and schoolgirl wearing small internship badges.
            Panda holding an 'Intern' folder." */}
-      <div className="pokiee-card p-6 sm:p-8 bg-gradient-to-r from-amber-50/60 via-white to-blue-50/50 dark:from-amber-950/20 dark:to-blue-950/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden">
+      <div className="Pookiee-card p-6 sm:p-8 bg-gradient-to-r from-amber-50/60 via-white to-blue-50/50 dark:from-amber-950/20 dark:to-blue-950/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden">
         <div className="space-y-1.5 max-w-xl">
           <div className="flex items-center gap-2">
             <span className="p-1.5 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-700 font-bold text-xs flex items-center gap-1">
@@ -72,28 +72,28 @@ export default function PokieeInterns() {
 
       {/* KPI Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="pokiee-card p-4">
+        <div className="Pookiee-card p-4">
           <p className="text-[11px] font-bold text-slate-400">Active Interns</p>
           <p className="text-2xl font-black text-slate-800 dark:text-white mt-1">18</p>
           <span className="text-[10px] font-extrabold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full mt-2 inline-block">
             4 Cohorts Active
           </span>
         </div>
-        <div className="pokiee-card p-4">
+        <div className="Pookiee-card p-4">
           <p className="text-[11px] font-bold text-slate-400">Mentors Assigned</p>
           <p className="text-2xl font-black text-slate-800 dark:text-white mt-1">12</p>
           <span className="text-[10px] font-extrabold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full mt-2 inline-block">
             100% Coverage
           </span>
         </div>
-        <div className="pokiee-card p-4">
+        <div className="Pookiee-card p-4">
           <p className="text-[11px] font-bold text-slate-400">Conversion Rate</p>
           <p className="text-2xl font-black text-slate-800 dark:text-white mt-1">84%</p>
           <span className="text-[10px] font-extrabold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full mt-2 inline-block">
             Top Quartile
           </span>
         </div>
-        <div className="pokiee-card p-4">
+        <div className="Pookiee-card p-4">
           <p className="text-[11px] font-bold text-slate-400">Avg Monthly Stipend</p>
           <p className="text-2xl font-black text-slate-800 dark:text-white mt-1">₹18,000</p>
           <span className="text-[10px] font-extrabold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full mt-2 inline-block">
@@ -104,7 +104,7 @@ export default function PokieeInterns() {
 
       {/* Conversion Section matching spec:
           "Blue robotic cat holding an arrow pointing from 'Intern' to 'Employee.'" */}
-      <div className="pokiee-card p-6 bg-gradient-to-r from-blue-50/80 via-white to-emerald-50/60 dark:from-blue-950/30 dark:to-emerald-950/30 border border-blue-200/70 dark:border-blue-900/50 flex flex-col md:flex-row items-center justify-between gap-6">
+      <div className="Pookiee-card p-6 bg-gradient-to-r from-blue-50/80 via-white to-emerald-50/60 dark:from-blue-950/30 dark:to-emerald-950/30 border border-blue-200/70 dark:border-blue-900/50 flex flex-col md:flex-row items-center justify-between gap-6">
         <div className="flex items-center gap-4">
           <div className="size-16 rounded-2xl bg-white dark:bg-slate-900 shadow-xs flex items-center justify-center shrink-0">
             <img
@@ -149,7 +149,7 @@ export default function PokieeInterns() {
         {interns.map((item) => (
           <div
             key={item.id}
-            className="pokiee-card p-5 flex flex-col justify-between hover:-translate-y-1 transition duration-200 group"
+            className="Pookiee-card p-5 flex flex-col justify-between hover:-translate-y-1 transition duration-200 group"
           >
             <div>
               <div className="flex items-center justify-between mb-3">

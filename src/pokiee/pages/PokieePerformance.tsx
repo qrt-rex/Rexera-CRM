@@ -13,11 +13,11 @@ import {
 } from 'lucide-react'
 import { CuteSparkle, CuteStar } from '../mascots'
 
-export default function PokieePerformance() {
+export default function PookieePerformance() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="pokiee-card p-6 sm:p-8 bg-gradient-to-r from-blue-50/60 via-white to-pink-50/40 dark:from-blue-950/20 dark:to-pink-950/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="Pookiee-card p-6 sm:p-8 bg-gradient-to-r from-blue-50/60 via-white to-pink-50/40 dark:from-blue-950/20 dark:to-pink-950/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="p-1.5 rounded-xl bg-purple-50 text-purple-600 dark:bg-purple-950 font-bold text-xs">
@@ -44,7 +44,7 @@ export default function PokieePerformance() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* 1. Individual Performance: Schoolgirl holding a performance scorecard */}
-        <div className="pokiee-card p-6 relative overflow-hidden flex flex-col justify-between">
+        <div className="Pookiee-card p-6 relative overflow-hidden flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-black text-sm text-slate-800 dark:text-white flex items-center gap-2">
@@ -101,7 +101,7 @@ export default function PokieePerformance() {
         </div>
 
         {/* 2. Company Performance: Blue robotic cat presenting a company dashboard */}
-        <div className="pokiee-card p-6 relative overflow-hidden flex flex-col justify-between">
+        <div className="Pookiee-card p-6 relative overflow-hidden flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-black text-sm text-slate-800 dark:text-white flex items-center gap-2">
@@ -149,7 +149,7 @@ export default function PokieePerformance() {
         </div>
 
         {/* 3. Goals: Funny schoolboy climbing a small staircase toward a star */}
-        <div className="pokiee-card p-6 relative overflow-hidden flex flex-col justify-between">
+        <div className="Pookiee-card p-6 relative overflow-hidden flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-black text-sm text-slate-800 dark:text-white flex items-center gap-2">
@@ -192,7 +192,7 @@ export default function PokieePerformance() {
         </div>
 
         {/* 4. Reports: Panda holding a report document */}
-        <div className="pokiee-card p-6 relative overflow-hidden flex flex-col justify-between">
+        <div className="Pookiee-card p-6 relative overflow-hidden flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-black text-sm text-slate-800 dark:text-white flex items-center gap-2">

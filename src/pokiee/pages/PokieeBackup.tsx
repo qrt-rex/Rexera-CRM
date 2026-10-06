@@ -10,7 +10,7 @@ import {
   HardDrive,
 } from 'lucide-react'
 
-export default function PokieeBackup() {
+export default function PookieeBackup() {
   const [backups, setBackups] = useState([
     { id: 'BKP-20261005-01', date: '05 Oct 2026, 04:00 AM', size: '42.8 MB', type: 'Automated Daily', status: 'Encrypted (AES-256)' },
     { id: 'BKP-20261004-01', date: '04 Oct 2026, 04:00 AM', size: '42.6 MB', type: 'Automated Daily', status: 'Encrypted (AES-256)' },
@@ -47,7 +47,7 @@ export default function PokieeBackup() {
   return (
     <div className="space-y-6">
       {/* Header: Secure and reliable visual style */}
-      <div className="pokiee-card p-6 sm:p-8 bg-gradient-to-r from-slate-50 via-white to-blue-50/50 dark:from-slate-900/40 dark:to-blue-950/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="Pookiee-card p-6 sm:p-8 bg-gradient-to-r from-slate-50 via-white to-blue-50/50 dark:from-slate-900/40 dark:to-blue-950/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="p-1.5 rounded-xl bg-blue-100 text-[#1d5cc8] dark:bg-blue-950 font-bold text-xs">
@@ -83,7 +83,7 @@ export default function PokieeBackup() {
       {/* Row 1: Backup (Blue cat into cloud) + Restore (Panda with arrow) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Backup Now: Blue cat placing HR data into cloud */}
-        <div className="pokiee-card p-6 relative overflow-hidden flex flex-col justify-between">
+        <div className="Pookiee-card p-6 relative overflow-hidden flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-black text-sm text-slate-800 dark:text-white flex items-center gap-2">
@@ -111,7 +111,7 @@ export default function PokieeBackup() {
         </div>
 
         {/* Security: Funny schoolboy beside shield */}
-        <div className="pokiee-card p-6 relative overflow-hidden flex flex-col justify-between">
+        <div className="Pookiee-card p-6 relative overflow-hidden flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-black text-sm text-slate-800 dark:text-white flex items-center gap-2">
@@ -140,7 +140,7 @@ export default function PokieeBackup() {
       </div>
 
       {/* Row 2: Snapshots Ledger + Restore (Panda with arrow) + Download (Schoolgirl) */}
-      <div className="pokiee-card p-6">
+      <div className="Pookiee-card p-6">
         <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 mb-4">
           <div className="flex items-center gap-3">
             <img src="/mascots/panda.png" alt="Panda Restore" className="size-10 object-contain" />
@@ -209,7 +209,7 @@ export default function PokieeBackup() {
       {/* Confirmation Warning Modal with neutral mascot illustration */}
       {confirmRestoreId && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="pokiee-card max-w-md w-full p-6 bg-white dark:bg-[#12192e] anim-pop space-y-4 text-center">
+          <div className="Pookiee-card max-w-md w-full p-6 bg-white dark:bg-[#12192e] anim-pop space-y-4 text-center">
             <div className="size-16 rounded-full bg-rose-50 dark:bg-rose-950 flex items-center justify-center mx-auto">
               <AlertTriangle className="size-8 text-rose-500" />
             </div>

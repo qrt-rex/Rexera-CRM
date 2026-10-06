@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import { INITIAL_EMPLOYEES, Employee } from '../data'
 
-export default function PokieePayslips() {
+export default function PookieePayslips() {
   const [employees] = useState<Employee[]>(INITIAL_EMPLOYEES)
   const [search, setSearch] = useState('')
   const [selectedEmp, setSelectedEmp] = useState<Employee | null>(null)
@@ -30,7 +30,7 @@ export default function PokieePayslips() {
   return (
     <div className="space-y-6">
       {/* Header with Panda holding payslip */}
-      <div className="pokiee-card p-6 sm:p-8 bg-gradient-to-r from-purple-50/60 via-white to-blue-50/50 dark:from-purple-950/20 dark:to-blue-950/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="Pookiee-card p-6 sm:p-8 bg-gradient-to-r from-purple-50/60 via-white to-blue-50/50 dark:from-purple-950/20 dark:to-blue-950/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <div className="size-16 rounded-2xl bg-purple-50 dark:bg-purple-950 flex items-center justify-center shrink-0">
             <img
@@ -96,7 +96,7 @@ export default function PokieePayslips() {
             return (
               <div
                 key={emp.id}
-                className="pokiee-card p-5 relative overflow-hidden flex flex-col justify-between hover:-translate-y-1 transition duration-200"
+                className="Pookiee-card p-5 relative overflow-hidden flex flex-col justify-between hover:-translate-y-1 transition duration-200"
               >
                 <div>
                   <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
@@ -173,7 +173,7 @@ export default function PokieePayslips() {
       {/* PDF Generator Modal (Blonde character beside printer) */}
       {selectedEmp && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="pokiee-card max-w-xl w-full p-6 sm:p-8 bg-white dark:bg-[#12192e] relative max-h-[90vh] overflow-y-auto anim-pop">
+          <div className="Pookiee-card max-w-xl w-full p-6 sm:p-8 bg-white dark:bg-[#12192e] relative max-h-[90vh] overflow-y-auto anim-pop">
             <button
               onClick={() => setSelectedEmp(null)}
               className="absolute top-5 right-5 text-slate-400 hover:text-slate-600"
@@ -193,7 +193,7 @@ export default function PokieePayslips() {
                   Salary Slip Preview
                 </h3>
                 <p className="text-xs text-slate-400">
-                  Pokiee Technologies Pvt Ltd • Month of October 2026
+                  Pookiee Technologies Pvt Ltd • Month of October 2026
                 </p>
               </div>
             </div>

@@ -11,7 +11,7 @@ import {
   TrendingUp,
 } from 'lucide-react'
 
-export default function PokieeAttendance() {
+export default function PookieeAttendance() {
   const [currentTime, setCurrentTime] = useState(new Date())
   const [isPunchedIn, setIsPunchedIn] = useState(true)
   const [punchTime, setPunchTime] = useState('09:12 AM')
@@ -37,7 +37,7 @@ export default function PokieeAttendance() {
   return (
     <div className="space-y-6">
       {/* Hero Banner: Blue robotic cat wearing small employee badge and clock */}
-      <div className="pokiee-card p-6 sm:p-8 bg-gradient-to-r from-blue-50/70 via-white to-emerald-50/60 dark:from-blue-950/20 dark:to-emerald-950/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden">
+      <div className="Pookiee-card p-6 sm:p-8 bg-gradient-to-r from-blue-50/70 via-white to-emerald-50/60 dark:from-blue-950/20 dark:to-emerald-950/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="p-1.5 rounded-xl bg-blue-100 dark:bg-blue-950 text-[#1d5cc8] font-bold text-xs">
@@ -68,7 +68,7 @@ export default function PokieeAttendance() {
       {/* Row 1: Punch In/Out card + Monthly Attendance Stats */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Punch In / Punch Out Card */}
-        <div className="pokiee-card p-6 flex flex-col justify-between relative overflow-hidden bg-gradient-to-b from-white to-blue-50/30 dark:from-[#131b30] dark:to-blue-950/20">
+        <div className="Pookiee-card p-6 flex flex-col justify-between relative overflow-hidden bg-gradient-to-b from-white to-blue-50/30 dark:from-[#131b30] dark:to-blue-950/20">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-black text-sm text-slate-800 dark:text-white">
@@ -122,7 +122,7 @@ export default function PokieeAttendance() {
         </div>
 
         {/* Attendance Calendar (with tiny panda in corner) */}
-        <div className="lg:col-span-2 pokiee-card p-6 relative overflow-hidden">
+        <div className="lg:col-span-2 Pookiee-card p-6 relative overflow-hidden">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
             <div className="flex items-center gap-2">
               <h3 className="font-black text-sm text-slate-800 dark:text-white">
@@ -203,7 +203,7 @@ export default function PokieeAttendance() {
       {/* Row 2: Late / Half-Day Section (Funny schoolboy running toward office with clock) + Monthly Report */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Late / Half-Day tracking */}
-        <div className="pokiee-card p-5 relative overflow-hidden flex flex-col justify-between">
+        <div className="Pookiee-card p-5 relative overflow-hidden flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-black text-sm text-slate-800 dark:text-white flex items-center gap-2">
@@ -251,7 +251,7 @@ export default function PokieeAttendance() {
         </div>
 
         {/* Monthly Report with Blonde character holding calendar */}
-        <div className="pokiee-card p-5 relative overflow-hidden flex flex-col justify-between">
+        <div className="Pookiee-card p-5 relative overflow-hidden flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-black text-sm text-slate-800 dark:text-white">

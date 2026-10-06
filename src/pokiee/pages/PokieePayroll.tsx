@@ -13,7 +13,7 @@ import {
   Building,
 } from 'lucide-react'
 
-export default function PokieePayroll() {
+export default function PookieePayroll() {
   const [stage, setStage] = useState<'Calculate' | 'Approve' | 'Finalise' | 'Paid'>('Finalise')
   const [bankExported, setBankExported] = useState(false)
   const [emailsSent, setEmailsSent] = useState(false)
@@ -21,7 +21,7 @@ export default function PokieePayroll() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="pokiee-card p-6 sm:p-8 bg-gradient-to-r from-emerald-50/70 via-white to-blue-50/50 dark:from-emerald-950/20 dark:to-blue-950/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="Pookiee-card p-6 sm:p-8 bg-gradient-to-r from-emerald-50/70 via-white to-blue-50/50 dark:from-emerald-950/20 dark:to-blue-950/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="p-1.5 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-700 font-bold text-xs">
@@ -54,7 +54,7 @@ export default function PokieePayroll() {
       </div>
 
       {/* Payroll Workflow: 4-Stage Stepper with Character Progression */}
-      <div className="pokiee-card p-6">
+      <div className="Pookiee-card p-6">
         <h3 className="font-black text-sm text-slate-800 dark:text-white mb-4">
           Payroll Stage Progression
         </h3>
@@ -176,7 +176,7 @@ export default function PokieePayroll() {
 
       {/* Row 2: Payroll Summary (Funny schoolboy with calculator) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 pokiee-card p-6 relative overflow-hidden flex flex-col justify-between">
+        <div className="lg:col-span-2 Pookiee-card p-6 relative overflow-hidden flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-black text-sm text-slate-800 dark:text-white flex items-center gap-2">
@@ -228,7 +228,7 @@ export default function PokieePayroll() {
         {/* Bank Export & Payslip Email Actions */}
         <div className="space-y-4">
           {/* Bank export: Blue cat with secure bank-transfer document */}
-          <div className="pokiee-card p-5 relative overflow-hidden flex flex-col justify-between">
+          <div className="Pookiee-card p-5 relative overflow-hidden flex flex-col justify-between">
             <div>
               <div className="flex items-center gap-2 mb-2 font-black text-xs text-slate-800 dark:text-white">
                 <Building className="size-4 text-[#1d5cc8]" />
@@ -246,7 +246,7 @@ export default function PokieePayroll() {
               </button>
               {bankExported && (
                 <span className="block text-[10.5px] font-bold text-emerald-600 mt-2 text-center">
-                  ✓ File generated: pokiee_batch_oct2026.csv
+                  ✓ File generated: Pookiee_batch_oct2026.csv
                 </span>
               )}
             </div>
@@ -257,7 +257,7 @@ export default function PokieePayroll() {
           </div>
 
           {/* Payslip email: Panda holding an envelope */}
-          <div className="pokiee-card p-5 relative overflow-hidden flex flex-col justify-between">
+          <div className="Pookiee-card p-5 relative overflow-hidden flex flex-col justify-between">
             <div>
               <div className="flex items-center gap-2 mb-2 font-black text-xs text-slate-800 dark:text-white">
                 <Mail className="size-4 text-purple-600" />

@@ -211,7 +211,7 @@ export function CuteStar({ className = 'text-amber-300', size = 14 }: { classNam
 }
 
 // Logo Mascot Head: Yellow bear/hamster with pink cheeks
-export function PokieeLogoMark({ size = 32 }: { size?: number }) {
+export function PookieeLogoMark({ size = 32 }: { size?: number }) {
   return (
     <div
       className="relative flex items-center justify-center rounded-2xl bg-amber-100 shadow-sm border border-amber-200"

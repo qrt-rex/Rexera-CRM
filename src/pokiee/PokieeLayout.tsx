@@ -26,9 +26,9 @@ import {
   X,
   ExternalLink,
 } from 'lucide-react'
-import { CuteHeart, CuteSparkle, PokieeLogoMark } from './mascots'
+import { CuteHeart, CuteSparkle, PookieeLogoMark } from './mascots'
 
-export const POKIEE_NAV_ITEMS = [
+export const Pookiee_NAV_ITEMS = [
   { path: '/hr', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/hr/employees', label: 'Employees', icon: Users },
   { path: '/hr/interns', label: 'Interns', icon: GraduationCap },
@@ -48,7 +48,7 @@ export const POKIEE_NAV_ITEMS = [
   { path: '/hr/backup', label: 'Backup & Restore', icon: DatabaseBackup },
 ]
 
-export function PokieeLayout() {
+export function PookieeLayout() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'))
@@ -70,7 +70,7 @@ export function PokieeLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f7f9fd] dark:bg-[#0c1222] font-pokiee text-slate-800 dark:text-slate-100 flex flex-col antialiased">
+    <div className="min-h-screen bg-[#f7f9fd] dark:bg-[#0c1222] font-Pookiee text-slate-800 dark:text-slate-100 flex flex-col antialiased">
       {/* Mobile Drawer Overlay */}
       {mobileOpen && (
         <div
@@ -89,9 +89,9 @@ export function PokieeLayout() {
           {/* Logo Area */}
           <div className="flex h-16 items-center justify-between px-5 border-b border-slate-100 dark:border-slate-800/60">
             <Link to="/hr" className="flex items-center gap-2.5 group">
-              <PokieeLogoMark size={36} />
+              <PookieeLogoMark size={36} />
               <div className="flex items-center gap-1 font-black text-2xl tracking-tight text-[#1e60d5]">
-                <span>Pokiee</span>
+                <span>Pookiee</span>
                 <CuteHeart className="text-[#ff4b72] anim-pulse-soft" size={16} />
               </div>
             </Link>
@@ -105,7 +105,7 @@ export function PokieeLayout() {
 
           {/* Navigation Items */}
           <nav className="flex-1 overflow-y-auto px-3.5 py-4 space-y-1 scrollbar-thin">
-            {POKIEE_NAV_ITEMS.map((item) => {
+            {Pookiee_NAV_ITEMS.map((item) => {
               const Icon = item.icon
               const isActive =
                 item.path === '/hr'

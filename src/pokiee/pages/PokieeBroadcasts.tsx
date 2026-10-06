@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import { INITIAL_ANNOUNCEMENTS, Announcement } from '../data'
 
-export default function PokieeBroadcasts() {
+export default function PookieeBroadcasts() {
   const [announcements, setAnnouncements] = useState<Announcement[]>(INITIAL_ANNOUNCEMENTS)
   const [newTitle, setNewTitle] = useState('')
   const [newContent, setNewContent] = useState('')
@@ -38,7 +38,7 @@ export default function PokieeBroadcasts() {
   return (
     <div className="space-y-6">
       {/* Header: Blue robotic cat holding a megaphone */}
-      <div className="pokiee-card p-6 sm:p-8 bg-gradient-to-r from-blue-50/70 via-white to-pink-50/50 dark:from-blue-950/20 dark:to-pink-950/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="Pookiee-card p-6 sm:p-8 bg-gradient-to-r from-blue-50/70 via-white to-pink-50/50 dark:from-blue-950/20 dark:to-pink-950/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <div className="size-16 rounded-2xl bg-blue-50 dark:bg-blue-950 flex items-center justify-center shrink-0">
             <img
@@ -60,7 +60,7 @@ export default function PokieeBroadcasts() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Create Broadcast Form (with Blonde holding envelope option) */}
-        <div className="pokiee-card p-6 flex flex-col justify-between">
+        <div className="Pookiee-card p-6 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 mb-4">
               <h3 className="font-black text-sm text-slate-800 dark:text-white flex items-center gap-2">
@@ -144,7 +144,7 @@ export default function PokieeBroadcasts() {
           {announcements.map((item) => (
             <div
               key={item.id}
-              className={`pokiee-card p-5 relative overflow-hidden transition ${
+              className={`Pookiee-card p-5 relative overflow-hidden transition ${
                 item.priority === 'High'
                   ? 'border-l-4 border-l-rose-500 bg-rose-50/20 dark:bg-rose-950/10'
                   : 'border-l-4 border-l-blue-400'

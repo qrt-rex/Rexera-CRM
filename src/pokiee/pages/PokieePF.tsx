@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import { INITIAL_EMPLOYEES } from '../data'
 
-export default function PokieePF() {
+export default function PookieePF() {
   const [employees] = useState(INITIAL_EMPLOYEES)
   const [search, setSearch] = useState('')
 
@@ -23,7 +23,7 @@ export default function PokieePF() {
   return (
     <div className="space-y-6">
       {/* Header / Dashboard: Blue robotic cat holding a shield and financial document */}
-      <div className="pokiee-card p-6 sm:p-8 bg-gradient-to-r from-emerald-50/70 via-white to-blue-50/50 dark:from-emerald-950/20 dark:to-blue-950/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="Pookiee-card p-6 sm:p-8 bg-gradient-to-r from-emerald-50/70 via-white to-blue-50/50 dark:from-emerald-950/20 dark:to-blue-950/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="p-1.5 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-700 font-bold text-xs">
@@ -54,7 +54,7 @@ export default function PokieePF() {
       {/* Grid: 4 Core Sections */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {/* 1. PF Rules: Panda holding a rulebook */}
-        <div className="pokiee-card p-5 relative overflow-hidden flex flex-col justify-between">
+        <div className="Pookiee-card p-5 relative overflow-hidden flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-black text-sm text-slate-800 dark:text-white flex items-center gap-2">
@@ -93,7 +93,7 @@ export default function PokieePF() {
         </div>
 
         {/* 2. PF Payroll: Funny schoolboy using a calculator */}
-        <div className="pokiee-card p-5 relative overflow-hidden flex flex-col justify-between">
+        <div className="Pookiee-card p-5 relative overflow-hidden flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-black text-sm text-slate-800 dark:text-white flex items-center gap-2">
@@ -127,7 +127,7 @@ export default function PokieePF() {
         </div>
 
         {/* 3. Reports & Audit: Blonde character & Blue cat */}
-        <div className="pokiee-card p-5 relative overflow-hidden flex flex-col justify-between">
+        <div className="Pookiee-card p-5 relative overflow-hidden flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-black text-sm text-slate-800 dark:text-white flex items-center gap-2">
@@ -158,7 +158,7 @@ export default function PokieePF() {
       </div>
 
       {/* Employee PF Directory: Schoolgirl holding employee PF card */}
-      <div className="pokiee-card p-6">
+      <div className="Pookiee-card p-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-3">
             <img src="/mascots/schoolgirl.png" alt="Schoolgirl PF Card" className="size-10 object-contain" />

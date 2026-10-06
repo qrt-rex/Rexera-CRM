@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 import { INITIAL_EMPLOYEES } from '../data'
 
-export default function PokieeEmployeeForm() {
+export default function PookieeEmployeeForm() {
   const { id } = useParams()
   const nav = useNavigate()
   const isEdit = Boolean(id)
@@ -56,7 +56,7 @@ export default function PokieeEmployeeForm() {
         </Link>
       </div>
 
-      <div className="pokiee-card p-6 sm:p-8 bg-gradient-to-r from-pink-50/50 via-white to-blue-50/40 dark:from-pink-950/20 dark:to-blue-950/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="Pookiee-card p-6 sm:p-8 bg-gradient-to-r from-pink-50/50 via-white to-blue-50/40 dark:from-pink-950/20 dark:to-blue-950/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">
             {isEdit ? 'Edit Employee Record' : 'Onboard New Employee'}
@@ -84,7 +84,7 @@ export default function PokieeEmployeeForm() {
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Section 1: Personal Details with Schoolgirl mascot header */}
-        <div className="pokiee-card p-6">
+        <div className="Pookiee-card p-6">
           <div className="flex items-center gap-3 pb-4 border-b border-slate-100 dark:border-slate-800 mb-5">
             <div className="size-8 rounded-lg bg-pink-100 dark:bg-pink-950 flex items-center justify-center">
               <img
@@ -117,7 +117,7 @@ export default function PokieeEmployeeForm() {
                 required
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
-                placeholder="riya@pokiee.com"
+                placeholder="riya@Pookiee.com"
                 className="w-full h-10 px-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-xs focus:outline-none focus:border-[#1d5cc8]"
               />
             </div>
@@ -168,7 +168,7 @@ export default function PokieeEmployeeForm() {
         </div>
 
         {/* Section 2: Employment Details with Schoolboy mascot header */}
-        <div className="pokiee-card p-6">
+        <div className="Pookiee-card p-6">
           <div className="flex items-center gap-3 pb-4 border-b border-slate-100 dark:border-slate-800 mb-5">
             <div className="size-8 rounded-lg bg-amber-100 dark:bg-amber-950 flex items-center justify-center">
               <img
@@ -221,7 +221,7 @@ export default function PokieeEmployeeForm() {
         </div>
 
         {/* Section 3: Bank Details with Blue Cat security lock */}
-        <div className="pokiee-card p-6">
+        <div className="Pookiee-card p-6">
           <div className="flex items-center gap-3 pb-4 border-b border-slate-100 dark:border-slate-800 mb-5">
             <div className="size-8 rounded-lg bg-blue-100 dark:bg-blue-950 flex items-center justify-center">
               <img
@@ -289,7 +289,7 @@ export default function PokieeEmployeeForm() {
         </div>
 
         {/* Section 4: Documents with Panda mascot */}
-        <div className="pokiee-card p-6">
+        <div className="Pookiee-card p-6">
           <div className="flex items-center gap-3 pb-4 border-b border-slate-100 dark:border-slate-800 mb-5">
             <div className="size-8 rounded-lg bg-purple-100 dark:bg-purple-950 flex items-center justify-center">
               <img

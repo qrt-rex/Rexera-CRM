@@ -24,7 +24,7 @@ import {
 import { CuteSparkle, CuteStar } from '../mascots'
 import { INITIAL_LEAVES, INITIAL_ANNOUNCEMENTS } from '../data'
 
-export default function PokieeDashboard() {
+export default function PookieeDashboard() {
   const [leaves, setLeaves] = useState(INITIAL_LEAVES)
   const [approvedCount, setApprovedCount] = useState(0)
 
@@ -38,7 +38,7 @@ export default function PokieeDashboard() {
   return (
     <div className="space-y-6 pb-8">
       {/* 1. Hero Banner */}
-      <div className="relative overflow-hidden rounded-3xl pokiee-hero-gradient border border-blue-100/70 dark:border-blue-900/40 p-6 sm:p-8 shadow-xs">
+      <div className="relative overflow-hidden rounded-3xl Pookiee-hero-gradient border border-blue-100/70 dark:border-blue-900/40 p-6 sm:p-8 shadow-xs">
         {/* Decorative Floating Clouds and Sparkles */}
         <div className="absolute top-3 left-12 text-white/70">
           <svg width="40" height="24" viewBox="0 0 24 24" fill="currentColor">
@@ -64,7 +64,7 @@ export default function PokieeDashboard() {
           <div className="flex-1 flex justify-center md:justify-end items-end relative min-h-[110px] sm:min-h-[130px]">
             <img
               src="/mascots/hero-team-strip.png"
-              alt="Pokiee Mascot Team"
+              alt="Pookiee Mascot Team"
               className="h-28 sm:h-36 md:h-40 w-auto object-contain filter drop-shadow-md select-none transition-transform hover:scale-[1.02] duration-300"
             />
           </div>
@@ -87,7 +87,7 @@ export default function PokieeDashboard() {
         {/* Card 1: Total Employees */}
         <Link
           to="/hr/employees"
-          className="pokiee-card p-4 relative overflow-hidden flex flex-col justify-between hover:-translate-y-1 transition duration-200 group"
+          className="Pookiee-card p-4 relative overflow-hidden flex flex-col justify-between hover:-translate-y-1 transition duration-200 group"
         >
           <div className="flex items-center justify-between mb-2">
             <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-[#1d5cc8]">
@@ -114,7 +114,7 @@ export default function PokieeDashboard() {
         {/* Card 2: Interns */}
         <Link
           to="/hr/interns"
-          className="pokiee-card p-4 relative overflow-hidden flex flex-col justify-between hover:-translate-y-1 transition duration-200 group"
+          className="Pookiee-card p-4 relative overflow-hidden flex flex-col justify-between hover:-translate-y-1 transition duration-200 group"
         >
           <div className="flex items-center justify-between mb-2">
             <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600">
@@ -140,7 +140,7 @@ export default function PokieeDashboard() {
         {/* Card 3: On Leave Today */}
         <Link
           to="/hr/leave"
-          className="pokiee-card p-4 relative overflow-hidden flex flex-col justify-between hover:-translate-y-1 transition duration-200 group"
+          className="Pookiee-card p-4 relative overflow-hidden flex flex-col justify-between hover:-translate-y-1 transition duration-200 group"
         >
           <div className="flex items-center justify-between mb-2">
             <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600">
@@ -166,7 +166,7 @@ export default function PokieeDashboard() {
         {/* Card 4: Present Today */}
         <Link
           to="/hr/attendance"
-          className="pokiee-card p-4 relative overflow-hidden flex flex-col justify-between hover:-translate-y-1 transition duration-200 group"
+          className="Pookiee-card p-4 relative overflow-hidden flex flex-col justify-between hover:-translate-y-1 transition duration-200 group"
         >
           <div className="flex items-center justify-between mb-2">
             <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-[#1d5cc8]">
@@ -192,7 +192,7 @@ export default function PokieeDashboard() {
         {/* Card 5: Pending Approvals */}
         <Link
           to="/hr/leave"
-          className="pokiee-card p-4 relative overflow-hidden flex flex-col justify-between hover:-translate-y-1 transition duration-200 group"
+          className="Pookiee-card p-4 relative overflow-hidden flex flex-col justify-between hover:-translate-y-1 transition duration-200 group"
         >
           <div className="flex items-center justify-between mb-2">
             <div className="p-2 rounded-xl bg-pink-50 dark:bg-pink-950/50 text-[#ff4b72]">
@@ -211,7 +211,7 @@ export default function PokieeDashboard() {
         {/* Card 6: Recruitment Pipeline */}
         <Link
           to="/hr/recruitment"
-          className="pokiee-card p-4 relative overflow-hidden flex flex-col justify-between hover:-translate-y-1 transition duration-200 group"
+          className="Pookiee-card p-4 relative overflow-hidden flex flex-col justify-between hover:-translate-y-1 transition duration-200 group"
         >
           <div className="flex items-center justify-between mb-2">
             <div className="p-2 rounded-xl bg-purple-50 dark:bg-purple-950/50 text-purple-600">
@@ -235,7 +235,7 @@ export default function PokieeDashboard() {
       {/* 3. Row 2: Attendance Overview + Leave Requests + Recruitment Pipeline */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Card 1: Attendance Overview */}
-        <div className="pokiee-card p-5 relative overflow-hidden flex flex-col">
+        <div className="Pookiee-card p-5 relative overflow-hidden flex flex-col">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
             <div className="flex items-center gap-2 font-black text-sm text-slate-800 dark:text-slate-100">
               <div className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950 text-[#1d5cc8]">
@@ -339,7 +339,7 @@ export default function PokieeDashboard() {
         </div>
 
         {/* Card 2: Leave Requests */}
-        <div className="pokiee-card p-5 relative overflow-hidden flex flex-col">
+        <div className="Pookiee-card p-5 relative overflow-hidden flex flex-col">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
             <div className="flex items-center gap-2 font-black text-sm text-slate-800 dark:text-slate-100">
               <div className="p-1.5 rounded-lg bg-pink-50 dark:bg-pink-950 text-[#ff4b72]">
@@ -414,7 +414,7 @@ export default function PokieeDashboard() {
         </div>
 
         {/* Card 3: Recruitment Pipeline Bar Chart */}
-        <div className="pokiee-card p-5 relative overflow-hidden flex flex-col">
+        <div className="Pookiee-card p-5 relative overflow-hidden flex flex-col">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
             <div className="flex items-center gap-2 font-black text-sm text-slate-800 dark:text-slate-100">
               <div className="p-1.5 rounded-lg bg-purple-50 dark:bg-purple-950 text-purple-600">
@@ -473,7 +473,7 @@ export default function PokieeDashboard() {
       {/* 4. Row 3: Payroll Status + Upcoming Birthdays + Announcements */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Column 1: Payroll Status */}
-        <div className="pokiee-card p-5 relative overflow-hidden flex flex-col justify-between">
+        <div className="Pookiee-card p-5 relative overflow-hidden flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-2 font-black text-sm text-slate-800 dark:text-slate-100">
@@ -555,7 +555,7 @@ export default function PokieeDashboard() {
         </div>
 
         {/* Column 2: Upcoming Birthdays */}
-        <div className="pokiee-card p-5 relative overflow-hidden flex flex-col justify-between">
+        <div className="Pookiee-card p-5 relative overflow-hidden flex flex-col justify-between">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
             <div className="flex items-center gap-2 font-black text-sm text-slate-800 dark:text-slate-100">
               <div className="p-1.5 rounded-lg bg-pink-50 dark:bg-pink-950 text-[#ff4b72]">
@@ -604,7 +604,7 @@ export default function PokieeDashboard() {
         </div>
 
         {/* Column 3: Announcements */}
-        <div className="pokiee-card p-5 relative overflow-hidden flex flex-col justify-between">
+        <div className="Pookiee-card p-5 relative overflow-hidden flex flex-col justify-between">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
             <div className="flex items-center gap-2 font-black text-sm text-slate-800 dark:text-slate-100">
               <div className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-600">
@@ -660,7 +660,7 @@ export default function PokieeDashboard() {
       </div>
 
       {/* 5. Bottom Quick Access */}
-      <div className="pokiee-card p-5 relative overflow-hidden">
+      <div className="Pookiee-card p-5 relative overflow-hidden">
         <div className="flex items-center gap-2 mb-4 font-black text-sm text-slate-800 dark:text-slate-100">
           <Zap className="size-4 text-amber-500 fill-amber-500" />
           <span>Quick Access</span>

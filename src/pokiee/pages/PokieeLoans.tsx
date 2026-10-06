@@ -10,7 +10,7 @@ import {
   Clock,
 } from 'lucide-react'
 
-export default function PokieeLoans() {
+export default function PookieeLoans() {
   const [loans, setLoans] = useState([
     { id: 'LN-201', employee: 'Rahul Verma', amount: 50000, type: 'Medical Emergency Loan', emi: 5000, tenure: '10 Months', status: 'Active', paidEmi: 4 },
     { id: 'LN-202', employee: 'Meera Jain', amount: 30000, type: 'Salary Advance', emi: 10000, tenure: '3 Months', status: 'Approved', paidEmi: 1 },
@@ -20,7 +20,7 @@ export default function PokieeLoans() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="pokiee-card p-6 sm:p-8 bg-gradient-to-r from-blue-50/60 via-white to-emerald-50/50 dark:from-blue-950/20 dark:to-emerald-950/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="Pookiee-card p-6 sm:p-8 bg-gradient-to-r from-blue-50/60 via-white to-emerald-50/50 dark:from-blue-950/20 dark:to-emerald-950/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="p-1.5 rounded-xl bg-blue-100 text-[#1d5cc8] dark:bg-blue-950 font-bold text-xs">
@@ -47,7 +47,7 @@ export default function PokieeLoans() {
       {/* Row 1: Advance request (Schoolgirl) + Loan agreement (Panda) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Advance Request: Schoolgirl submitting document */}
-        <div className="pokiee-card p-5 relative overflow-hidden flex flex-col justify-between">
+        <div className="Pookiee-card p-5 relative overflow-hidden flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-black text-sm text-slate-800 dark:text-white">
@@ -106,7 +106,7 @@ export default function PokieeLoans() {
         </div>
 
         {/* Loan Policy & Agreement: Panda holding small agreement */}
-        <div className="pokiee-card p-5 relative overflow-hidden flex flex-col justify-between">
+        <div className="Pookiee-card p-5 relative overflow-hidden flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-black text-sm text-slate-800 dark:text-white">
@@ -144,7 +144,7 @@ export default function PokieeLoans() {
       </div>
 
       {/* Row 2: Active Advances Ledger + Approval (Bluecat) & Repayment (Schoolboy) */}
-      <div className="pokiee-card p-6">
+      <div className="Pookiee-card p-6">
         <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 mb-4">
           <div className="flex items-center gap-3">
             <img src="/mascots/bluecat.png" alt="Bluecat Approval" className="size-10 object-contain" />

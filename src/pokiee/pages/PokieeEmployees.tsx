@@ -17,7 +17,7 @@ import {
 } from 'lucide-react'
 import { INITIAL_EMPLOYEES, Employee } from '../data'
 
-export default function PokieeEmployees() {
+export default function PookieeEmployees() {
   const [employees, setEmployees] = useState<Employee[]>(INITIAL_EMPLOYEES)
   const [search, setSearch] = useState('')
   const [deptFilter, setDeptFilter] = useState('All')
@@ -81,7 +81,7 @@ export default function PokieeEmployees() {
         {/* Main Directory Table (3 cols on large screen) */}
         <div className="lg:col-span-3 space-y-4">
           {/* Filter Bar */}
-          <div className="pokiee-card p-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="Pookiee-card p-4 flex flex-wrap items-center justify-between gap-3">
             <div className="relative flex-1 min-w-[220px]">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-slate-400" />
               <input
@@ -122,7 +122,7 @@ export default function PokieeEmployees() {
           </div>
 
           {/* Employee Table */}
-          <div className="pokiee-card overflow-hidden">
+          <div className="Pookiee-card overflow-hidden">
             {filtered.length === 0 ? (
               /* Empty State matching spec: Blue cat looking through magnifying glass */
               <div className="py-16 flex flex-col items-center justify-center text-center p-6">
@@ -254,7 +254,7 @@ export default function PokieeEmployees() {
             "Schoolgirl and funny schoolboy holding employee ID cards.
              Panda holding a small employee directory folder." */}
         <div className="space-y-4">
-          <div className="pokiee-card p-5 bg-gradient-to-br from-white to-blue-50/40 dark:from-[#151d33] dark:to-blue-950/20 relative overflow-hidden">
+          <div className="Pookiee-card p-5 bg-gradient-to-br from-white to-blue-50/40 dark:from-[#151d33] dark:to-blue-950/20 relative overflow-hidden">
             <h3 className="font-black text-sm text-slate-800 dark:text-white mb-2">
               Directory Stats
             </h3>
@@ -295,7 +295,7 @@ export default function PokieeEmployees() {
           </div>
 
           {/* Quick Departments pill list */}
-          <div className="pokiee-card p-5">
+          <div className="Pookiee-card p-5">
             <h4 className="font-black text-xs uppercase tracking-wider text-slate-400 mb-3">
               By Department
             </h4>

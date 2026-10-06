@@ -8,7 +8,7 @@ import {
   Database,
 } from 'lucide-react'
 
-export default function PokieeImport() {
+export default function PookieeImport() {
   const [step, setStep] = useState<'upload' | 'mapping' | 'success'>('mapping')
   const [uploadedFile, setUploadedFile] = useState<string | null>('staff_roster_october.xlsx')
 
@@ -21,7 +21,7 @@ export default function PokieeImport() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="pokiee-card p-6 sm:p-8 bg-gradient-to-r from-teal-50/70 via-white to-blue-50/50 dark:from-teal-950/20 dark:to-blue-950/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="Pookiee-card p-6 sm:p-8 bg-gradient-to-r from-teal-50/70 via-white to-blue-50/50 dark:from-teal-950/20 dark:to-blue-950/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="p-1.5 rounded-xl bg-teal-100 text-teal-700 dark:bg-teal-950 font-bold text-xs">
@@ -39,7 +39,7 @@ export default function PokieeImport() {
       </div>
 
       {/* Row 1: Upload Area (Blue robotic cat dragging spreadsheet) */}
-      <div className="pokiee-card p-6 relative overflow-hidden">
+      <div className="Pookiee-card p-6 relative overflow-hidden">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 mb-4">
           <h3 className="font-black text-sm text-slate-800 dark:text-white flex items-center gap-2">
             <FileSpreadsheet className="size-4 text-emerald-600" />
@@ -70,7 +70,7 @@ export default function PokieeImport() {
       {/* Row 2: Column Mapping (Schoolgirl connecting columns) & Validation Errors (Schoolboy looking at warning) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Column Mapping: Schoolgirl connecting columns with arrows */}
-        <div className="pokiee-card p-6 relative overflow-hidden flex flex-col justify-between">
+        <div className="Pookiee-card p-6 relative overflow-hidden flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-black text-sm text-slate-800 dark:text-white">
@@ -115,7 +115,7 @@ export default function PokieeImport() {
         </div>
 
         {/* Validation Errors: Funny schoolboy looking at warning icon */}
-        <div className="pokiee-card p-6 relative overflow-hidden flex flex-col justify-between">
+        <div className="Pookiee-card p-6 relative overflow-hidden flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-black text-sm text-slate-800 dark:text-white flex items-center gap-2">
@@ -159,7 +159,7 @@ export default function PokieeImport() {
       </div>
 
       {/* Row 3: Spreadsheet Preview (Panda sitting beside spreadsheet) */}
-      <div className="pokiee-card p-6 relative overflow-hidden">
+      <div className="Pookiee-card p-6 relative overflow-hidden">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 mb-4">
           <div className="flex items-center gap-3">
             <img src="/mascots/panda.png" alt="Panda Spreadsheet" className="size-10 object-contain" />
