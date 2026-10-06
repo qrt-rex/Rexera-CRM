@@ -169,7 +169,20 @@ function SettingsTab() {
           <Input label="Company GSTIN" value={s.companyGstin} onChange={(e) => setS({ ...s, companyGstin: e.target.value.toUpperCase() })} />
           <Select label="Supplier state (for CGST/SGST vs IGST)" value={s.supplierState} onChange={(e) => setS({ ...s, supplierState: e.target.value })}>{INDIAN_STATES.map((x) => <option key={x}>{x}</option>)}</Select>
           <Input label="Inactivity sign-out (minutes)" type="number" min={5} max={480} value={s.sessionMinutes} onChange={(e) => setS({ ...s, sessionMinutes: Number(e.target.value) })} hint="A warning shows 1 minute before." />
-          <Button icon={Save} className="w-fit" onClick={() => run(() => updateSettings(me, { ...s, sessionMinutes: Math.max(5, s.sessionMinutes || 60) }), 'Settings saved')}>Save settings</Button>
+          <Button icon={Save} className="w-fit" onClick={() => run(() => updateSettings(me, { companyName: s.companyName, companyGstin: s.companyGstin, supplierState: s.supplierState, sessionMinutes: Math.max(5, s.sessionMinutes || 60) }), 'Settings saved')}>Save settings</Button>
+        </div>
+      </Card>
+      <Card className="overflow-hidden">
+        <CardHeader title="Attendance rules" icon={Lock} />
+        <div className="space-y-3 p-5 text-sm">
+          <label className="flex items-center justify-between gap-3 font-semibold">
+            Block sign-in after Logout until the next day
+            <Toggle checked={db.settings.dayLock === true} label="Block sign-in after Logout" onChange={(v) => run(() => updateSettings(me, { dayLock: v }), v ? 'Lock on — after Logout, people sign in again tomorrow' : 'Lock off — people can sign in again after Logout')} />
+          </label>
+          <p className="text-mute">{db.settings.dayLock === true
+            ? 'On: after Logout a person cannot sign in again until tomorrow (IT and Super Admin always can; HR can re-open a day).'
+            : 'Off (testing): people can sign in again after Logout, and their day re-opens. Turn this on before going live.'}</p>
+          <p className="text-xs text-mute">The 40-minute daily break limit always applies.</p>
         </div>
       </Card>
       <Card className="overflow-hidden">

@@ -261,6 +261,8 @@ export interface Settings {
   maintenance?: { on: boolean; message: string; by: string; at: string }
   /** sessions started before this moment are signed out ("sign out everyone") */
   sessionsValidAfter?: string
+  /** after Logout, no sign-in until the next day (IT / Super Admin always can). Off = testing: people can sign in again. */
+  dayLock?: boolean
 }
 
 export type ApiScope = 'leads:read' | 'leads:write' | 'bookings:read' | 'billing:read' | 'reports:read' | 'webhooks:send'

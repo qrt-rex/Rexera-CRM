@@ -67,7 +67,7 @@ export async function loginStep1(login: string, password: string) {
     throw new ActionError('Wrong username or password.')
   }
   assert(u.active, 'This account is deactivated. Contact your administrator.')
-  const ended = d.sessions.find((x) => x.userId === u.id && x.date === today())?.logoutAt
+  const ended = dayLockOn(d) ? d.sessions.find((x) => x.userId === u.id && x.date === today())?.logoutAt : undefined
   assert(!ended || isMaster(u), `You logged out for today at ${ended ? new Date(ended).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }) : ''}. You can sign in again tomorrow — or ask HR to re-open your day.`)
   const mt = d.settings.maintenance
   assert(!mt?.on || isMaster(u), `Rexera CRM is under maintenance${mt?.message ? `: ${mt.message}` : '.'} Please try again later.`)
@@ -98,9 +98,10 @@ export function verifyCode(token: string, code: string): string {
   pending.delete(token)
   mutate((d) => {
     const u = d.users.find((x) => x.id === p.userId)!
-    if (!d.sessions.some((s) => s.userId === u.id && s.date === today())) {
-      d.sessions.push({ id: uid('ds-'), userId: u.id, date: today(), loginAt: nowIso() })
-    }
+    const s = d.sessions.find((x) => x.userId === u.id && x.date === today())
+    if (!s) d.sessions.push({ id: uid('ds-'), userId: u.id, date: today(), loginAt: nowIso() })
+    // lock off (testing): signing in again after Logout re-opens the day
+    else if (s.logoutAt && !dayLockOn(d)) { s.logoutAt = undefined; s.reopenedBy = u.id }
     audit(d, u.id, 'SIGN_IN', `${u.name} signed in`)
   })
   return p.userId
@@ -135,14 +136,16 @@ export function workedMs(s: DaySession | undefined, now = Date.now()) {
   const end = s.logoutAt ? new Date(s.logoutAt).getTime() : now
   return Math.max(0, end - new Date(s.loginAt).getTime() - breakUsedMs(s, end))
 }
+/** Is the 'no sign-in after Logout until tomorrow' rule on? (Access → Settings; off while testing.) */
+export const dayLockOn = (d: DB) => d.settings.dayLock === true
 /** Ended the day (and not re-opened by HR/IT): no new sign-in until tomorrow. */
 export const dayEnded = (d: DB, userId: string) => !!d.sessions.find((x) => x.userId === userId && x.date === today())?.logoutAt
 
 export function startDay(me: User) {
   mutate((d) => {
     const s = d.sessions.find((x) => x.userId === me.id && x.date === today())
-    assert(!s?.logoutAt, 'You have logged out for today. You can start again tomorrow.')
-    if (s) return
+    assert(!s?.logoutAt || !dayLockOn(d), 'You have logged out for today. You can start again tomorrow.')
+    if (s) { if (s.logoutAt) { s.logoutAt = undefined; s.reopenedBy = me.id } return }
     d.sessions.push({ id: uid('ds-'), userId: me.id, date: today(), loginAt: nowIso() })
   })
 }

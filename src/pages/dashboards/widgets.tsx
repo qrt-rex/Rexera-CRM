@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { ArrowRight, CalendarDays, ChevronRight, Clock, Eye, LogIn, LogOut, Pause, Play, Square, type LucideIcon } from 'lucide-react'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
-import { BREAK_MINUTES, breakLeftMs, breakUsedMs, endDay, onBreak, pauseDay, resumeDay, startDay, userName, workedMs } from '../../lib/actions'
+import { BREAK_MINUTES, breakLeftMs, breakUsedMs, dayLockOn, endDay, onBreak, pauseDay, resumeDay, startDay, userName, workedMs } from '../../lib/actions'
 import { todaySession } from '../../lib/metrics'
 import { ago, fmtDate, fmtTime, today } from '../../lib/format'
 import { roleLabel } from '../../lib/rbac'
@@ -89,7 +89,8 @@ export function LoginLogoutCard({ className }: { className?: string }) {
   const used = breakUsedMs(s, now)
   const hours = workedMs(s, now) / 3600000
   const logout = async () => {
-    if (!(await confirm('Logout for today?', `You won't be able to sign in again until tomorrow. Worked ${hours.toFixed(1)} h today${used ? `, break ${mmss(used)}` : ''}.`, true))) return
+    const lock = dayLockOn(db)
+    if (!(await confirm('Logout for today?', `${lock ? "You won't be able to sign in again until tomorrow. " : ''}Worked ${hours.toFixed(1)} h today${used ? `, break ${mmss(used)}` : ''}.`, true))) return
     if (await run(() => endDay(me), 'Logged out for today. See you tomorrow!')) signOut()
   }
   return (
@@ -121,7 +122,9 @@ export function LoginLogoutCard({ className }: { className?: string }) {
       )}
       <div className="mt-3 grid grid-cols-2 gap-2">
         {!s ? <Button size="sm" variant="success" icon={Play} className="col-span-2" onClick={() => run(() => startDay(me), 'Day started')}>Start my day</Button>
-          : s.logoutAt ? <p className="col-span-2 rounded-xl bg-card2 px-3 py-2 text-center text-xs text-mute">You logged out for today. You can sign in again tomorrow.</p>
+          : s.logoutAt ? (dayLockOn(db)
+            ? <p className="col-span-2 rounded-xl bg-card2 px-3 py-2 text-center text-xs text-mute">You logged out for today. You can sign in again tomorrow.</p>
+            : <Button size="sm" variant="success" icon={Play} className="col-span-2" title="The after-logout lock is off (testing)" onClick={() => run(() => startDay(me), 'Day started again')}>Start again</Button>)
           : <>
             {paused
               ? <Button size="sm" variant="success" icon={Play} onClick={() => run(() => resumeDay(me), 'Welcome back — day resumed')}>Resume</Button>
