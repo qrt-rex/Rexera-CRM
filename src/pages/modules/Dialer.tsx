@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Briefcase, CircleCheck, CircleDashed, Flame, History, Pause, Phone, PhoneCall, PhoneOff, Play, Radio, RefreshCcw, Settings2, SkipForward, Square, Timer, UserPlus } from 'lucide-react'
+import { Ban, Briefcase, CircleCheck, CircleDashed, Flame, History, Pause, Phone, PhoneCall, PhoneOff, Play, Radio, RefreshCcw, Settings2, SkipForward, Square, Timer, UserPlus } from 'lucide-react'
 import type { CallOutcome, Lead } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
-import { createLead, logCall, visibleLeads } from '../../lib/actions'
+import { createLead, logCall, setLeadStatus, visibleLeads } from '../../lib/actions'
 import { CALL_OUTCOMES, LEAD_STATUS, OPEN_LEAD } from '../../lib/workflow'
 import { addDays, fmtDate, fmtDateTime, fmtTime, inr, normPhone, today, ymd } from '../../lib/format'
-import { blutec, FINAL_STATUSES, isHot, type AgentConnect, type BlutecStatus, type CallStatus, type Ivr, type IvrStats } from '../../lib/dialer'
+import { blutec, DialerError, FINAL_STATUSES, isHot, type AgentConnect, type BlutecStatus, type CallStatus, type Ivr, type IvrStats } from '../../lib/dialer'
 import { rolesOf } from '../../lib/rbac'
 import { Badge, Button, Card, CardHeader, cx, EmptyState, Input, Modal, PageHeader, Table, Tabs, Td, Textarea, Th, useConfirm, useRun, useToast } from '../../components/ui'
 import { salesNumbers } from '../../lib/metrics'
@@ -88,12 +88,12 @@ function ConnectionPill({ bt, ivr }: { bt: ReturnType<typeof useBlutec>; ivr: bo
       </button>
       <Modal open={open} onClose={() => setOpen(false)} title="Blutec dialer connection" size="lg" footer={<><Button variant="outline" icon={RefreshCcw} onClick={bt.check}>Check again</Button><Button onClick={() => setOpen(false)}>Close</Button></>}>
         <div className="space-y-3 text-sm">
-          <p>Click-to-call: <b className={bt.status?.dialer ? 'text-ok' : 'text-warn'}>{bt.status?.dialer ? 'connected' : 'not set up'}</b> · IVR: <b className={bt.status?.ivr ? 'text-ok' : 'text-warn'}>{bt.status?.ivr ? 'connected' : 'not set up'}</b>{bt.error ? ` · ${bt.error}` : ''}</p>
+          <p>Click-to-call: <b className={bt.status?.dialer ? 'text-ok' : 'text-warn'}>{bt.status?.dialer ? 'connected' : 'not set up'}</b> · DND check: <b className={bt.status?.dnc ? 'text-ok' : 'text-warn'}>{bt.status?.dnc ? 'on' : 'not set up'}</b> · IVR: <b className={bt.status?.ivr ? 'text-ok' : 'text-warn'}>{bt.status?.ivr ? 'connected' : 'not set up'}</b>{bt.error ? ` · ${bt.error}` : ''}</p>
           <p className="text-mute">Calls ring <b>your own phone</b> first (the number set for your agent in Blutec), then connect the client. Each CRM user's email must be added as an agent in Blutec.</p>
           <p className="font-semibold">To connect (done once by IT):</p>
           <ol className="list-decimal space-y-1 pl-5 text-mute">
-            <li>In Blutec, create a <b>Click-to-Call credential</b> (key id, API key, signing secret) and a dedicated <b>API user</b> for IVR.</li>
-            <li>On this computer, add them to <code>.env.local</code> (never in a VITE_ variable): <code>BLUTEC_KEY_ID</code>, <code>BLUTEC_API_KEY</code>, <code>BLUTEC_SIGNING_SECRET</code>, <code>BLUTEC_IVR_EMAIL</code>, <code>BLUTEC_IVR_PASSWORD</code> — then restart the app.</li>
+            <li>In Blutec, make a dedicated <b>API user</b> (Company Admin, never used to sign in to the website), create a <b>long-lived API token</b> (blt_…) and — once Blutec support has enabled Click-to-Call — a <b>Click-to-Call credential</b> (key id, API key, signing secret).</li>
+            <li>On this computer, add them to <code>.env.local</code> (never in a VITE_ variable): <code>BLUTEC_KEY_ID</code>, <code>BLUTEC_API_KEY</code>, <code>BLUTEC_SIGNING_SECRET</code>, <code>BLUTEC_TOKEN</code>, <code>BLUTEC_IVR_EMAIL</code>, <code>BLUTEC_IVR_PASSWORD</code> — then restart the app.</li>
             <li>For the live site, set the same values as Supabase function secrets and deploy the <code>blutec</code> function.</li>
           </ol>
           <p className="text-xs text-mute">Until then, “Call now” opens your phone's dialler and you log the outcome by hand.</p>
@@ -124,9 +124,10 @@ function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
   const [manualStart, setManualStart] = useState<number | null>(null)
   const [live, setLive] = useState<{ refId: string; status: string; info?: CallStatus } | null>(null)
   const poll = useRef<ReturnType<typeof setInterval> | null>(null)
+  const retry = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [tick, setTick] = useState(0)
   useEffect(() => { if (manualStart === null) return; const i = setInterval(() => setTick((x) => x + 1), 1000); return () => clearInterval(i) }, [manualStart])
-  useEffect(() => () => { if (poll.current) clearInterval(poll.current) }, [])
+  useEffect(() => () => { if (poll.current) clearInterval(poll.current); if (retry.current) clearTimeout(retry.current) }, [])
   void tick
   const manualSecs = manualStart ? Math.floor((Date.now() - manualStart) / 1000) : 0
   const ended = !!live && FINAL_STATUSES.includes(live.status)
@@ -134,12 +135,35 @@ function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
   const suggested: CallOutcome | undefined = ended ? (isHot(live?.info?.disposition) ? 'INTERESTED' : !live?.info?.answer_time ? 'NO_ANSWER' : undefined) : undefined
   const n = salesNumbers(db, me)
   const myCallsToday = db.leads.flatMap((l) => l.calls.filter((c) => c.by === me.id && c.at.slice(0, 10) === t).map((c) => ({ ...c, lead: l }))).sort((a, b) => b.at.localeCompare(a.at))
-  const reset = () => { if (poll.current) clearInterval(poll.current); poll.current = null; setLive(null); setManualStart(null) }
+  const reset = () => { if (poll.current) clearInterval(poll.current); if (retry.current) clearTimeout(retry.current); poll.current = null; retry.current = null; setLive(null); setManualStart(null) }
+  /** The client asked not to be called: Blutec's DND list (when connected) + the lead leaves every queue. */
+  const markDnd = async (l: Lead) => {
+    if (!(await confirm(`Do not call ${l.name} again?`, `${bt.status?.dnc ? 'The number is added to the company’s Do-Not-Disturb list in Blutec, so no campaign or click-to-call dials it, and ' : ''}the lead is marked “Not interested” with a note.`, true))) return
+    const ok = await run(async () => {
+      if (bt.status?.dnc) await blutec.dncAdd(l.phone, `Asked not to be called (CRM, ${me.name})`)
+      setLeadStatus(me, l.id, 'NOT_INTERESTED', 'Asked not to be called (DND)')
+    }, `${l.name} won't be called again`)
+    if (ok) next()
+  }
   const next = () => { reset(); const i = queue.findIndex((l) => l.id === current?.id); setCurrentId(queue[(i + 1) % queue.length]?.id ?? null) }
 
-  const dial = async (l: Lead) => {
-    const r = await run(() => blutec.clickToCall(me.email, l.phone, l.id))
-    if (!r || typeof r !== 'object') return
+  const dial = async (l: Lead, attempt = `${Date.now()}`, retried = false) => {
+    retry.current = null
+    let r: { ref_id: string; status: string }
+    try { r = await blutec.clickToCall(me.email, l.phone, l.id, attempt) }
+    catch (e) {
+      const code = e instanceof DialerError ? e.code : undefined
+      // all lines busy: try the same click once more after 15 s (same Idempotency-Key, so it can't dial twice)
+      if (code === 'CHANNEL_LIMIT' && !retried) {
+        toast('warning', 'All calling lines are busy — trying again in 15 seconds')
+        setLive({ refId: '', status: 'waiting_for_a_free_line' })
+        retry.current = setTimeout(() => dial(l, attempt, true), 15_000)
+        return
+      }
+      setLive(null)
+      toast('error', code === 'DND' ? `${l.name} is on the Do-Not-Disturb list — this number can't be called.` : e instanceof Error ? e.message : 'The call could not be placed.')
+      return
+    }
     toast('info', 'Your phone is ringing — answer it to connect the client')
     setLive({ refId: r.ref_id, status: r.status })
     if (poll.current) clearInterval(poll.current)
@@ -210,6 +234,7 @@ function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
                     ? <a href={`tel:+91${current.phone}`} onClick={() => setManualStart(Date.now())}><Button size="lg" variant="success" icon={PhoneCall}>Call now</Button></a>
                     : <Button size="lg" variant="danger" icon={PhoneOff} onClick={() => setManualStart(null)}>End call</Button>}
                 <Button size="lg" variant="outline" icon={SkipForward} onClick={next}>Skip</Button>
+                <Button size="lg" variant="ghost" icon={Ban} onClick={() => markDnd(current)}>Do not call</Button>
                 {can('bookings.create') && <Button size="lg" variant="soft" icon={Briefcase} onClick={() => nav(`/bookings/new?lead=${current.id}`)}>Book</Button>}
               </div>
               {current.notes && <p className="mt-5 w-full whitespace-pre-line rounded-xl bg-card2 p-3 text-left text-sm">{current.notes}</p>}

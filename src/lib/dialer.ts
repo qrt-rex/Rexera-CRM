@@ -4,7 +4,7 @@ import { cloudConfig, getSupabase } from './supabase'
  * Talks to the Blutec relay — the local dev server (/api/blutec) or, on the live site, the Supabase Edge Function
  * `blutec`. Secrets live only on the relay; the browser never sees them.
  */
-export interface BlutecStatus { dialer: boolean; ivr: boolean; dialerUrl: string; ivrUrl: string }
+export interface BlutecStatus { dialer: boolean; ivr: boolean; dnc?: boolean; dialerUrl: string; ivrUrl: string }
 export interface CallStatus {
   ref_id: string; status: string; agent_name?: string; destination_number?: string
   start_time?: string; answer_time?: string; end_time?: string; duration_seconds?: number; talk_duration_seconds?: number
@@ -38,9 +38,14 @@ async function call<T>(body: Record<string, unknown>): Promise<T> {
 
 export const blutec = {
   status: () => call<BlutecStatus>({ action: 'status' }),
-  /** Rings the agent's own phone first, then connects the customer. */
-  clickToCall: (agentEmail: string, phone: string, leadId?: string) =>
-    call<{ ref_id: string; status: string }>({ action: 'call', agentEmail, phone, leadId, attempt: `${Date.now()}` }),
+  /**
+   * Rings the agent's own phone first, then connects the customer. `attempt` makes the Idempotency-Key: pass the same
+   * one only when retrying the same click (e.g. after CHANNEL_LIMIT), so Blutec never dials twice.
+   */
+  clickToCall: (agentEmail: string, phone: string, leadId?: string, attempt = `${Date.now()}`) =>
+    call<{ ref_id: string; status: string }>({ action: 'call', agentEmail, phone, leadId, attempt }),
+  /** Adds the number to the company's Do-Not-Disturb list in Blutec (no campaign or click-to-call will dial it). */
+  dncAdd: (phone: string, reason: string) => call<unknown>({ action: 'dncAdd', phone, reason }),
   callStatus: (refId: string) => call<CallStatus>({ action: 'callStatus', refId }),
   ivrList: () => call<Ivr[]>({ action: 'ivrList' }),
   ivrStats: (id: number) => call<IvrStats>({ action: 'ivrStats', id }),

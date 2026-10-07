@@ -11,7 +11,7 @@ function blutecRelay(mode: string): Plugin {
   return {
     name: 'blutec-relay',
     configureServer(server) {
-      const env = blutecEnv(loadEnv(mode, process.cwd(), 'BLUTEC_'))
+      const env = blutecEnv(loadEnv(mode, process.cwd(), ['BLUTEC_', 'BTC_']))
       server.middlewares.use('/api/blutec', (req, res) => {
         if (req.method !== 'POST') { res.statusCode = 405; res.end(); return }
         let raw = ''

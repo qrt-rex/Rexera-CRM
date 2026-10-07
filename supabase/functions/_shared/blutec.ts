@@ -3,14 +3,17 @@
  * (vite.config.ts) and in the Supabase Edge Function `blutec` — because requests are signed with a secret that must
  * never reach a browser, and Blutec does not accept browser (CORS) calls.
  *
- * Click-to-call (`/api/v1`) uses key_id + api_key + HMAC-SHA256 signing. IVR uses a login token (email + password of a
- * dedicated API account). Uses only Web Crypto + fetch, so the same file works in Node 18+ and Deno.
+ * Click-to-call (`/api/v1`) uses key_id + api_key + HMAC-SHA256 signing. The DND list uses the dialer's long-lived
+ * API token (blt_…). IVR uses a login token (email + password of a dedicated API account — the IVR product has no
+ * long-lived tokens). Uses only Web Crypto + fetch, so the same file works in Node 18+ and Deno.
  */
 export interface BlutecEnv {
   dialerUrl?: string
   keyId?: string
   apiKey?: string
   signingSecret?: string
+  /** long-lived dialer API token (blt_…), for the DND list */
+  token?: string
   ivrUrl?: string
   ivrEmail?: string
   ivrPassword?: string
@@ -19,6 +22,8 @@ export type BlutecRequest =
   | { action: 'status' }
   | { action: 'agent'; email: string }
   | { action: 'call'; agentEmail: string; phone: string; leadId?: string; attempt?: string }
+  | { action: 'dncCheck'; phone: string }
+  | { action: 'dncAdd'; phone: string; reason?: string }
   | { action: 'callStatus'; refId: string }
   | { action: 'ivrList' }
   | { action: 'ivrStats'; id: number }
@@ -39,6 +44,22 @@ let ivrToken: { token: string; at: number } | null = null
 
 const dialerReady = (e: BlutecEnv) => !!(e.keyId && e.apiKey && e.signingSecret)
 const ivrReady = (e: BlutecEnv) => !!(e.ivrEmail && e.ivrPassword)
+const dncReady = (e: BlutecEnv) => !!e.token
+/** Indian 10-digit numbers get the 91 country code (how Blutec stores numbers). */
+const toE164ish = (phone: string) => { const p = String(phone).replace(/\D/g, ''); return p.length === 10 ? `91${p}` : p }
+
+/** Dialer API with the long-lived token (DND list). */
+async function dialerApi(e: BlutecEnv, method: 'GET' | 'POST', path: string, body?: unknown) {
+  const res = await fetch(`${(e.dialerUrl || 'https://dialer.blutec.ai').replace(/\/$/, '')}${path}`, {
+    method, headers: { Authorization: `Bearer ${e.token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined,
+  })
+  return { status: res.status, body: await res.json().catch(() => ({ success: false, message: `Dialer answered ${res.status}` })) }
+}
+async function isDnc(e: BlutecEnv, phone: string) {
+  const r = await dialerApi(e, 'GET', `/api/dnc/check?phone=${encodeURIComponent(toE164ish(phone))}`)
+  if (r.status !== 200) throw new Error(`DND check failed (${r.status})`)
+  return !!(r.body as { data?: { is_dnc?: boolean } }).data?.is_dnc
+}
 const fail = (status: number, message: string, code?: string): BlutecResult => ({ status, body: { success: false, message, code } })
 
 /** Signed request to the Click-to-Call API. `path` excludes the query string (as the signature requires). */
@@ -94,7 +115,7 @@ export async function handleBlutec(req: BlutecRequest, e: BlutecEnv): Promise<Bl
   try {
     switch (req.action) {
       case 'status':
-        return { status: 200, body: { success: true, data: { dialer: dialerReady(e), ivr: ivrReady(e), dialerUrl: e.dialerUrl || 'https://dialer.blutec.ai', ivrUrl: e.ivrUrl || 'https://ivr.blutec.ai' } } }
+        return { status: 200, body: { success: true, data: { dialer: dialerReady(e), ivr: ivrReady(e), dnc: dncReady(e), dialerUrl: e.dialerUrl || 'https://dialer.blutec.ai', ivrUrl: e.ivrUrl || 'https://ivr.blutec.ai' } } }
       case 'agent':
         if (!dialerReady(e)) return fail(503, 'Click-to-call is not configured.', 'NOT_CONFIGURED')
         return { status: 200, body: { success: true, data: { agent_uuid: await agentUuid(e, req.email) } } }
@@ -102,11 +123,24 @@ export async function handleBlutec(req: BlutecRequest, e: BlutecEnv): Promise<Bl
         if (!dialerReady(e)) return fail(503, 'Click-to-call is not configured.', 'NOT_CONFIGURED')
         const phone = String(req.phone).replace(/\D/g, '')
         if (phone.length < 10 || phone.length > 15) return fail(422, 'The number must have 10–15 digits.', 'VALIDATION_ERROR')
+        const destination = toE164ish(phone)
+        // numbers on the company's Do-Not-Disturb list are never dialled (a failed check doesn't block the call)
+        if (dncReady(e) && await isDnc(e, destination).catch(() => false)) return fail(409, 'This number is on the Do-Not-Disturb list — it can’t be called.', 'DND')
         const uuid = await agentUuid(e, req.agentEmail)
-        // Indian 10-digit numbers get the 91 country code
-        const destination = phone.length === 10 ? `91${phone}` : phone
         return await signed(e, 'POST', '/api/v1/click-to-call', '', { agent_uuid: uuid, destination_number: destination, custom_identifier: req.leadId ? { crm_lead_id: req.leadId } : undefined },
           req.attempt ? `crm-${req.leadId ?? phone}-${req.attempt}` : undefined)
+      }
+      case 'dncCheck': {
+        if (!dncReady(e)) return fail(503, 'The DND list needs the Blutec API token (BLUTEC_TOKEN).', 'NOT_CONFIGURED')
+        const p = toE164ish(req.phone)
+        if (p.length < 10 || p.length > 15) return fail(422, 'The number must have 10–15 digits.', 'VALIDATION_ERROR')
+        return { status: 200, body: { success: true, data: { phone: p, is_dnc: await isDnc(e, p) } } }
+      }
+      case 'dncAdd': {
+        if (!dncReady(e)) return fail(503, 'The DND list needs the Blutec API token (BLUTEC_TOKEN).', 'NOT_CONFIGURED')
+        const p = toE164ish(req.phone)
+        if (p.length < 10 || p.length > 15) return fail(422, 'The number must have 10–15 digits.', 'VALIDATION_ERROR')
+        return await dialerApi(e, 'POST', '/api/dnc', { phone: p, reason: String(req.reason ?? 'Customer asked not to be called').slice(0, 200), source: 'rexera-crm' })
       }
       case 'callStatus':
         if (!dialerReady(e)) return fail(503, 'Click-to-call is not configured.', 'NOT_CONFIGURED')
@@ -140,10 +174,15 @@ export async function handleBlutec(req: BlutecRequest, e: BlutecEnv): Promise<Bl
   }
 }
 
-/** Reads the BLUTEC_* settings from an environment map (Node process.env, Vite loadEnv, or Deno.env.toObject()). */
+/**
+ * Reads the settings from an environment map (Node process.env, Vite loadEnv, or Deno.env.toObject()).
+ * BTC_KEY_ID / BTC_API_KEY / BTC_SIGNING_SECRET (the names in Blutec's own guide) work too.
+ */
 export function blutecEnv(env: Record<string, string | undefined>): BlutecEnv {
+  const v = (...keys: string[]) => keys.map((k) => env[k]?.trim()).find(Boolean)
   return {
-    dialerUrl: env.BLUTEC_DIALER_URL, keyId: env.BLUTEC_KEY_ID, apiKey: env.BLUTEC_API_KEY, signingSecret: env.BLUTEC_SIGNING_SECRET,
-    ivrUrl: env.BLUTEC_IVR_URL, ivrEmail: env.BLUTEC_IVR_EMAIL, ivrPassword: env.BLUTEC_IVR_PASSWORD,
+    dialerUrl: v('BLUTEC_DIALER_URL'), keyId: v('BLUTEC_KEY_ID', 'BTC_KEY_ID'), apiKey: v('BLUTEC_API_KEY', 'BTC_API_KEY'),
+    signingSecret: v('BLUTEC_SIGNING_SECRET', 'BTC_SIGNING_SECRET'), token: v('BLUTEC_TOKEN', 'BLUTEC_API_TOKEN'),
+    ivrUrl: v('BLUTEC_IVR_URL'), ivrEmail: v('BLUTEC_IVR_EMAIL'), ivrPassword: v('BLUTEC_IVR_PASSWORD'),
   }
 }
