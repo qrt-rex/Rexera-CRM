@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "start": "node server.mjs",
     "typecheck": "tsc -b",
     "db:migrate": "node supabase/migrate-from-backup.mjs",
     "preview": "vite preview"
