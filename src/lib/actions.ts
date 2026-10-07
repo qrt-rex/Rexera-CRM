@@ -708,6 +708,7 @@ export function decide(me: User, id: string, dec: Decision) {
       case 'APPROVE_DONE': {
         // completing puts the file on the final stage; its result stays as Admin set it (Approved if none was chosen)
         b.status = 'COMPLETED'
+        b.maxStage = FINAL_STAGE
         if (b.stage < FINAL_STAGE || !b.stageOutcome) {
           b.stage = FINAL_STAGE
           b.stageOutcome = b.stageOutcome && STAGE_OUTCOMES[FINAL_STAGE]!.some((o) => o.id === b.stageOutcome) ? b.stageOutcome : 'APPROVED'
@@ -725,10 +726,12 @@ export function decide(me: User, id: string, dec: Decision) {
 
 /** Files whose stages are being worked on (Admin and the Operation team can both set stages on these). */
 export const WORK_STATUSES: BookingStatus[] = ['IN_OPERATIONS', 'WITH_ADMIN', 'OPS_REVIEW']
-/** Admin and the Operation team can set the stage and result of any file in processing (up to the stage Legal allowed). */
+/** Statuses whose stage Admin and the Operation team can change (completed files too: moving one back re-opens it). */
+export const STAGE_EDIT_STATUSES: BookingStatus[] = [...WORK_STATUSES, 'ON_HOLD', 'COMPLETED']
+/** Admin and the Operation team can set the stage and result of any processed file (up to the stage Legal allowed). */
 export function canMoveStage(d: DB, me: User, b: Booking) {
+  if (!b.opsMemberId || !STAGE_EDIT_STATUSES.includes(b.status)) return false
   if (isSA(me)) return true
-  if (!WORK_STATUSES.includes(b.status) || !b.opsMemberId) return false
   const p = effectivePerms(d, me)
   return p.has('bookings.process') || p.has('bookings.admin')
 }
@@ -747,6 +750,12 @@ export function moveStage(me: User, id: string, stage: number, note: string, out
     // stage 3 starts "in process"; stage 8 starts "Approved" (change it — with a reason — if it isn't)
     const o = outcome ?? options?.[0]?.id
     assert(!outcomeNeedsReason(o) || note.trim().length >= 3, 'Give the reason.')
+    // a completed file moved back to an earlier stage is re-opened with Operations
+    if (b.status === 'COMPLETED' && stage < FINAL_STAGE) {
+      assert(note.trim().length >= 3, 'Give the reason for re-opening this file.')
+      b.status = 'IN_OPERATIONS'
+      b.approvals.push({ id: uid('ap-'), level: 'Operations', action: 'REOPENED', by: me.id, at: nowIso(), remark: note.trim() })
+    }
     b.stage = stage
     b.stageOutcome = o
     b.stageReason = outcomeNeedsReason(o) ? note.trim() : undefined

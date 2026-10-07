@@ -10,6 +10,7 @@ import { bookingMoney, downloadCsv, fmtDateTime, inr, today } from '../../lib/fo
 import { pipelineTotals } from '../../lib/metrics'
 import { Button, Card, EmptyState, PageHeader, SearchBox, Table, Td, Th, usePaged } from '../../components/ui'
 import { BookingStatusBadge, DeadlineBadge, MoneyBar, PriorityBadge } from '../../components/booking'
+import { StageSelect } from '../../components/StageControls'
 import { MiniStat } from '../dashboards/widgets'
 import { IndianRupee, Wallet, AlertCircle } from 'lucide-react'
 
@@ -70,7 +71,7 @@ export default function Bookings() {
         </div>
         {!list.length ? <EmptyState icon={Briefcase} title="No CRM entries" text="Try another filter, or create a new entry." /> : (
           <Table>
-            <thead><tr><Th>Client</Th><Th>Service</Th><Th>Status</Th><Th>Stage</Th><Th className="w-52">Payment</Th><Th>Owner</Th><Th>Created</Th></tr></thead>
+            <thead><tr><Th>Client</Th><Th>Service</Th><Th>Status · stage</Th><Th className="w-52">Payment</Th><Th>Owner</Th><Th>Created</Th></tr></thead>
             <tbody>
               {slice.map((b) => (
                 <tr key={b.id} className="hover:bg-card2/60">
@@ -79,8 +80,7 @@ export default function Bookings() {
                     <span className="font-mono text-[11px] text-mute">{b.bookingId}</span>
                   </Td>
                   <Td><span className="block max-w-48 truncate">{b.serviceName}</span><span className="flex gap-1 pt-0.5"><PriorityBadge p={b.priority} /><DeadlineBadge b={b} /></span></Td>
-                  <Td><BookingStatusBadge b={b} /></Td>
-                  <Td className="text-xs">{b.opsMemberId ? stageLabel(b.stage, b.stageOutcome) : <span className="text-mute">—</span>}</Td>
+                  <Td><BookingStatusBadge b={b} /><StageSelect b={b} /></Td>
                   <Td><MoneyBar b={b} /></Td>
                   <Td className="text-xs">{b.createdBy ? userName(db, b.createdBy) : b.ownerName ?? '—'}</Td>
                   <Td className="text-xs text-mute">{fmtDateTime(b.createdAt)}</Td>

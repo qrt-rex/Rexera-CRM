@@ -8,6 +8,7 @@ import { STAGES, stageLabel } from '../../lib/workflow'
 import { bookingMoney, fmtDate, inr, today } from '../../lib/format'
 import { Avatar, Badge, Card, cx, EmptyState, PageHeader, SearchBox, Table, Tabs, Td, Th, usePaged } from '../../components/ui'
 import { BookingStatusBadge, DeadlineBadge, PriorityBadge, StageTrack } from '../../components/booking'
+import { StageSelect } from '../../components/StageControls'
 
 /** Cards drawn per column before "Show all" — keeps the board quick with thousands of imported files. */
 const COLUMN_CAP = 30
@@ -87,8 +88,8 @@ export default function WorkBoard() {
               {slice.map((b) => (
                 <tr key={b.id} className="hover:bg-card2/60">
                   <Td><Link to={`/bookings/${b.id}`} className="font-semibold hover:underline">{b.companyName}</Link><p className="text-xs text-mute">{b.serviceName}</p></Td>
-                  <Td><BookingStatusBadge b={b} /></Td>
-                  <Td className="w-48"><p className="mb-1 text-xs">{stageLabel(b.stage, b.stageOutcome)}</p><StageTrack b={b} /></Td>
+                  <Td><BookingStatusBadge b={b} /><StageSelect b={b} /></Td>
+                  <Td className="w-48"><StageTrack b={b} /></Td>
                   <Td className="text-xs">{userName(db, b.opsMemberId)}</Td><Td className="text-xs">{userName(db, b.adminId)}</Td>
                   <Td className="text-xs">{fmtDate(b.deadline)} <DeadlineBadge b={b} /></Td>
                   <Td className="text-right text-sm font-semibold">{inr(bookingMoney(b).collected)}</Td>

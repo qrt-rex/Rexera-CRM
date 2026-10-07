@@ -100,6 +100,11 @@ export function upgradeDb(d: DB): DB {
     }
     d.upgrades.push('stages-8')
   }
+  if (!d.upgrades.includes('completed-max-stage')) {
+    // completed files sit on the final stage, so their allowed limit is the final stage too
+    for (const b of d.bookings) if (b.stage > b.maxStage) b.maxStage = b.stage
+    d.upgrades.push('completed-max-stage')
+  }
   if (!d.upgrades.includes('doc-categories-2')) {
     const rename: Record<string, string> = { 'PAN card': 'Company PAN card', 'GSTIN certificate': 'GST certificate' }
     for (const b of d.bookings) for (const doc of b.documents) if (rename[doc.category]) doc.category = rename[doc.category]!

@@ -252,9 +252,9 @@ function Processing({ id }: { id: string }) {
                   </div>
                   {options && here && (
                     <div className="mt-2 space-y-1.5 pl-11">
-                      {movable && b.status !== 'COMPLETED' ? <StageControls b={b} variant="chips" showMove={false} />
+                      {movable ? <StageControls b={b} variant="chips" showMove={false} />
                         : <p className="text-xs font-semibold"><StageText b={b} /></p>}
-                      {b.stageReason && movable && b.status !== 'COMPLETED' && <p className="text-xs text-bad">Reason: {b.stageReason}</p>}
+                      {b.stageReason && movable && <p className="text-xs text-bad">Reason: {b.stageReason}</p>}
                       {!b.stageOutcome && <span className="text-xs text-warn">Pick the {n === 3 ? 'step' : 'result'}</span>}
                     </div>
                   )}
