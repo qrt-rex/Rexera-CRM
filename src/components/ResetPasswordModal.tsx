@@ -1,46 +1,130 @@
 import { useEffect, useState } from 'react'
-import { KeyRound, Mail } from 'lucide-react'
-import { PASSWORD_HINT, requestPasswordReset, resetPasswordWithCode } from '../lib/actions'
-import { Button, Input, Modal, useRun } from './ui'
+import { CheckCircle2, Loader2, Mail } from 'lucide-react'
+import { createPasswordResetLink } from '../lib/actions'
+import { sendPasswordResetEmail, cloudConfig } from '../lib/supabase'
+import { Button, Input, Modal } from './ui'
 
-/** Forgotten password: a 6-digit code goes to the account's email, then a new password is set. */
 export function ResetPasswordModal({ open, onClose, email: fixedEmail }: { open: boolean; onClose: () => void; email?: string }) {
-  const run = useRun()
-  const [step, setStep] = useState<'email' | 'code' | 'done'>('email')
   const [email, setEmail] = useState(fixedEmail ?? '')
-  const [token, setToken] = useState('')
-  const [devCode, setDevCode] = useState<string | undefined>()
-  const [f, setF] = useState({ code: '', next: '', again: '', show: false })
-  useEffect(() => { if (open) { setStep('email'); setEmail(fixedEmail ?? ''); setToken(''); setDevCode(undefined); setF({ code: '', next: '', again: '', show: false }) } }, [open, fixedEmail])
+  const [loading, setLoading] = useState(false)
+  const [sent, setSent] = useState(false)
+  const [err, setErr] = useState('')
+
+  useEffect(() => {
+    if (open) {
+      setEmail(fixedEmail ?? '')
+      setLoading(false)
+      setSent(false)
+      setErr('')
+    }
+  }, [open, fixedEmail])
 
   const send = async () => {
-    const r = await run(() => requestPasswordReset(email))
-    if (r && typeof r === 'object') { setToken(r.token); setDevCode(r.devCode); setStep('code') }
+    if (!email.trim() || !email.includes('@')) {
+      setErr('Please enter a valid email address.')
+      return
+    }
+    setErr('')
+    setLoading(true)
+
+    try {
+      // 1. Generate local token-based reset link
+      const { resetLink } = createPasswordResetLink(email)
+
+      let delivered = false
+
+      // 2. Try dispatching via Hostinger / SMTP relay in Vite dev server
+      try {
+        const resp = await fetch('/api/send-reset-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email.trim(), resetLink }),
+        })
+        const data = await resp.json()
+        if (data.success) {
+          delivered = true
+        } else if (data.message && data.configured !== false) {
+          throw new Error(data.message)
+        }
+      } catch (relayErr: any) {
+        if (!relayErr.message?.includes('Failed to fetch')) {
+          setErr(relayErr.message)
+        }
+      }
+
+      // 3. If SMTP was not configured, try Supabase Auth as fallback
+      if (!delivered) {
+        const cfg = cloudConfig()
+        if (cfg.status === 'ready') {
+          try {
+            await sendPasswordResetEmail(email.trim())
+            delivered = true
+          } catch (sbErr: any) {
+            setErr(sbErr.message || 'Failed to send reset email.')
+          }
+        }
+      }
+
+
+      setSent(true)
+    } catch (e: any) {
+      setErr(e.message || 'Failed to generate reset link.')
+    } finally {
+      setLoading(false)
+    }
   }
-  const reset = async () => { if (await run(() => resetPasswordWithCode(token, f.code, f.next, f.again), 'Password reset — you can sign in with it now')) setStep('done') }
 
   return (
-    <Modal open={open} onClose={onClose} title="Reset your password" size="sm"
-      footer={step === 'email' ? <><Button variant="outline" onClick={onClose}>Cancel</Button><Button icon={Mail} onClick={send}>Send code</Button></>
-        : step === 'code' ? <><Button variant="outline" onClick={() => setStep('email')}>Back</Button><Button icon={KeyRound} onClick={reset}>Reset password</Button></>
-        : <Button onClick={onClose}>Done</Button>}>
-      {step === 'email' && (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Reset your password"
+      size="sm"
+      footer={
+        sent ? (
+          <Button onClick={onClose}>Back to sign in</Button>
+        ) : (
+          <>
+            <Button variant="outline" onClick={onClose} disabled={loading}>
+              Cancel
+            </Button>
+            <Button icon={loading ? Loader2 : Mail} onClick={send} disabled={loading}>
+              {loading ? 'Sending link...' : 'Send reset link'}
+            </Button>
+          </>
+        )
+      }
+    >
+      {sent ? (
+        <div className="space-y-3 py-1">
+          <div className="flex items-center gap-2 text-emerald-600 font-semibold text-sm">
+            <CheckCircle2 className="size-5 shrink-0 text-emerald-500" />
+            <span>Reset link sent!</span>
+          </div>
+          <p className="text-sm text-mute leading-relaxed">
+            A password reset link has been dispatched to <b className="text-ink">{email}</b>. Please check your inbox and click the link to choose your new password.
+          </p>
+        </div>
+      ) : (
         <div className="grid gap-3">
-          <Input label="Account email" type="email" value={email} disabled={!!fixedEmail} onChange={(e) => setEmail(e.target.value)} placeholder="you@rexera.co.in" autoFocus={!fixedEmail} />
-          <p className="text-xs text-mute">We'll send a 6-digit code to this email. It is valid for 10 minutes.</p>
+          <Input
+            label="Account email"
+            type="email"
+            value={email}
+            disabled={!!fixedEmail || loading}
+            onChange={(e) => {
+              setEmail(e.target.value)
+              if (err) setErr('')
+            }}
+            placeholder="you@rexera.in"
+            autoFocus={!fixedEmail}
+            error={err}
+          />
+          <p className="text-xs text-mute">
+            Enter your email address. We'll send a direct reset link so you can choose a new password.
+          </p>
         </div>
       )}
-      {step === 'code' && (
-        <div className="grid gap-3">
-          <p className="text-sm text-mute">If <b className="text-ink">{email}</b> has an account, a code has been sent to it.</p>
-          {devCode && <p className="rounded-xl bg-warn-soft px-3 py-2 text-xs text-warn">Email isn't connected in this build yet, so the code is shown here: <b className="font-mono text-sm tracking-widest">{devCode}</b></p>}
-          <Input label="6-digit code" inputMode="numeric" maxLength={6} value={f.code} onChange={(e) => setF({ ...f, code: e.target.value.replace(/\D/g, '').slice(0, 6) })} autoFocus />
-          <Input label="New password" type={f.show ? 'text' : 'password'} autoComplete="new-password" value={f.next} onChange={(e) => setF({ ...f, next: e.target.value })} hint={PASSWORD_HINT} />
-          <Input label="Re-type new password" type={f.show ? 'text' : 'password'} autoComplete="new-password" value={f.again} onChange={(e) => setF({ ...f, again: e.target.value })} error={f.again && f.again !== f.next ? 'Does not match' : undefined} />
-          <label className="flex items-center gap-2 text-xs text-mute"><input type="checkbox" checked={f.show} onChange={(e) => setF({ ...f, show: e.target.checked })} className="accent-[var(--brand)]" />Show password</label>
-        </div>
-      )}
-      {step === 'done' && <p className="text-sm">Your password has been changed. Use the new one next time you sign in.</p>}
     </Modal>
   )
 }

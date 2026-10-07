@@ -9,6 +9,7 @@ import { moduleByKey, canSee } from './lib/modules'
 import type { Role } from './lib/types'
 import Login from './pages/Login'
 
+const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 const Dashboard = lazy(() => import('./pages/dashboards/Dashboard'))
 const Leads = lazy(() => import('./pages/modules/Leads'))
 const Dialer = lazy(() => import('./pages/modules/Dialer'))
@@ -159,6 +160,7 @@ export default function App() {
             <Route path="/" element={<HomeRedirect />} />
 
             <Route path="/login" element={<Login />} />
+            <Route path="/reset-password" element={<S><ResetPassword /></S>} />
             {/* public: candidates apply without signing in */}
             <Route path="/apply/:token" element={<S><Apply /></S>} />
             <Route element={<RequireAuth><Shell /></RequireAuth>}>

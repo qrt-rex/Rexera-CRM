@@ -40,3 +40,28 @@ export async function pingCloud(): Promise<{ ok: boolean; detail: string }> {
     return { ok: false, detail: `Can't reach Supabase: ${e instanceof Error ? e.message : 'network error'}` }
   }
 }
+
+/** Sends a password reset email using Supabase Auth */
+export async function sendPasswordResetEmail(email: string): Promise<void> {
+  const cfg = cloudConfig()
+  if (cfg.status !== 'ready') {
+    throw new Error('Supabase is not configured. Please set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in .env.local.')
+  }
+  const sb = await getSupabase()
+  const redirectTo = `${window.location.origin}/reset-password`
+  const { error } = await sb.auth.resetPasswordForEmail(email.trim(), { redirectTo })
+  if (error) throw new Error(error.message)
+}
+
+/** Completes password update for the recovery session in Supabase Auth */
+export async function completePasswordReset(newPassword: string): Promise<{ email?: string }> {
+  const cfg = cloudConfig()
+  if (cfg.status !== 'ready') {
+    throw new Error('Supabase is not configured.')
+  }
+  const sb = await getSupabase()
+  const { data, error } = await sb.auth.updateUser({ password: newPassword })
+  if (error) throw new Error(error.message)
+  return { email: data.user?.email }
+}
+
