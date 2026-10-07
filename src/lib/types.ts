@@ -245,6 +245,8 @@ export interface DaySession {
 
 /** An uploaded file kept in the browser's file store (lib/files.ts); records only hold this reference. */
 export interface FileRef { id: string; name: string; type: string; size: number; at: string }
+/** An old-CRM upload that isn't linked to a client file: where it was, and our best guess of what it is. */
+export interface LegacyFile { path: string; file: FileRef; kind: string }
 
 export interface CandidateForm {
   id: string
@@ -450,6 +452,8 @@ export interface DB {
   emailAutomations: EmailAutomation[]
   candidateForms: CandidateForm[]
   candidates: CandidateApplication[]
+  /** files from the old CRM's uploads folder that no client file refers to (kept so nothing is lost) */
+  legacyFiles?: LegacyFile[]
   /** one-time data upgrades already applied */
   upgrades: string[]
 }

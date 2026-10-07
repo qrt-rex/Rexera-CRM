@@ -1,4 +1,5 @@
-import type { ApiKey, ApiScope, BackupLogEntry, DB, User } from './types'
+import type { ApiKey, ApiScope, BackupLogEntry, DB, FileRef, User } from './types'
+import { applyFiles, refOf, type FilePlan } from './legacyFiles'
 import { approxDataBytes, flushSaves, getDb, mutate, replaceDb, storageBackend } from './store'
 import { buildImport, type DumpTables, type ImportOptions } from './legacyImport'
 import { ActionError } from './actions'
@@ -8,7 +9,7 @@ import { DEMO_PASSWORD, SEED_VERSION } from './seed'
 import { listDatasets, saveDatasets, type Dataset } from './imports'
 import { addDays, fmtDate, nowIso, uid } from './format'
 import { cloudConfig, pingCloud } from './supabase'
-import { exportFiles, importFiles, type StoredFile } from './files'
+import { exportFiles, importFiles, putFiles, storageRoom, storedLegacyIds, type StoredFile } from './files'
 
 function needMaster(me: User) {
   if (!isMaster(me)) throw new ActionError('Only IT Support or Super Admin can do that.')
@@ -206,6 +207,49 @@ export async function importLegacy(me: User, tables: DumpTables, opts: ImportOpt
   await flushSaves()
   return report
 }
+export interface CopyProgress { done: number; total: number; bytes: number; totalBytes: number; skipped: number }
+/**
+ * Copies the planned old-CRM files into this browser's file store and links them into the client files.
+ * Files already stored are skipped, so it can be stopped and started again. Linking happens at the end — and also
+ * when stopped, for whatever was copied by then.
+ */
+export async function copyLegacyFiles(me: User, plan: FilePlan, source: Map<string, File>, onProgress: (p: CopyProgress) => void, signal: AbortSignal) {
+  needMaster(me)
+  const have = await storedLegacyIds()
+  const todo = plan.files.filter((f) => !have.has(f.id) && source.has(f.id))
+  const need = todo.reduce((s, f) => s + f.size, 0)
+  const room = await storageRoom()
+  if (room.free != null && need > room.free * 0.95) {
+    const gb = (n: number) => `${(n / 1073741824).toFixed(2)} GB`
+    throw new ActionError(`Not enough space in this browser: the files need ${gb(need)}, the browser allows ${gb(room.free)} more. Free disk space on this computer (the browser can use most of the free space), then try again — files already copied are kept.`)
+  }
+  const p: CopyProgress = { done: 0, total: todo.length, bytes: 0, totalBytes: need, skipped: plan.files.length - todo.length }
+  onProgress({ ...p })
+  let batch: { ref: FileRef; blob: Blob }[] = [], batchBytes = 0
+  const flush = async () => {
+    if (!batch.length) return
+    await putFiles(batch)
+    for (const x of batch) have.add(x.ref.id)
+    p.done += batch.length; p.bytes += batchBytes
+    batch = []; batchBytes = 0
+    onProgress({ ...p })
+  }
+  for (const f of todo) {
+    if (signal.aborted) break
+    batch.push({ ref: refOf(f), blob: source.get(f.id)! }); batchBytes += f.size
+    if (batch.length >= 25 || batchBytes > 48 * 1048576) await flush()
+  }
+  if (!signal.aborted) await flush()
+  else batch = []
+  let result = { linked: 0, archived: 0 }
+  mutate((d) => {
+    result = applyFiles(d, plan, have)
+    log(d, me.id, 'LEGACY_FILES', `${p.done} old CRM file(s) copied (${(p.bytes / 1048576).toFixed(0)} MB), ${result.linked} attached to client files, ${result.archived} kept as unlinked${signal.aborted ? ' — stopped before the end' : ''}`)
+  })
+  await flushSaves()
+  return { ...p, ...result, stopped: signal.aborted, stored: plan.files.filter((f) => have.has(f.id)).length }
+}
+
 export async function deleteSnapshot(me: User, id: string) {
   needMaster(me)
   await snapTx('readwrite', (s) => s.delete(id))

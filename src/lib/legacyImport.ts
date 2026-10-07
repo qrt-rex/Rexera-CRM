@@ -1,7 +1,7 @@
-import type { BComment, BDoc, Booking, BookingStatus, DB, Lead, LeadStatus, LegacyRow, Notice, Payment, Role, Service, StageMove, User, Approval } from './types'
-import { normPhone, round2 } from './format'
+import type { BComment, BDoc, Booking, BookingStatus, DB, Invoice, Lead, LeadStatus, LegacyRow, Notice, Payment, Role, Service, StageMove, User, Approval } from './types'
+import { invoiceTotals, normPhone, round2 } from './format'
 import { PRESET_USERS } from './seed'
-import { STAGES, stageLabel } from './workflow'
+import { guessCategory, STAGES, stageLabel } from './workflow'
 
 /**
  * Import from the old PHP CRM (phpMyAdmin / MariaDB .sql dump).
@@ -22,11 +22,13 @@ export function parseDump(sql: string): DumpTables {
   for (const m of sql.matchAll(/CREATE TABLE `([^`]+)` \(([\s\S]*?)\n\)[^;]*;/g)) {
     tables[m[1]!] = { columns: [...m[2]!.matchAll(/^\s*`([^`]+)`/gm)].map((c) => c[1]!), rows: [] }
   }
-  const re = /INSERT INTO `([^`]+)` \(([^)]*)\) VALUES\s*/g
+  // phpMyAdmin writes the column list (INSERT INTO `t` (`a`, `b`) VALUES …); mysqldump leaves it out (INSERT INTO `t` VALUES …)
+  const re = /INSERT INTO `([^`]+)`\s*(?:\(([^)]*)\)\s*)?VALUES\s*/g
   let m: RegExpExecArray | null
   while ((m = re.exec(sql))) {
     const table = m[1]!
-    const names = m[2]!.split(',').map((s) => s.trim().replace(/`/g, ''))
+    const names = m[2] != null ? m[2].split(',').map((s) => s.trim().replace(/`/g, '')) : tables[table]?.columns ?? []
+    if (!names.length) throw new Error(`The dump inserts into “${table}” without a column list or a CREATE TABLE.`)
     const target = (tables[table] ??= { columns: names, rows: [] })
     let i = re.lastIndex
     while (i < sql.length) {
@@ -78,6 +80,34 @@ const ist = (v: string | null | undefined) => (blank(v) ? undefined : new Date(v
 const day = (v: string | null | undefined) => (blank(v) ? undefined : v!.trim().slice(0, 10))
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
 const titleCase = (s: string) => s.replace(/\b\w/g, (c) => c.toUpperCase())
+/** Common surnames, to split run-together names from the old CRM ("sudhanshusingh" → "Sudhanshu Singh"). */
+const SURNAMES = ['agarwal', 'agrawal', 'ahir', 'anand', 'arya', 'bhandari', 'bhanushali', 'bhatt', 'bhavaiya', 'bhavsar', 'bhatia', 'brahmbhatt', 'chauhan', 'chouhan', 'chaudhary', 'chudasama',
+  'dalsaniya', 'darji', 'dave', 'desai', 'dixit', 'doshi', 'gandhi', 'gohil', 'gupta', 'hadole', 'jadeja', 'jadav', 'jain', 'jambhulkar', 'jariwala', 'zariwala', 'jivani', 'joshi', 'kamble', 'kaur', 'khaire',
+  'khan', 'kumar', 'macwan', 'makwana', 'mathur', 'mehta', 'mishra', 'modi', 'nair', 'pandey', 'pandya', 'panchal', 'parekh', 'parikh', 'parmar', 'patel', 'patidar', 'pathak', 'prajapati', 'rana',
+  'raval', 'rathod', 'rathore', 'ramani', 'rohit', 'sahani', 'sharma', 'shah', 'shrimali', 'singh', 'sisodiya', 'solanki', 'soni', 'srivastava', 'tapodhan', 'thakkar', 'thakor', 'tiwari', 'trivedi', 'tyagi',
+  'upadhyay', 'vaghela', 'vasava', 'verma', 'vyas', 'watkar', 'yadav', 'zala', 'mehra', 'kapoor', 'malhotra', 'reddy', 'rao', 'iyer', 'pillai', 'das', 'ghosh', 'bose', 'sen', 'roy']
+  .sort((a, b) => b.length - a.length)
+/** "sudhanshu.singh" / "sudhanshusingh" → "Sudhanshu Singh"; unknown run-together names just get a capital letter. */
+export function personName(raw: string) {
+  const s = raw.trim().replace(/[._-]+/g, ' ').replace(/\d+/g, '').replace(/\s+/g, ' ').trim()
+  if (s.includes(' ')) return s.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())
+  const low = s.toLowerCase()
+  const sur = SURNAMES.find((x) => low.endsWith(x) && low.length - x.length >= 3)
+  const parts = sur ? [low.slice(0, -sur.length), sur] : [low]
+  return parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(' ')
+}
+/** "M/S Edu-Teach LLP" →"msedutteachllp": how the old CRM named agreement PDFs, and a loose company match. */
+export const squash = (s: string | null | undefined) => (s ?? '').replace(/[^A-Za-z0-9]/g, '').toLowerCase()
+/** First two digits of a GSTIN / the old invoice's state code. */
+const GST_STATE: Record<string, string> = {
+  '01': 'Jammu and Kashmir', '02': 'Himachal Pradesh', '03': 'Punjab', '04': 'Chandigarh', '05': 'Uttarakhand', '06': 'Haryana', '07': 'Delhi', '08': 'Rajasthan',
+  '09': 'Uttar Pradesh', '10': 'Bihar', '11': 'Sikkim', '12': 'Arunachal Pradesh', '13': 'Nagaland', '14': 'Manipur', '15': 'Mizoram', '16': 'Tripura', '17': 'Meghalaya',
+  '18': 'Assam', '19': 'West Bengal', '20': 'Jharkhand', '21': 'Odisha', '22': 'Chhattisgarh', '23': 'Madhya Pradesh', '24': 'Gujarat',
+  '26': 'Dadra and Nagar Haveli and Daman and Diu', '27': 'Maharashtra', '29': 'Karnataka', '30': 'Goa', '31': 'Lakshadweep', '32': 'Kerala', '33': 'Tamil Nadu',
+  '34': 'Puducherry', '35': 'Andaman and Nicobar Islands', '36': 'Telangana', '37': 'Andhra Pradesh', '38': 'Ladakh',
+}
+/** Old invoice branch codes → the branches under Access → Settings. Plain "ahmedabad" is ambiguous (two Ahmedabad branches). */
+const BRANCH: Record<string, string> = { ahmedabad_a: 'br-amd-a', ahmedabad_y: 'br-amd-y', baroda: 'br-vdr', vadodara: 'br-vdr' }
 
 export const ROLE_MAP: Record<string, { role: Role; department: string; designation: string }> = {
   'super admin': { role: 'superadmin', department: 'Management', designation: 'Super Admin' },
@@ -90,9 +120,11 @@ export const ROLE_MAP: Record<string, { role: Role; department: string; designat
   legal: { role: 'legal', department: 'Legal', designation: 'Legal Executive' },
 }
 const DOC_CAT: Record<string, string> = {
-  kyc: 'KYC', 'company documents': 'Company documents', 'government certificate': 'Government certificates', 'pitch deck dpr': 'Pitch deck / DPR',
-  'financial documents': 'Financial', agreement: 'Other', general: 'Other', other: 'Other',
+  kyc: 'KYC', 'company documents': 'Company documents', 'government certificate': 'Government certificates', 'pitch deck dpr': 'Pitch deck',
+  'financial documents': 'Financial', agreement: 'Agreement', general: 'Other', other: 'Other',
 }
+/** Old document → the matching Document Forms slot, from its title and file name (e.g. “cio”, “udyam”, “aadhar card”). */
+const docCategory = (d: LegacyRow) => guessCategory(`${d.doc_title ?? ''} ${d.original_file_name ?? ''}`, DOC_CAT[norm(d.doc_type ?? 'other')] ?? 'Other')
 const PAY_MODE: Record<string, string> = { upi: 'UPI', neft: 'NEFT', imps: 'IMPS', rtgs: 'RTGS', payment_link: 'Payment link', check: 'Cheque', cheque: 'Cheque', cash: 'Cash' }
 const payMode = (v: string | null) => (v ? PAY_MODE[v.toLowerCase()] ?? (v.toLowerCase().startsWith('cash') ? 'Cash' : v) : 'Not recorded')
 function serviceCategory(name: string) {
@@ -104,8 +136,36 @@ function serviceCategory(name: string) {
   return 'Certifications & Registrations'
 }
 
+/**
+ * Documents made by the file step: agreements (`lg-d-ag-…`), payment screenshots without a payment (`lg-d-shot-…`)
+ * and client uploads found by the client's phone number (`lg-d-up-…`).
+ */
+export const FILE_DOC = /^lg-d-(ag|shot|up)-/
+
 // ================================================================== mapping
-export interface ImportOptions { replaceSampleData: boolean }
+export interface ImportOptions {
+  replaceSampleData: boolean
+  /** the old billing database (u417368936_bill): staff full names and invoices */
+  billing?: DumpTables
+}
+
+/** Newest `created_at` in a dump's crm table (to tell an older export from a newer one). */
+const latestCrm = (t: DumpTables) => (t.crm?.rows ?? []).reduce((m, r) => ((r.created_at ?? '') > m ? r.created_at! : m), '')
+const isBilling = (t: DumpTables) => !!t.invoices?.rows.length || !!t.users?.columns.includes('full_name')
+
+/**
+ * Several dumps chosen together (e.g. u417368936_crm.sql + u417368936_bill_full.sql): client files come from the dump
+ * with the newest client file; the billing dump adds staff names and invoices.
+ */
+export function pickDumps(list: { name: string; tables: DumpTables }[]) {
+  const crm = list.filter((x) => x.tables.crm?.rows.length).sort((a, b) => latestCrm(b.tables).localeCompare(latestCrm(a.tables)))
+  const main = crm[0]
+  if (!main) throw new Error('None of these files has the old CRM client files (the “crm” table).')
+  const billing = list.filter((x) => isBilling(x.tables)).sort((a, b) => latestCrm(b.tables).localeCompare(latestCrm(a.tables)))[0]
+  const notes = list.filter((x) => x !== main && x !== billing).map((x) => `${x.name} was not used: ${main.name} has newer client files (latest ${latestCrm(main.tables).slice(0, 10)}).`)
+  if (billing && billing !== main && latestCrm(billing.tables) && latestCrm(billing.tables) < latestCrm(main.tables)) notes.push(`${billing.name} is an older export (client files up to ${latestCrm(billing.tables).slice(0, 10)}); only its staff names and invoices are used — client files come from ${main.name} (up to ${latestCrm(main.tables).slice(0, 10)}).`)
+  return { main, billing: billing && billing !== main ? billing : undefined, notes }
+}
 export interface ImportReport {
   source: Record<string, number>
   imported: Record<string, number>
@@ -153,8 +213,20 @@ export function buildImport(tables: DumpTables, current: DB, opts: ImportOptions
     if (!e || n.length < 2 || /@/.test(n)) continue
     const v = nameVotes.get(e) ?? new Map<string, number>(); v.set(n, (v.get(n) ?? 0) + 1); nameVotes.set(e, v)
   }
-  const realName = (email: string) => { const v = nameVotes.get(email); return v ? [...v].sort((a, b) => b[1] - a[1])[0]![0] : undefined }
-  let namesFound = 0
+  // the billing database has a full_name per person — it wins over the closer names on client files
+  const bill = opts.billing ?? (isBilling(tables) ? tables : undefined)
+  const fullNames = new Map((bill?.users?.rows ?? []).map((u) => [(u.email ?? '').trim().toLowerCase(), (u.full_name ?? '').trim().replace(/\s+/g, ' ')] as const)
+    .filter(([, n]) => n.length > 1 && !/@/.test(n)))
+  const realName = (email: string) => { const f = fullNames.get(email); if (f) return f; const v = nameVotes.get(email); return v ? [...v].sort((a, b) => b[1] - a[1])[0]![0] : undefined }
+  // most old names are the email name run together ("sudhanshusingh"); those are split at a known surname
+  const isRunTogether = (name: string, email: string) => !name.trim().includes(' ') && squash(name) === squash(email.split('@')[0])
+  const bestName = (email: string) => personName(realName(email) ?? email.split('@')[0] ?? '')
+  /** names an earlier import may have given (so a name someone typed in Employees is never overwritten) */
+  const earlierNames = (email: string) => {
+    const local = email.split('@')[0] ?? ''
+    return new Set([titleCase(local.replace(/[._-]+/g, ' ').replace(/\d+/g, '').trim() || local), ...[...(nameVotes.get(email)?.keys() ?? [])].map((n) => titleCase(n.toLowerCase())), ...(fullNames.has(email) ? [titleCase(fullNames.get(email)!.toLowerCase())] : [])])
+  }
+  let namesFound = 0, namesSplit = 0, renamed = 0
   for (const r of T('users')) {
     const email = (r.email ?? '').trim().toLowerCase()
     const legacyRole = (r.role ?? '').trim()
@@ -163,6 +235,8 @@ export function buildImport(tables: DumpTables, current: DB, opts: ImportOptions
     const existing = byEmail.get(email)
     if (existing) {
       existing.legacyId = Number(r.id); existing.legacyRole = legacyRole
+      // a person an earlier import named "Sudhanshusingh" becomes "Sudhanshu Singh"; names changed by hand stay
+      if (existing.id.startsWith('lg-u-') && earlierNames(email).has(existing.name) && existing.name !== bestName(email)) { existing.name = bestName(email); renamed++ }
       legacyUser.set(r.id!, existing); merged++
       if (existing.role !== map.role) {
         // the old Manager leads every sales person: they need team-leader rights to see the team and approve new files
@@ -178,16 +252,19 @@ export function buildImport(tables: DumpTables, current: DB, opts: ImportOptions
     while (usernames.has(username)) username = `${username}.${r.id}`
     usernames.add(username)
     const found = realName(email)
-    if (found) namesFound++
+    const name = bestName(email)
+    if (found && !isRunTogether(found, email)) namesFound++
+    else if (name.includes(' ')) namesSplit++
     const u: User = {
-      id: `lg-u-${r.id}`, name: found ? titleCase(found.toLowerCase()) : titleCase(local.replace(/[._-]+/g, ' ').replace(/\d+/g, '').trim() || local), username, email, phone: '',
+      id: `lg-u-${r.id}`, name, username, email, phone: '',
       role: map.role, extraRoles: [], grants: [], denies: [], department: map.department, designation: map.designation,
       joinedOn: day(utc(r.created_at)) ?? now.slice(0, 10), active: true, passHash: '', needsPasswordReset: true,
       legacyId: Number(r.id), legacyRole,
     }
     base.users.push(u); byEmail.set(email, u); legacyUser.set(r.id!, u); created++
   }
-  if (created) notes.push(`${namesFound} of ${created} new users got their real name from the old client files (the old users table has no names); the other ${created - namesFound} were named from their email — correct them in Employees.`)
+  if (created) notes.push(`The old CRM keeps names as the email name run together (e.g. “sudhanshusingh”). Of ${created} new users, ${namesFound} had a proper name, ${namesSplit} were split at a common surname (“Sudhanshu Singh”) and ${created - namesFound - namesSplit} keep one word — check names in Employees.`)
+  if (renamed) notes.push(`${renamed} user(s) imported earlier get the better name (names you changed yourself are kept).`)
   const managerUser = manager ? legacyUser.get(manager.id!) : undefined
   const allIds = new Set(base.users.map((u) => u.id))
   for (const u of base.users) {
@@ -244,6 +321,8 @@ export function buildImport(tables: DumpTables, current: DB, opts: ImportOptions
   let missingAssignee = 0, gstEstimated = 0, paymentsMade = 0, unknownStatus = 0, withGstNoAmount = 0, undated = 0, ownerUnknown = 0, futureDated = 0
   const estimatedIds = new Set<string>()
   const bookings: Booking[] = []
+  const previous = new Map(current.bookings.filter((b) => b.id.startsWith('lg-')).map((b) => [b.id, b]))
+  let filesKept = 0
   for (const r of crm) {
     const id = `lg-b-${r.id}`
     const wf = workflow.get(r.id!)
@@ -332,7 +411,7 @@ export function buildImport(tables: DumpTables, current: DB, opts: ImportOptions
 
     // documents (metadata; the files themselves stay on the old server)
     const documents: BDoc[] = (docs.get(r.id!) ?? []).map((d) => ({
-      id: `lg-d-${d.id}`, name: (d.doc_title || d.original_file_name || d.stored_file_name || 'Document')!.trim(), category: DOC_CAT[norm(d.doc_type ?? 'other')] ?? 'Other',
+      id: `lg-d-${d.id}`, name: (d.doc_title || d.original_file_name || d.stored_file_name || 'Document')!.trim(), category: docCategory(d),
       size: num(d.file_size), at: utc(d.uploaded_at) ?? createdAt, by: userFromId(d.uploaded_by)?.id ?? '', legacyPath: d.file_path ?? d.stored_file_name ?? undefined,
     }))
     if (!blank(r.agreement_pdf)) documents.push({ id: `lg-d-agreement-${r.id}`, name: 'Signed agreement (old CRM)', category: 'Other', size: 0, at: ist(r.legal_approved_at) ?? createdAt, by: '', legacyPath: r.agreement_pdf!, status: 'VERIFIED' })
@@ -346,7 +425,7 @@ export function buildImport(tables: DumpTables, current: DB, opts: ImportOptions
     const billingDiffers = (billing.name && billing.name !== txt(r.company_name)) || (billing.pan && billing.pan !== txt(r.company_pan).toUpperCase()) || (billing.gstin && billing.gstin !== txt(r.gst_no).toUpperCase())
       || (billing.contact && normPhone(billing.contact) !== normPhone(r.company_mobile ?? '')) || (billing.email && billing.email.toLowerCase() !== txt(r.company_email).toLowerCase())
     const updatedAt = [createdAt, ...approvals.map((a) => a.at), ...stageHistory.map((s) => s.at)].sort().at(-1)!
-    bookings.push({
+    const bk: Booking = {
       id, bookingId: (r.booking_id ?? '').trim() || `LEGACY-${r.id}`, companyName: r.company_name ?? '', contactPerson: r.contact_person ?? '',
       mobile: normPhone(r.company_mobile ?? ''), email: (r.company_email ?? '').trim(), pan: (r.company_pan ?? '').trim().toUpperCase(), gstin: (r.gst_no ?? '').trim().toUpperCase(),
       city: r.city ?? '', state: r.state ?? '', industry: r.industry ?? r.sector ?? '', serviceId: svc?.id ?? '', serviceName: r.service ?? '',
@@ -360,8 +439,17 @@ export function buildImport(tables: DumpTables, current: DB, opts: ImportOptions
       billing: billingDiffers ? billing : undefined,
       ownerName: owner ? undefined : txt(r.lead_closed_by) || undefined,
       legacyId: Number(r.id), legacy: { crm: r, workflow: wf, deductions: ded },
-    })
+    }
+    // files attached from the old uploads folder (step 4) stay attached when the dump is imported again
+    const before = previous.get(id)
+    if (before) {
+      for (const p of bk.payments) { const o = before.payments.find((x) => x.id === p.id); if (o?.proof) { p.proof = o.proof; filesKept++ } }
+      for (const doc of bk.documents) { const o = before.documents.find((x) => x.id === doc.id); if (o?.file) { doc.file = o.file; doc.size = o.file.size; filesKept++ } }
+      for (const o of before.documents) if (FILE_DOC.test(o.id) && !bk.documents.some((x) => x.id === o.id)) { bk.documents.push(o); filesKept++ }
+    }
+    bookings.push(bk)
   }
+  if (filesKept) notes.push(`${filesKept} file(s) already attached from the old uploads folder stay attached.`)
   if (svcFuzzy) notes.push(`${svcFuzzy} file(s) wrote the service differently from the services list (e.g. “combo (1.Seed Fund)”); each is linked to the matching service and keeps its original text.`)
   if (missingAssignee) notes.push(`${missingAssignee} file(s) were assigned to a processing user who no longer exists in the old CRM (shown as “unassigned”; the old id is kept on the record).`)
   if (gstEstimated) notes.push(`${gstEstimated} payment(s) had no with-GST amount in the old CRM; GST was calculated at 18% for them.`)
@@ -403,9 +491,50 @@ export function buildImport(tables: DumpTables, current: DB, opts: ImportOptions
     at: utc(n.created_at) ?? now, read: n.is_read === '1', kind: (['info', 'success', 'warning', 'action'].includes(n.type ?? '') ? n.type : 'info') as Notice['kind'],
   }))
 
+  // ---------------------------------------------------------- invoices (billing database)
+  const invItems = new Map<string, LegacyRow[]>()
+  for (const it of bill?.invoice_items?.rows ?? []) invItems.set(it.invoice_id!, [...(invItems.get(it.invoice_id!) ?? []), it])
+  const branchIds = new Set((base.settings.branches ?? []).map((b) => b.id))
+  const billUser = new Map((bill?.users?.rows ?? []).map((u) => [u.id!, (u.email ?? '').trim().toLowerCase()]))
+  const byCompany = new Map<string, Booking[]>()
+  for (const b of bookings) { const k = squash(b.companyName); if (k) byCompany.set(k, [...(byCompany.get(k) ?? []), b]) }
+  let invoicesLinked = 0
+  const invoices: Invoice[] = (bill?.invoices?.rows ?? []).map((r) => {
+    const cg = num(r.cgst_rate), sg = num(r.sgst_rate), ig = num(r.igst_rate)
+    const gstin = (r.client_gstin || r.gst || '').trim().toUpperCase()
+    const code = ((r.client_state_code || r.billing_state_code || '').trim() || gstin.slice(0, 2)).padStart(2, '0')
+    const state = GST_STATE[code] ?? (ig > 0 ? '' : cg + sg > 0 ? base.settings.supplierState : '')
+    const client = (r.billing_name || r.company_name || '').trim()
+    // linked by crm_id when the old invoice had one, otherwise by an unambiguous company name
+    const byName = byCompany.get(squash(client)) ?? byCompany.get(squash(r.company_name))
+    const booking = (r.crm_id && bookings.find((b) => b.legacyId === Number(r.crm_id))) || (byName && new Set(byName.map((b) => b.companyName)).size === 1 ? byName.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] : undefined)
+    if (booking) invoicesLinked++
+    const by = userFromEmail(billUser.get(r.generated_by_user_id ?? ''))
+    const items = (invItems.get(r.id!) ?? []).map((it) => ({
+      desc: (it.particulars || it.description || 'Consultancy Services')!.trim(), sac: (it.hsn || it.hsn_sac || '998312')!.trim(),
+      // the amount the old invoice charged (some were saved with ₹0 — kept as ₹0, like the old grand total)
+      qty: num(it.quantity) || 1, rate: blank(it.amount) ? num(it.mrp) : round2(num(it.amount) / (num(it.quantity) || 1)), gstRate: round2(cg + sg + ig),
+    }))
+    const branch = BRANCH[(r.invoice_branch ?? '').trim().toLowerCase()]
+    return {
+      id: `lg-inv-${r.id}`, number: (r.invoice_number ?? '').trim() || `OLD-${r.id}`, type: /proforma/i.test(r.invoice_type ?? '') ? 'PROFORMA' : 'TAX',
+      bookingId: booking?.id, client, gstin, state, items, paid: 0, status: 'ISSUED', date: day(r.invoice_date) ?? day(ist(r.created_at)) ?? now.slice(0, 10),
+      due: day(r.invoice_date) ?? now.slice(0, 10), salesPerson: by?.id ?? booking?.createdBy, createdBy: by?.id ?? '',
+      branchId: branch && branchIds.has(branch) ? branch : undefined, clientAddress: (r.billing_address ?? '').trim() || undefined, clientPan: (r.pan ?? '').trim().toUpperCase() || undefined,
+    } satisfies Invoice
+  })
+  if (invoices.length) {
+    notes.push(`${invoices.length} invoice(s) from the old billing system keep their old numbers; ${invoicesLinked} are linked to a client file by company name (the old invoices had no client-file link). Payments received against them weren't recorded there, so they show as issued.`)
+    const zero = invoices.filter((i) => i.items.every((x) => x.rate === 0)).length
+    if (zero) notes.push(`${zero} old invoice(s) were saved with a ₹0 amount in the old billing system (probably unfinished); they are kept as ₹0.`)
+    const unbranched = invoices.filter((i) => !i.branchId).length
+    if (unbranched) notes.push(`${unbranched} old invoice(s) say only “Ahmedabad” or an unknown branch — Accounts can pick the branch on the invoice.`)
+  }
+
   // ---------------------------------------------------------- assemble (lg-* records replace earlier imports)
   const next: DB = {
     ...base,
+    invoices: [...base.invoices.filter((i) => !i.id.startsWith('lg-')), ...invoices],
     services,
     bookings: [...base.bookings.filter((b) => !b.id.startsWith('lg-')), ...bookings].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
     leads: [...base.leads.filter((l) => !l.id.startsWith('lg-')), ...leads],
@@ -435,20 +564,29 @@ export function buildImport(tables: DumpTables, current: DB, opts: ImportOptions
     { label: 'Payments with GST (as recorded)', legacy: lakh(legacyWithGst), imported: lakh(importedWithGstRecorded), ok: Math.abs(legacyWithGst - importedWithGstRecorded) < 0.01 },
     { label: 'Stage timestamps → stage history', legacy: String(legacyStages), imported: String(bookings.reduce((s, b) => s + b.stageHistory.length, 0)), ok: legacyStages === bookings.reduce((s, b) => s + b.stageHistory.length, 0) },
     { label: 'Comments', legacy: String(T('crm_comments').length), imported: String(bookings.reduce((s, b) => s + b.comments.filter((c) => c.id.startsWith('lg-c-')).length, 0)), ok: T('crm_comments').length === bookings.reduce((s, b) => s + b.comments.filter((c) => c.id.startsWith('lg-c-')).length, 0) },
-    { label: 'Client documents', legacy: String(T('client_documents').length), imported: String(bookings.reduce((s, b) => s + b.documents.filter((d) => !d.id.startsWith('lg-d-agreement')).length, 0)), ok: T('client_documents').length === bookings.reduce((s, b) => s + b.documents.filter((d) => !d.id.startsWith('lg-d-agreement')).length, 0) },
+    { label: 'Client documents', legacy: String(T('client_documents').length), imported: String(bookings.reduce((s, b) => s + b.documents.filter((d) => /^lg-d-\d+$/.test(d.id)).length, 0)), ok: T('client_documents').length === bookings.reduce((s, b) => s + b.documents.filter((d) => /^lg-d-\d+$/.test(d.id)).length, 0) },
     { label: 'Deductions', legacy: String(T('crm_deductions').length), imported: String(bookings.reduce((s, b) => s + (b.legacy?.deductions?.length ?? 0), 0)), ok: T('crm_deductions').length === bookings.reduce((s, b) => s + (b.legacy?.deductions?.length ?? 0), 0) },
     { label: 'Users', legacy: String(T('users').length), imported: `${created} new + ${merged} matched`, ok: created + merged === T('users').length },
   ]
+  if (bill?.invoices?.rows.length) {
+    const legacyGrand = round2(bill.invoices.rows.reduce((s, r) => s + num(r.grand_total), 0))
+    const importedGrand = round2(invoices.reduce((s, i) => s + invoiceTotals(i, next.settings.supplierState).grand, 0))
+    checks.push(
+      { label: 'Invoices (billing)', legacy: String(bill.invoices.rows.length), imported: String(invoices.length), ok: bill.invoices.rows.length === invoices.length },
+      { label: 'Invoice line items', legacy: String(bill.invoice_items?.rows.length ?? 0), imported: String(invoices.reduce((s, i) => s + i.items.length, 0)), ok: (bill.invoice_items?.rows.length ?? 0) === invoices.reduce((s, i) => s + i.items.length, 0) },
+      { label: 'Invoice grand totals', legacy: lakh(legacyGrand), imported: lakh(importedGrand), ok: Math.abs(legacyGrand - importedGrand) < 0.05 },
+    )
+  }
 
   for (const t of ['login_tokens', 'magic_links', 'trusted_ips']) if (tables[t]) skipped.push(`${t} (${T(t).length} rows) — sign-in secrets are never carried over`)
   skipped.push('users.password, otp_code — the old system stored passwords as plain text; everyone gets a new password')
   for (const [t, v] of Object.entries(tables)) if (!v.rows.length) skipped.push(`${t} — empty in the old CRM`)
   if (T('service_stage_master').length || T('employee_service_stages').length) notes.push('Per-service stage lists (Startup India Certificate, 6 stages) are kept in the original records; the new CRM uses its 9-stage pipeline.')
-  notes.push('Uploaded files (payment screenshots, documents, agreements) are not inside the .sql file — their names and old paths are kept so they can be copied from the old server.')
+  notes.push('Uploaded files (payment screenshots, documents, agreements) are not inside the .sql file — after importing, attach them from the old uploads folder in step 4.')
 
   const report: ImportReport = {
     source: Object.fromEntries(Object.entries(tables).map(([k, v]) => [k, v.rows.length])),
-    imported: { clientFiles: bookings.length, payments: paymentsMade, users: created, usersMatched: merged, services: svcAdded, leads: leads.length, notifications: notices.length, documents: bookings.reduce((s, b) => s + b.documents.length, 0) },
+    imported: { clientFiles: bookings.length, payments: paymentsMade, users: created, usersMatched: merged, services: svcAdded, leads: leads.length, notifications: notices.length, documents: bookings.reduce((s, b) => s + b.documents.length, 0), ...(invoices.length ? { invoices: invoices.length } : {}) },
     checks, notes, skipped,
     statusMap: [...statusCount].map(([key, v]) => ({ legacy: key.split('\u0000')[0] || '(empty)', count: v.count, becomes: v.becomes })).sort((a, b) => b.count - a.count),
     roleMap: [...roleCount].map(([legacy, count]) => ({ legacy, count, becomes: ROLE_MAP[legacy.toLowerCase()]?.role ?? 'sales' })).sort((a, b) => b.count - a.count),

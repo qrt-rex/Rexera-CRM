@@ -60,12 +60,35 @@ export async function openFile(ref: FileRef, download = false) {
 
 export const fileSize = (n: number) => (n > 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`)
 
+// ------------------------------------------------------------------ old CRM files (ids start with lg-f-, see legacyFiles.ts)
+/** Ids of the old-CRM files already stored in this browser. */
+export async function storedLegacyIds(): Promise<Set<string>> {
+  const keys = await tx<IDBValidKey[]>('readonly', (s) => s.getAllKeys(IDBKeyRange.bound('lg-f-', 'lg-f-￿')))
+  return new Set((keys ?? []).map(String))
+}
+/** Stores several files in one transaction (much quicker than one by one for thousands of files). */
+export async function putFiles(rows: { ref: FileRef; blob: Blob }[]) {
+  await tx('readwrite', (s) => { for (const { ref, blob } of rows) s.put({ ...ref, blob }) })
+}
+/** Space this browser still allows (bytes), and asks it not to clear our data when the disk gets full. */
+export async function storageRoom() {
+  const persisted = await navigator.storage?.persist?.().catch(() => false)
+  const est = await navigator.storage?.estimate?.().catch(() => undefined)
+  return { free: est?.quota != null ? est.quota - (est.usage ?? 0) : null, quota: est?.quota ?? null, used: est?.usage ?? null, persisted: !!persisted }
+}
+
 // ------------------------------------------------------------------ backups
 export interface StoredFile extends FileRef { data: string }
 const toB64 = (b: Blob) => new Promise<string>((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] ?? ''); r.onerror = rej; r.readAsDataURL(b) })
+/** Files added in the CRM. Old-CRM files (gigabytes) are left out — they can be attached again from the export folder. */
 export async function exportFiles(): Promise<StoredFile[]> {
-  const rows = await tx<(FileRef & { blob: Blob })[]>('readonly', (s) => s.getAll() as IDBRequest<(FileRef & { blob: Blob })[]>)
-  return Promise.all(rows.map(async ({ blob, ...ref }) => ({ ...ref, data: await toB64(blob) })))
+  const keys = (await tx<IDBValidKey[]>('readonly', (s) => s.getAllKeys())).map(String).filter((k) => !k.startsWith('lg-f-'))
+  const out: StoredFile[] = []
+  for (const id of keys) {
+    const row = await tx<(FileRef & { blob: Blob }) | undefined>('readonly', (s) => s.get(id) as IDBRequest<(FileRef & { blob: Blob }) | undefined>)
+    if (row) { const { blob, ...ref } = row; out.push({ ...ref, data: await toB64(blob) }) }
+  }
+  return out
 }
 export async function importFiles(list: StoredFile[]) {
   for (const { data, ...ref } of list) {

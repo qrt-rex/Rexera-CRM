@@ -1,37 +1,13 @@
 import { useRef, useState } from 'react'
 import { FileText, Plus, Upload, X } from 'lucide-react'
 import type { FileRef } from '../lib/types'
-import { DOC_CATEGORIES } from '../lib/workflow'
+import { DOC_CATEGORIES, guessCategory } from '../lib/workflow'
 import { checkFile, deleteFile, fileSize, saveFile } from '../lib/files'
 import { Button, cx, useToast } from './ui'
 
 export const DOC_ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,application/pdf,image/png,image/jpeg,image/webp'
 export interface PendingDoc { file: FileRef; category: string }
 
-/** Best guess of the document type from its file name (the person can change it). */
-export function guessCategory(name: string, fallback = 'Other') {
-  const n = name.toLowerCase()
-  if (/\bcoi\b|incorporat/.test(n)) return 'Certificate of Incorporation (COI)'
-  if (/msme|udyam|udyog/.test(n)) return 'MSME / Udyam certificate'
-  if (/aadha?r/.test(n)) return 'Aadhaar card'
-  if (/\bpan\b|pan[\s_-]?card/.test(n)) return 'Company PAN card'
-  if (/gst/.test(n)) return 'GST certificate'
-  if (/bank|statement/.test(n)) return 'Bank statement'
-  if (/\bitr\b|income[\s_-]?tax/.test(n)) return 'ITR'
-  if (/\bmou\b|memorandum/.test(n)) return 'MOU'
-  if (/\baoa\b|articles/.test(n)) return 'AOA'
-  if (/\bcma\b/.test(n)) return 'CMA report'
-  if (/passport|photo/.test(n)) return 'Passport / photo'
-  if (/agree|contract|mou/.test(n)) return 'Agreement'
-  if (/quot|\bqt\b|proposal/.test(n)) return 'Quotation (QT)'
-  if (/\bcrm\b/.test(n)) return 'CRM'
-  if (/pitch|deck/.test(n)) return 'Pitch deck'
-  if (/\bdpr\b|project[\s_-]?report/.test(n)) return 'D.P.R (Detailed project report)'
-  if (/\bfr\b|financial|balance|p&l|itr/.test(n)) return 'F.R (Financial report)'
-  if (/receipt|payment|utr|screenshot/.test(n)) return 'Payment receipt'
-  if (/kyc|voter/.test(n)) return 'KYC'
-  return fallback
-}
 
 /**
  * Add documents one after another: each gets its own type. `onChange` receives the list so a form can save it later,

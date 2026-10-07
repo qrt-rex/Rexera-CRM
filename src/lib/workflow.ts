@@ -115,6 +115,34 @@ export const DOC_CATEGORIES = [
   'Government certificates', 'Financial', 'Other',
 ]
 
-export const LEAD_SOURCES = ['Website', 'Facebook Ads', 'Google Ads', 'Referral', 'Walk-in', 'IVR campaign', 'Exhibition', 'Cold call']
+/** Best guess of the document type from its title / file name (the person can change it). */
+export function guessCategory(name: string, fallback = 'Other') {
+  const n = name.toLowerCase()
+  if (/\bcoi\b|\bcio\b|incorporat/.test(n)) return 'Certificate of Incorporation (COI)'
+  if (/msme|udyam|udyog/.test(n)) return 'MSME / Udyam certificate'
+  if (/aadha?r/.test(n) && /\bpan\b/.test(n)) return 'KYC'
+  if (/aadha?r/.test(n)) return 'Aadhaar card'
+  if (/\bpan\b|pan[\s_-]?card/.test(n)) return 'Company PAN card'
+  if (/gst/.test(n)) return 'GST certificate'
+  if (/bank|statement/.test(n)) return 'Bank statement'
+  if (/\bitr\b|income[\s_-]?tax/.test(n)) return 'ITR'
+  if (/\bmou\b|\bmoa\b|memorandum/.test(n)) return 'MOU'
+  if (/\baoa\b|articles/.test(n)) return 'AOA'
+  if (/\bcma\b/.test(n)) return 'CMA report'
+  if (/passport|photo/.test(n)) return 'Passport / photo'
+  if (/agree|contract/.test(n)) return 'Agreement'
+  if (/quot|\bqt\b|proposal/.test(n)) return 'Quotation (QT)'
+  if (/\bcrm\b/.test(n)) return 'CRM'
+  if (/pitch|deck/.test(n)) return 'Pitch deck'
+  if (/\bdpr\b|project[\s_-]?report/.test(n)) return 'D.P.R (Detailed project report)'
+  if (/\bfr\b|financial|balance|p&l/.test(n)) return 'F.R (Financial report)'
+  if (/receipt|payment|utr|screenshot/.test(n)) return 'Payment receipt'
+  if (/kyc|voter|director/.test(n)) return 'KYC'
+  if (/dpiit|startup india|startup certificate|fssai|importer|iec\b|approval letter|\btan\b/.test(n)) return 'Government certificates'
+  if (/logo|brochure|brand|product|concept|layout|mockup/.test(n)) return 'Company documents'
+  return fallback
+}
+
+export const LEAD_SOURCES =['Website', 'Facebook Ads', 'Google Ads', 'Referral', 'Walk-in', 'IVR campaign', 'Exhibition', 'Cold call']
 
 export type { Tone }
