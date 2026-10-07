@@ -8,7 +8,7 @@ import { createLead, logCall, visibleLeads } from '../../lib/actions'
 import { CALL_OUTCOMES, LEAD_STATUS, OPEN_LEAD } from '../../lib/workflow'
 import { addDays, fmtDate, fmtDateTime, fmtTime, inr, normPhone, today, ymd } from '../../lib/format'
 import { blutec, FINAL_STATUSES, isHot, type AgentConnect, type BlutecStatus, type CallStatus, type Ivr, type IvrStats } from '../../lib/dialer'
-import { isMaster, rolesOf } from '../../lib/rbac'
+import { rolesOf } from '../../lib/rbac'
 import { Badge, Button, Card, CardHeader, cx, EmptyState, Input, Modal, PageHeader, Table, Tabs, Td, Textarea, Th, useConfirm, useRun, useToast } from '../../components/ui'
 import { salesNumbers } from '../../lib/metrics'
 import { MiniStat } from '../dashboards/widgets'
@@ -54,31 +54,37 @@ export function CallLogger({ lead, seconds = 0, suggested, onDone }: { lead: Lea
 }
 
 export default function Dialer() {
-  const { can } = useAuth()
   const me = useMe()
   const [params, setParams] = useSearchParams()
-  const tab = params.get('tab') === 'ivr' ? 'ivr' : 'calls'
+  const roles = rolesOf(me)
+  // Calls are for sales people (sales / team leader); IVR campaigns are for Super Admin only
+  const showCalls = roles.some((r) => r === 'sales' || r === 'teamlead')
+  const showIvr = roles.includes('superadmin')
+  const tab = showIvr && (!showCalls || params.get('tab') === 'ivr') ? 'ivr' : showCalls ? 'calls' : null
   const bt = useBlutec()
   return (
     <div>
-      <PageHeader title="Dialer" subtitle="Click-to-call and IVR through Blutec — follow-ups due come first, then new leads" icon={Phone}
-        actions={<>
-          <ConnectionPill bt={bt} />
-          <Tabs value={tab} onChange={(t) => setParams(t === 'calls' ? {} : { tab: t })} tabs={[{ id: 'calls', label: 'Calls', icon: PhoneCall }, { id: 'ivr', label: 'IVR campaigns', icon: Radio }]} />
+      <PageHeader title="Dialer" icon={Phone}
+        subtitle={tab === 'ivr' ? 'IVR campaigns through Blutec: live stats and hot prospects' : 'Click-to-call through Blutec — follow-ups due come first, then new leads'}
+        actions={tab && <>
+          <ConnectionPill bt={bt} ivr={tab === 'ivr'} />
+          {showCalls && showIvr && <Tabs value={tab} onChange={(t) => setParams(t === 'calls' ? {} : { tab: t })} tabs={[{ id: 'calls', label: 'Calls', icon: PhoneCall }, { id: 'ivr', label: 'IVR campaigns', icon: Radio }]} />}
         </>} />
-      {tab === 'calls' ? <CallsTab bt={bt} /> : <IvrTab bt={bt} manage={isMaster(me) || rolesOf(me).some((r) => r === 'teamlead' || r === 'admin') || can('leads.manage')} />}
+      {tab === 'calls' ? <CallsTab bt={bt} /> : tab === 'ivr' ? <IvrTab bt={bt} manage /> : (
+        <Card><EmptyState icon={Phone} title="Dialer is for sales people" text="Calls are used by sales people and team leaders; IVR campaigns are run by the Super Admin." /></Card>
+      )}
     </div>
   )
 }
 
-function ConnectionPill({ bt }: { bt: ReturnType<typeof useBlutec> }) {
+function ConnectionPill({ bt, ivr }: { bt: ReturnType<typeof useBlutec>; ivr: boolean }) {
   const [open, setOpen] = useState(false)
-  const ok = bt.status?.dialer
+  const ok = ivr ? bt.status?.ivr : bt.status?.dialer
   return (
     <>
       <button onClick={() => setOpen(true)} className={cx('flex h-10 items-center gap-2 rounded-xl border px-3 text-xs font-semibold', ok ? 'border-ok/30 bg-ok-soft text-ok' : 'border-warn/30 bg-warn-soft text-warn')}>
         {bt.loading ? <CircleDashed className="size-4 animate-spin" /> : ok ? <CircleCheck className="size-4" /> : <Settings2 className="size-4" />}
-        {bt.loading ? 'Checking dialer…' : ok ? `Blutec connected${bt.status?.ivr ? ' · IVR' : ''}` : 'Dialer not connected'}
+        {bt.loading ? 'Checking dialer…' : ivr ? (ok ? 'Blutec IVR connected' : 'IVR not connected') : ok ? 'Blutec connected' : 'Dialer not connected'}
       </button>
       <Modal open={open} onClose={() => setOpen(false)} title="Blutec dialer connection" size="lg" footer={<><Button variant="outline" icon={RefreshCcw} onClick={bt.check}>Check again</Button><Button onClick={() => setOpen(false)}>Close</Button></>}>
         <div className="space-y-3 text-sm">
@@ -282,7 +288,7 @@ function IvrTab({ bt, manage }: { bt: ReturnType<typeof useBlutec>; manage: bool
     else if (lead) nav(`/leads?open=${lead.id}`)
   }
 
-  if (!ready) return <Card><EmptyState icon={Radio} title="IVR is not connected" text="Ask IT to add the Blutec IVR API account (see “Dialer not connected” at the top). Then campaigns, live stats and hot prospects show here." /></Card>
+  if (!ready) return <Card><EmptyState icon={Radio} title="IVR is not connected" text="Ask IT to add the Blutec IVR API account (see “IVR not connected” at the top). Then campaigns, live stats and hot prospects show here." /></Card>
   const cur = ivrs?.find((x) => x.id === sel)
   const st = stats?.broadcast_status ?? cur?.broadcast_status
   return (
