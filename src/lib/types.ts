@@ -163,6 +163,8 @@ export interface Booking {
   ownerName?: string
   /** step / result inside the current stage: stage 3 IN_PROCESS | IN_REVIEW, stage 8 APPROVED | REJECTED | RESUBMISSION | HOLD_CLIENT */
   stageOutcome?: string
+  /** why stage 8 is Rejected / Re-submission / Hold */
+  stageReason?: string
   /** every service on the entry with its price (bifurcation); serviceId / serviceName mirror the first / all names */
   services?: { serviceId: string; name: string; price: number }[]
   /** combo booking: services can be added until the deadline (3, 6 or 12 months from the booking date) */

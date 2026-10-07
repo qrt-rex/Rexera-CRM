@@ -723,13 +723,17 @@ export function decide(me: User, id: string, dec: Decision) {
   })
 }
 
+/** Files whose stages are being worked on (Admin and the Operation team can both set stages on these). */
+export const WORK_STATUSES: BookingStatus[] = ['IN_OPERATIONS', 'WITH_ADMIN', 'OPS_REVIEW']
+/** Admin and the Operation team can set the stage and result of any file in processing (up to the stage Legal allowed). */
 export function canMoveStage(d: DB, me: User, b: Booking) {
-  const p = effectivePerms(d, me)
   if (isSA(me)) return true
-  if (b.status === 'IN_OPERATIONS') return p.has('bookings.process') && b.opsMemberId === me.id
-  if (b.status === 'WITH_ADMIN') return p.has('bookings.admin') && b.adminId === me.id
-  return false
+  if (!WORK_STATUSES.includes(b.status) || !b.opsMemberId) return false
+  const p = effectivePerms(d, me)
+  return p.has('bookings.process') || p.has('bookings.admin')
 }
+/** Stage 8 results other than Approved need a reason. */
+export const outcomeNeedsReason = (outcome?: string) => outcome === 'REJECTED' || outcome === 'RESUBMISSION' || outcome === 'HOLD_CLIENT'
 
 export function moveStage(me: User, id: string, stage: number, note: string, outcome?: string) {
   mutate((d) => {
@@ -740,31 +744,37 @@ export function moveStage(me: User, id: string, stage: number, note: string, out
     assert(stage >= b.stage || note.trim().length >= 3, 'Moving back needs a reason.')
     const options = STAGE_OUTCOMES[stage]
     assert(!outcome || options?.some((o) => o.id === outcome), 'That step / result does not belong to this stage.')
+    // stage 3 starts "in process"; stage 8 starts "Approved" (change it — with a reason — if it isn't)
+    const o = outcome ?? options?.[0]?.id
+    assert(!outcomeNeedsReason(o) || note.trim().length >= 3, 'Give the reason.')
     b.stage = stage
-    // stage 3 starts "in process"; stage 8 waits for its result to be picked
-    b.stageOutcome = outcome ?? (stage === 3 ? 'IN_PROCESS' : undefined)
-    b.stageHistory.push({ stage, at: nowIso(), by: me.id, outcome: b.stageOutcome, note: note || `Moved to ${stageLabel(stage, b.stageOutcome)}` })
+    b.stageOutcome = o
+    b.stageReason = outcomeNeedsReason(o) ? note.trim() : undefined
+    b.stageHistory.push({ stage, at: nowIso(), by: me.id, outcome: o, note: note.trim() || `Moved to ${stageLabel(stage, o)}` })
     b.updatedAt = nowIso()
-    notify(d, [b.createdBy], `Stage: ${stageLabel(stage, b.stageOutcome)}`, `${b.bookingId} · ${b.companyName}`, `/bookings/${b.id}`, 'info')
+    notify(d, [b.createdBy, b.opsMemberId, b.adminId].filter((x) => x && x !== me.id), `Stage: ${stageLabel(stage, o)}`, `${b.bookingId} · ${b.companyName}${b.stageReason ? ` — ${b.stageReason}` : ''}`, `/bookings/${b.id}`, outcomeNeedsReason(o) ? 'warning' : 'info')
   })
 }
 
-/** Stage 3: in process ↔ in review. Stage 8: approved / rejected / re-submission / hold (client not responding). */
+/** Stage 3: in process ↔ in review. Stage 8: Approved, or Rejected / Re-submission / Hold with a reason. */
 export function setStageOutcome(me: User, id: string, outcome: string, note = '') {
   mutate((d) => {
     const b = findB(d, id)
     assert(canMoveStage(d, me, b), 'You cannot update this file right now.')
     const options = STAGE_OUTCOMES[b.stage]
     assert(options?.some((o) => o.id === outcome), 'Pick a step / result for this stage.')
-    if (b.stageOutcome === outcome) return
+    const reason = note.trim()
+    assert(!outcomeNeedsReason(outcome) || reason.length >= 3, 'Give the reason.')
+    if (b.stageOutcome === outcome && (b.stageReason ?? '') === (outcomeNeedsReason(outcome) ? reason : '')) return
     b.stageOutcome = outcome
-    b.stageHistory.push({ stage: b.stage, at: nowIso(), by: me.id, outcome, note: note || stageLabel(b.stage, outcome) })
+    b.stageReason = outcomeNeedsReason(outcome) ? reason : undefined
+    b.stageHistory.push({ stage: b.stage, at: nowIso(), by: me.id, outcome, note: reason || stageLabel(b.stage, outcome) })
     b.updatedAt = nowIso()
-    notify(d, [b.createdBy, b.opsMemberId, b.adminId].filter((x) => x !== me.id), stageLabel(b.stage, outcome), `${b.bookingId} · ${b.companyName}`, `/bookings/${b.id}`, outcome === 'REJECTED' || outcome === 'HOLD_CLIENT' ? 'warning' : 'info')
-    audit(d, me.id, 'STAGE_OUTCOME', `${b.bookingId}: ${stageLabel(b.stage, outcome)}`)
+    notify(d, [b.createdBy, b.opsMemberId, b.adminId, ...usersWithRole(d, 'legal').map((u) => u.id)].filter((x) => x && x !== me.id), stageLabel(b.stage, outcome),
+      `${b.bookingId} · ${b.companyName}${reason ? ` — ${reason}` : ''}`, `/bookings/${b.id}`, outcomeNeedsReason(outcome) ? 'warning' : 'info')
+    audit(d, me.id, 'STAGE_OUTCOME', `${b.bookingId}: ${stageLabel(b.stage, outcome)}${reason ? ` — ${reason}` : ''}`)
   })
 }
-
 export function setMaxStage(me: User, id: string, max: number) {
   need(me, 'bookings.legal')
   mutate((d) => {

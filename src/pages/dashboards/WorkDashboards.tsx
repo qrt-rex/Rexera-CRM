@@ -16,6 +16,7 @@ import { HBars } from '../../components/charts'
 import { BookingRow, BookingStatusBadge, DeadlineBadge, StageTrack } from '../../components/booking'
 import { ClientWorkRow } from '../../components/ClientWork'
 import { TasksPanel } from '../../components/TasksPanel'
+import { WorkProgressPanel } from '../../components/WorkProgressPanel'
 import { Greeting, LoginLogoutCard, Section, Tile, TileGrid, UpcomingEvents, ViewAll } from './widgets'
 
 export function OperationsDashboard() {
@@ -86,6 +87,7 @@ export function OperationsDashboard() {
           <LoginLogoutCard /><UpcomingEvents limit={3} />
         </div>
       </div>
+      <WorkProgressPanel title={team ? 'Client work progress · whole team' : 'Client work progress · all files'} className="mt-6" />
     </div>
   )
 }

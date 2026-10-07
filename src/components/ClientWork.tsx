@@ -4,14 +4,15 @@ import { CheckCircle2, FilePlus2, FileText, Upload } from 'lucide-react'
 import type { Booking, FileRef } from '../lib/types'
 import { useDb } from '../lib/store'
 import { useMe } from '../lib/auth'
-import { addDocuments, canMoveStage, moveStage, setStageOutcome, userName } from '../lib/actions'
-import { STAGE_OUTCOMES, STAGES, stageLabel } from '../lib/workflow'
+import { addDocuments, userName } from '../lib/actions'
+import { STAGES } from '../lib/workflow'
 import { fmtDateTime } from '../lib/format'
 import { checkFile, saveFile } from '../lib/files'
 import { Button, cx, Modal, useRun, useToast } from './ui'
 import { BookingStatusBadge, DecisionButtons, StageTrack } from './booking'
 import { DOC_ACCEPT, DocUploader, type PendingDoc } from './DocUploader'
 import { FileLink } from './FileField'
+import { StageControls, StageText } from './StageControls'
 
 /** The documents Admin adds while doing the client's work. */
 const WORK_DOCS = [
@@ -27,34 +28,17 @@ export function ClientWorkRow({ b, showDocs = false }: { b: Booking; showDocs?: 
   const run = useRun()
   const [docsOpen, setDocsOpen] = useState(false)
   const [pending, setPending] = useState<PendingDoc[]>([])
-  const movable = canMoveStage(db, me, b)
-  const next = STAGES.map((s, i) => ({ s, n: i + 1 })).filter((x) => x.n > b.stage && (x.n <= b.maxStage || me.role === 'superadmin'))
-  const outcomes = STAGE_OUTCOMES[b.stage]
   return (
     <li className="px-5 py-4">
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <Link to={`/bookings/${b.id}`} className="font-bold hover:underline">{b.companyName}</Link>
         <BookingStatusBadge b={b} />
-        <span className="ml-auto text-xs font-semibold text-mute">Stage {stageLabel(b.stage, b.stageOutcome)} <span className="font-normal">of {STAGES.length}</span></span>
+        <span className="ml-auto text-xs font-semibold text-mute">Stage <StageText b={b} /> <span className="font-normal">of {STAGES.length}</span></span>
       </div>
       <StageTrack b={b} />
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <span className="min-w-0 flex-1 truncate text-xs text-mute">{b.serviceName} · Ops {userName(db, b.opsMemberId)}{b.adminId ? ` · Admin ${userName(db, b.adminId)}` : ''}</span>
-        {movable && outcomes && (
-          <select aria-label={`${b.stage === 3 ? 'Step' : 'Result'} for ${b.companyName}`} value={b.stageOutcome ?? ''}
-            onChange={(e) => e.target.value && run(() => setStageOutcome(me, b.id, e.target.value), stageLabel(b.stage, e.target.value))}
-            className={cx('h-8 rounded-lg border px-2 text-xs font-semibold', b.stageOutcome ? 'border-line bg-card' : 'border-warn/50 bg-warn-soft text-warn')}>
-            {!b.stageOutcome && <option value="">{b.stage === 3 ? 'Pick step…' : 'Pick result…'}</option>}
-            {outcomes.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
-          </select>
-        )}
-        {movable && next.length > 0 && (
-          <select aria-label={`Move ${b.companyName} to stage`} value="" onChange={(e) => e.target.value && run(() => moveStage(me, b.id, Number(e.target.value), ''), `Moved to ${stageLabel(Number(e.target.value))}`)}
-            className="h-8 rounded-lg border border-line bg-card px-2 text-xs font-semibold">
-            <option value="">Move to stage…</option>
-            {next.map((x) => <option key={x.n} value={x.n}>{x.n}. {x.s}</option>)}
-          </select>
-        )}
+        <StageControls b={b} />
         <Button size="sm" variant="outline" icon={FilePlus2} onClick={() => setDocsOpen(true)}>Add documents</Button>
         <span className="inline-flex items-center gap-1 text-xs text-mute"><FileText className="size-3.5" />{b.documents.length}</span>
       </div>

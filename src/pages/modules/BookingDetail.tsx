@@ -17,6 +17,7 @@ import type { FileRef, LegacyRow } from '../../lib/types'
 import { DOC_TYPES } from '../../lib/files'
 import { FileField } from '../../components/FileField'
 import { DocUploader, type PendingDoc } from '../../components/DocUploader'
+import { StageControls, StageText } from '../../components/StageControls'
 import { FileLink } from '../../components/FileField'
 import {
   Avatar, Badge, Button, Card, CardHeader, cx, EmptyState, FileButton, Input, Modal, Select, Table, Tabs, Td, Textarea, Th, readAsDataUrl, useRun,
@@ -229,7 +230,7 @@ function Processing({ id }: { id: string }) {
   return (
     <div className="grid gap-6 xl:grid-cols-3">
       <Card className="overflow-hidden xl:col-span-2">
-        <CardHeader title="Processing stages" subtitle={b.opsMemberId ? `Now: ${stageLabel(b.stage, b.stageOutcome)} · allowed up to stage ${b.maxStage}` : 'Starts once Legal assigns Operations'} icon={FolderKanban} />
+        <CardHeader title="Processing stages" subtitle={b.opsMemberId ? `Now: ${stageLabel(b.stage, b.stageOutcome)}${b.stageReason ? ` — ${b.stageReason}` : ''} · allowed up to stage ${b.maxStage} · Admin and the Operation team can update stages` : 'Starts once Legal assigns Operations'} icon={FolderKanban} />
         <div className="p-5">
           <StageTrack b={b} />
           <ol className="mt-5 space-y-2">
@@ -250,14 +251,11 @@ function Processing({ id }: { id: string }) {
                     {cur && <Badge tone="orange" dot>Current</Badge>}
                   </div>
                   {options && here && (
-                    <div className="mt-2 flex flex-wrap gap-2 pl-11">
-                      {options.map((o) => (
-                        <button key={o.id} type="button" disabled={!movable || b.status === 'COMPLETED'} onClick={() => run(() => setStageOutcome(me, b.id, o.id), stageLabel(n, o.id))}
-                          className={cx('rounded-full border px-3 py-1 text-xs font-semibold transition disabled:cursor-default', b.stageOutcome === o.id ? 'border-brand bg-brand text-white' : 'border-line bg-card hover:bg-card2 disabled:hover:bg-card')}>
-                          {o.label}
-                        </button>
-                      ))}
-                      {!b.stageOutcome && n === STAGES.length && <span className="self-center text-xs text-warn">Pick the result</span>}
+                    <div className="mt-2 space-y-1.5 pl-11">
+                      {movable && b.status !== 'COMPLETED' ? <StageControls b={b} variant="chips" showMove={false} />
+                        : <p className="text-xs font-semibold"><StageText b={b} /></p>}
+                      {b.stageReason && movable && b.status !== 'COMPLETED' && <p className="text-xs text-bad">Reason: {b.stageReason}</p>}
+                      {!b.stageOutcome && <span className="text-xs text-warn">Pick the {n === 3 ? 'step' : 'result'}</span>}
                     </div>
                   )}
                 </li>

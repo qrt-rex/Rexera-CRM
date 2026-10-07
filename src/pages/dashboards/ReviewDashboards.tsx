@@ -11,6 +11,7 @@ import { fmtDateTime, inr, inrShort, today } from '../../lib/format'
 import { Link } from 'react-router-dom'
 import { FileLink } from '../../components/FileField'
 import { TasksPanel } from '../../components/TasksPanel'
+import { WorkProgressPanel } from '../../components/WorkProgressPanel'
 import { EmptyState } from '../../components/ui'
 import { Bars, HBars } from '../../components/charts'
 import { BookingRow } from '../../components/booking'
@@ -108,6 +109,7 @@ export function LegalDashboard() {
           <UpcomingEvents limit={3} />
         </div>
       </div>
+      <WorkProgressPanel className="mt-6" />
       <div className="mt-6 grid gap-6 xl:grid-cols-2">
         <Section title="Client documents" subtitle="Latest uploads across client files" icon={FileText} action={<ViewAll to="/documents" />}>
           <ul className="max-h-96 divide-y divide-line/70 overflow-y-auto">

@@ -17,7 +17,7 @@ export const STAGE_OUTCOMES: Record<number, { id: string; label: string; tone: T
   3: [{ id: 'IN_PROCESS', label: 'Document in process', tone: 'blue' }, { id: 'IN_REVIEW', label: 'Document in review', tone: 'violet' }],
   8: [
     { id: 'APPROVED', label: 'Approved', tone: 'green' }, { id: 'REJECTED', label: 'Rejected', tone: 'red' },
-    { id: 'RESUBMISSION', label: 'Re-submission', tone: 'amber' }, { id: 'HOLD_CLIENT', label: 'Hold – client not responding', tone: 'orange' },
+    { id: 'RESUBMISSION', label: 'Re-submission', tone: 'amber' }, { id: 'HOLD_CLIENT', label: 'Hold', tone: 'orange' },
   ],
 }
 export const FINAL_STAGE = STAGES.length

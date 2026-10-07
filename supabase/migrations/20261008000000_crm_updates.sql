@@ -18,6 +18,7 @@ alter table booking_stage_moves drop constraint if exists booking_stage_moves_st
 alter table booking_stage_moves add constraint booking_stage_moves_stage_check check (stage between 1 and 8);
 
 alter table bookings add column if not exists stage_outcome text check (stage_outcome is null or stage_outcome in ('IN_PROCESS', 'IN_REVIEW', 'APPROVED', 'REJECTED', 'RESUBMISSION', 'HOLD_CLIENT'));
+alter table bookings add column if not exists stage_reason text;           -- why stage 8 is rejected / re-submission / hold
 alter table booking_stage_moves add column if not exists outcome text;
 alter table bookings add column if not exists services jsonb;          -- [{ serviceId, name, price }]
 alter table bookings add column if not exists combo jsonb;             -- { months, startedOn, deadline, deadlineNotified }
