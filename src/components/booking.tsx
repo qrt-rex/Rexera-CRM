@@ -5,7 +5,7 @@ import type { Booking } from '../lib/types'
 import { useDb } from '../lib/store'
 import { useMe } from '../lib/auth'
 import { availableDecisions, decide, userName, usersWithRole, type Decision } from '../lib/actions'
-import { BOOKING_STATUS, CHAIN, HOLD_REASONS, STAGES } from '../lib/workflow'
+import { BOOKING_STATUS, CHAIN, HOLD_REASONS, STAGES, stageLabel } from '../lib/workflow'
 import { addDays, bookingMoney, fmtDate, inr, ymd } from '../lib/format'
 import { Badge, Button, cx, Input, Modal, Progress, Select, Textarea, useRun } from './ui'
 
@@ -82,7 +82,7 @@ export function ChainStepper({ b, compact }: { b: Booking; compact?: boolean }) 
 
 export function StageTrack({ b }: { b: Booking }) {
   return (
-    <div className="flex gap-1" aria-label={`Stage ${b.stage} of ${STAGES.length}`}>
+    <div className="flex gap-1" aria-label={`Stage ${stageLabel(b.stage, b.stageOutcome)} of ${STAGES.length}`} title={stageLabel(b.stage, b.stageOutcome)}>
       {STAGES.map((s, i) => (
         <span key={s} title={`${i + 1}. ${s}${i + 1 > b.maxStage ? ' (locked)' : ''}`}
           className={cx('h-2 flex-1 rounded-full', i < b.stage ? 'bg-ok' : i < b.maxStage ? 'bg-brand-soft' : 'bg-line/60')} />

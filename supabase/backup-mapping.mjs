@@ -37,11 +37,11 @@ export function mapAll(backup) {
     lead_id: s(b.leadId), created_at: b.createdAt, updated_at: b.updatedAt, legacy_id: b.legacyId ?? null, legacy: b.legacy ?? null,
     address: s(b.address), website: s(b.website), cin: s(b.cin), startup_contact: b.startupContact ?? null, billing: b.billing ?? null, owner_name: s(b.ownerName),
     services: b.services ?? null, combo: b.combo ?? null, payment_contact: s(b.paymentContact), payment_email: s(b.paymentEmail), booking_date: s(b.bookingDate),
-    success_fee: b.successFee ?? null, remarks: s(b.remarks), closed_by: uref(b.closedBy),
+    success_fee: b.successFee ?? null, remarks: s(b.remarks), closed_by: uref(b.closedBy), stage_outcome: s(b.stageOutcome),
   }))
   t.booking_payments = d.bookings.flatMap((b) => b.payments.map((p) => ({ id: p.id, booking_id: b.id, part: p.part, amount: p.amount, gst: p.gst, total: p.total, paid_on: p.date, mode: p.mode, proof_name: p.proofName, recorded_by: uref(p.recordedBy), verified: p.verified, is_adjustment: p.mode === 'Adjustment', date_unknown: !!p.dateUnknown, proof: p.proof ?? null })))
   t.booking_approvals = d.bookings.flatMap((b) => b.approvals.map((a) => ({ id: a.id, booking_id: b.id, level: a.level, action: a.action, decided_by: uref(a.by), decided_at: a.at, remark: a.remark ?? '' })))
-  t.booking_stage_moves = d.bookings.flatMap((b) => b.stageHistory.map((h, i) => ({ id: `${b.id}-stage-${i + 1}`, booking_id: b.id, stage: h.stage, moved_at: h.at, moved_by: uref(h.by), note: h.note ?? '' })))
+  t.booking_stage_moves = d.bookings.flatMap((b) => b.stageHistory.map((h, i) => ({ id: `${b.id}-stage-${i + 1}`, booking_id: b.id, stage: h.stage, moved_at: h.at, moved_by: uref(h.by), note: h.note ?? '', outcome: s(h.outcome) })))
   t.booking_comments = d.bookings.flatMap((b) => b.comments.map((c) => ({ id: c.id, booking_id: b.id, author_id: uref(c.by), created_at: c.at, body: c.text, kind: c.kind ?? '' })))
   t.booking_documents = d.bookings.flatMap((b) => b.documents.map((x) => ({ id: x.id, booking_id: b.id, name: x.name, category: x.category, size_bytes: x.size ?? 0, uploaded_at: x.at, uploaded_by: uref(x.by), status: x.status ?? 'PENDING', storage_path: null, legacy_path: x.legacyPath ?? null, file: x.file ?? null })))
   t.booking_tasks = d.bookings.flatMap((b) => b.tasks.map((x) => ({ id: x.id, booking_id: b.id, title: x.title, done: x.done, due_on: s(x.due), created_by: uref(x.by), assignee_id: uref(x.assignee), remind_every_days: x.remindEveryDays ?? null, last_reminded_at: s(x.lastRemindedAt), created_at: x.createdAt ?? b.createdAt })))

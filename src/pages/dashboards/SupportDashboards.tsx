@@ -6,7 +6,7 @@ import {
 import { useDb } from '../../lib/store'
 import { userName, visibleBookings } from '../../lib/actions'
 import { useMe } from '../../lib/auth'
-import { KYC_CATEGORIES, STAGES } from '../../lib/workflow'
+import { KYC_CATEGORIES, STAGES, stageLabel } from '../../lib/workflow'
 import { ago, bookingMoney, inr, today } from '../../lib/format'
 import { roleLabel } from '../../lib/rbac'
 import { Button, EmptyState, Stat, useToast } from '../../components/ui'
@@ -54,7 +54,7 @@ export function SupportDashboard() {
                     <div className="min-w-0 flex-1">
                       <Link to={`/bookings/${b.id}`} className="font-bold hover:underline">{b.companyName}</Link>
                       <p className="text-xs text-mute">{b.bookingId} · {b.serviceName} · {b.contactPerson} · {b.mobile}</p>
-                      <p className="text-xs text-mute">Owner {userName(db, b.createdBy)}{b.opsMemberId ? ` · Stage ${b.stage}. ${STAGES[b.stage - 1]}` : ''} · outstanding {inr(m.outstanding)}</p>
+                      <p className="text-xs text-mute">Owner {userName(db, b.createdBy)}{b.opsMemberId ? ` · Stage ${stageLabel(b.stage, b.stageOutcome)}` : ''} · outstanding {inr(m.outstanding)}</p>
                     </div>
                     <BookingStatusBadge b={b} />
                   </li>

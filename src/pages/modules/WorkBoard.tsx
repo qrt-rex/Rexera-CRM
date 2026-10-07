@@ -4,7 +4,7 @@ import { Columns3, FolderKanban, List, PauseCircle } from 'lucide-react'
 import { useDb } from '../../lib/store'
 import { useMe } from '../../lib/auth'
 import { userName, usersWithRole, visibleBookings } from '../../lib/actions'
-import { STAGES } from '../../lib/workflow'
+import { STAGES, stageLabel } from '../../lib/workflow'
 import { bookingMoney, fmtDate, inr, today } from '../../lib/format'
 import { Avatar, Badge, Card, cx, EmptyState, PageHeader, SearchBox, Table, Tabs, Td, Th, usePaged } from '../../components/ui'
 import { BookingStatusBadge, DeadlineBadge, PriorityBadge, StageTrack } from '../../components/booking'
@@ -88,7 +88,7 @@ export default function WorkBoard() {
                 <tr key={b.id} className="hover:bg-card2/60">
                   <Td><Link to={`/bookings/${b.id}`} className="font-semibold hover:underline">{b.companyName}</Link><p className="text-xs text-mute">{b.serviceName}</p></Td>
                   <Td><BookingStatusBadge b={b} /></Td>
-                  <Td className="w-48"><p className="mb-1 text-xs">{b.stage}. {STAGES[b.stage - 1]}</p><StageTrack b={b} /></Td>
+                  <Td className="w-48"><p className="mb-1 text-xs">{stageLabel(b.stage, b.stageOutcome)}</p><StageTrack b={b} /></Td>
                   <Td className="text-xs">{userName(db, b.opsMemberId)}</Td><Td className="text-xs">{userName(db, b.adminId)}</Td>
                   <Td className="text-xs">{fmtDate(b.deadline)} <DeadlineBadge b={b} /></Td>
                   <Td className="text-right text-sm font-semibold">{inr(bookingMoney(b).collected)}</Td>

@@ -99,7 +99,7 @@ export interface Payment {
 }
 
 export interface Approval { id: string; level: string; action: string; by: string; at: string; remark: string }
-export interface StageMove { stage: number; at: string; by: string; note: string }
+export interface StageMove { stage: number; at: string; by: string; note: string; outcome?: string }
 export interface BComment { id: string; by: string; at: string; text: string; kind: string }
 export interface BDoc { id: string; name: string; category: string; size: number; at: string; by: string; dataUrl?: string; status?: 'PENDING' | 'VERIFIED' | 'REJECTED'; legacyPath?: string; file?: FileRef; note?: string }
 export interface BTask {
@@ -161,6 +161,8 @@ export interface Booking {
   billing?: { name: string; pan: string; gstin: string; contact: string; email: string }
   /** closer's name when they aren't a CRM user (old-CRM files) */
   ownerName?: string
+  /** step / result inside the current stage: stage 3 IN_PROCESS | IN_REVIEW, stage 8 APPROVED | REJECTED | RESUBMISSION | HOLD_CLIENT */
+  stageOutcome?: string
   /** every service on the entry with its price (bifurcation); serviceId / serviceName mirror the first / all names */
   services?: { serviceId: string; name: string; price: number }[]
   /** combo booking: services can be added until the deadline (3, 6 or 12 months from the booking date) */

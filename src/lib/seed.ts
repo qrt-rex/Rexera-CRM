@@ -214,7 +214,7 @@ export async function buildSeed(): Promise<DB> {
       approvals,
       opsMemberId: inOps ? (i % 2 ? 'u-op2' : 'u-op1') : undefined,
       adminId: ['WITH_ADMIN', 'COMPLETED'].includes(f.st) ? (i % 2 ? 'u-ad2' : 'u-ad1') : undefined,
-      stage, maxStage: inOps ? Math.max(stage, 6) : 1,
+      stage, maxStage: inOps ? Math.max(stage, 6) : 1, ...(f.st === 'COMPLETED' ? { stageOutcome: 'APPROVED' } : stage === 3 ? { stageOutcome: 'IN_PROCESS' } : {}),
       stageHistory: inOps ? Array.from({ length: stage }, (_, k) => ({ stage: k + 1, at: at(created - 6 - k, 11), by: i % 2 ? 'u-op2' : 'u-op1', note: k === 0 ? 'Started' : `Moved to ${STAGES[k]}` })) : [],
       comments: [
         { id: `c-${i}-1`, by: owner, at: at(created, 11), text: 'Client is keen to start this month. Advance paid via ' + (payments[0]?.mode ?? 'UPI') + '.', kind: 'BDE' },
@@ -332,7 +332,8 @@ export async function buildSeed(): Promise<DB> {
     backupLog: [],
     emails: [],
     emailAutomations: [],
-    upgrades: [],
+    // sample data is created in the current stage numbering, so the stage renumbering upgrades don't apply to it
+    upgrades: ['stages-11', 'stages-8'],
   }
 
   // starter notifications so the bell is not empty

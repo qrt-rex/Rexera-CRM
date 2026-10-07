@@ -4,7 +4,7 @@ import type {
 import { effectivePerms, isMaster, MASTER_ROLES, rolesOf, roleLabel } from './rbac'
 import { getDb, mutate } from './store'
 import { hashPassword } from './crypto'
-import { CALL_OUTCOMES, OPEN_LEAD, STAGES } from './workflow'
+import { CALL_OUTCOMES, FINAL_STAGE, OPEN_LEAD, STAGE_OUTCOMES, STAGES, stageLabel } from './workflow'
 import { fireAutomation } from './email'
 import { addDays, daysBetween, fmtDate, isEmail, isGstin, isPan, isPhone, normPhone, nowIso, round2, today, uid, ymd } from './format'
 
@@ -706,9 +706,13 @@ export function decide(me: User, id: string, dec: Decision) {
         notify(d, [b.adminId], 'Operations sent the file back', `${label}: ${dec.remark}`, link, 'warning')
         break
       case 'APPROVE_DONE': {
-        const approved = STAGES.indexOf('Approved / Rejected') + 1
+        // completing puts the file on the final stage; its result stays as Admin set it (Approved if none was chosen)
         b.status = 'COMPLETED'
-        if (b.stage < approved) { b.stage = approved; b.stageHistory.push({ stage: approved, at, by: me.id, note: dec.remark || 'Approved by Operations' }) }
+        if (b.stage < FINAL_STAGE || !b.stageOutcome) {
+          b.stage = FINAL_STAGE
+          b.stageOutcome = b.stageOutcome && STAGE_OUTCOMES[FINAL_STAGE]!.some((o) => o.id === b.stageOutcome) ? b.stageOutcome : 'APPROVED'
+          b.stageHistory.push({ stage: FINAL_STAGE, at, by: me.id, outcome: b.stageOutcome, note: dec.remark || 'Approved by Operations' })
+        }
         notify(d, [b.createdBy, b.teamLeadId, b.adminId, ...toRole('superadmin')], 'Client work completed 🎉', label, link, 'success')
         break
       }
@@ -727,17 +731,37 @@ export function canMoveStage(d: DB, me: User, b: Booking) {
   return false
 }
 
-export function moveStage(me: User, id: string, stage: number, note: string) {
+export function moveStage(me: User, id: string, stage: number, note: string, outcome?: string) {
   mutate((d) => {
     const b = findB(d, id)
     assert(canMoveStage(d, me, b), 'You cannot move this file right now.')
     assert(stage >= 1 && stage <= STAGES.length, 'Unknown stage.')
     assert(isSA(me) || stage <= b.maxStage, `You may move this file up to stage ${b.maxStage} (${STAGES[b.maxStage - 1]}).`)
     assert(stage >= b.stage || note.trim().length >= 3, 'Moving back needs a reason.')
+    const options = STAGE_OUTCOMES[stage]
+    assert(!outcome || options?.some((o) => o.id === outcome), 'That step / result does not belong to this stage.')
     b.stage = stage
-    b.stageHistory.push({ stage, at: nowIso(), by: me.id, note: note || `Moved to ${STAGES[stage - 1]}` })
+    // stage 3 starts "in process"; stage 8 waits for its result to be picked
+    b.stageOutcome = outcome ?? (stage === 3 ? 'IN_PROCESS' : undefined)
+    b.stageHistory.push({ stage, at: nowIso(), by: me.id, outcome: b.stageOutcome, note: note || `Moved to ${stageLabel(stage, b.stageOutcome)}` })
     b.updatedAt = nowIso()
-    notify(d, [b.createdBy], `Stage: ${STAGES[stage - 1]}`, `${b.bookingId} · ${b.companyName}`, `/bookings/${b.id}`, 'info')
+    notify(d, [b.createdBy], `Stage: ${stageLabel(stage, b.stageOutcome)}`, `${b.bookingId} · ${b.companyName}`, `/bookings/${b.id}`, 'info')
+  })
+}
+
+/** Stage 3: in process ↔ in review. Stage 8: approved / rejected / re-submission / hold (client not responding). */
+export function setStageOutcome(me: User, id: string, outcome: string, note = '') {
+  mutate((d) => {
+    const b = findB(d, id)
+    assert(canMoveStage(d, me, b), 'You cannot update this file right now.')
+    const options = STAGE_OUTCOMES[b.stage]
+    assert(options?.some((o) => o.id === outcome), 'Pick a step / result for this stage.')
+    if (b.stageOutcome === outcome) return
+    b.stageOutcome = outcome
+    b.stageHistory.push({ stage: b.stage, at: nowIso(), by: me.id, outcome, note: note || stageLabel(b.stage, outcome) })
+    b.updatedAt = nowIso()
+    notify(d, [b.createdBy, b.opsMemberId, b.adminId].filter((x) => x !== me.id), stageLabel(b.stage, outcome), `${b.bookingId} · ${b.companyName}`, `/bookings/${b.id}`, outcome === 'REJECTED' || outcome === 'HOLD_CLIENT' ? 'warning' : 'info')
+    audit(d, me.id, 'STAGE_OUTCOME', `${b.bookingId}: ${stageLabel(b.stage, outcome)}`)
   })
 }
 

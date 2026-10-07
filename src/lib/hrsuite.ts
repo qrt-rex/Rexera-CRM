@@ -84,6 +84,22 @@ export function upgradeDb(d: DB): DB {
     }
     d.upgrades.push('stages-11')
   }
+  if (!d.upgrades.includes('stages-8')) {
+    // 11 → 8 work stages: "in process" and "in review" are one stage (3) with a step; approved / rejected,
+    // re-submission and hold (client not responding) are one final stage (8) with a result
+    const map: Record<number, [number, string?]> = {
+      1: [1], 2: [2], 3: [3, 'IN_PROCESS'], 4: [3, 'IN_REVIEW'], 5: [4], 6: [5], 7: [6], 8: [7], 9: [8], 10: [8, 'RESUBMISSION'], 11: [8, 'HOLD_CLIENT'],
+    }
+    const to = (n: number) => map[n] ?? [Math.min(n, 8)] as [number, string?]
+    for (const b of d.bookings) {
+      const [s, o] = to(b.stage)
+      b.stage = s
+      b.stageOutcome = o ?? (s === 8 && b.status === 'COMPLETED' ? 'APPROVED' : undefined)
+      b.maxStage = to(b.maxStage)[0]
+      for (const h of b.stageHistory) { const [hs, ho] = to(h.stage); h.stage = hs; if (ho) h.outcome = ho }
+    }
+    d.upgrades.push('stages-8')
+  }
   if (!d.upgrades.includes('doc-categories-2')) {
     const rename: Record<string, string> = { 'PAN card': 'Company PAN card', 'GSTIN certificate': 'GST certificate' }
     for (const b of d.bookings) for (const doc of b.documents) if (rename[doc.category]) doc.category = rename[doc.category]!

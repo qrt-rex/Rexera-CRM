@@ -4,16 +4,28 @@ import type { BookingStatus, CallOutcome, LeadStatus, Role } from './types'
 export const STAGES = [
   'Data Collection',
   'Data Received',
-  'Document In-process',
-  'Document In-review',
+  'Document In-process / In-review',
   'Document Approved',
   'Ready to Submit',
   'Submission',
   'Company Information Under Process',
-  'Approved / Rejected',
-  'Re-submission',
-  'Hold – Client Not Responding',
+  'Approved / Rejected / Re-submission / Hold',
 ] as const
+
+/** Stages with a step (3) or a result (8) to choose; the first option is the default when a file reaches the stage. */
+export const STAGE_OUTCOMES: Record<number, { id: string; label: string; tone: Tone }[]> = {
+  3: [{ id: 'IN_PROCESS', label: 'Document in process', tone: 'blue' }, { id: 'IN_REVIEW', label: 'Document in review', tone: 'violet' }],
+  8: [
+    { id: 'APPROVED', label: 'Approved', tone: 'green' }, { id: 'REJECTED', label: 'Rejected', tone: 'red' },
+    { id: 'RESUBMISSION', label: 'Re-submission', tone: 'amber' }, { id: 'HOLD_CLIENT', label: 'Hold – client not responding', tone: 'orange' },
+  ],
+}
+export const FINAL_STAGE = STAGES.length
+/** "3. Document in review", "8. Approved" — the stage with its chosen step / result. */
+export function stageLabel(stage: number, outcome?: string) {
+  const o = STAGE_OUTCOMES[stage]?.find((x) => x.id === outcome)
+  return `${stage}. ${o ? o.label : STAGES[stage - 1] ?? ''}`
+}
 
 export const HOLD_REASONS = [
   'Client not responsive',

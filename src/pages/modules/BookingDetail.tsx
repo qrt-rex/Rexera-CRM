@@ -7,10 +7,10 @@ import {
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
 import {
-  addComboService, addComment, addDocuments, addPayment, needsPriceSplit, addTask, canEditBooking, canMoveStage, deleteDocument, deleteTask, invoiceFromBooking, moveStage,
+  addComboService, addComment, addDocuments, addPayment, needsPriceSplit, addTask, canEditBooking, canMoveStage, deleteDocument, setStageOutcome, deleteTask, invoiceFromBooking, moveStage,
   setDeduction, setDocStatus, toggleTask, userName, verifyPayment, visibleBookings,
 } from '../../lib/actions'
-import { DOC_CATEGORIES, STAGES } from '../../lib/workflow'
+import { DOC_CATEGORIES, STAGES, STAGE_OUTCOMES, stageLabel } from '../../lib/workflow'
 import { ago, bookingMoney, fmtDate, fmtDateTime, gstSplit, inr, today } from '../../lib/format'
 import { roleLabel } from '../../lib/rbac'
 import type { FileRef, LegacyRow } from '../../lib/types'
@@ -65,7 +65,7 @@ export default function BookingDetail() {
       </Card>
 
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {[['Quoted with GST', inr(m.quotedWithGst), ''], ['Collected', inr(m.collected), 'text-ok'], ['Outstanding', inr(m.outstanding), 'text-bad'], ['Stage', b.opsMemberId ? `${b.stage}/${STAGES.length} · ${STAGES[b.stage - 1]}` : 'Not started', '']].map(([k, v, c]) => (
+        {[['Quoted with GST', inr(m.quotedWithGst), ''], ['Collected', inr(m.collected), 'text-ok'], ['Outstanding', inr(m.outstanding), 'text-bad'], ['Stage', b.opsMemberId ? `${stageLabel(b.stage, b.stageOutcome)} (of ${STAGES.length})` : 'Not started', '']].map(([k, v, c]) => (
           <Card key={k} className="p-4"><p className="text-xs font-semibold text-mute">{k}</p><p className={cx('mt-1 truncate text-lg font-extrabold', c)}>{v}</p></Card>
         ))}
       </div>
@@ -229,7 +229,7 @@ function Processing({ id }: { id: string }) {
   return (
     <div className="grid gap-6 xl:grid-cols-3">
       <Card className="overflow-hidden xl:col-span-2">
-        <CardHeader title="Processing stages" subtitle={b.opsMemberId ? `Allowed up to stage ${b.maxStage} · ${STAGES[b.maxStage - 1]}` : 'Starts once Legal assigns Operations'} icon={FolderKanban} />
+        <CardHeader title="Processing stages" subtitle={b.opsMemberId ? `Now: ${stageLabel(b.stage, b.stageOutcome)} · allowed up to stage ${b.maxStage}` : 'Starts once Legal assigns Operations'} icon={FolderKanban} />
         <div className="p-5">
           <StageTrack b={b} />
           <ol className="mt-5 space-y-2">
@@ -238,13 +238,28 @@ function Processing({ id }: { id: string }) {
               const done = n < b.stage || (n === b.stage && b.status === 'COMPLETED')
               const cur = n === b.stage && b.status !== 'COMPLETED' && !!b.opsMemberId
               const locked = n > b.maxStage && me.role !== 'superadmin'
+              const options = STAGE_OUTCOMES[n]
+              const here = n === b.stage && !!b.opsMemberId
               return (
-                <li key={s} className={cx('flex items-center gap-3 rounded-xl border px-4 py-3', cur ? 'border-accent bg-accent-soft/50' : 'border-line')}>
-                  <span className={cx('grid size-8 place-items-center rounded-full text-xs font-bold', done ? 'bg-ok text-white' : cur ? 'bg-accent text-white' : 'bg-card2 text-mute')}>{done ? <Check className="size-4" /> : n}</span>
-                  <span className="flex-1 text-sm font-semibold">{s}</span>
-                  {locked && <Lock className="size-4 text-mute" aria-label="Beyond allowed stage" />}
-                  {movable && !cur && !locked && <Button size="sm" variant={n > b.stage ? 'soft' : 'ghost'} onClick={() => { setTarget(n); setNote('') }}>{n > b.stage ? 'Move here' : 'Move back'}</Button>}
-                  {cur && <Badge tone="orange" dot>Current</Badge>}
+                <li key={s} className={cx('rounded-xl border px-4 py-3', cur ? 'border-accent bg-accent-soft/50' : 'border-line')}>
+                  <div className="flex items-center gap-3">
+                    <span className={cx('grid size-8 place-items-center rounded-full text-xs font-bold', done ? 'bg-ok text-white' : cur ? 'bg-accent text-white' : 'bg-card2 text-mute')}>{done ? <Check className="size-4" /> : n}</span>
+                    <span className="flex-1 text-sm font-semibold">{s}</span>
+                    {locked && <Lock className="size-4 text-mute" aria-label="Beyond allowed stage" />}
+                    {movable && !cur && !locked && <Button size="sm" variant={n > b.stage ? 'soft' : 'ghost'} onClick={() => { setTarget(n); setNote('') }}>{n > b.stage ? 'Move here' : 'Move back'}</Button>}
+                    {cur && <Badge tone="orange" dot>Current</Badge>}
+                  </div>
+                  {options && here && (
+                    <div className="mt-2 flex flex-wrap gap-2 pl-11">
+                      {options.map((o) => (
+                        <button key={o.id} type="button" disabled={!movable || b.status === 'COMPLETED'} onClick={() => run(() => setStageOutcome(me, b.id, o.id), stageLabel(n, o.id))}
+                          className={cx('rounded-full border px-3 py-1 text-xs font-semibold transition disabled:cursor-default', b.stageOutcome === o.id ? 'border-brand bg-brand text-white' : 'border-line bg-card hover:bg-card2 disabled:hover:bg-card')}>
+                          {o.label}
+                        </button>
+                      ))}
+                      {!b.stageOutcome && n === STAGES.length && <span className="self-center text-xs text-warn">Pick the result</span>}
+                    </div>
+                  )}
                 </li>
               )
             })}
@@ -275,14 +290,14 @@ function Processing({ id }: { id: string }) {
           <ol className="space-y-3 p-5">
             {timeIn.slice().reverse().map((h, i) => (
               <li key={i} className="flex gap-3 text-sm"><CircleDot className="mt-0.5 size-4 shrink-0 text-accent" />
-                <div><p className="font-semibold">{h.stage}. {STAGES[h.stage - 1]} <span className="font-normal text-mute">· {h.days} day(s)</span></p><p className="text-xs text-mute">{userName(db, h.by)} · {fmtDateTime(h.at)}{h.note ? ` · ${h.note}` : ''}</p></div>
+                <div><p className="font-semibold">{stageLabel(h.stage, h.outcome)} <span className="font-normal text-mute">· {h.days} day(s)</span></p><p className="text-xs text-mute">{userName(db, h.by)} · {fmtDateTime(h.at)}{h.note ? ` · ${h.note}` : ''}</p></div>
               </li>
             ))}
             {!timeIn.length && <li className="text-sm text-mute">Not started.</li>}
           </ol>
         </Card>
       </div>
-      <Modal open={target !== null} onClose={() => setTarget(null)} title={`Move to stage ${target}`} subtitle={target ? STAGES[target - 1] : ''} size="sm"
+      <Modal open={target !== null} onClose={() => setTarget(null)} title={`Move to stage ${target}`} subtitle={target ? stageLabel(target, target === 3 ? 'IN_PROCESS' : undefined) : ''} size="sm"
         footer={<><Button variant="outline" onClick={() => setTarget(null)}>Cancel</Button><Button icon={ChevronRight} onClick={async () => { if (target && await run(() => moveStage(me, b.id, target, note), 'Stage updated')) setTarget(null) }}>Move</Button></>}>
         <Textarea label={target && target < b.stage ? 'Reason (required)' : 'Note'} value={note} onChange={(e) => setNote(e.target.value)} />
       </Modal>

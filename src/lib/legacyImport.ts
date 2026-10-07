@@ -1,7 +1,7 @@
 import type { BComment, BDoc, Booking, BookingStatus, DB, Lead, LeadStatus, LegacyRow, Notice, Payment, Role, Service, StageMove, User, Approval } from './types'
 import { normPhone, round2 } from './format'
 import { PRESET_USERS } from './seed'
-import { STAGES } from './workflow'
+import { STAGES, stageLabel } from './workflow'
 
 /**
  * Import from the old PHP CRM (phpMyAdmin / MariaDB .sql dump).
@@ -64,7 +64,11 @@ export function parseDump(sql: string): DumpTables {
 
 // ================================================================== helpers
 /** Old CRM stages 1–9 → the new 11-stage list ("Company Information Under Process" was inserted at 8). */
-const newStage = (n: number) => (n >= 8 ? n + 1 : n)
+// old: 1 Data Collection · 2 Data Received · 3 In-process · 4 In-review · 5 Approved · 6 Ready to submit · 7 Submission
+//      8 Approved / Rejection · 9 Re-submission
+// new: 1 · 2 · 3 In-process / In-review · 4 Approved · 5 Ready · 6 Submission · 7 Company info · 8 Approved / Rejected / Re-submission / Hold
+const newStage = (n: number) => [1, 2, 3, 3, 4, 5, 6, 8, 8][n - 1] ?? Math.min(n, 8)
+const newOutcome = (n: number) => (n === 3 ? 'IN_PROCESS' : n === 4 ? 'IN_REVIEW' : n === 9 ? 'RESUBMISSION' : undefined)
 const blank = (v: string | null | undefined) => v == null || v.trim() === '' || /^0000-00-00/.test(v)
 const num = (v: string | null | undefined) => { const n = Number(v); return v != null && v !== '' && Number.isFinite(n) ? n : 0 }
 /** TIMESTAMP columns: the dump was written with time_zone = +00:00. */
@@ -254,7 +258,7 @@ export function buildImport(tables: DumpTables, current: DB, opts: ImportOptions
     if (wf) for (let n = 1; n <= 9; n++) {
       const key = Object.keys(wf).find((k) => k.startsWith(`stage_${n}_`))
       const at = key ? utc(wf[key]) : undefined
-      if (at) stageHistory.push({ stage: newStage(n), at, by: ops?.id ?? owner?.id ?? '', note: `Stage ${n} (old CRM)` })
+      if (at) stageHistory.push({ stage: newStage(n), outcome: newOutcome(n), at, by: ops?.id ?? owner?.id ?? '', note: `Stage ${n} (old CRM)` })
     }
     stageHistory.sort((a, b) => a.at.localeCompare(b.at))
     const highestStage = stageHistory.reduce((m, s) => Math.max(m, s.stage), 0)
@@ -262,14 +266,15 @@ export function buildImport(tables: DumpTables, current: DB, opts: ImportOptions
     // status: free text in the old CRM → status + stage (original text is kept and shown)
     const raw = (r.status ?? '').trim()
     let status: BookingStatus, stage = Math.max(1, highestStage), holdReason: string | undefined, holdFrom: BookingStatus | undefined
+    let stageOutcome = [...stageHistory].reverse().find((h) => h.stage === stage)?.outcome
     const stageMatch = raw.match(/^stage\s*-?\s*([1-9])(?:\s*-|\s*$)/i)
-    if (stageMatch) { status = 'IN_OPERATIONS'; stage = newStage(Number(stageMatch[1])) }
+    if (stageMatch) { status = 'IN_OPERATIONS'; stage = newStage(Number(stageMatch[1])); stageOutcome = newOutcome(Number(stageMatch[1])) }
     else if (/^company\s+inc/i.test(raw)) { status = 'IN_OPERATIONS'; stage = STAGES.indexOf('Company Information Under Process') + 1 }
     else if (/^approved$/i.test(raw)) status = r.legal_approved_at ? 'IN_OPERATIONS' : 'PENDING_LEGAL'
     else if (/^rejected$/i.test(raw)) status = 'REJECTED'
     else if (/^pending$/i.test(raw) || raw === '') status = r.approved_at ? 'PENDING_LEGAL' : 'PENDING_TL'
     else { status = 'ON_HOLD'; holdReason = raw; holdFrom = 'IN_OPERATIONS'; if (!/hold|pending|under process|not complete|kyc|waiting/i.test(raw)) unknownStatus++ }
-    const becomes = status === 'IN_OPERATIONS' ? `With Operations · stage ${stage}` : status === 'ON_HOLD' ? `On hold · “${raw}”` : status === 'PENDING_LEGAL' ? 'Pending Legal' : status === 'REJECTED' ? 'Rejected' : status
+    const becomes = status === 'IN_OPERATIONS' ? `With Operations · stage ${stageLabel(stage, stageOutcome)}` : status === 'ON_HOLD' ? `On hold · “${raw}”` : status === 'PENDING_LEGAL' ? 'Pending Legal' : status === 'REJECTED' ? 'Rejected' : status
     const key = `${raw}\u0000${becomes}`
     const sc = statusCount.get(key) ?? { count: 0, becomes }
     sc.count++; statusCount.set(key, sc)
@@ -348,7 +353,7 @@ export function buildImport(tables: DumpTables, current: DB, opts: ImportOptions
       mode: r.mode === 'Refundable' ? 'Refundable' : 'Non-Refundable', successFeePct: num(r.percentage), totalQuoted: num(r.total_quoted), gstRate,
       deduction: ded ? round2(ded.reduce((s, d) => s + num(d.deducted_amount), 0)) : 0, payments,
       createdBy: owner?.id ?? '', teamLeadId: managerUser?.id, status, holdFrom, holdReason, approvals,
-      opsMemberId: status === 'IN_OPERATIONS' || status === 'ON_HOLD' ? ops?.id : undefined, stage, maxStage, stageHistory,
+      opsMemberId: status === 'IN_OPERATIONS' || status === 'ON_HOLD' ? ops?.id : undefined, stage, maxStage, stageHistory, ...(stageOutcome ? { stageOutcome } : {}),
       comments: timeline, documents, tasks: [], priority: 'MEDIUM', deadline: '', createdAt, updatedAt,
       address: txt(r.address) || undefined, website: txt(r.website) || undefined, cin: txt(r.cin_llp) || undefined,
       startupContact: txt(r.startup_contact) || txt(r.startup_email) ? { phone: txt(r.startup_contact), email: txt(r.startup_email) } : undefined,

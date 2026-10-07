@@ -4,7 +4,7 @@ import { Download, FileSpreadsheet, TrendingUp } from 'lucide-react'
 import { useDb } from '../../lib/store'
 import { useMe } from '../../lib/auth'
 import { userName, usersWithRole, visibleBookings } from '../../lib/actions'
-import { BOOKING_STATUS, STAGES } from '../../lib/workflow'
+import { BOOKING_STATUS, STAGES, stageLabel } from '../../lib/workflow'
 import { addDays, downloadCsv, fmtDate, fmtDateTime, today, ymd } from '../../lib/format'
 import { roleLabel } from '../../lib/rbac'
 import { Avatar, Button, Card, CardHeader, Input, Table, Tabs, Td, Th, useRun } from '../../components/ui'
@@ -53,7 +53,7 @@ export function WorkProgress() {
   })).filter((r) => r.moves > 0 || inRange(r.b.updatedAt)).sort((x, y) => y.moves - x.moves), [files, start, end]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const summaryRows = () => people.map((r) => ({ person: r.u.name, role: roleLabel(r.u.role), files: r.files, active: r.active, stage_moves: r.moves, sent_for_approval: r.sentForApproval, completed: r.completed, on_hold: r.onHold, average_stage: r.avgStage, open_tasks: r.openTasks }))
-  const detailRows = () => detail.map(({ b, moves, last }) => ({ booking: b.bookingId, company: b.companyName, service: b.serviceName, operations: userName(db, b.opsMemberId), admin: userName(db, b.adminId), status: BOOKING_STATUS[b.status].label, stage: `${b.stage}. ${STAGES[b.stage - 1]}`, stage_moves_in_period: moves, last_move: last ? fmtDateTime(last.at) : '', updated: fmtDateTime(b.updatedAt) }))
+  const detailRows = () => detail.map(({ b, moves, last }) => ({ booking: b.bookingId, company: b.companyName, service: b.serviceName, operations: userName(db, b.opsMemberId), admin: userName(db, b.adminId), status: BOOKING_STATUS[b.status].label, stage: stageLabel(b.stage, b.stageOutcome), stage_moves_in_period: moves, last_move: last ? fmtDateTime(last.at) : '', updated: fmtDateTime(b.updatedAt) }))
   const name = `work-progress-${start}-to-${end}`
   const excel = () => run(async () => {
     const XLSX = await import('xlsx')
@@ -106,7 +106,7 @@ export function WorkProgress() {
               <tr key={b.id}>
                 <Td><Link to={`/bookings/${b.id}`} className="font-semibold hover:underline">{b.companyName}</Link><p className="text-xs text-mute">{b.bookingId} · {BOOKING_STATUS[b.status].label}</p></Td>
                 <Td className="text-xs">{userName(db, b.opsMemberId)}</Td><Td className="text-xs">{userName(db, b.adminId)}</Td>
-                <Td className="text-xs">{b.stage}. {STAGES[b.stage - 1]}</Td><Td className="text-right font-bold tabular-nums">{moves}</Td>
+                <Td className="text-xs">{stageLabel(b.stage, b.stageOutcome)}</Td><Td className="text-right font-bold tabular-nums">{moves}</Td>
                 <Td className="text-xs text-mute">{last ? fmtDateTime(last.at) : '—'}</Td>
               </tr>
             ))}
