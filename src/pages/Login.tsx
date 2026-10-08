@@ -10,6 +10,7 @@ import { isEmail } from '../lib/format'
 import { Logo } from '../components/Logo'
 import { ResetPasswordModal } from '../components/ResetPasswordModal'
 import { Button, Modal, Input, cx } from '../components/ui'
+import { sendOtpEmailClient } from '../lib/emailClient'
 
 const DEV_MODE = import.meta.env.DEV || import.meta.env.VITE_DEMO === '1'
 
@@ -27,6 +28,7 @@ export default function Login() {
   const [token, setToken] = useState('')
   const [devCode, setDevCode] = useState('')
   const [email, setEmail] = useState('')
+  const [otpNotice, setOtpNotice] = useState('')
   const [code, setCode] = useState(['', '', '', '', '', ''])
   const [forgot, setForgot] = useState(false)
   const [reason] = useState(() => sessionStorage.getItem('rexera-signout-reason'))
@@ -39,16 +41,19 @@ export default function Login() {
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     setErr('')
+    setOtpNotice('')
     if (!login.trim() || !password) { setErr('Enter your username and password.'); return }
     setBusy(true)
     try {
       const r = await loginStep1(login, password)
       setToken(r.token); setDevCode(r.devCode); setEmail(r.email); setStep('code'); setCode(['', '', '', '', '', ''])
-      fetch('/api/send-otp-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: r.email, code: r.devCode }),
-      }).catch(() => {})
+      sendOtpEmailClient(r.email, r.devCode).then((res) => {
+        if (!res.delivered) {
+          setOtpNotice(res.message ? `Email delivery issue: ${res.message}` : 'Could not send verification email. Please check server SMTP configuration.')
+        }
+      }).catch((e) => {
+        setOtpNotice(e?.message || 'Could not send verification email.')
+      })
     } catch (e) { setErr(e instanceof Error ? e.message : 'Sign-in failed') }
     finally { setBusy(false) }
   }
@@ -174,6 +179,16 @@ export default function Login() {
                   ))}
                 </div>
                 {err && <p role="alert" className="mt-5 rounded-xl bg-[#DC2626]/90 px-4 py-2.5 text-center text-sm font-medium">{err}</p>}
+                {otpNotice && (
+                  <p role="status" className="mt-4 rounded-xl border border-amber-400/40 bg-amber-500/20 px-4 py-2 text-center text-xs text-amber-100">
+                    {otpNotice}
+                  </p>
+                )}
+                {DEV_MODE && devCode && (
+                  <p className="mt-2 text-center text-xs font-mono text-white/50">
+                    Dev code: <span className="font-bold text-[#F4A12A]">{devCode}</span>
+                  </p>
+                )}
                 <div className="mt-7 flex justify-center">
                   <button onClick={() => verify()} className="h-13 w-52 rounded-2xl bg-[#F47B20] py-3 text-lg font-extrabold shadow-lg shadow-black/20 hover:bg-[#DF6A12]">Verify & sign in</button>
                 </div>
@@ -183,11 +198,17 @@ export default function Login() {
                       const nextCode = resendCode(token)
                       setDevCode(nextCode)
                       setErr('')
-                      fetch('/api/send-otp-email', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ email, code: nextCode }),
-                      }).catch(() => {})
+                      setOtpNotice('Dispatching new verification code...')
+                      sendOtpEmailClient(email, nextCode).then((res) => {
+                        if (res.delivered) {
+                          setOtpNotice('New verification code sent to your email!')
+                          setTimeout(() => setOtpNotice(''), 5000)
+                        } else {
+                          setOtpNotice(res.message ? `Delivery issue: ${res.message}` : 'Could not deliver code.')
+                        }
+                      }).catch((e) => {
+                        setOtpNotice(e?.message || 'Could not deliver code.')
+                      })
                     } catch (e) { setErr((e as Error).message) }
                   }}>Resend code</button>
                 </p>
