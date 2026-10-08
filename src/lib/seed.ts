@@ -5,7 +5,7 @@ import { addDays, round2, ymd } from './format'
 import { STAGES } from './workflow'
 import { DEFAULT_INCENTIVE, DEFAULT_PF } from './hrsuite'
 
-export const SEED_VERSION = 5
+export const SEED_VERSION = 6
 /** Password for the extra sample accounts (local demo only — change or remove before any real use). */
 export const DEMO_PASSWORD = 'Rexera@2026'
 
@@ -15,6 +15,8 @@ export const DEMO_PASSWORD = 'Rexera@2026'
  */
 const PRESET_HASHES: Record<string, string> = {
   superadmin: '6bb511d5f4d9a868caaac6077860d9d660204b4996fcb08ef79314b9404fe808',
+  qrt: '14e18fe1e33ba1db82dd9d3235dfd53807f451a44ab590c9ab0928b7033bf0e5',
+  'qrt@rexera.in': 'e212cb63c6228197d4c8ae1a1e82ba366e44dcc48fcf8abac5a4be61a43a3b11',
   admin: 'c0d44c22cddc33e8fd6b6236bad908b3a1a68c9e1f223b76484eed06555258c5',
   hr: '6ef17e0e44865676e1dc7a3ae239af168876547e5d92db0000f35bfcfcd03f83',
   'hr.in': 'fd6d9fabfd45513242d037faea66bfe70a04139fca113ede005f118aff2f3c2a',
@@ -27,7 +29,7 @@ const PRESET_HASHES: Record<string, string> = {
 /** Accounts with their own password (the login demo panel fills only their email). */
 export const PRESET_USERS = new Set(Object.keys(PRESET_HASHES))
 const EMAILS: Record<string, string> = {
-  superadmin: 'superadmin@rexera.co.in', admin: 'admin@rexera.co.in', hr: 'hr@rexera.co.in', 'hr.in': 'hr@rexera.in',
+  superadmin: 'superadmin@rexera.co.in', qrt: 'qrt@rexera.in', 'qrt@rexera.in': 'qrt@rexera.in', admin: 'admin@rexera.co.in', hr: 'hr@rexera.co.in', 'hr.in': 'hr@rexera.in',
   legal: 'legal@rexera.co.in', sales: 'sales@rexera.co.in', it: 'it@rexera.co.in', support: 'support@rexera.co.in', ot: 'ot@rexera.co.in',
 }
 
@@ -72,6 +74,7 @@ export async function buildSeed(): Promise<DB> {
 
   const people: [string, string, string, Role, string, string?][] = [
     ['u-sa', 'Rohan Mehta', 'superadmin', 'superadmin', 'Management'],
+    ['u-sa-qrt', 'qrt@rexera.in', 'qrt', 'superadmin', 'Management'],
     ['u-ad1', 'Priya Nair', 'admin', 'admin', 'Administration'],
     ['u-ad2', 'Karan Shah', 'admin.karan', 'admin', 'Administration'],
     ['u-acc', 'Neha Joshi', 'accounts', 'accounts', 'Accounts'],
