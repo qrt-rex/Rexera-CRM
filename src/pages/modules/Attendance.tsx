@@ -5,7 +5,7 @@ import { useAuth, useMe } from '../../lib/auth'
 import { dayStatus, presentToday } from '../../lib/metrics'
 import { addDays, downloadCsv, fmtDate, fmtTime, today, ymd } from '../../lib/format'
 import { isMaster, roleLabel } from '../../lib/rbac'
-import { breakUsedMs, reopenDay, workedMs } from '../../lib/actions'
+import { breakFor, breakReview, breakUsedMs, clock, lateBreakCount, reopenDay, workedMs } from '../../lib/actions'
 import { Avatar, Badge, Button, Card, CardHeader, cx, PageHeader, SearchBox, Table, Tabs, Td, Th, useRun } from '../../components/ui'
 import { LoginLogoutCard, MiniStat } from '../dashboards/widgets'
 
@@ -40,7 +40,8 @@ export default function Attendance() {
     if (s) {
       const late = new Date(s.loginAt).getHours() * 60 + new Date(s.loginAt).getMinutes() > 9 * 60 + 30
       const half = s.logoutAt ? workedMs(s) / 3600000 < 5 : d < today()
-      return { code: half ? 'H' : late ? 'L' : 'P', cls: half ? 'bg-warn-soft text-warn' : late ? 'bg-info-soft text-info' : 'bg-ok-soft text-ok', title: `${fmtTime(s.loginAt)} – ${fmtTime(s.logoutAt)}${s.breaks?.length ? ` · break ${Math.round(breakUsedMs(s) / 60000)} min` : ''}` }
+      const lb = s.lateBreak ? ` · late from break ${s.lateBreak.lateMinutes} min` : ''
+      return { code: half ? 'H' : late ? 'L' : 'P', lateBreak: !!s.lateBreak, cls: half ? 'bg-warn-soft text-warn' : late ? 'bg-info-soft text-info' : 'bg-ok-soft text-ok', title: `${fmtTime(s.loginAt)} – ${fmtTime(s.logoutAt)}${s.breaks?.length ? ` · break ${Math.round(breakUsedMs(s) / 60000)} min` : ''}${lb}` }
     }
     if (leave) return { code: 'LV', cls: 'bg-violet-500/12 text-violet-600', title: 'Leave' }
     if (sunday) return { code: '—', cls: 'text-mute', title: 'Sunday' }
@@ -53,7 +54,16 @@ export default function Attendance() {
       <PageHeader title="Attendance Board" subtitle={all ? 'Live day status of everyone, and history' : 'Your attendance (only HR, Admin roles see others)'} icon={UserCheck}
         actions={<>
           {all && <Tabs value={tab} onChange={setTab} tabs={[{ id: 'live', label: 'Live today' }, { id: 'history', label: 'History' }]} />}
-          <Button variant="outline" icon={Download} onClick={() => downloadCsv(`attendance-${today()}.csv`, db.sessions.filter((s) => users.some((u) => u.id === s.userId) && dates.includes(s.date)).map((s) => ({ date: s.date, name: db.users.find((u) => u.id === s.userId)?.name, login: fmtTime(s.loginAt), logout: fmtTime(s.logoutAt), break_minutes: Math.round(breakUsedMs(s) / 60000), worked_hours: (workedMs(s) / 3600000).toFixed(2) })))}>Export</Button>
+          <Button variant="outline" icon={Download} onClick={() => downloadCsv(`attendance-${today()}.csv`, db.sessions.filter((s) => users.some((u) => u.id === s.userId) && dates.includes(s.date)).map((s) => {
+            const u = db.users.find((x) => x.id === s.userId), r = breakReview(s), tz = breakFor(u, db).timeZone
+            const at = (iso?: string) => (iso ? clock(new Date(iso).getTime(), tz) : '')
+            return {
+              date: s.date, name: u?.name, department: u?.department, login: fmtTime(s.loginAt), logout: fmtTime(s.logoutAt), break_minutes: Math.round(breakUsedMs(s) / 60000),
+              break_start: at(r.breakStart), expected_return: r.expected && r.state !== 'NONE' ? clock(r.expected, tz) : '', actual_return: at(r.returnedAt), time_zone: tz,
+              late_break: r.state === 'LATE' || r.state === 'STILL_AWAY' ? 'yes' : 'no', late_minutes: r.lateMinutes, late_breaks_total: lateBreakCount(db, s.userId),
+              worked_hours: (workedMs(s) / 3600000).toFixed(2),
+            }
+          }))}>Export</Button>
         </>} />
       {all && <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
         <MiniStat label="Present today" value={`${att.present}/${att.total}`} icon={Users} />
@@ -84,7 +94,7 @@ export default function Attendance() {
       ) : (
         <div className="grid gap-6 xl:grid-cols-[1fr_300px]">
           <Card className="overflow-hidden">
-            <CardHeader title="Daily register" subtitle="P present · L late · H half day · A absent · LV leave" icon={CalendarRange}
+            <CardHeader title="Daily register" subtitle="P present · L late · H half day · A absent · LV leave · red dot = late from break" icon={CalendarRange}
               action={<select value={days} onChange={(e) => setDays(Number(e.target.value))} className="h-9 rounded-lg border border-line bg-card px-2 text-sm" aria-label="Range"><option value={7}>7 days</option><option value={14}>14 days</option><option value={21}>21 days</option></select>} />
             {all && <div className="border-b border-line p-3"><SearchBox value={q} onChange={setQ} className="max-w-sm" /></div>}
             <Table>
@@ -95,7 +105,7 @@ export default function Attendance() {
                   return (
                     <tr key={u.id}>
                       <Td className="sticky left-0 z-10 bg-card"><span className="flex items-center gap-2 whitespace-nowrap"><Avatar name={u.name} photo={u.photo} size={26} /><span className="text-sm font-semibold">{u.name}</span></span></Td>
-                      {cells.map((c) => <Td key={c.d} className="px-1 text-center"><span title={`${fmtDate(c.d)} · ${c.title}`} className={cx('inline-grid h-6 min-w-6 place-items-center rounded-md text-[10px] font-bold', c.cls)}>{c.code}</span></Td>)}
+                      {cells.map((c) => <Td key={c.d} className="px-1 text-center"><span title={`${fmtDate(c.d)} · ${c.title}`} className={cx('relative inline-grid h-6 min-w-6 place-items-center rounded-md text-[10px] font-bold', c.cls)}>{c.code}{'lateBreak' in c && c.lateBreak && <i className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-bad ring-1 ring-card" />}</span></Td>)}
                       <Td className="text-center font-bold">{cells.filter((c) => ['P', 'L'].includes(c.code)).length}</Td>
                     </tr>
                   )

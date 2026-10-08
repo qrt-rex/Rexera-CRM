@@ -41,6 +41,7 @@ const Payslips = lazy(() => import('./pages/hr/Payslips'))
 const Pf = lazy(() => import('./pages/hr/Pf'))
 const Incentives = lazy(() => import('./pages/hr/Incentives'))
 const IncentiveSettings = lazy(() => import('./pages/hr/IncentiveSettings'))
+const BreakSettings = lazy(() => import('./pages/hr/BreakSettings'))
 const Performance = lazy(() => import('./pages/hr/Performance'))
 const Recruitment = lazy(() => import('./pages/hr/Recruitment'))
 const ApiKeys = lazy(() => import('./pages/it/ApiKeys'))
@@ -144,6 +145,7 @@ export default function App() {
               <Route path="/pf" element={<Guard m="pf"><S><Pf /></S></Guard>} />
               <Route path="/incentives" element={<Guard m="incentives"><S><Incentives /></S></Guard>} />
               <Route path="/incentive-settings" element={<Guard m="incentive-settings"><S><IncentiveSettings /></S></Guard>} />
+              <Route path="/break-settings" element={<Guard m="break-settings"><S><BreakSettings /></S></Guard>} />
               <Route path="/performance" element={<Guard m="performance"><S><Performance /></S></Guard>} />
               <Route path="/recruitment" element={<Guard m="recruitment"><S><Recruitment /></S></Guard>} />
               <Route path="/candidates" element={<Guard m="candidates"><S><Candidates /></S></Guard>} />

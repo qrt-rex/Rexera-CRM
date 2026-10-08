@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { ArrowRight, CalendarDays, ChevronRight, Clock, Eye, LogIn, LogOut, Pause, Play, Square, type LucideIcon } from 'lucide-react'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
-import { BREAK_MINUTES, breakLabel, breakLeftMs, breakUsedMs, breakWindow, dayLockOn, endDay, inBreakWindow, remindBreak, onBreak, pauseDay, resumeDay, startDay, userName, workedMs } from '../../lib/actions'
+import { breakFor, breakLabel, breakLeftMs, breakMinutes, breakReview, breakUsedMs, breakWindow, clock, dayLockOn, endDay, inBreakWindow, remindBreak, onBreak, pauseDay, resumeDay, startDay, userName, workedMs } from '../../lib/actions'
 import { todaySession } from '../../lib/metrics'
 import { ago, fmtDate, fmtTime, today } from '../../lib/format'
 import { roleLabel } from '../../lib/rbac'
@@ -88,6 +88,8 @@ export function LoginLogoutCard({ className }: { className?: string }) {
   const left = breakLeftMs(s, now)
   const used = breakUsedMs(s, now)
   const hours = workedMs(s, now) / 3600000
+  const bp = breakFor(me, db)
+  const bmin = breakMinutes(bp)
   const logout = async () => {
     const lock = dayLockOn(db)
     if (!(await confirm('End your day?', `${lock ? "You won't be able to sign in again until tomorrow. " : ''}Worked ${hours.toFixed(1)} h today${used ? `, break ${mmss(used)}` : ''}.`, true))) return
@@ -116,8 +118,8 @@ export function LoginLogoutCard({ className }: { className?: string }) {
       </div>
       {s && !s.logoutAt && (
         <div className="mt-3">
-          <div className="mb-1 flex justify-between text-[11px] font-semibold text-mute"><span>Lunch break · {breakLabel()}</span><span className="tabular-nums">{mmss(used)} / {BREAK_MINUTES}:00</span></div>
-          <div className="h-1.5 overflow-hidden rounded-full bg-card2"><div className={cx('h-full rounded-full transition-all', left > 0 ? 'bg-warn' : 'bg-bad')} style={{ width: `${Math.min(100, (used / (BREAK_MINUTES * 60000)) * 100)}%` }} /></div>
+          <div className="mb-1 flex justify-between text-[11px] font-semibold text-mute"><span>Lunch break · {breakLabel(bp)}</span><span className="tabular-nums">{mmss(used)} / {bmin}:00</span></div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-card2"><div className={cx('h-full rounded-full transition-all', left > 0 ? 'bg-warn' : 'bg-bad')} style={{ width: `${Math.min(100, (used / Math.max(1, bmin * 60000)) * 100)}%` }} /></div>
         </div>
       )}
       <div className="mt-3 grid grid-cols-2 gap-2">
@@ -128,7 +130,7 @@ export function LoginLogoutCard({ className }: { className?: string }) {
           : <>
             {paused
               ? <Button size="sm" variant="success" icon={Play} onClick={() => run(() => resumeDay(me), 'Welcome back — day resumed')}>Resume</Button>
-              : <Button size="sm" variant="soft" icon={Pause} disabled={!inBreakWindow(now) || left <= 0} title={`Lunch break: ${breakLabel()}`} onClick={() => run(() => pauseDay(me), `Day paused · ${mmss(left)} of break left`)}>{inBreakWindow(now) ? (left <= 0 ? 'Break used' : 'Pause') : `Break ${breakLabel()}`}</Button>}
+              : <Button size="sm" variant="soft" icon={Pause} disabled={!inBreakWindow(now, bp) || left <= 0} title={`Lunch break: ${breakLabel(bp)}`} onClick={() => run(() => pauseDay(me), `Day paused · ${mmss(left)} of break left`)}>{inBreakWindow(now, bp) ? (left <= 0 ? 'Break used' : 'Pause') : `Break ${breakLabel(bp)}`}</Button>}
             <Button size="sm" variant="outline" icon={Square} onClick={logout}>End my day</Button>
           </>}
       </div>
@@ -145,10 +147,11 @@ export function BreakReminder() {
   const s = todaySession(db, me.id)
   const working = !!s && !s.logoutAt
   const now = useNow(working, 20000)
-  const w = breakWindow(now)
+  const bp = breakFor(me, db)
+  const w = breakWindow(now, bp)
   useEffect(() => {
-    if (working && now >= w.start - 5 * 60000 && now < w.start && remindBreak(me)) toast('info', `Lunch break starts at ${new Date(w.start).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })} — in about 5 minutes`)
-  }, [working, now, w.start, me, toast])
+    if (working && now >= w.start - 5 * 60000 && now < w.start && remindBreak(me)) toast('info', `Lunch break starts at ${clock(w.start, bp.timeZone)} — in about 5 minutes`)
+  }, [working, now, w.start, bp.timeZone, me, toast])
   return null
 }
 
@@ -162,11 +165,12 @@ export function BreakBanner() {
   const now = useNow(paused)
   if (!paused) return null
   const left = breakLeftMs(s, now)
+  const late = breakReview(s, now)
   return (
-    <div role="status" className={cx('mb-5 flex flex-wrap items-center gap-3 rounded-2xl border px-4 py-3 text-sm', left > 0 ? 'border-warn/40 bg-warn-soft text-warn' : 'border-bad/40 bg-bad-soft text-bad')}>
+    <div role={late.state === 'STILL_AWAY' ? 'alert' : 'status'} className={cx('mb-5 flex flex-wrap items-center gap-3 rounded-2xl border px-4 py-3 text-sm', left > 0 ? 'border-warn/40 bg-warn-soft text-warn' : 'border-bad/40 bg-bad-soft text-bad')}>
       <Pause className="size-4" />
-      <b>Your day is paused</b>
-      <span className="text-ink/70">{left > 0 ? `${mmss(left)} of lunch break left (${breakLabel()})` : `Lunch break ended — please resume your day`}</span>
+      <b>{late.state === 'STILL_AWAY' ? `Late from break · ${late.lateMinutes} min` : 'Your day is paused'}</b>
+      <span className="text-ink/70">{left > 0 ? `${mmss(left)} of lunch break left (${breakLabel(breakFor(me, db))})` : late.state === 'STILL_AWAY' ? breakFor(me, db).warnMessage : 'Lunch break ended — please resume your day'}</span>
       <Button size="sm" variant="success" icon={Play} className="ml-auto" onClick={() => run(() => resumeDay(me), 'Welcome back — day resumed')}>Resume my day</Button>
     </div>
   )

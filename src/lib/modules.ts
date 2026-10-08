@@ -1,5 +1,5 @@
 import {
-  BarChart3, BellRing, BookOpenCheck, Briefcase, CalendarDays, ClipboardCheck, FileText, FolderKanban, Images, IndianRupee,
+  BarChart3, BellRing, BookOpenCheck, Briefcase, CalendarDays, ClipboardCheck, Coffee, FileText, FolderKanban, Images, IndianRupee,
   KeyRound, Megaphone, MessagesSquare, Phone, Settings, ShieldCheck, Sparkles, UserCheck, UserPlus, Users, UsersRound,
   CalendarCheck2, Network, ScrollText, Wallet, Receipt, Landmark, Trophy, SlidersHorizontal, Gauge, KeySquare, DatabaseBackup, DatabaseZap, MailPlus, ClipboardList, FilePen, Inbox, type LucideIcon,
 } from 'lucide-react'
@@ -41,6 +41,7 @@ export const MODULES: ModuleDef[] = [
   { key: 'pf', path: '/pf', label: 'PF Management', desc: 'PF rules, wage limits, UANs', icon: Landmark, tone: 'green', perms: ['payroll.view', 'payroll.manage'], group: 'People', hrOnly: true },
   { key: 'incentives', path: '/incentives', label: 'Sales Incentives', desc: 'Daily, weekly and monthly incentive per sales person', icon: Trophy, tone: 'orange', perms: ['incentives.manage', 'payroll.view'], group: 'People', hrOnly: true },
   { key: 'incentive-settings', path: '/incentive-settings', label: 'Incentive Settings', desc: 'Thresholds and slabs, versioned', icon: SlidersHorizontal, tone: 'amber', perms: ['incentives.manage'], group: 'People', hrOnly: true },
+  { key: 'break-settings', path: '/break-settings', label: 'Break Time', desc: 'Lunch break window, late-break warning and HR alerts', icon: Coffee, tone: 'amber', perms: ['employees.manage'], group: 'People', hrOnly: true },
   { key: 'performance', path: '/performance', label: 'Performance', desc: 'Report cards and scores', icon: Gauge, tone: 'violet', perms: ['performance.view'], group: 'People', hrOnly: true },
   { key: 'candidates', path: '/candidates', label: 'Candidate Forms', desc: 'Share an apply link; resumes come in here', icon: ClipboardList, tone: 'violet', perms: ['recruitment.manage'], group: 'People', hrOnly: true },
   { key: 'letters', path: '/letters', label: 'Letters', desc: 'Joining, internship and experience letters (PDF)', icon: FilePen, tone: 'pink', perms: ['employees.manage'], group: 'People', hrOnly: true },

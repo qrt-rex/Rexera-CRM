@@ -1,5 +1,5 @@
 import type {
-  Booking, BookingStatus, BDoc, Branch, CallOutcome, CandidateApplication, CandidateForm, DaySession, DB, EventItem, FileRef, Invoice, InvoiceItem, Lead, LeaveType, Perm, Post, Role, Scheme, User,
+  Booking, BookingStatus, BDoc, Branch, BreakPolicy, CallOutcome, Shift, CandidateApplication, CandidateForm, DaySession, DB, EventItem, FileRef, Invoice, InvoiceItem, Lead, LeaveType, Perm, Post, Role, Scheme, User,
 } from './types'
 import { effectivePerms, isMaster, MASTER_ROLES, rolesOf, roleLabel } from './rbac'
 import { getDb, mutate } from './store'
@@ -299,19 +299,182 @@ export async function resetPasswordWithToken(token: string, next: string, again:
 
 
 // ============================================================ day attendance
-/** Lunch break: 40 minutes, from 1:00 to 1:40 pm. Pause and resume as often as you like inside that window. */
-export const BREAK_MINUTES = 40
-export const BREAK_START = { h: 13, m: 0 }
-const BREAK_MS = BREAK_MINUTES * 60000
-/** Today's break window (local time). */
-export function breakWindow(now = Date.now()) {
-  const s = new Date(now); s.setHours(BREAK_START.h, BREAK_START.m, 0, 0)
-  return { start: s.getTime(), end: s.getTime() + BREAK_MS }
+/** Lunch break window, set by HR (HR → Break Time): 1:00–1:40 pm India time by default. Pause and resume as often as you like inside it. */
+export const DEFAULT_BREAK: BreakPolicy = {
+  start: '13:00', end: '13:40', timeZone: 'Asia/Kolkata', offDays: [0], warnAfterMin: 2, remind: true, monitor: true,
+  warnMessage: 'Bhai, tame late chho. Break time complete thai gayu chhe. Please immediately return to work.',
 }
-export const inBreakWindow = (now = Date.now()) => { const w = breakWindow(now); return now >= w.start && now < w.end }
-export const breakLabel = () => {
-  const t = (ms: number) => new Date(ms).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })
-  const w = breakWindow(); return `${t(w.start)} – ${t(w.end)}`
+export const breakPolicy = (d: DB = getDb()): BreakPolicy => ({ ...DEFAULT_BREAK, ...d.settings.breakPolicy })
+/** A person's break rules: the company policy with their own shift (window, time zone, off days) on top. */
+export function breakFor(u: Pick<User, 'shift'> | undefined, d: DB = getDb()): BreakPolicy {
+  const p = breakPolicy(d), sh = u?.shift
+  const tz = sh?.timeZone || p.timeZone
+  return { ...p, start: sh?.breakStart || p.start, end: sh?.breakEnd || p.end, timeZone: tzOk(tz) ? tz : DEFAULT_BREAK.timeZone, offDays: sh?.offDays ?? p.offDays }
+}
+const policyOf = (s: DaySession | undefined, d: DB = getDb()) => breakFor(d.users.find((u) => u.id === s?.userId), d)
+
+const hhmm = (v: string) => { const [h = 0, m = 0] = v.split(':').map(Number); return h * 60 + m }
+const isTime = (v: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(v)
+const fmts = new Map<string, Intl.DateTimeFormat>()
+const zoneFmt = (tz: string) => {
+  let f = fmts.get(tz)
+  if (!f) { f = new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }); fmts.set(tz, f) }
+  return f
+}
+export const tzOk = (tz: string) => { try { zoneFmt(tz); return true } catch { return false } }
+/** Browsers may name a zone by an alias (Asia/Calcutta = Asia/Kolkata): compare by the browser's canonical id. */
+const canonTz = (tz: string) => { try { return zoneFmt(tz).resolvedOptions().timeZone } catch { return tz } }
+export const sameTz = (a: string, b: string) => canonTz(a) === canonTz(b)
+export const LOCAL_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone
+function zoneParts(at: number, tz: string) {
+  const p: Record<string, number> = {}
+  for (const x of zoneFmt(tz).formatToParts(at)) if (x.type !== 'literal') p[x.type] = Number(x.value)
+  return p as { year: number; month: number; day: number; hour: number; minute: number; second: number }
+}
+/** The calendar date (YYYY-MM-DD) at an instant in a time zone. */
+export const dateIn = (at: number, tz: string) => { const p = zoneParts(at, tz); return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}` }
+/** The instant when clocks in `tz` show `minutes` past midnight on `date` (two passes, so DST changes are handled). */
+function zonedAt(date: string, minutes: number, tz: string) {
+  const [y = 0, mo = 1, dd = 1] = date.split('-').map(Number)
+  const wall = Date.UTC(y, mo - 1, dd, 0, minutes)
+  const offset = (at: number) => { const p = zoneParts(at, tz); return Date.UTC(p.year, p.month - 1, p.day, p.hour % 24, p.minute, p.second) - Math.floor(at / 1000) * 1000 }
+  return wall - offset(wall - offset(wall))
+}
+/** A time of day as the person sees it; other time zones get a short zone label (e.g. 1:40 pm GMT+4). */
+export const clock = (ms: number, tz = LOCAL_TZ) =>
+  new Date(ms).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', timeZone: tz, ...(!sameTz(tz, LOCAL_TZ) && { timeZoneName: 'short' }) })
+/** Length of the break window — also the daily break budget. */
+export const breakMinutes = (p = breakPolicy()) => Math.max(0, hhmm(p.end) - hhmm(p.start))
+/** The break window on a work date, in the policy's time zone. */
+export function breakWindowOn(date: string, p = breakPolicy()) {
+  const start = zonedAt(date, hhmm(p.start), p.timeZone)
+  return { start, end: start + breakMinutes(p) * 60000 }
+}
+/** Today's break window (today in the policy's time zone). */
+export const breakWindow = (now = Date.now(), p = breakPolicy()) => breakWindowOn(dateIn(now, p.timeZone), p)
+export const inBreakWindow = (now = Date.now(), p = breakPolicy()) => { const w = breakWindow(now, p); return now >= w.start && now < w.end }
+export const breakLabel = (p = breakPolicy()) => { const w = breakWindow(Date.now(), p); return `${clock(w.start, p.timeZone)} – ${clock(w.end, p.timeZone)}` }
+/** Scheduled to work on that date — not one of the shift's weekly off days. */
+export const workDay = (date: string, p = breakPolicy()) => !p.offDays.includes(new Date(date + 'T12:00:00Z').getUTCDay())
+
+export type BreakState = 'NONE' | 'ON_BREAK' | 'ON_TIME' | 'LATE' | 'STILL_AWAY'
+/**
+ * How a day's lunch break went. Late starts 1 minute after the window ends (back at 1:40 = on time, 1:41 = 1 min late);
+ * still away = on break past that. A saved late record keeps the window that applied that day.
+ */
+export function breakReview(s: DaySession | undefined, now = Date.now()): { state: BreakState; breakStart?: string; expected?: number; returnedAt?: string; lateMinutes: number } {
+  if (!s?.breaks?.length) return { state: 'NONE', lateMinutes: 0 }
+  const expected = s.lateBreak ? new Date(s.lateBreak.expectedReturn).getTime() : breakWindowOn(s.date, policyOf(s)).end
+  const open = s.breaks.some((b) => !b.end)
+  const returnedAt = open ? undefined : s.breaks.reduce((m, b) => (b.end! > m ? b.end! : m), '')
+  const lateMinutes = Math.max(0, Math.floor(((returnedAt ? new Date(returnedAt).getTime() : now) - expected) / 60000))
+  const state: BreakState = lateMinutes >= 1 ? (open ? 'STILL_AWAY' : 'LATE') : open ? 'ON_BREAK' : 'ON_TIME'
+  return { state, breakStart: s.lateBreak?.breakStart ?? s.breaks[0]!.start, expected, returnedAt, lateMinutes }
+}
+/** Late breaks on record for a person (before a date, when given). */
+export const lateBreakCount = (d: DB, userId: string, before?: string) => d.sessions.filter((s) => s.userId === userId && s.lateBreak && (!before || s.date < before)).length
+
+/** Brings the day's late-break record in line with its breaks. Returns true when the break is late. */
+function syncLateBreak(s: DaySession, now = Date.now()) {
+  const r = breakReview(s, now)
+  if (r.state !== 'LATE' && r.state !== 'STILL_AWAY') return false
+  s.lateBreak = { ...s.lateBreak, breakStart: r.breakStart!, expectedReturn: new Date(r.expected!).toISOString(), returnedAt: r.returnedAt, lateMinutes: r.lateMinutes }
+  return true
+}
+/** Once per person per day: a bell alert to HR (Super Admin when there is no HR) that someone is late from break. */
+function alertHrLateBreak(d: DB, s: DaySession) {
+  const u = d.users.find((x) => x.id === s.userId)
+  const hr = usersWithRole(d, 'hr')
+  for (const h of hr.length ? hr : usersWithRole(d, 'superadmin')) {
+    const id = `n-brklate-hr-${s.date}-${s.userId}-${h.id}`
+    if (h.id === s.userId || d.notices.some((n) => n.id === id)) continue
+    d.notices.unshift({
+      id, userId: h.id, title: `Late from break: ${u?.name ?? 'Employee'}`, link: '/dashboard/hr', at: nowIso(), read: false, kind: 'warning',
+      body: `${u?.name ?? 'Employee'} (${u?.department || '—'}) was not back by ${clock(new Date(s.lateBreak!.expectedReturn).getTime(), policyOf(s, d).timeZone)}. See Late Break Alerts on the HR dashboard.`,
+    })
+  }
+}
+
+/**
+ * Lunch-break automation, run every 30 s while the app is open (Shell). Each person is checked against their own shift
+ * (break window, time zone, off days). At the break start: a reminder to everyone whose day is running. From the end +
+ * warnAfterMin (1:42 pm): anyone still on break is marked late, warned once and listed for HR. People on leave, absent
+ * (day not started), off that day or whose day has ended get nothing.
+ */
+export function runBreakMonitor(now = Date.now()) {
+  const d0 = getDb()
+  const due: { id: string; p: BreakPolicy; w: { start: number; end: number }; kind: 'remind' | 'warn' }[] = []
+  for (const u of d0.users) {
+    if (!u.active) continue
+    const p = breakFor(u, d0)
+    const date = dateIn(now, p.timeZone)
+    const s = d0.sessions.find((x) => x.userId === u.id && x.date === date)
+    if (!s || s.logoutAt || !workDay(date, p)) continue
+    if (d0.leaves.some((l) => l.userId === u.id && l.status === 'APPROVED' && l.from <= date && l.to >= date)) continue
+    const w = breakWindowOn(date, p)
+    if (p.remind && now >= w.start && now < w.end && !s.breaks?.length && !d0.notices.some((n) => n.id === `n-brkstart-${date}-${u.id}`)) due.push({ id: s.id, p, w, kind: 'remind' })
+    if (p.monitor && now >= w.end + p.warnAfterMin * 60000 && !s.lateBreak?.warnedAt && breakReview(s, now).state === 'STILL_AWAY') due.push({ id: s.id, p, w, kind: 'warn' })
+  }
+  if (!due.length) return
+  mutate((d) => {
+    for (const { id, p, w, kind } of due) {
+      const s = d.sessions.find((x) => x.id === id)
+      if (!s) continue
+      const [from, to] = [clock(w.start, p.timeZone), clock(w.end, p.timeZone)]
+      if (kind === 'remind') {
+        d.notices.unshift({ id: `n-brkstart-${s.date}-${s.userId}`, userId: s.userId, title: 'Lunch break has started', link: '/attendance', at: nowIso(), read: false, kind: 'info',
+          body: `Break time is ${from} – ${to}. Pause your day when you go and resume by ${to}.` })
+        continue
+      }
+      if (!syncLateBreak(s, now)) continue
+      s.lateBreak!.warnedAt = nowIso()
+      d.notices.unshift({ id: `n-brklate-${s.date}-${s.userId}`, userId: s.userId, title: 'Break time is over — return to work', body: p.warnMessage, link: '/attendance', at: nowIso(), read: false, kind: 'warning' })
+      alertHrLateBreak(d, s)
+      audit(d, s.userId, 'LATE_BREAK', `Not back from lunch by ${to} · ${s.lateBreak!.lateMinutes} min late so far`)
+    }
+    if (d.notices.length > 600) d.notices.length = 600
+  })
+}
+
+function checkWindow(start: string, end: string) {
+  assert(isTime(start) && isTime(end), 'Enter the break start and end times.')
+  const len = hhmm(end) - hhmm(start)
+  assert(len >= 5 && len <= 180, 'The break must end after it starts (5 minutes to 3 hours).')
+}
+const checkOffDays = (days: number[]) => assert(days.length < 7 && days.every((x) => Number.isInteger(x) && x >= 0 && x <= 6), 'Pick at least one working day.')
+
+/** HR → Break Time: the company window, time zone, off days, the warning and whether reminders / late checks run. */
+export function saveBreakPolicy(me: User, p: Omit<BreakPolicy, 'updatedAt' | 'updatedBy'>) {
+  need(me, 'employees.manage')
+  checkWindow(p.start, p.end)
+  assert(tzOk(p.timeZone), 'Pick a valid time zone.')
+  checkOffDays(p.offDays)
+  assert(Number.isInteger(p.warnAfterMin) && p.warnAfterMin >= 0 && p.warnAfterMin <= 30, 'Warn 0 to 30 minutes after the break ends.')
+  assert(p.warnMessage.trim().length >= 5, 'Write the message employees get when they are late.')
+  mutate((d) => {
+    d.settings.breakPolicy = { ...p, offDays: [...new Set(p.offDays)].sort(), warnMessage: p.warnMessage.trim(), updatedAt: nowIso(), updatedBy: me.id }
+    audit(d, me.id, 'BREAK_POLICY', `Break ${p.start}–${p.end} ${p.timeZone} · warning ${p.warnAfterMin} min after · reminder ${p.remind ? 'on' : 'off'} · late checks ${p.monitor ? 'on' : 'off'}`)
+  })
+}
+
+/** HR → Break Time → Employee shifts: a person's own break window / time zone / off days (undefined = company policy). */
+export function saveShift(me: User, userId: string, sh: Shift | undefined) {
+  need(me, 'employees.manage')
+  let clean: Shift | undefined
+  if (sh) {
+    clean = {}
+    if (sh.breakStart || sh.breakEnd) { checkWindow(sh.breakStart ?? '', sh.breakEnd ?? ''); clean.breakStart = sh.breakStart; clean.breakEnd = sh.breakEnd }
+    if (sh.timeZone) { assert(tzOk(sh.timeZone), 'Pick a valid time zone.'); clean.timeZone = sh.timeZone }
+    if (sh.offDays) { checkOffDays(sh.offDays); clean.offDays = [...new Set(sh.offDays)].sort() }
+    if (!Object.keys(clean).length) clean = undefined
+  }
+  mutate((d) => {
+    const u = d.users.find((x) => x.id === userId)
+    assert(u, 'Employee not found.')
+    if (clean) u.shift = clean
+    else delete u.shift
+    audit(d, me.id, 'SHIFT', clean ? `Shift for ${u.name}: ${clean.breakStart ? `break ${clean.breakStart}–${clean.breakEnd}` : 'company break'}${clean.timeZone ? ` · ${clean.timeZone}` : ''}${clean.offDays ? ` · off ${clean.offDays.join(',')}` : ''}` : `${u.name} back on the company shift`)
+  })
 }
 
 /** Break time used today (an open break counts up to now). */
@@ -321,9 +484,10 @@ export function breakUsedMs(s: DaySession | undefined, now = Date.now()) {
 export const onBreak = (s: DaySession | undefined) => !!s && !s.logoutAt && !!s.breaks?.some((b) => !b.end)
 /** Break time still available now: the unused budget, but never past the end of the lunch window. */
 export const breakLeftMs = (s: DaySession | undefined, now = Date.now()) => {
-  const w = breakWindow(now)
+  const p = policyOf(s)
+  const w = breakWindow(now, p)
   if (now >= w.end) return 0
-  return Math.max(0, Math.min(BREAK_MS - breakUsedMs(s, now), w.end - Math.max(now, w.start)))
+  return Math.max(0, Math.min(breakMinutes(p) * 60000 - breakUsedMs(s, now), w.end - Math.max(now, w.start)))
 }
 /** Working time today, without breaks. */
 export function workedMs(s: DaySession | undefined, now = Date.now()) {
@@ -349,8 +513,9 @@ export function pauseDay(me: User) {
     const s = d.sessions.find((x) => x.userId === me.id && x.date === today())
     assert(s && !s.logoutAt, 'Start your day first.')
     assert(!s.breaks?.some((b) => !b.end), 'Your day is already paused.')
-    assert(inBreakWindow(), `Lunch break is ${breakLabel()}. You can pause then.`)
-    assert(breakLeftMs(s) > 0, `You have used your ${BREAK_MINUTES} minutes of break time for today.`)
+    const p = breakFor(me, d)
+    assert(inBreakWindow(Date.now(), p), `Lunch break is ${breakLabel(p)}. You can pause then.`)
+    assert(breakLeftMs(s) > 0, `You have used your ${breakMinutes(p)} minutes of break time for today.`)
     ;(s.breaks ??= []).push({ start: nowIso() })
     audit(d, me.id, 'DAY_PAUSE', `Paused · ${Math.ceil(breakLeftMs(s) / 60000)} min of break left`)
   })
@@ -361,15 +526,17 @@ export function resumeDay(me: User) {
     const open = s?.breaks?.find((b) => !b.end)
     assert(s && open, 'Your day is not paused.')
     open.end = nowIso()
-    const over = breakUsedMs(s) - BREAK_MS
-    audit(d, me.id, 'DAY_RESUME', over > 0 ? `Resumed · break time exceeded by ${Math.ceil(over / 60000)} min` : `Resumed · ${Math.floor(breakLeftMs(s) / 60000)} min of break left`)
+    const late = syncLateBreak(s)
+    if (late) alertHrLateBreak(d, s)
+    audit(d, me.id, 'DAY_RESUME', late ? `Resumed · back from break ${s.lateBreak!.lateMinutes} min late` : `Resumed · ${Math.floor(breakLeftMs(s) / 60000)} min of break left`)
   })
 }
 /** Once a day, 5 minutes before lunch: a notification in the bell (the caller also shows a pop-up). */
 export function remindBreak(me: User) {
   const id = `n-break-${today()}-${me.id}`
   if (getDb().notices.some((n) => n.id === id)) return false
-  mutate((d) => { d.notices.unshift({ id, userId: me.id, title: 'Lunch break in 5 minutes', body: `Your 40-minute break is ${breakLabel()}. Pause your day when you go.`, at: nowIso(), read: false, kind: 'info' }) })
+  const p = breakFor(me)
+  mutate((d) => { d.notices.unshift({ id, userId: me.id, title: 'Lunch break in 5 minutes', body: `Your ${breakMinutes(p)}-minute break is ${breakLabel(p)}. Pause your day when you go.`, at: nowIso(), read: false, kind: 'info' }) })
   return true
 }
 /** Logout for the day: closes an open break; the person can't sign in again until tomorrow. */
@@ -379,7 +546,7 @@ export function endDay(me: User) {
     assert(s, 'Start your day first.')
     assert(!s.logoutAt, 'You have already logged out for today.')
     const open = s.breaks?.find((b) => !b.end)
-    if (open) open.end = nowIso()
+    if (open) { open.end = nowIso(); if (syncLateBreak(s)) alertHrLateBreak(d, s) }
     s.logoutAt = nowIso()
     audit(d, me.id, 'END_DAY', `Logged out for the day · worked ${(workedMs(s) / 3600000).toFixed(1)} h`)
   })

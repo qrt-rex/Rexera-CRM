@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import {
   Bell, ChevronDown, ChevronRight, Home, LayoutGrid, LogOut, Mail, Menu as MenuIcon, Moon, Search, Settings, ShieldCheck, Sun, UserCheck, X, Monitor,
   HelpCircle, SlidersHorizontal, Users, CalendarCheck2, TrendingUp, GraduationCap, FileText, Inbox, PartyPopper, BarChart3,
-  Wallet, Receipt, Landmark, Trophy, Briefcase, Wrench, MailPlus, ClipboardList, FilePen,
+  Wallet, Receipt, Landmark, Trophy, Briefcase, Wrench, MailPlus, ClipboardList, FilePen, Coffee,
 } from 'lucide-react'
 import type { Perm } from '../lib/types'
 import { Rexy } from '../components/hr/Mascots'
@@ -11,7 +11,7 @@ import { useDb } from '../lib/store'
 import { applyTheme, getTheme, useAuth, useMe, type Theme } from '../lib/auth'
 import { MODULES, canSee } from '../lib/modules'
 import { isMaster, ROLES, roleLabel } from '../lib/rbac'
-import { markRead, runComboReminders, runTaskReminders } from '../lib/actions'
+import { markRead, runBreakMonitor, runComboReminders, runTaskReminders } from '../lib/actions'
 import { runScheduledAutomations } from '../lib/email'
 import { ago } from '../lib/format'
 import { Avatar, Button, cx, Menu, MenuItem, Modal } from '../components/ui'
@@ -55,6 +55,13 @@ export function Shell() {
     const tick = () => { try { runScheduledAutomations(); runTaskReminders(); runComboReminders() } catch { /* never block the app */ } }
     tick()
     const t = setInterval(tick, 5 * 60000)
+    return () => clearInterval(t)
+  }, [])
+  // lunch break: reminder at the start, late warning a couple of minutes after the end — needs to be on time
+  useEffect(() => {
+    const tick = () => { try { runBreakMonitor() } catch { /* never block the app */ } }
+    tick()
+    const t = setInterval(tick, 30000)
     return () => clearInterval(t)
   }, [])
   useEffect(() => {
@@ -236,12 +243,13 @@ function Sidebar() {
   )
 }
 
-const HR_PATHS = ['/payroll', '/payslips', '/pf', '/incentives', '/incentive-settings', '/recruitment', '/candidates', '/letters', '/performance', '/email-center']
+const HR_PATHS = ['/payroll', '/payslips', '/pf', '/incentives', '/incentive-settings', '/break-settings', '/recruitment', '/candidates', '/letters', '/performance', '/email-center']
 
 /** HR navigation: each item keeps its own colour; only pages that exist and the user may open are listed. */
 const HR_MENU: { label: string; to: string; icon: typeof Home; color: string; perms: Perm[] }[] = [
   { label: 'Employees', to: '/employees', icon: Users, color: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-500/15 dark:text-emerald-300', perms: ['employees.view', 'employees.manage'] },
   { label: 'Attendance', to: '/attendance', icon: UserCheck, color: 'text-orange-600 bg-orange-100 dark:bg-orange-500/15 dark:text-orange-300', perms: [] },
+  { label: 'Break Time', to: '/break-settings', icon: Coffee, color: 'text-amber-600 bg-amber-100 dark:bg-amber-500/15 dark:text-amber-300', perms: ['employees.manage'] },
   { label: 'Leave Management', to: '/leave', icon: CalendarCheck2, color: 'text-rose-600 bg-rose-100 dark:bg-rose-500/15 dark:text-rose-300', perms: [] },
   { label: 'Payroll', to: '/payroll', icon: Wallet, color: 'text-sky-600 bg-sky-100 dark:bg-sky-500/15 dark:text-sky-300', perms: ['payroll.view', 'payroll.manage'] },
   { label: 'Payslips', to: '/payslips', icon: Receipt, color: 'text-cyan-600 bg-cyan-100 dark:bg-cyan-500/15 dark:text-cyan-300', perms: [] },

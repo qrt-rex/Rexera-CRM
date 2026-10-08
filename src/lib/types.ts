@@ -45,7 +45,12 @@ export interface User {
   needsPasswordReset?: boolean
   /** resume uploaded when HR added the person */
   resume?: FileRef
+  /** own shift (HR → Break Time); anything left out follows the company break policy */
+  shift?: Shift
 }
+
+/** A person's own break window, time zone and weekly off days. */
+export interface Shift { breakStart?: string; breakEnd?: string; timeZone?: string; offDays?: number[] }
 
 /** Every original column of a record imported from the old CRM, exactly as it was. */
 export type LegacyRow = Record<string, string | null>
@@ -232,8 +237,20 @@ export interface LeaveRequest {
   attachment?: FileRef
 }
 
-/** A break inside the working day. Breaks share a daily budget (BREAK_MINUTES). */
+/** A break inside the working day. Breaks share the lunch window's budget (HR → Break Time). */
 export interface DayBreak { start: string; end?: string }
+/** Back from lunch after the break window ended. Kept on the day for history and reports. */
+export interface LateBreak {
+  breakStart: string
+  /** end of that day's break window */
+  expectedReturn: string
+  /** resumed (or ended the day); empty while still away */
+  returnedAt?: string
+  /** whole minutes after the expected return (from the end + 1 min) */
+  lateMinutes: number
+  /** the employee got the "return to work" warning */
+  warnedAt?: string
+}
 export interface DaySession {
   id: string; userId: string; date: string; loginAt: string
   /** set when the person ends the day — they can't sign in again until tomorrow */
@@ -241,6 +258,25 @@ export interface DaySession {
   breaks?: DayBreak[]
   /** HR/IT re-opened the day after it was ended */
   reopenedBy?: string
+  lateBreak?: LateBreak
+}
+/** Lunch break rules, set by HR (HR → Break Time). Times are HH:MM in `timeZone`; people with a shift override them. */
+export interface BreakPolicy {
+  start: string
+  end: string
+  /** IANA time zone, e.g. Asia/Kolkata */
+  timeZone: string
+  /** weekdays nobody is scheduled (0 = Sunday): no reminder, no late alert */
+  offDays: number[]
+  /** minutes after the end when someone still away is warned (2 → 1:42 pm) */
+  warnAfterMin: number
+  /** "break has started" reminder at the start time */
+  remind: boolean
+  /** late-break checks: warning to the employee, alert to HR */
+  monitor: boolean
+  warnMessage: string
+  updatedAt?: string
+  updatedBy?: string
 }
 
 /** An uploaded file kept in the browser's file store (lib/files.ts); records only hold this reference. */
@@ -299,6 +335,7 @@ export interface Settings {
   /** after Logout, no sign-in until the next day (IT / Super Admin always can). Off = testing: people can sign in again. */
   dayLock?: boolean
   branches?: Branch[]
+  breakPolicy?: BreakPolicy
 }
 
 export type ApiScope = 'leads:read' | 'leads:write' | 'bookings:read' | 'billing:read' | 'reports:read' | 'webhooks:send'

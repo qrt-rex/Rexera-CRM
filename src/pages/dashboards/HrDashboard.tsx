@@ -1,17 +1,17 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  Award, BarChart3, CalendarCheck2, CalendarDays, CalendarPlus, ChevronRight, ClipboardCheck, ClipboardList, FileText, FilePen as FileSignature, FolderOpen, GraduationCap, Mail, Megaphone, PieChart,
+  AlarmClock, Award, BarChart3, CalendarCheck2, CalendarDays, CalendarPlus, ChevronRight, ClipboardCheck, ClipboardList, FileText, FilePen as FileSignature, FolderOpen, GraduationCap, Mail, Megaphone, PieChart,
   UserCheck, UserMinus, UserPlus, Users, type LucideIcon,
 } from 'lucide-react'
 import { useDb } from '../../lib/store'
 import { useAuth } from '../../lib/auth'
-import { userName, visibleBookings } from '../../lib/actions'
+import { breakFor, breakLabel, breakPolicy, breakReview, clock, dateIn, lateBreakCount, userName, visibleBookings, workDay, type BreakState } from '../../lib/actions'
 import { useMe } from '../../lib/auth'
 import { addDays, fmtDate, today, ymd } from '../../lib/format'
-import { Avatar, Badge, cx } from '../../components/ui'
+import { Avatar, Badge, cx, Table, Td, Th } from '../../components/ui'
 import { Bao, Cloud, Kabir, Meera, MiniLaptop, PaperPlane, Plant, Rexy, Twinkle } from '../../components/hr/Mascots'
-import { LoginLogoutCard } from './widgets'
+import { LoginLogoutCard, useNow } from './widgets'
 
 // ------------------------------------------------------------------ helpers
 const reduced = () => typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -58,7 +58,7 @@ function Panel({ title, icon: Icon, action, children, className, chip }: { title
     </section>
   )
 }
-const ViewAll = ({ to }: { to: string }) => <Link to={to} className="inline-flex items-center gap-0.5 text-xs font-bold text-brand-ink hover:underline">View All<ChevronRight className="size-3.5" /></Link>
+const ViewAll = ({ to, label = 'View All' }: { to: string; label?: string }) => <Link to={to} className="inline-flex items-center gap-0.5 text-xs font-bold text-brand-ink hover:underline">{label}<ChevronRight className="size-3.5" /></Link>
 const Empty = ({ text }: { text: string }) => <p className="px-5 py-8 text-center text-sm text-mute">{text}</p>
 
 // ------------------------------------------------------------------ page
@@ -162,6 +162,8 @@ export function HrDashboard() {
           hint={data.joinees.length ? data.joinees.map((u) => u.name.split(' ')[0]).slice(0, 3).join(', ') : 'Nobody has joined yet this month'}
           mascot={<Meera className="h-full w-full" />} />
       </div>
+
+      {canAttendance && <LateBreakAlerts />}
 
       {/* 3. middle row */}
       <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
@@ -299,6 +301,60 @@ function MiniRing({ value }: { value: number }) {
       </svg>
       <span className="text-[10px] font-extrabold">{Math.round(value)}%</span>
     </span>
+  )
+}
+
+// ------------------------------------------------------------------ late break alerts
+const BREAK_BADGE: Record<BreakState, { label: string; tone: 'green' | 'red' | 'amber' | 'gray' }> = {
+  STILL_AWAY: { label: 'Still Away', tone: 'red' }, LATE: { label: 'Late', tone: 'amber' }, ON_BREAK: { label: 'On break', tone: 'gray' },
+  ON_TIME: { label: 'On Time', tone: 'green' }, NONE: { label: '—', tone: 'gray' },
+}
+const BREAK_ORDER: BreakState[] = ['STILL_AWAY', 'LATE', 'ON_BREAK', 'ON_TIME', 'NONE']
+
+function LateBreakAlerts() {
+  const db = useDb()
+  const now = useNow(true, 30000)
+  const [all, setAll] = useState(false)
+  // each person's "today" and times follow their own shift time zone
+  const rows = useMemo(() => db.users
+    .filter((u) => u.active)
+    .flatMap((u) => {
+      const p = breakFor(u, db), tz = p.timeZone, date = dateIn(now, tz)
+      // not scheduled (off day) or on approved leave: no late-break alert
+      if (!workDay(date, p) || db.leaves.some((l) => l.userId === u.id && l.status === 'APPROVED' && l.from <= date && l.to >= date)) return []
+      const s = db.sessions.find((x) => x.userId === u.id && x.date === date)
+      return s?.breaks?.length ? [{ s, u, tz, r: breakReview(s, now), before: lateBreakCount(db, u.id, s.date) }] : []
+    })
+    .sort((a, b) => BREAK_ORDER.indexOf(a.r.state) - BREAK_ORDER.indexOf(b.r.state) || b.r.lateMinutes - a.r.lateMinutes), [db, now])
+  const at = (iso: string | undefined, tz: string) => (iso ? clock(new Date(iso).getTime(), tz) : '—')
+  const late = rows.filter((x) => x.r.state === 'LATE' || x.r.state === 'STILL_AWAY')
+  const away = late.filter((x) => x.r.state === 'STILL_AWAY').length
+  const shown = all ? rows : late
+  return (
+    <Panel title="Late Break Alerts — Today" icon={AlarmClock} chip={late.length ? `${late.length} late${away ? ` · ${away} away` : ''}` : undefined}
+      action={<span className="flex items-center gap-3">
+        {rows.length > late.length && <button className="text-xs font-bold text-brand-ink hover:underline" onClick={() => setAll(!all)}>{all ? 'Late only' : `Show all ${rows.length}`}</button>}
+        <ViewAll to="/break-settings" label="Settings" />
+      </span>}>
+      {!shown.length ? <Empty text={rows.length ? 'Everyone came back from break on time today.' : `No breaks taken yet today (break ${breakLabel(breakPolicy(db))}).`} /> : (
+        <Table className="pb-2">
+          <thead><tr><Th>Employee</Th><Th>Break</Th><Th>Expected return</Th><Th>Actual return</Th><Th>Late by</Th><Th>Status</Th><Th className="text-right">Earlier late breaks</Th></tr></thead>
+          <tbody>
+            {shown.map(({ s, u, tz, r, before }) => (
+              <tr key={s.id} className={cx(r.state === 'STILL_AWAY' && 'bg-bad-soft/40')}>
+                <Td><span className="flex items-center gap-2.5"><Avatar name={u.name} photo={u.photo} size={32} /><span className="min-w-0"><span className="block truncate font-semibold">{u.name}</span><span className="block truncate text-xs text-mute">{u.department || '—'}{u.shift ? ' · own shift' : ''}</span></span></span></Td>
+                <Td className="tabular-nums">{at(r.breakStart, tz)}</Td>
+                <Td className="tabular-nums">{r.expected ? clock(r.expected, tz) : '—'}</Td>
+                <Td className="tabular-nums">{at(r.returnedAt, tz)}</Td>
+                <Td className={cx('font-bold tabular-nums', r.lateMinutes ? 'text-bad' : 'text-mute')}>{r.state === 'STILL_AWAY' ? `${r.lateMinutes}+ min` : r.lateMinutes ? `${r.lateMinutes} min` : '—'}</Td>
+                <Td><Badge tone={BREAK_BADGE[r.state].tone} dot={r.state === 'STILL_AWAY'}>{BREAK_BADGE[r.state].label}</Badge>{s.lateBreak?.warnedAt && <span className="mt-0.5 block text-[10px] text-mute">warned {at(s.lateBreak.warnedAt, tz)}</span>}</Td>
+                <Td className="text-right font-bold tabular-nums">{before}</Td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      )}
+    </Panel>
   )
 }
 
