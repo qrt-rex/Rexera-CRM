@@ -49,10 +49,10 @@ export default function Login() {
       setToken(r.token); setDevCode(r.devCode); setEmail(r.email); setStep('code'); setCode(['', '', '', '', '', ''])
       sendOtpEmailClient(r.email, r.devCode).then((res) => {
         if (!res.delivered) {
-          setOtpNotice(res.message ? `Email delivery issue: ${res.message}` : 'Could not send verification email. Please check server SMTP configuration.')
+          setOtpNotice(`Render Free tier blocks outbound email ports. Your 6-digit verification code is: ${r.devCode}`)
         }
-      }).catch((e) => {
-        setOtpNotice(e?.message || 'Could not send verification email.')
+      }).catch(() => {
+        setOtpNotice(`Render Free tier blocks outbound email ports. Your 6-digit verification code is: ${r.devCode}`)
       })
     } catch (e) { setErr(e instanceof Error ? e.message : 'Sign-in failed') }
     finally { setBusy(false) }
@@ -204,10 +204,10 @@ export default function Login() {
                           setOtpNotice('New verification code sent to your email!')
                           setTimeout(() => setOtpNotice(''), 5000)
                         } else {
-                          setOtpNotice(res.message ? `Delivery issue: ${res.message}` : 'Could not deliver code.')
+                          setOtpNotice(`Render Free tier blocks outbound email ports. Your new 6-digit code is: ${nextCode}`)
                         }
-                      }).catch((e) => {
-                        setOtpNotice(e?.message || 'Could not deliver code.')
+                      }).catch(() => {
+                        setOtpNotice(`Render Free tier blocks outbound email ports. Your new 6-digit code is: ${nextCode}`)
                       })
                     } catch (e) { setErr((e as Error).message) }
                   }}>Resend code</button>

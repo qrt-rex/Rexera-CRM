@@ -89,7 +89,33 @@ function createMailer() {
     secure: smtpPort === 465,
     auth: { user: smtpUser, pass: smtpPass },
     tls: { rejectUnauthorized: false },
+    connectionTimeout: 5000,
+    greetingTimeout: 5000,
+    socketTimeout: 5000,
   })
+}
+
+async function sendViaResendApi(to, subject, html) {
+  const resendKey = getEnv('RESEND_API_KEY') || getEnv('RESEND_KEY')
+  if (!resendKey) return null
+
+  const resendFrom = getEnv('RESEND_FROM', 'Rexera CRM <onboarding@resend.dev>')
+  const resp = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${resendKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: resendFrom,
+      to: [to],
+      subject,
+      html,
+    }),
+  })
+  const data = await resp.json()
+  if (!resp.ok) throw new Error(data.message || 'Resend API error')
+  return data
 }
 
 // -------------------------------------------------------------
@@ -143,6 +169,33 @@ async function handleSendResetEmail(req, res) {
     return sendJson(res, 400, { success: false, message: 'Email and resetLink are required' })
   }
 
+  const resetHtml = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 540px; margin: 0 auto; padding: 32px 24px; background: #ffffff; border: 1px solid #E5E7EB; border-radius: 16px;">
+      <h2 style="color: #2E3A8C; margin-top: 0; font-size: 22px;">Rexera CRM · Reset Password</h2>
+      <p style="color: #374151; font-size: 15px; line-height: 1.6;">Hello,</p>
+      <p style="color: #374151; font-size: 15px; line-height: 1.6;">We received a request to reset the password for your Rexera CRM account (<b>${email}</b>).</p>
+      <p style="color: #374151; font-size: 15px; line-height: 1.6;">Click the button below to verify your email and set your new password:</p>
+      <div style="margin: 28px 0; text-align: center;">
+        <a href="${resetLink}" style="background-color: #F47B20; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 10px; font-weight: bold; font-size: 16px; display: inline-block;">Reset Password</a>
+      </div>
+      <p style="color: #6B7280; font-size: 13px; line-height: 1.5;">This link will expire in 15 minutes. If you did not request a password reset, you can safely ignore this email.</p>
+      <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 24px 0;" />
+      <p style="color: #9CA3AF; font-size: 12px; margin: 0;">Rexera Financial Services Pvt. Ltd.</p>
+    </div>
+  `
+
+  // 1. Try Resend API over HTTPS (port 443 - never blocked on Render free tier)
+  try {
+    const resendResult = await sendViaResendApi(email, 'Reset your Rexera CRM password', resetHtml)
+    if (resendResult) {
+      console.log(`[Resend API] Reset email delivered to ${email}`)
+      return sendJson(res, 200, { success: true, message: `Email delivered to ${email}` })
+    }
+  } catch (resendErr) {
+    console.warn('[Resend API Warning]:', resendErr.message)
+  }
+
+  // 2. Try Nodemailer SMTP
   const transporter = createMailer()
   const smtpUser = getEnv('SMTP_USER')
   const smtpFrom = getEnv('SMTP_FROM', `"Rexera CRM" <${smtpUser || 'no-reply@hr.rexera.in'}>`)
@@ -161,27 +214,21 @@ async function handleSendResetEmail(req, res) {
       from: smtpFrom,
       to: email,
       subject: 'Reset your Rexera CRM password',
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 540px; margin: 0 auto; padding: 32px 24px; background: #ffffff; border: 1px solid #E5E7EB; border-radius: 16px;">
-          <h2 style="color: #2E3A8C; margin-top: 0; font-size: 22px;">Rexera CRM · Reset Password</h2>
-          <p style="color: #374151; font-size: 15px; line-height: 1.6;">Hello,</p>
-          <p style="color: #374151; font-size: 15px; line-height: 1.6;">We received a request to reset the password for your Rexera CRM account (<b>${email}</b>).</p>
-          <p style="color: #374151; font-size: 15px; line-height: 1.6;">Click the button below to verify your email and set your new password:</p>
-          <div style="margin: 28px 0; text-align: center;">
-            <a href="${resetLink}" style="background-color: #F47B20; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 10px; font-weight: bold; font-size: 16px; display: inline-block;">Reset Password</a>
-          </div>
-          <p style="color: #6B7280; font-size: 13px; line-height: 1.5;">This link will expire in 15 minutes. If you did not request a password reset, you can safely ignore this email.</p>
-          <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 24px 0;" />
-          <p style="color: #9CA3AF; font-size: 12px; margin: 0;">Rexera Financial Services Pvt. Ltd.</p>
-        </div>
-      `,
+      html: resetHtml,
     })
 
     console.log(`[SMTP] Reset email successfully delivered to ${email}`)
     return sendJson(res, 200, { success: true, message: `Email delivered to ${email}` })
   } catch (err) {
-    console.error('[SMTP Error - Reset Link]:', err)
-    return sendJson(res, 500, { success: false, message: `SMTP error: ${err.message}` })
+    console.error('[SMTP Error - Reset Link]:', err.message)
+    const isTimeout = /timeout|ETIMEDOUT|ECONNREFUSED/i.test(err.message)
+    return sendJson(res, 500, {
+      success: false,
+      smtpBlocked: isTimeout,
+      message: isTimeout
+        ? 'SMTP connection timed out. Render Free tier blocks outbound SMTP ports (25, 465, 587).'
+        : `SMTP error: ${err.message}`,
+    })
   }
 }
 
@@ -198,6 +245,33 @@ async function handleSendOtpEmail(req, res) {
     return sendJson(res, 400, { success: false, message: 'Email and code are required' })
   }
 
+  const otpHtml = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 32px 24px; background: #ffffff; border: 1px solid #E5E7EB; border-radius: 16px;">
+      <h2 style="color: #2E3A8C; margin-top: 0; font-size: 22px;">Rexera CRM · Login Verification</h2>
+      <p style="color: #374151; font-size: 15px; line-height: 1.6;">Hello,</p>
+      <p style="color: #374151; font-size: 15px; line-height: 1.6;">Your 6-digit login verification code for <b>${email}</b> is:</p>
+      <div style="margin: 28px 0; text-align: center;">
+        <span style="font-family: monospace, Courier; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #F47B20; background: #FFF7ED; padding: 14px 28px; border-radius: 12px; border: 1.5px dashed #F4A12A; display: inline-block;">${code}</span>
+      </div>
+      <p style="color: #6B7280; font-size: 13px; line-height: 1.5;">This code is valid for 5 minutes. Enter this code on the login screen to access your account.</p>
+      <p style="color: #6B7280; font-size: 13px; line-height: 1.5;">If you did not attempt to sign in, please secure your account immediately.</p>
+      <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 24px 0;" />
+      <p style="color: #9CA3AF; font-size: 12px; margin: 0;">Rexera Financial Services Pvt. Ltd.</p>
+    </div>
+  `
+
+  // 1. Try Resend API over HTTPS (port 443 - never blocked on Render free tier)
+  try {
+    const resendResult = await sendViaResendApi(email, `${code} is your Rexera CRM login verification code`, otpHtml)
+    if (resendResult) {
+      console.log(`[Resend API] OTP delivered to ${email}`)
+      return sendJson(res, 200, { success: true, message: `OTP delivered to ${email}` })
+    }
+  } catch (resendErr) {
+    console.warn('[Resend API Warning]:', resendErr.message)
+  }
+
+  // 2. Try Nodemailer SMTP
   const transporter = createMailer()
   const smtpUser = getEnv('SMTP_USER')
   const smtpFrom = getEnv('SMTP_FROM', `"Rexera CRM" <${smtpUser || 'no-reply@hr.rexera.in'}>`)
@@ -217,27 +291,21 @@ async function handleSendOtpEmail(req, res) {
       from: smtpFrom,
       to: email,
       subject: `${code} is your Rexera CRM login verification code`,
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 32px 24px; background: #ffffff; border: 1px solid #E5E7EB; border-radius: 16px;">
-          <h2 style="color: #2E3A8C; margin-top: 0; font-size: 22px;">Rexera CRM · Login Verification</h2>
-          <p style="color: #374151; font-size: 15px; line-height: 1.6;">Hello,</p>
-          <p style="color: #374151; font-size: 15px; line-height: 1.6;">Your 6-digit login verification code for <b>${email}</b> is:</p>
-          <div style="margin: 28px 0; text-align: center;">
-            <span style="font-family: monospace, Courier; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #F47B20; background: #FFF7ED; padding: 14px 28px; border-radius: 12px; border: 1.5px dashed #F4A12A; display: inline-block;">${code}</span>
-          </div>
-          <p style="color: #6B7280; font-size: 13px; line-height: 1.5;">This code is valid for 5 minutes. Enter this code on the login screen to access your account.</p>
-          <p style="color: #6B7280; font-size: 13px; line-height: 1.5;">If you did not attempt to sign in, please secure your account immediately.</p>
-          <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 24px 0;" />
-          <p style="color: #9CA3AF; font-size: 12px; margin: 0;">Rexera Financial Services Pvt. Ltd.</p>
-        </div>
-      `,
+      html: otpHtml,
     })
 
     console.log(`[SMTP] OTP code successfully delivered to ${email}`)
     return sendJson(res, 200, { success: true, message: `OTP delivered to ${email}` })
   } catch (err) {
-    console.error('[SMTP Error - OTP]:', err)
-    return sendJson(res, 500, { success: false, message: `SMTP error: ${err.message}` })
+    console.error('[SMTP Error - OTP]:', err.message)
+    const isTimeout = /timeout|ETIMEDOUT|ECONNREFUSED/i.test(err.message)
+    return sendJson(res, 500, {
+      success: false,
+      smtpBlocked: isTimeout,
+      message: isTimeout
+        ? 'SMTP connection timed out. Render Free tier blocks outbound SMTP ports (25, 465, 587).'
+        : `SMTP error: ${err.message}`,
+    })
   }
 }
 

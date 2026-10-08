@@ -6,12 +6,16 @@ export interface EmailDispatchResult {
 }
 
 async function trySendViaEndpoint(endpoint: string, payload: unknown): Promise<{ ok: boolean; data?: any; isHtml?: boolean }> {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 6000)
   try {
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
+      signal: controller.signal,
     })
+    clearTimeout(timeoutId)
 
     const contentType = res.headers.get('content-type') || ''
     if (contentType.includes('text/html')) {
@@ -33,7 +37,9 @@ async function trySendViaEndpoint(endpoint: string, payload: unknown): Promise<{
     const data = await res.json()
     return { ok: true, data }
   } catch (err: any) {
-    return { ok: false, data: { message: err.message } }
+    clearTimeout(timeoutId)
+    const isTimeout = err.name === 'AbortError' || /aborted/i.test(err.message)
+    return { ok: false, data: { message: isTimeout ? 'Request timed out after 6 seconds' : err.message } }
   }
 }
 
@@ -44,6 +50,8 @@ async function trySendViaSupabaseEdge(payload: unknown): Promise<{ ok: boolean; 
   const edgeUrl = `${cfg.url}/functions/v1/send-email`
   const key = String(import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '').trim()
 
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 6000)
   try {
     const res = await fetch(edgeUrl, {
       method: 'POST',
@@ -53,7 +61,9 @@ async function trySendViaSupabaseEdge(payload: unknown): Promise<{ ok: boolean; 
         Authorization: `Bearer ${key}`,
       },
       body: JSON.stringify(payload),
+      signal: controller.signal,
     })
+    clearTimeout(timeoutId)
 
     if (!res.ok) {
       let msg = ''
@@ -69,7 +79,9 @@ async function trySendViaSupabaseEdge(payload: unknown): Promise<{ ok: boolean; 
     const data = await res.json()
     return { ok: Boolean(data.success), message: data.message }
   } catch (err: any) {
-    return { ok: false, message: err.message }
+    clearTimeout(timeoutId)
+    const isTimeout = err.name === 'AbortError' || /aborted/i.test(err.message)
+    return { ok: false, message: isTimeout ? 'Edge request timed out' : err.message }
   }
 }
 
