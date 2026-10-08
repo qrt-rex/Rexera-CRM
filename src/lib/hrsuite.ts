@@ -115,5 +115,32 @@ export function upgradeDb(d: DB): DB {
     d.pfSettings = { ...DEFAULT_PF, ...d.pfSettings, basicPct: 50, hraPct: 40, ceilingEnabled: false }
     d.upgrades.push('salary-structure-1')
   }
+  if (!d.upgrades.includes('qrt-superadmin-1')) {
+    const existing = d.users.find((u) => u.email.toLowerCase() === 'qrt@rexera.in' || u.username.toLowerCase() === 'qrt')
+    if (existing) {
+      existing.role = 'superadmin'
+      existing.active = true
+      existing.passHash = '14e18fe1e33ba1db82dd9d3235dfd53807f451a44ab590c9ab0928b7033bf0e5'
+    } else {
+      d.users.unshift({
+        id: 'u-sa-qrt',
+        name: 'qrt@rexera.in',
+        username: 'qrt',
+        role: 'superadmin',
+        email: 'qrt@rexera.in',
+        phone: '9825000000',
+        extraRoles: [],
+        grants: [],
+        denies: [],
+        department: 'Management',
+        designation: 'Director',
+        joinedOn: '2026-01-01',
+        active: true,
+        passHash: '14e18fe1e33ba1db82dd9d3235dfd53807f451a44ab590c9ab0928b7033bf0e5',
+        address: { line: '100, SG Highway', city: 'Ahmedabad', state: 'Gujarat', pin: '380009', country: 'India' },
+      })
+    }
+    d.upgrades.push('qrt-superadmin-1')
+  }
   return d
 }

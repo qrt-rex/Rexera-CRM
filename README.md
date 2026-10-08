@@ -48,6 +48,7 @@ SHA-256 hashes of those passwords are stored, in `src/lib/seed.ts` (`PRESET_HASH
 
 | Role | Email |
 |---|---|
+| Super Admin | qrt@rexera.in |
 | Super Admin | superadmin@rexera.co.in |
 | Admin | admin@rexera.co.in |
 | HR | hr@rexera.co.in |

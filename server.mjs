@@ -37,7 +37,14 @@ const fileEnv = {
 }
 
 function getEnv(key, fallback = '') {
-  return process.env[key] || fileEnv[key] || fallback
+  let val = process.env[key] || fileEnv[key] || fallback
+  if (typeof val === 'string') {
+    val = val.trim()
+    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+      val = val.slice(1, -1)
+    }
+  }
+  return val
 }
 
 // -------------------------------------------------------------
@@ -81,6 +88,7 @@ function createMailer() {
     port: smtpPort,
     secure: smtpPort === 465,
     auth: { user: smtpUser, pass: smtpPass },
+    tls: { rejectUnauthorized: false },
   })
 }
 
@@ -148,6 +156,7 @@ async function handleSendResetEmail(req, res) {
   }
 
   try {
+    console.log(`[SMTP] Delivering reset email to ${email}...`)
     await transporter.sendMail({
       from: smtpFrom,
       to: email,
@@ -168,6 +177,7 @@ async function handleSendResetEmail(req, res) {
       `,
     })
 
+    console.log(`[SMTP] Reset email successfully delivered to ${email}`)
     return sendJson(res, 200, { success: true, message: `Email delivered to ${email}` })
   } catch (err) {
     console.error('[SMTP Error - Reset Link]:', err)
@@ -193,6 +203,7 @@ async function handleSendOtpEmail(req, res) {
   const smtpFrom = getEnv('SMTP_FROM', `"Rexera CRM" <${smtpUser || 'no-reply@hr.rexera.in'}>`)
 
   if (!transporter) {
+    console.warn('[SMTP] Attempted OTP send but SMTP_USER / SMTP_PASS is missing')
     return sendJson(res, 500, {
       success: false,
       configured: false,
@@ -201,6 +212,7 @@ async function handleSendOtpEmail(req, res) {
   }
 
   try {
+    console.log(`[SMTP] Delivering OTP code ${code} to ${email}...`)
     await transporter.sendMail({
       from: smtpFrom,
       to: email,
@@ -221,6 +233,7 @@ async function handleSendOtpEmail(req, res) {
       `,
     })
 
+    console.log(`[SMTP] OTP code successfully delivered to ${email}`)
     return sendJson(res, 200, { success: true, message: `OTP delivered to ${email}` })
   } catch (err) {
     console.error('[SMTP Error - OTP]:', err)

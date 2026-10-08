@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { CheckCircle2, Loader2, Mail } from 'lucide-react'
 import { createPasswordResetLink } from '../lib/actions'
 import { sendPasswordResetEmail, cloudConfig } from '../lib/supabase'
+import { sendResetEmailClient } from '../lib/emailClient'
 import { Button, Input, Modal } from './ui'
 
 export function ResetPasswordModal({ open, onClose, email: fixedEmail }: { open: boolean; onClose: () => void; email?: string }) {
@@ -31,42 +32,27 @@ export function ResetPasswordModal({ open, onClose, email: fixedEmail }: { open:
       // 1. Generate local token-based reset link
       const { resetLink } = createPasswordResetLink(email)
 
-      let delivered = false
+      // 2. Dispatch via universal client (local backend -> Supabase Edge Function)
+      const dispatch = await sendResetEmailClient(email, resetLink)
+      if (dispatch.delivered) {
+        setSent(true)
+        return
+      }
 
-      // 2. Try dispatching via Hostinger / SMTP relay in Vite dev server
-      try {
-        const resp = await fetch('/api/send-reset-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: email.trim(), resetLink }),
-        })
-        const data = await resp.json()
-        if (data.success) {
-          delivered = true
-        } else if (data.message && data.configured !== false) {
-          throw new Error(data.message)
-        }
-      } catch (relayErr: any) {
-        if (!relayErr.message?.includes('Failed to fetch')) {
-          setErr(relayErr.message)
+      // 3. Fallback: Supabase Auth recovery email if cloud configured
+      const cfg = cloudConfig()
+      if (cfg.status === 'ready') {
+        try {
+          await sendPasswordResetEmail(email.trim())
+          setSent(true)
+          return
+        } catch (sbErr: any) {
+          console.warn('[Supabase Auth Reset fallback failed]:', sbErr.message)
         }
       }
 
-      // 3. If SMTP was not configured, try Supabase Auth as fallback
-      if (!delivered) {
-        const cfg = cloudConfig()
-        if (cfg.status === 'ready') {
-          try {
-            await sendPasswordResetEmail(email.trim())
-            delivered = true
-          } catch (sbErr: any) {
-            setErr(sbErr.message || 'Failed to send reset email.')
-          }
-        }
-      }
-
-
-      setSent(true)
+      // If all channels failed, show clear diagnostic error
+      setErr(dispatch.message || 'Unable to deliver password reset email. Please contact administrator.')
     } catch (e: any) {
       setErr(e.message || 'Failed to generate reset link.')
     } finally {
