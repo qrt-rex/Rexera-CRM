@@ -30,6 +30,7 @@ RUN npm ci --omit=dev
 # Copy compiled assets from builder
 COPY --from=builder /app/dist ./dist
 COPY server.mjs ./
+COPY supabase/functions/_shared/client-email.mjs ./supabase/functions/_shared/
 
 EXPOSE 5180
 

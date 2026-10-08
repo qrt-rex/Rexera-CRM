@@ -184,6 +184,16 @@ export interface Booking {
   remarks?: string
   /** who closed the lead (defaults to the person entering it) */
   closedBy?: string
+  /** emails sent to the client from the file (Operation team / Admin) */
+  clientEmails?: ClientEmailLog[]
+}
+
+/** One email to the client: SENT by the CRM, MAIL_APP = handed to the sender's own email app, FAILED = not sent. */
+export interface ClientEmailLog {
+  id: string; at: string; by: string
+  to: string; cc: string[]; subject: string; template: string
+  status: 'SENT' | 'MAIL_APP' | 'FAILED'
+  error?: string
 }
 
 export interface Service { id: string; name: string; category: string; price: number; gstRate: number; deduction: number; active: boolean }

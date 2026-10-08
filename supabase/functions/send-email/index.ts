@@ -1,4 +1,4 @@
-// Supabase Edge Function: Email relay for OTP codes and Password Reset links.
+// Supabase Edge Function: Email relay for OTP codes, Password Reset links and client emails (Operation team / Admin).
 // Useful when frontend is deployed on static hosting (Render Static Site, Vercel, Netlify)
 // without a Node.js backend server.
 //
@@ -6,10 +6,11 @@
 //   SMTP_HOST = smtp.hostinger.com
 //   SMTP_PORT = 587
 //   SMTP_USER = no-reply@hr.rexera.in
-//   SMTP_PASS = QRT##12321It
+//   SMTP_PASS = (the mailbox password — set it as a secret, never write it in code)
 //   SMTP_FROM = "Rexera CRM" <no-reply@hr.rexera.in>
 
 import nodemailer from 'npm:nodemailer@6.9.16'
+import { checkClientEmail, renderClientEmail } from '../_shared/client-email.mjs'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -27,11 +28,30 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST') return json(405, { success: false, message: 'POST only' })
 
-  let body: { type?: 'otp' | 'reset'; email?: string; code?: string; resetLink?: string }
+  let body: { type?: 'otp' | 'reset' | 'client'; email?: string; code?: string; resetLink?: string; [k: string]: unknown }
   try {
     body = await req.json()
   } catch {
     return json(400, { success: false, message: 'Bad JSON payload' })
+  }
+
+  if (body.type === 'client') {
+    const problem = checkClientEmail(body)
+    if (problem) return json(400, { success: false, message: problem })
+    const smtpUser = Deno.env.get('SMTP_USER'), smtpPass = Deno.env.get('SMTP_PASS')
+    if (!smtpUser || !smtpPass) return json(500, { success: false, configured: false, message: 'SMTP credentials not configured in Supabase Edge Secrets (SMTP_USER / SMTP_PASS).' })
+    const p = body as unknown as Parameters<typeof renderClientEmail>[0]
+    const { html, text } = renderClientEmail(p)
+    const port = Number(Deno.env.get('SMTP_PORT') || 587)
+    try {
+      await nodemailer.createTransport({ host: Deno.env.get('SMTP_HOST') || 'smtp.hostinger.com', port, secure: port === 465, auth: { user: smtpUser, pass: smtpPass } }).sendMail({
+        from: Deno.env.get('SMTP_FROM') || `"Rexera CRM" <${smtpUser}>`, to: p.to, cc: p.cc?.length ? p.cc : undefined,
+        replyTo: p.replyTo || p.sender.email || undefined, subject: p.subject, html, text,
+      })
+      return json(200, { success: true, message: `Email sent to ${p.to}` })
+    } catch (err: any) {
+      return json(500, { success: false, message: `SMTP error: ${err.message}` })
+    }
   }
 
   const email = body.email?.trim()

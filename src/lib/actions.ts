@@ -1,5 +1,5 @@
 import type {
-  Booking, BookingStatus, BDoc, Branch, BreakPolicy, CallOutcome, Shift, CandidateApplication, CandidateForm, DaySession, DB, EventItem, FileRef, Invoice, InvoiceItem, Lead, LeaveType, Perm, Post, Role, Scheme, User,
+  Booking, BookingStatus, BDoc, Branch, BreakPolicy, CallOutcome, ClientEmailLog, Shift, CandidateApplication, CandidateForm, DaySession, DB, EventItem, FileRef, Invoice, InvoiceItem, Lead, LeaveType, Perm, Post, Role, Scheme, User,
 } from './types'
 import { effectivePerms, isMaster, MASTER_ROLES, rolesOf, roleLabel } from './rbac'
 import { getDb, mutate } from './store'
@@ -1146,6 +1146,25 @@ export function setDeduction(me: User, id: string, amount: number) {
 }
 
 const commentKind: Record<Role, string> = { superadmin: 'Super Admin', admin: 'Admin', accounts: 'Accounts', legal: 'Legal', operations: 'Operations', teamlead: 'Team Leader', sales: 'BDE', hr: 'HR', it: 'IT', support: 'Customer Support' }
+/** The Operation team and Admin (and Super Admin / IT) email clients from the file. */
+export function canEmailClient(d: DB, me: User, b: Booking) {
+  if (!visibleBookings(d, me).some((x) => x.id === b.id)) return false
+  const p = effectivePerms(d, me)
+  return isSA(me) || p.has('bookings.process') || p.has('bookings.admin')
+}
+/** Records an email to the client on the file (shown in its timeline) and in the activity log. */
+export function logClientEmail(me: User, id: string, e: Omit<ClientEmailLog, 'id' | 'at' | 'by'>) {
+  mutate((d) => {
+    const b = findB(d, id)
+    assert(canEmailClient(d, me, b), 'Only the Operation team and Admin can email clients.')
+    ;(b.clientEmails ??= []).unshift({ ...e, id: uid('ce-'), at: nowIso(), by: me.id })
+    if (b.clientEmails.length > 200) b.clientEmails.length = 200
+    audit(d, me.id, 'CLIENT_EMAIL', `${b.bookingId}: ${e.status === 'SENT' ? 'emailed' : e.status === 'MAIL_APP' ? 'opened email app for' : 'email failed to'} ${e.to} — “${e.subject}”`)
+    const watchers = [b.opsMemberId, b.adminId, b.createdBy].filter((x) => x && x !== me.id)
+    if (e.status !== 'FAILED') notify(d, watchers, `Client emailed · ${b.bookingId}`, `${me.name}: ${e.subject}`, `/bookings/${b.id}`, 'info')
+  })
+}
+
 export function addComment(me: User, id: string, text: string) {
   assert(text.trim(), 'Write something first.')
   mutate((d) => {

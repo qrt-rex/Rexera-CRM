@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import nodemailer from 'nodemailer'
+import { checkClientEmail, renderClientEmail } from './supabase/functions/_shared/client-email.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DIST_DIR = path.resolve(__dirname, 'dist')
@@ -95,7 +96,7 @@ function createMailer() {
   })
 }
 
-async function sendViaResendApi(to, subject, html) {
+async function sendViaResendApi(to, subject, html, extra = {}) {
   const resendKey = getEnv('RESEND_API_KEY') || getEnv('RESEND_KEY')
   if (!resendKey) return null
 
@@ -111,6 +112,7 @@ async function sendViaResendApi(to, subject, html) {
       to: [to],
       subject,
       html,
+      ...extra,
     }),
   })
   const data = await resp.json()
@@ -309,6 +311,69 @@ async function handleSendOtpEmail(req, res) {
   }
 }
 
+// Client emails (Operation team / Admin → client). The CRM has no server-side login yet, so this endpoint only sends
+// the fixed branded layout built from plain text (escaped), and is rate-limited per caller and per recipient.
+const sendLog = new Map()
+function overLimit(key, max, windowMs) {
+  const now = Date.now()
+  const hits = (sendLog.get(key) || []).filter((t) => now - t < windowMs)
+  if (hits.length >= max) { sendLog.set(key, hits); return true }
+  hits.push(now)
+  sendLog.set(key, hits)
+  if (sendLog.size > 5000) for (const [k, v] of sendLog) if (!v.some((t) => now - t < windowMs)) sendLog.delete(k)
+  return false
+}
+
+async function handleSendClientEmail(req, res) {
+  let body
+  try {
+    body = await readJsonBody(req)
+  } catch (err) {
+    return sendJson(res, 400, { success: false, message: err.message })
+  }
+  const problem = checkClientEmail(body)
+  if (problem) return sendJson(res, 400, { success: false, message: problem })
+
+  const ip = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '?'
+  if (overLimit(`ip:${ip}`, 60, 3600_000) || overLimit(`to:${body.to.toLowerCase()}`, 10, 3600_000)) {
+    return sendJson(res, 429, { success: false, message: 'Too many emails in the last hour. Please try again later.' })
+  }
+
+  const { html, text } = renderClientEmail(body)
+  const cc = (body.cc || []).filter(Boolean)
+  const replyTo = body.replyTo || body.sender?.email || undefined
+
+  try {
+    const resendResult = await sendViaResendApi(body.to, body.subject, html, { text, ...(cc.length && { cc }), ...(replyTo && { reply_to: replyTo }) })
+    if (resendResult) {
+      console.log(`[Resend API] Client email delivered to ${body.to}`)
+      return sendJson(res, 200, { success: true, message: `Email sent to ${body.to}` })
+    }
+  } catch (resendErr) {
+    console.warn('[Resend API Warning]:', resendErr.message)
+  }
+
+  const transporter = createMailer()
+  const smtpUser = getEnv('SMTP_USER')
+  const smtpFrom = getEnv('SMTP_FROM', `"Rexera CRM" <${smtpUser || 'no-reply@hr.rexera.in'}>`)
+  if (!transporter) {
+    return sendJson(res, 500, { success: false, configured: false, message: 'Email is not set up on the server (SMTP_USER / SMTP_PASS).' })
+  }
+  try {
+    await transporter.sendMail({ from: smtpFrom, to: body.to, ...(cc.length && { cc }), ...(replyTo && { replyTo }), subject: body.subject, html, text })
+    console.log(`[SMTP] Client email delivered to ${body.to}`)
+    return sendJson(res, 200, { success: true, message: `Email sent to ${body.to}` })
+  } catch (err) {
+    console.error('[SMTP Error - Client email]:', err.message)
+    const isTimeout = /timeout|ETIMEDOUT|ECONNREFUSED/i.test(err.message)
+    return sendJson(res, 500, {
+      success: false,
+      smtpBlocked: isTimeout,
+      message: isTimeout ? 'The email server could not be reached (SMTP timed out).' : `SMTP error: ${err.message}`,
+    })
+  }
+}
+
 // -------------------------------------------------------------
 // Static File Serving with SPA fallback
 // -------------------------------------------------------------
@@ -389,6 +454,10 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === '/api/send-otp-email' && req.method === 'POST') {
     return handleSendOtpEmail(req, res)
+  }
+
+  if (pathname === '/api/send-client-email' && req.method === 'POST') {
+    return handleSendClientEmail(req, res)
   }
 
   // Static Assets and SPA routing

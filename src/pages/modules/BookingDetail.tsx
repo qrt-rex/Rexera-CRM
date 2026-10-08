@@ -2,12 +2,13 @@ import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   Archive, ArrowLeft, Building2, Layers, Check, CheckCircle2, ChevronRight, CircleDot, Download, FileText, FolderKanban, History, IndianRupee, ListTodo,
-  MessageSquare, Pencil, Plus, Receipt, Send, ShieldCheck, Trash2, Upload, X, Lock,
+  MessageSquare, Pencil, Plus, Receipt, Send, ShieldCheck, Trash2, Upload, X, Lock, Mail,
 } from 'lucide-react'
+import { ClientEmailComposer } from '../../components/ClientEmail'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
 import {
-  addComboService, addComment, addDocuments, addPayment, needsPriceSplit, addTask, canEditBooking, canMoveStage, deleteDocument, setStageOutcome, deleteTask, invoiceFromBooking, moveStage,
+  addComboService, addComment, addDocuments, addPayment, needsPriceSplit, addTask, canEditBooking, canEmailClient, canMoveStage, deleteDocument, setStageOutcome, deleteTask, invoiceFromBooking, moveStage,
   setDeduction, setDocStatus, toggleTask, userName, verifyPayment, visibleBookings,
 } from '../../lib/actions'
 import { DOC_CATEGORIES, STAGES, STAGE_OUTCOMES, stageLabel } from '../../lib/workflow'
@@ -20,7 +21,7 @@ import { DocUploader, type PendingDoc } from '../../components/DocUploader'
 import { StageControls, StageText } from '../../components/StageControls'
 import { FileLink } from '../../components/FileField'
 import {
-  Avatar, Badge, Button, Card, CardHeader, cx, EmptyState, FileButton, Input, Modal, Select, Table, Tabs, Td, Textarea, Th, readAsDataUrl, useRun,
+  Avatar, Badge, Button, Card, CardHeader, Checkbox, cx, EmptyState, FileButton, Input, Modal, Select, Table, Tabs, Td, Textarea, Th, readAsDataUrl, useRun,
 } from '../../components/ui'
 import { BookingStatusBadge, ChainStepper, DeadlineBadge, DecisionButtons, PriorityBadge, StageTrack } from '../../components/booking'
 
@@ -34,6 +35,7 @@ export default function BookingDetail() {
   const run = useRun()
   const nav = useNavigate()
   const [tab, setTab] = useState<Tab>('overview')
+  const [mail, setMail] = useState(false)
   const b = visibleBookings(db, me).find((x) => x.id === id)
   if (!b) return <Card><EmptyState icon={FileText} title="CRM entry not found" text="It doesn't exist or isn't visible to you." action={<Link to="/bookings"><Button>All CRM entries</Button></Link>} /></Card>
   const m = bookingMoney(b)
@@ -51,6 +53,7 @@ export default function BookingDetail() {
             {b.holdReason && <p className="mt-2 inline-flex rounded-lg bg-warn-soft px-3 py-1 text-sm font-medium text-warn">On hold: {b.holdReason}</p>}
           </div>
           <div className="flex flex-wrap gap-2">
+            {canEmailClient(db, me, b) && <Button variant="accent" icon={Mail} onClick={() => setMail(true)}>Email client</Button>}
             {canEditBooking(db, me, b) && <Link to={`/bookings/${b.id}/edit`}><Button variant="outline" icon={Pencil}>Edit</Button></Link>}
             {can('billing.create', 'billing.manage') && !invoices.length && !['PENDING_TL', 'REJECTED'].includes(b.status) && (
               <Button variant="outline" icon={Receipt} onClick={async () => { const inv = await run(() => invoiceFromBooking(me, b.id, can('billing.manage') ? 'TAX' : 'PROFORMA'), 'Invoice raised'); if (typeof inv === 'string') nav(`/billing/${inv}`) }}>Raise invoice</Button>
@@ -73,7 +76,7 @@ export default function BookingDetail() {
 
       <Tabs value={tab} onChange={setTab} className="mb-5 w-fit" tabs={[
         { id: 'overview', label: 'Overview', icon: Building2 }, { id: 'processing', label: 'Processing', icon: FolderKanban, count: b.tasks.filter((t) => !t.done).length },
-        { id: 'documents', label: 'Documents', icon: FileText, count: b.documents.length }, { id: 'timeline', label: 'Timeline', icon: History, count: b.comments.length + b.approvals.length },
+        { id: 'documents', label: 'Documents', icon: FileText, count: b.documents.length }, { id: 'timeline', label: 'Timeline', icon: History, count: b.comments.length + b.approvals.length + (b.clientEmails?.length ?? 0) },
         ...(b.legacy ? [{ id: 'legacy' as const, label: 'Old CRM record', icon: Archive }] : []),
       ]} />
       {tab === 'overview' && <Overview id={b.id} />}
@@ -81,6 +84,7 @@ export default function BookingDetail() {
       {tab === 'documents' && <Documents id={b.id} />}
       {tab === 'timeline' && <Timeline id={b.id} />}
       {tab === 'legacy' && <LegacyRecord id={b.id} />}
+      {mail && <ClientEmailComposer b={b} onClose={() => setMail(false)} />}
     </div>
   )
 }
@@ -220,6 +224,9 @@ function Processing({ id }: { id: string }) {
   const movable = canMoveStage(db, me, b)
   const [target, setTarget] = useState<number | null>(null)
   const [note, setNote] = useState('')
+  const canMail = canEmailClient(db, me, b)
+  const [mailAfter, setMailAfter] = useState(false)
+  const [mail, setMail] = useState(false)
   const [task, setTask] = useState('')
   const [due, setDue] = useState('')
   const timeIn = useMemo(() => {
@@ -296,9 +303,11 @@ function Processing({ id }: { id: string }) {
         </Card>
       </div>
       <Modal open={target !== null} onClose={() => setTarget(null)} title={`Move to stage ${target}`} subtitle={target ? stageLabel(target, target === 3 ? 'IN_PROCESS' : undefined) : ''} size="sm"
-        footer={<><Button variant="outline" onClick={() => setTarget(null)}>Cancel</Button><Button icon={ChevronRight} onClick={async () => { if (target && await run(() => moveStage(me, b.id, target, note), 'Stage updated')) setTarget(null) }}>Move</Button></>}>
-        <Textarea label={target && target < b.stage ? 'Reason (required)' : 'Note'} value={note} onChange={(e) => setNote(e.target.value)} />
+        footer={<><Button variant="outline" onClick={() => setTarget(null)}>Cancel</Button><Button icon={ChevronRight} onClick={async () => { if (target && await run(() => moveStage(me, b.id, target, note), 'Stage updated')) { setTarget(null); if (mailAfter) setMail(true) } }}>Move</Button></>}>
+        <Textarea label={target && target < b.stage ? 'Reason (required)' : 'Note'} value={note} onChange={(e) => setNote(e.target.value)} hint={mailAfter ? 'The note is added to the progress email — you can edit it before sending' : undefined} />
+        {canMail && <div className="mt-3"><Checkbox checked={mailAfter} onChange={setMailAfter} label="Email the client about this update" /></div>}
       </Modal>
+      {mail && <ClientEmailComposer b={b} onClose={() => setMail(false)} />}
     </div>
   )
 }
@@ -391,6 +400,11 @@ function Timeline({ id }: { id: string }) {
   const items = [
     ...b.approvals.map((a) => ({ id: a.id, at: a.at, by: a.by, kind: 'approval' as const, title: `${a.level}: ${a.action.replace('_', ' ').toLowerCase()}`, text: a.remark, action: a.action })),
     ...b.comments.map((c) => ({ id: c.id, at: c.at, by: c.by, kind: 'comment' as const, title: c.kind, text: c.text, action: '' })),
+    ...(b.clientEmails ?? []).map((e) => ({
+      id: e.id, at: e.at, by: e.by, kind: 'email' as const, action: e.status,
+      title: e.status === 'SENT' ? 'emailed the client' : e.status === 'MAIL_APP' ? 'opened the email in their own email app' : 'email to the client failed',
+      text: `To: ${e.to}${e.cc.length ? ` · CC: ${e.cc.join(', ')}` : ''}\n“${e.subject}”${e.error ? `\n${e.error}` : ''}`,
+    })),
   ].sort((x, y) => y.at.localeCompare(x.at))
   const icon = (a: string) => a === 'REJECTED' ? <X className="size-4" /> : a === 'COMPLETED' ? <ShieldCheck className="size-4" /> : a.startsWith('ASSIGN') ? <Send className="size-4" /> : <CheckCircle2 className="size-4" />
   return (
@@ -410,7 +424,9 @@ function Timeline({ id }: { id: string }) {
             <li key={it.id} className="flex gap-3">
               {it.kind === 'approval'
                 ? <span className={cx('grid size-9 shrink-0 place-items-center rounded-full text-white', it.action === 'REJECTED' ? 'bg-bad' : it.action === 'HOLD' ? 'bg-warn' : 'bg-ok')}>{icon(it.action)}</span>
-                : <Avatar name={u?.name ?? '?'} photo={u?.photo} />}
+                : it.kind === 'email'
+                  ? <span className={cx('grid size-9 shrink-0 place-items-center rounded-full text-white', it.action === 'FAILED' ? 'bg-bad' : 'bg-accent')}><Mail className="size-4" /></span>
+                  : <Avatar name={u?.name ?? '?'} photo={u?.photo} />}
               <div className="min-w-0 flex-1 rounded-2xl bg-card2 px-4 py-3">
                 <p className="text-sm"><b>{u?.name ?? '—'}</b> <span className="text-mute">· {u ? roleLabel(u.role) : ''} · {it.title}</span></p>
                 {it.text && <p className="mt-1 whitespace-pre-line text-sm">{it.text.split(/(@[\w.]+)/g).map((p, i) => p.startsWith('@') ? <b key={i} className="text-brand-ink">{p}</b> : p)}</p>}

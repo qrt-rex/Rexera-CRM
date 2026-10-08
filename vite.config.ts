@@ -2,6 +2,7 @@ import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { blutecEnv, handleBlutec, type BlutecRequest } from './supabase/functions/_shared/blutec.ts'
+import { checkClientEmail, renderClientEmail, type ClientEmailRequest } from './supabase/functions/_shared/client-email.mjs'
 
 /**
  * Local relay for sending password reset emails via SMTP (Nodemailer) or Resend.
@@ -215,6 +216,42 @@ function mailerRelay(mode: string): Plugin {
 
           res.statusCode = 200; res.setHeader('Content-Type', 'application/json')
           res.end(JSON.stringify({ success: false, message: 'SMTP credentials not configured' }))
+        })
+      })
+
+      // client emails (Operation team / Admin → client): same layout and checks as server.mjs
+      server.middlewares.use('/api/send-client-email', (req, res) => {
+        const reply = (status: number, body: unknown) => { res.statusCode = status; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(body)) }
+        if (req.method !== 'POST') { res.statusCode = 405; res.end(); return }
+        let raw = ''
+        req.on('data', (c) => { raw += c; if (raw.length > 50_000) req.destroy() })
+        req.on('end', async () => {
+          let body: ClientEmailRequest
+          try { body = JSON.parse(raw || '{}') } catch { reply(400, { success: false, message: 'Bad JSON' }); return }
+          const problem = checkClientEmail(body)
+          if (problem) { reply(400, { success: false, message: problem }); return }
+          const env = loadEnv(mode, process.cwd(), '')
+          const smtpUser = env.SMTP_USER || process.env.SMTP_USER
+          const smtpPass = env.SMTP_PASS || process.env.SMTP_PASS
+          if (!smtpUser || !smtpPass) { reply(200, { success: false, configured: false, message: 'Email is not set up on this computer (SMTP_USER / SMTP_PASS in .env.local).' }); return }
+          const smtpPort = Number(env.SMTP_PORT || process.env.SMTP_PORT) || 587
+          const { html, text } = renderClientEmail(body)
+          const cc = (body.cc ?? []).filter(Boolean)
+          const replyTo = body.replyTo || body.sender.email || undefined
+          try {
+            const nodemailer = await import('nodemailer')
+            const transporter = nodemailer.createTransport({
+              host: env.SMTP_HOST || process.env.SMTP_HOST || 'smtp.hostinger.com', port: smtpPort, secure: smtpPort === 465,
+              auth: { user: smtpUser, pass: smtpPass }, connectionTimeout: 8000, greetingTimeout: 8000, socketTimeout: 10000,
+            })
+            await transporter.sendMail({
+              from: env.SMTP_FROM || process.env.SMTP_FROM || `"Rexera CRM" <${smtpUser}>`, to: body.to, ...(cc.length && { cc }), ...(replyTo && { replyTo }),
+              subject: body.subject, html, text,
+            })
+            reply(200, { success: true, message: `Email sent to ${body.to}` })
+          } catch (err) {
+            reply(500, { success: false, message: `SMTP error: ${err instanceof Error ? err.message : 'failed'}` })
+          }
         })
       })
     },

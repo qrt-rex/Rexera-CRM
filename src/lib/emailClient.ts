@@ -1,13 +1,14 @@
 import { cloudConfig } from './supabase'
+import type { ClientEmailRequest } from '../../supabase/functions/_shared/client-email.mjs'
 
 export interface EmailDispatchResult {
   delivered: boolean
   message?: string
 }
 
-async function trySendViaEndpoint(endpoint: string, payload: unknown): Promise<{ ok: boolean; data?: any; isHtml?: boolean }> {
+async function trySendViaEndpoint(endpoint: string, payload: unknown, timeoutMs = 6000): Promise<{ ok: boolean; data?: any; isHtml?: boolean }> {
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 6000)
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
   try {
     const res = await fetch(endpoint, {
       method: 'POST',
@@ -110,6 +111,23 @@ export async function sendOtpEmailClient(email: string, code: string): Promise<E
   const failureReason = edgeRes.message || localRes.data?.message || 'SMTP service unreachable on live host'
   console.error(`[Email] OTP delivery failed for ${trimmed}:`, failureReason)
   return { delivered: false, message: failureReason }
+}
+
+/** Sends a branded email to a client (Operation team / Admin): the server builds it from plain text. */
+export async function sendClientEmailClient(payload: ClientEmailRequest): Promise<EmailDispatchResult & { notConfigured?: boolean }> {
+  const localRes = await trySendViaEndpoint('/api/send-client-email', payload, 20000)
+  if (localRes.ok && localRes.data?.success) return { delivered: true, message: localRes.data.message }
+  // Only fall back to Supabase when there is no mail server here (static hosting, not set up, unreachable). A real answer
+  // (bad address, rate limit, SMTP error) is final, and so is a timeout: the server may still send it — no double emails.
+  const msg = String(localRes.data?.message ?? '')
+  const noServer = localRes.isHtml || localRes.data?.configured === false || /Failed to fetch|NetworkError|Route not found/i.test(msg)
+  if (!noServer) {
+    return { delivered: false, message: /timed out/i.test(msg) ? 'The mail server is slow to answer — the email may still arrive. Check before sending it again.' : msg || 'Sending failed.' }
+  }
+  const edgeRes = await trySendViaSupabaseEdge({ type: 'client', ...payload })
+  if (edgeRes.ok) return { delivered: true, message: edgeRes.message }
+  const notConfigured = localRes.data?.configured === false || /not configured/i.test(edgeRes.message ?? '')
+  return { delivered: false, notConfigured, message: localRes.data?.message || edgeRes.message || 'Email service unreachable' }
 }
 
 /** Sends password reset email */
