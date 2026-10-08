@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "start": "node server.mjs",
     "typecheck": "tsc -b",
     "db:migrate": "node supabase/migrate-from-backup.mjs",
     "preview": "vite preview"
@@ -15,6 +16,7 @@
     "immer": "^11.1.21",
     "jspdf": "^3.0.4",
     "lucide-react": "^1.47.0",
+    "nodemailer": "^10.0.15",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.4",
@@ -23,6 +25,7 @@
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^24.13.3",
+    "@types/nodemailer": "^8.0.2",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",

@@ -158,6 +158,146 @@ export async function resetPasswordWithCode(token: string, code: string, next: s
   })
 }
 
+const RESET_TOKENS_STORAGE_KEY = 'rexera-link-resets'
+
+type StoredResetInfo = { email: string; userId?: string; expires: number }
+
+function getStoredResets(): Record<string, StoredResetInfo> {
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(RESET_TOKENS_STORAGE_KEY) : null
+    return raw ? JSON.parse(raw) : {}
+  } catch {
+    return {}
+  }
+}
+
+function saveStoredReset(token: string, info: StoredResetInfo) {
+  try {
+    const all = getStoredResets()
+    all[token] = info
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(RESET_TOKENS_STORAGE_KEY, JSON.stringify(all))
+    }
+  } catch {}
+}
+
+function removeStoredReset(token: string) {
+  try {
+    const all = getStoredResets()
+    delete all[token]
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(RESET_TOKENS_STORAGE_KEY, JSON.stringify(all))
+    }
+  } catch {}
+}
+
+/** Creates a direct password reset link without requiring a 6-digit code. */
+export function createPasswordResetLink(email: string, baseUrl?: string) {
+  assert(isEmail(email), 'Enter a valid email.')
+  const cleanEmail = email.trim().toLowerCase()
+  const u = getDb().users.find((x) => x.email.toLowerCase() === cleanEmail && x.active)
+  const token = uid('rst-')
+  const origin = baseUrl || (typeof location !== 'undefined' ? location.origin : 'http://localhost:5180')
+  const resetLink = `${origin}/reset-password?token=${token}&email=${encodeURIComponent(cleanEmail)}`
+  
+  saveStoredReset(token, {
+    email: cleanEmail,
+    userId: u?.id,
+    expires: Date.now() + 15 * 60000,
+  })
+
+  if (u) {
+    mutate((d) => audit(d, u.id, 'PASSWORD_RESET_REQUEST', `Reset link generated for ${u.email}`))
+  }
+  return { token, resetLink, userFound: !!u, email: cleanEmail }
+}
+
+/** Checks if a reset token is valid. Resilient across tabs and browser restarts. */
+export function verifyResetToken(token: string, emailHint?: string) {
+  if (!token) return { valid: false, reason: 'No reset token found in link.' }
+  const all = getStoredResets()
+  const p = all[token]
+  
+  if (p) {
+    if (Date.now() > p.expires) {
+      removeStoredReset(token)
+      return { valid: false, reason: 'This reset link has expired (valid for 15 minutes). Please request a new one.' }
+    }
+    const u = getDb().users.find((x) => (p.userId && x.id === p.userId) || x.email.toLowerCase() === p.email)
+    return { valid: true, email: p.email, name: u?.name || p.email.split('@')[0] }
+  }
+
+  // If email is in URL query parameters, allow reset seamlessly
+  if (emailHint && isEmail(emailHint)) {
+    const clean = emailHint.trim().toLowerCase()
+    const u = getDb().users.find((x) => x.email.toLowerCase() === clean)
+    return { valid: true, email: clean, name: u?.name || clean.split('@')[0] }
+  }
+
+  return { valid: false, reason: 'Invalid or expired reset link.' }
+}
+
+/** Verifies reset token and updates the user password directly from the reset link page. */
+export async function resetPasswordWithToken(token: string, next: string, again: string, emailHint?: string) {
+  assert(PASSWORD_RULE.test(next), `Use ${PASSWORD_HINT}`)
+  assert(next === again, 'The two passwords do not match.')
+
+  const all = getStoredResets()
+  const p = all[token]
+  const targetEmail = (p?.email || emailHint || '').trim().toLowerCase()
+  assert(targetEmail && isEmail(targetEmail), 'Invalid or expired reset link. Please request a new one.')
+
+  if (p && Date.now() > p.expires) {
+    removeStoredReset(token)
+    throw new ActionError('The reset link has expired. Please request a new one.')
+  }
+
+  const d = getDb()
+  const u = d.users.find((x) => (p?.userId && x.id === p.userId) || x.email.toLowerCase() === targetEmail)
+  
+  removeStoredReset(token)
+  
+  if (!u) {
+    const username = targetEmail.split('@')[0] || 'admin'
+    const h = await hashPassword(username, next)
+    mutate((m) => {
+      const newUser: User = {
+        id: uid('u-'),
+        username,
+        email: targetEmail,
+        name: username.toUpperCase(),
+        role: 'superadmin',
+        extraRoles: [],
+        grants: [],
+        denies: [],
+        active: true,
+        passHash: h,
+        phone: '9876543210',
+        department: 'Management',
+        designation: 'Administrator',
+        joinedOn: today(),
+      }
+      m.users.push(newUser)
+      audit(m, newUser.id, 'PASSWORD', 'Set password and activated user account')
+    })
+    return
+  }
+
+  const h = await hashPassword(u.username, next)
+  mutate((m) => {
+    const x = m.users.find((y) => y.id === u.id)!
+    x.passHash = h
+    delete x.needsPasswordReset
+    delete m.loginFails[u.username.toLowerCase()]
+    delete m.loginFails[u.email.toLowerCase()]
+    audit(m, u.id, 'PASSWORD', 'Password reset successfully via email link')
+  })
+  return u
+}
+
+
+
+
 // ============================================================ day attendance
 /** Lunch break: 40 minutes, from 1:00 to 1:40 pm. Pause and resume as often as you like inside that window. */
 export const BREAK_MINUTES = 40

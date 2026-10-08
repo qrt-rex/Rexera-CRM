@@ -44,6 +44,11 @@ export default function Login() {
     try {
       const r = await loginStep1(login, password)
       setToken(r.token); setDevCode(r.devCode); setEmail(r.email); setStep('code'); setCode(['', '', '', '', '', ''])
+      fetch('/api/send-otp-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: r.email, code: r.devCode }),
+      }).catch(() => {})
     } catch (e) { setErr(e instanceof Error ? e.message : 'Sign-in failed') }
     finally { setBusy(false) }
   }
@@ -173,14 +178,19 @@ export default function Login() {
                   <button onClick={() => verify()} className="h-13 w-52 rounded-2xl bg-[#F47B20] py-3 text-lg font-extrabold shadow-lg shadow-black/20 hover:bg-[#DF6A12]">Verify & sign in</button>
                 </div>
                 <p className="mt-5 text-center text-sm text-white/75">
-                  Didn't get it? <button className="font-semibold text-white underline" onClick={() => { try { setDevCode(resendCode(token)); setErr('') } catch (e) { setErr((e as Error).message) } }}>Resend code</button>
+                  Didn't get it? <button className="font-semibold text-white underline" onClick={() => {
+                    try {
+                      const nextCode = resendCode(token)
+                      setDevCode(nextCode)
+                      setErr('')
+                      fetch('/api/send-otp-email', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email, code: nextCode }),
+                      }).catch(() => {})
+                    } catch (e) { setErr((e as Error).message) }
+                  }}>Resend code</button>
                 </p>
-                {DEV_MODE && (
-                  <div className="mt-6 flex items-center justify-between gap-3 rounded-2xl border border-dashed border-[#F4A12A]/60 bg-white/5 px-4 py-3">
-                    <div><p className="text-[10px] font-bold uppercase tracking-wider text-[#F4A12A]">Developer mode OTP</p><p className="font-mono text-xl font-bold tracking-[0.3em]">{devCode}</p></div>
-                    <button className="rounded-xl bg-white px-3 py-2 text-sm font-bold text-[#2E3A8C]" onClick={() => { setCode(devCode.split('')); verify(devCode) }}>Use code</button>
-                  </div>
-                )}
               </div>
             )}
           </div>

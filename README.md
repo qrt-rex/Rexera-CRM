@@ -13,6 +13,34 @@ npm run dev
 
 Open <http://localhost:5180>. Other commands: `npm run build` (type-check + production build), `npm run typecheck`.
 
+## Live Production Deployment
+
+To host live on a **VPS, Render, Railway, Cloud VM, or Docker**:
+
+### 1. Standard Node.js Server
+```bash
+npm install
+npm run build
+npm start
+```
+Runs `server.mjs`, serving the production frontend with SPA routing and live SMTP endpoints for reset link & OTP emails.
+
+### 2. Docker Deployment
+```bash
+docker build -t rexera-crm .
+docker run -p 5180:5180 --env-file .env.local rexera-crm
+```
+
+### 3. Live Server Environment Variables
+Set these in your host dashboard (Railway / Render / VPS environment variables):
+- `PORT` — default `5180` (or injected by platform)
+- `SMTP_HOST` — `smtp.hostinger.com`
+- `SMTP_PORT` — `587`
+- `SMTP_USER` — `no-reply@hr.rexera.in`
+- `SMTP_PASS` — your email password (wrap in quotes if it has `#`, e.g. `"pass#123"`)
+- `SMTP_FROM` — `"Rexera CRM" <no-reply@hr.rexera.in>`
+
+
 ### Sign-in accounts
 
 Sign in with the company email (not case-sensitive) and the password agreed for that account. Only
