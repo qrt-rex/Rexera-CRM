@@ -1,5 +1,5 @@
 # Multi-stage production build for Rexera CRM
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
@@ -16,7 +16,7 @@ COPY . .
 RUN npm run build
 
 # Production runner image
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 
 WORKDIR /app
 
@@ -30,7 +30,7 @@ RUN npm ci --omit=dev
 # Copy compiled assets from builder
 COPY --from=builder /app/dist ./dist
 COPY server.mjs ./
-COPY supabase/functions/_shared/client-email.mjs ./supabase/functions/_shared/
+COPY supabase/functions/_shared/client-email.mjs supabase/functions/_shared/blutec.ts ./supabase/functions/_shared/
 
 EXPOSE 5180
 

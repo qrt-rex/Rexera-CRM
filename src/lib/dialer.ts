@@ -1,8 +1,7 @@
 import { cloudConfig, getSupabase } from './supabase'
 
 /**
- * Talks to the Blutec relay — the local dev server (/api/blutec) or, on the live site, the Supabase Edge Function
- * `blutec`. Secrets live only on the relay; the browser never sees them.
+ * Talks to the Blutec relay at /api/blutec — the local dev server (vite.config.ts) or, on the live site, server.mjs. Secrets live only on the relay; the browser never sees them.
  */
 export interface BlutecStatus { dialer: boolean; ivr: boolean; dnc?: boolean; dialerUrl: string; ivrUrl: string }
 export interface CallStatus {
@@ -23,7 +22,8 @@ async function endpoint(): Promise<{ url: string; headers: Record<string, string
   const sb = await getSupabase()
   const { data } = await sb.auth.getSession()
   if (!data.session) throw new DialerError('Sign in to the online CRM to use the dialer.', 'NOT_SIGNED_IN')
-  return { url: `${cfg.url}/functions/v1/blutec`, headers: { Authorization: `Bearer ${data.session.access_token}`, apikey: String(import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? '') } }
+  // the live server (server.mjs) relays to Blutec with the BLUTEC_* settings from Render
+  return { url: '/api/blutec', headers: { Authorization: `Bearer ${data.session.access_token}` } }
 }
 
 async function call<T>(body: Record<string, unknown>): Promise<T> {

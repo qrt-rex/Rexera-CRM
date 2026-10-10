@@ -3,7 +3,9 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import nodemailer from 'nodemailer'
+import { createClient } from '@supabase/supabase-js'
 import { checkClientEmail, renderClientEmail } from './supabase/functions/_shared/client-email.mjs'
+import { blutecEnv, handleBlutec } from './supabase/functions/_shared/blutec.ts'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DIST_DIR = path.resolve(__dirname, 'dist')
@@ -420,6 +422,35 @@ function serveStaticFile(req, res, pathname) {
 }
 
 // -------------------------------------------------------------
+// Blutec dialer / IVR relay (same checks as the `blutec` Edge Function, but reads BLUTEC_* from Render's environment)
+// -------------------------------------------------------------
+const IVR_ACTIONS = ['ivrList', 'ivrStats', 'ivrControl', 'ivrConnects']
+
+async function handleBlutecRelay(req, res) {
+  const sbUrl = getEnv('VITE_SUPABASE_URL') || getEnv('SUPABASE_URL')
+  const sbKey = getEnv('VITE_SUPABASE_PUBLISHABLE_KEY')
+  if (!sbUrl || !sbKey) return sendJson(res, 503, { success: false, message: 'Server is missing VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY.' })
+  const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '')
+  if (!token) return sendJson(res, 401, { success: false, message: 'Sign in to the CRM first.' })
+
+  // the user's own token: Supabase verifies it, and row-level security applies to the lookup
+  const sb = createClient(sbUrl, sbKey, { auth: { persistSession: false }, global: { headers: { Authorization: `Bearer ${token}` } } })
+  const { data: who } = await sb.auth.getUser(token)
+  if (!who?.user) return sendJson(res, 401, { success: false, message: 'Sign in to the CRM first.' })
+  const { data: me } = await sb.from('app_users').select('id, role, email, active').eq('auth_user_id', who.user.id).maybeSingle()
+  if (!me?.active) return sendJson(res, 403, { success: false, message: 'Your CRM account is not active.' })
+
+  let body
+  try { body = await readJsonBody(req) } catch { return sendJson(res, 400, { success: false, message: 'Bad JSON' }) }
+  if (IVR_ACTIONS.includes(body.action) && me.role !== 'superadmin') return sendJson(res, 403, { success: false, message: 'IVR campaigns are for the Super Admin only.' })
+  // people can only place calls from their own dialer agent
+  if (body.action === 'call') body = { ...body, agentEmail: me.email }
+
+  const r = await handleBlutec(body, blutecEnv({ ...fileEnv, ...process.env }))
+  sendJson(res, r.status, r.body)
+}
+
+// -------------------------------------------------------------
 // Server creation
 // -------------------------------------------------------------
 const server = http.createServer(async (req, res) => {
@@ -460,6 +491,10 @@ const server = http.createServer(async (req, res) => {
     return handleSendClientEmail(req, res)
   }
 
+  if (pathname === '/api/blutec' && req.method === 'POST') {
+    return handleBlutecRelay(req, res).catch((err) => sendJson(res, 502, { success: false, message: err.message }))
+  }
+
   // Static Assets and SPA routing
   if (req.method === 'GET' || req.method === 'HEAD') {
     return serveStaticFile(req, res, pathname)
@@ -472,6 +507,7 @@ server.listen(PORT, HOST, () => {
   console.log(`\n======================================================`)
   console.log(`🚀 Rexera CRM Live Production Server is running!`)
   console.log(`👉 URL: http://${HOST}:${PORT} (listening on all interfaces)`)
+  console.log(`📞 Dialer: ${blutecEnv({ ...fileEnv, ...process.env }).keyId ? 'Configured' : '⚠️ NOT configured (Set BLUTEC_KEY_ID, BLUTEC_API_KEY, BLUTEC_SIGNING_SECRET)'}`)
   console.log(`📧 SMTP: ${getEnv('SMTP_USER') ? `Configured (${getEnv('SMTP_USER')})` : '⚠️ NOT configured (Set SMTP_USER & SMTP_PASS)'}`)
   console.log(`======================================================\n`)
 })
