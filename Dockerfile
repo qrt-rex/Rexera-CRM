@@ -12,6 +12,10 @@ RUN npm ci
 # Copy application source code
 COPY . .
 
+# Render passes its Environment values to Docker builds only when declared here; Vite bakes them into the site
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_PUBLISHABLE_KEY
+
 # Build production bundle
 RUN npm run build
 
