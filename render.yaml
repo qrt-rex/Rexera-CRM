@@ -37,3 +37,19 @@ services:
         sync: false
       - key: VITE_SUPABASE_PUBLISHABLE_KEY
         sync: false
+      - key: BLUTEC_KEY_ID
+        sync: false
+      - key: BLUTEC_API_KEY
+        sync: false
+      - key: BLUTEC_SIGNING_SECRET
+        sync: false
+      - key: BLUTEC_TOKEN
+        sync: false
+      - key: BLUTEC_IVR_EMAIL
+        sync: false
+      - key: BLUTEC_IVR_PASSWORD
+        sync: false
+      - key: DIALER_ACCESS_KEY
+        sync: false
+      - key: IVR_ACCESS_KEY
+        sync: false

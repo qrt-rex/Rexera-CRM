@@ -7,9 +7,9 @@ import { useAuth, useMe } from '../../lib/auth'
 import { createLead, logCall, setLeadStatus, visibleLeads } from '../../lib/actions'
 import { CALL_OUTCOMES, LEAD_STATUS, OPEN_LEAD } from '../../lib/workflow'
 import { addDays, fmtDate, fmtDateTime, fmtTime, inr, normPhone, today, ymd } from '../../lib/format'
-import { blutec, DialerError, FINAL_STATUSES, isHot, type AgentConnect, type BlutecStatus, type CallStatus, type Ivr, type IvrStats } from '../../lib/dialer'
+import { blutec, dialerKey, DialerError, FINAL_STATUSES, isHot, type AgentConnect, type BlutecCampaign, type BlutecStatus, type CallStatus, type Ivr, type IvrStats } from '../../lib/dialer'
 import { rolesOf } from '../../lib/rbac'
-import { Badge, Button, Card, CardHeader, cx, EmptyState, Input, Modal, PageHeader, Table, Tabs, Td, Textarea, Th, useConfirm, useRun, useToast } from '../../components/ui'
+import { Badge, Button, Card, CardHeader, cx, EmptyState, Input, Modal, Select, PageHeader, Table, Tabs, Td, Textarea, Th, useConfirm, useRun, useToast } from '../../components/ui'
 import { salesNumbers } from '../../lib/metrics'
 import { MiniStat } from '../dashboards/widgets'
 
@@ -79,6 +79,7 @@ export default function Dialer() {
 
 function ConnectionPill({ bt, ivr }: { bt: ReturnType<typeof useBlutec>; ivr: boolean }) {
   const [open, setOpen] = useState(false)
+  const [key, setKey] = useState(dialerKey.get)
   const ok = ivr ? bt.status?.ivr : bt.status?.dialer
   return (
     <>
@@ -89,15 +90,62 @@ function ConnectionPill({ bt, ivr }: { bt: ReturnType<typeof useBlutec>; ivr: bo
       <Modal open={open} onClose={() => setOpen(false)} title="Blutec dialer connection" size="lg" footer={<><Button variant="outline" icon={RefreshCcw} onClick={bt.check}>Check again</Button><Button onClick={() => setOpen(false)}>Close</Button></>}>
         <div className="space-y-3 text-sm">
           <p>Click-to-call: <b className={bt.status?.dialer ? 'text-ok' : 'text-warn'}>{bt.status?.dialer ? 'connected' : 'not set up'}</b> · DND check: <b className={bt.status?.dnc ? 'text-ok' : 'text-warn'}>{bt.status?.dnc ? 'on' : 'not set up'}</b> · IVR: <b className={bt.status?.ivr ? 'text-ok' : 'text-warn'}>{bt.status?.ivr ? 'connected' : 'not set up'}</b>{bt.error ? ` · ${bt.error}` : ''}</p>
+          {!import.meta.env.DEV && <form className="flex items-end gap-2" onSubmit={(e) => { e.preventDefault(); dialerKey.set(key); bt.check() }}>
+            <Input className="flex-1" label="Dialer access key (this computer)" type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} hint="From the Super Admin. Use the IVR key on the Super Admin's computer." />
+            <Button type="submit">Save</Button>
+          </form>}
           <p className="text-mute">Calls ring <b>your own phone</b> first (the number set for your agent in Blutec), then connect the client. Each CRM user's email must be added as an agent in Blutec.</p>
           <p className="font-semibold">To connect (done once by IT):</p>
           <ol className="list-decimal space-y-1 pl-5 text-mute">
             <li>In Blutec, make a dedicated <b>API user</b> (Company Admin, never used to sign in to the website), create a <b>long-lived API token</b> (blt_…) and — once Blutec support has enabled Click-to-Call — a <b>Click-to-Call credential</b> (key id, API key, signing secret).</li>
             <li>On this computer, add them to <code>.env</code> (never in a VITE_ variable): <code>BLUTEC_KEY_ID</code>, <code>BLUTEC_API_KEY</code>, <code>BLUTEC_SIGNING_SECRET</code>, <code>BLUTEC_TOKEN</code>, <code>BLUTEC_IVR_EMAIL</code>, <code>BLUTEC_IVR_PASSWORD</code> — then restart the app.</li>
-            <li>For the live site, set the same values as Supabase function secrets and deploy the <code>blutec</code> function.</li>
+            <li>For the live site, set the same values in Render → Environment, plus <code>DIALER_ACCESS_KEY</code> (staff) and <code>IVR_ACCESS_KEY</code> (Super Admin) — any long random text — then enter the key above on each computer.</li>
           </ol>
           <p className="text-xs text-mute">Until then, “Call now” opens your phone's dialler and you log the outcome by hand.</p>
         </div>
+      </Modal>
+    </>
+  )
+}
+
+/** Copies a Blutec campaign's leads into the CRM, so they join the queue (numbers already in the CRM are skipped). */
+function BlutecImport() {
+  const db = useDb()
+  const me = useMe()
+  const toast = useToast()
+  const [open, setOpen] = useState(false)
+  const [camps, setCamps] = useState<BlutecCampaign[] | null>(null)
+  const [pick, setPick] = useState('')
+  const [busy, setBusy] = useState(false)
+  const load = () => { setOpen(true); setCamps(null); blutec.campaigns().then(setCamps, (e: Error) => { setCamps([]); toast('error', e.message) }) }
+  const importLeads = async () => {
+    setBusy(true)
+    try {
+      const leads = await blutec.campaignLeads(Number(pick))
+      const have = new Set(db.leads.map((l) => l.phone))
+      const camp = camps?.find((c) => String(c.id) === pick)?.name ?? 'Blutec'
+      let added = 0
+      for (const b of leads) {
+        const phone = normPhone(b.phone)
+        if (have.has(phone)) continue
+        have.add(phone)
+        try { createLead(me, { name: b.name?.trim() || `Lead ${phone.slice(-4)}`, company: '', phone, email: '', city: '', state: 'Gujarat', service: '', source: `Blutec: ${camp}`, notes: '', assignedTo: me.id }); added++ } catch { /* invalid number: skip */ }
+      }
+      toast('success', `${added} new leads added from ${camp} (${leads.length - added} already in the CRM or invalid)`)
+      setOpen(false)
+    } catch (e) { toast('error', e instanceof Error ? e.message : 'Import failed.') }
+    finally { setBusy(false) }
+  }
+  return (
+    <>
+      <Button size="sm" variant="soft" icon={UserPlus} onClick={load}>Import from Blutec</Button>
+      <Modal open={open} onClose={() => setOpen(false)} title="Import leads from Blutec" footer={<><Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button disabled={!pick || busy} onClick={importLeads}>{busy ? 'Importing…' : 'Import'}</Button></>}>
+        {!camps ? <p className="text-sm text-mute">Loading campaigns…</p> : (
+          <Select label="Campaign" value={pick} onChange={(e) => setPick(e.target.value)}>
+            <option value="">Choose a campaign</option>
+            {camps.map((c) => <option key={c.id} value={c.id}>{c.name} · {c.status}{c.total_leads != null ? ` · ${c.total_leads} leads` : ''}</option>)}
+          </Select>
+        )}
       </Modal>
     </>
   )
@@ -192,7 +240,7 @@ function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
       </div>
       <div className="grid gap-6 xl:grid-cols-[340px_1fr_320px]">
         <Card className="overflow-hidden xl:max-h-[70vh] xl:overflow-y-auto">
-          <CardHeader title="Queue" subtitle={`${queue.length} leads`} />
+          <CardHeader title="Queue" subtitle={`${queue.length} leads`} action={bt.status?.dnc && <BlutecImport />} />
           {!queue.length && <EmptyState icon={PhoneCall} title="Queue is empty" text="Great work! Add leads or ask your team leader for more." />}
           <ul>
             {queue.map((l) => (

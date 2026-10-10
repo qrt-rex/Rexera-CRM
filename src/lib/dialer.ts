@@ -1,8 +1,5 @@
-import { cloudConfig, getSupabase } from './supabase'
-
 /**
- * Talks to the Blutec relay — the local dev server (/api/blutec) or, on the live site, the Supabase Edge Function
- * `blutec`. Secrets live only on the relay; the browser never sees them.
+ * Talks to the Blutec relay at /api/blutec — the local dev server (vite.config.ts) or, on the live site, server.mjs. Secrets live only on the relay; the browser never sees them.
  */
 export interface BlutecStatus { dialer: boolean; ivr: boolean; dnc?: boolean; dialerUrl: string; ivrUrl: string }
 export interface CallStatus {
@@ -10,24 +7,29 @@ export interface CallStatus {
   start_time?: string; answer_time?: string; end_time?: string; duration_seconds?: number; talk_duration_seconds?: number
   hangup_cause?: string; disposition?: string; recording_status?: string
 }
+export interface BlutecCampaign { id: number; name: string; status: string; total_leads?: number; fresh_leads?: number }
+export interface BlutecLead { id: number; phone: string; name?: string; status?: string }
 export interface Ivr { id: number; name: string; status: string; broadcast_status: string; max_concurrent_calls?: number; agent_connect_enabled?: boolean }
 export interface IvrStats { broadcast_status: string; dialing_now: number; total_leads: number; dialed: number; answered: number; pressed_1: number; remaining: number }
 export interface AgentConnect { id: number; lead_phone: string; agent_name: string; status: string; wait_seconds: number; talk_seconds: number; hangup_by?: string; recording?: boolean; created_at: string }
 
 export class DialerError extends Error { constructor(message: string, public code?: string, public status?: number) { super(message) } }
 
-async function endpoint(): Promise<{ url: string; headers: Record<string, string> }> {
+const KEY = 'rexera-dialer-key'
+/** The access key this computer sends to the live server (set once in the Dialer → connection window). */
+export const dialerKey = {
+  get: () => { try { return localStorage.getItem(KEY) ?? '' } catch { return '' } },
+  set: (k: string) => { try { localStorage.setItem(KEY, k.trim()) } catch { /* ignore */ } },
+}
+
+function endpoint(): { url: string; headers: Record<string, string> } {
   if (import.meta.env.DEV) return { url: '/api/blutec', headers: {} }
-  const cfg = cloudConfig()
-  if (cfg.status !== 'ready') throw new DialerError('The dialer needs the online database (Supabase) connected for the live site.', 'NOT_CONNECTED')
-  const sb = await getSupabase()
-  const { data } = await sb.auth.getSession()
-  if (!data.session) throw new DialerError('Sign in to the online CRM to use the dialer.', 'NOT_SIGNED_IN')
-  return { url: `${cfg.url}/functions/v1/blutec`, headers: { Authorization: `Bearer ${data.session.access_token}`, apikey: String(import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? '') } }
+  // the live server (server.mjs) relays to Blutec with the BLUTEC_* settings from Render
+  return { url: '/api/blutec', headers: { 'X-Dialer-Key': dialerKey.get() } }
 }
 
 async function call<T>(body: Record<string, unknown>): Promise<T> {
-  const { url, headers } = await endpoint()
+  const { url, headers } = endpoint()
   let res: Response
   try { res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) }) }
   catch { throw new DialerError('Could not reach the dialer relay.', 'OFFLINE') }
@@ -47,6 +49,8 @@ export const blutec = {
   /** Adds the number to the company's Do-Not-Disturb list in Blutec (no campaign or click-to-call will dial it). */
   dncAdd: (phone: string, reason: string) => call<unknown>({ action: 'dncAdd', phone, reason }),
   callStatus: (refId: string) => call<CallStatus>({ action: 'callStatus', refId }),
+  campaigns: () => call<BlutecCampaign[]>({ action: 'campaigns' }),
+  campaignLeads: (id: number) => call<BlutecLead[]>({ action: 'campaignLeads', id }),
   ivrList: () => call<Ivr[]>({ action: 'ivrList' }),
   ivrStats: (id: number) => call<IvrStats>({ action: 'ivrStats', id }),
   ivrControl: (id: number, op: 'start' | 'pause' | 'resume' | 'stop') => call<unknown>({ action: 'ivrControl', id, op }),
