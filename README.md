@@ -28,7 +28,7 @@ Runs `server.mjs`, serving the production frontend with SPA routing and live SMT
 ### 2. Docker Deployment
 ```bash
 docker build -t rexera-crm .
-docker run -p 5180:5180 --env-file .env.local rexera-crm
+docker run -p 5180:5180 --env-file .env rexera-crm
 ```
 
 ### 3. Live Server Environment Variables

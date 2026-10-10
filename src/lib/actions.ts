@@ -219,29 +219,21 @@ export function createPasswordResetLink(email: string, baseUrl?: string) {
   return { token, resetLink, userFound: !!u, email: cleanEmail }
 }
 
-/** Checks if a reset token is valid. Resilient across tabs and browser restarts. */
-export function verifyResetToken(token: string, emailHint?: string) {
+/**
+ * Checks a reset link. Only a link this app issued (stored token, not expired) for an existing, active account is valid.
+ * The email in the link is never trusted on its own — otherwise anyone could reset any account by typing its email.
+ */
+export function verifyResetToken(token: string, _emailHint?: string) {
   if (!token) return { valid: false, reason: 'No reset token found in link.' }
-  const all = getStoredResets()
-  const p = all[token]
-  
-  if (p) {
-    if (Date.now() > p.expires) {
-      removeStoredReset(token)
-      return { valid: false, reason: 'This reset link has expired (valid for 15 minutes). Please request a new one.' }
-    }
-    const u = getDb().users.find((x) => (p.userId && x.id === p.userId) || x.email.toLowerCase() === p.email)
-    return { valid: true, email: p.email, name: u?.name || p.email.split('@')[0] }
+  const p = getStoredResets()[token]
+  if (!p) return { valid: false, reason: 'Invalid or expired reset link. Open the link on the same computer and browser where you asked for it, or request a new one.' }
+  if (Date.now() > p.expires) {
+    removeStoredReset(token)
+    return { valid: false, reason: 'This reset link has expired (valid for 15 minutes). Please request a new one.' }
   }
-
-  // If email is in URL query parameters, allow reset seamlessly
-  if (emailHint && isEmail(emailHint)) {
-    const clean = emailHint.trim().toLowerCase()
-    const u = getDb().users.find((x) => x.email.toLowerCase() === clean)
-    return { valid: true, email: clean, name: u?.name || clean.split('@')[0] }
-  }
-
-  return { valid: false, reason: 'Invalid or expired reset link.' }
+  const u = getDb().users.find((x) => x.active && ((p.userId && x.id === p.userId) || x.email.toLowerCase() === p.email))
+  if (!u) return { valid: false, reason: 'Invalid or expired reset link.' }
+  return { valid: true, email: p.email, name: u.name }
 }
 
 /** Verifies reset token and updates the user password directly from the reset link page. */
@@ -249,46 +241,18 @@ export async function resetPasswordWithToken(token: string, next: string, again:
   assert(PASSWORD_RULE.test(next), `Use ${PASSWORD_HINT}`)
   assert(next === again, 'The two passwords do not match.')
 
-  const all = getStoredResets()
-  const p = all[token]
-  const targetEmail = (p?.email || emailHint || '').trim().toLowerCase()
-  assert(targetEmail && isEmail(targetEmail), 'Invalid or expired reset link. Please request a new one.')
-
-  if (p && Date.now() > p.expires) {
+  // only a link this app issued: the token must be stored and unexpired, for an existing active account
+  // (never trust the email in the URL, and never create accounts here)
+  void emailHint
+  const p = getStoredResets()[token]
+  assert(p, 'Invalid or expired reset link. Please request a new one.')
+  if (Date.now() > p.expires) {
     removeStoredReset(token)
     throw new ActionError('The reset link has expired. Please request a new one.')
   }
-
-  const d = getDb()
-  const u = d.users.find((x) => (p?.userId && x.id === p.userId) || x.email.toLowerCase() === targetEmail)
-  
+  const u = getDb().users.find((x) => x.active && ((p.userId && x.id === p.userId) || x.email.toLowerCase() === p.email))
   removeStoredReset(token)
-  
-  if (!u) {
-    const username = targetEmail.split('@')[0] || 'admin'
-    const h = await hashPassword(username, next)
-    mutate((m) => {
-      const newUser: User = {
-        id: uid('u-'),
-        username,
-        email: targetEmail,
-        name: username.toUpperCase(),
-        role: 'superadmin',
-        extraRoles: [],
-        grants: [],
-        denies: [],
-        active: true,
-        passHash: h,
-        phone: '9876543210',
-        department: 'Management',
-        designation: 'Administrator',
-        joinedOn: today(),
-      }
-      m.users.push(newUser)
-      audit(m, newUser.id, 'PASSWORD', 'Set password and activated user account')
-    })
-    return
-  }
+  assert(u, 'Invalid or expired reset link. Please request a new one.')
 
   const h = await hashPassword(u.username, next)
   mutate((m) => {

@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 /**
  * Browser connection to Supabase. Uses ONLY the publishable key (row-level security protects the data).
  * The secret key (sb_secret_…) must never reach the browser — if someone puts it here, we refuse to connect.
- * Configure VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in .env.local, then restart `npm run dev`.
+ * Configure VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in .env, then restart `npm run dev`.
  */
 const url = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim() || ''
 const key = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined)?.trim() || ''
@@ -30,7 +30,7 @@ export function getSupabase(): Promise<SupabaseClient> {
 export async function pingCloud(): Promise<{ ok: boolean; detail: string }> {
   const cfg = cloudConfig()
   if (cfg.status === 'unsafe-key') return { ok: false, detail: 'A secret key is configured for the browser — replace it with the publishable key now.' }
-  if (cfg.status === 'not-configured') return { ok: false, detail: 'Not connected yet — add the project URL and publishable key to .env.local' }
+  if (cfg.status === 'not-configured') return { ok: false, detail: 'Not connected yet — add the project URL and publishable key to .env' }
   try {
     const sb = await getSupabase()
     const { error } = await sb.from('app_settings').select('key', { head: true, count: 'exact' })
@@ -45,7 +45,7 @@ export async function pingCloud(): Promise<{ ok: boolean; detail: string }> {
 export async function sendPasswordResetEmail(email: string): Promise<void> {
   const cfg = cloudConfig()
   if (cfg.status !== 'ready') {
-    throw new Error('Supabase is not configured. Please set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in .env.local.')
+    throw new Error('Supabase is not configured. Please set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in .env.')
   }
   const sb = await getSupabase()
   const redirectTo = `${window.location.origin}/reset-password`

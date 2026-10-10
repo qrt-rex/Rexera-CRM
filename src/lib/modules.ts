@@ -1,6 +1,6 @@
 import {
   BarChart3, BellRing, BookOpenCheck, Briefcase, CalendarDays, ClipboardCheck, Coffee, FileText, FolderKanban, Images, IndianRupee,
-  KeyRound, Megaphone, MessagesSquare, Phone, Settings, ShieldCheck, Sparkles, UserCheck, UserPlus, Users, UsersRound,
+  KeyRound, Megaphone, MessagesSquare, Phone, Settings, ShieldCheck, Sparkles, UserCheck, UserCog, UserPlus, Users, UsersRound,
   CalendarCheck2, Network, ScrollText, Wallet, Receipt, Landmark, Trophy, SlidersHorizontal, Gauge, KeySquare, DatabaseBackup, DatabaseZap, MailPlus, ClipboardList, FilePen, Inbox, type LucideIcon,
 } from 'lucide-react'
 import type { Perm } from './types'
@@ -27,6 +27,7 @@ export const MODULES: ModuleDef[] = [
   { key: 'assign', path: '/assign', label: 'Client Assignment', desc: 'Who owns which client, reassign within team', icon: Network, tone: 'pink', perms: ['team.assign', 'bookings.create', 'leads.assign'], group: 'Sales' },
   { key: 'bookings', path: '/bookings', label: 'CRM Entries', desc: 'Client bookings, approvals and payments', icon: Briefcase, tone: 'violet', perms: ['bookings.own', 'bookings.team', 'bookings.all'], group: 'Client files' },
   { key: 'approvals', path: '/approvals', label: 'Waiting for me', desc: 'Files that need your decision now', icon: ClipboardCheck, tone: 'amber', perms: ['bookings.approve_tl', 'bookings.accounts', 'bookings.legal', 'bookings.process', 'bookings.admin'], group: 'Client files' },
+  { key: 'ops-desk', path: '/ops-desk', label: 'Operations Dashboard', desc: 'Cases assigned by Legal: status, tasks, team, deadlines, progress', icon: UserCog, tone: 'cyan', perms: ['bookings.legal', 'bookings.process'], group: 'Client files' },
   { key: 'work', path: '/work', label: 'Client Work Board', desc: '9-stage processing kanban', icon: FolderKanban, tone: 'cyan', perms: ['bookings.process', 'bookings.admin', 'bookings.legal', 'bookings.all'], group: 'Client files' },
   { key: 'documents', path: '/documents', label: 'Document Forms', desc: 'Collect and verify client documents', icon: FileText, tone: 'blue', perms: ['documents.forms'], group: 'Client files' },
   { key: 'schemes', path: '/schemes', label: 'Schemes', desc: 'Government schemes and offers', icon: Sparkles, tone: 'green', perms: ['schemes.view', 'schemes.manage'], group: 'Content' },

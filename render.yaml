@@ -23,6 +23,16 @@ services:
         sync: false
       - key: SMTP_FROM
         value: '"Rexera CRM" <no-reply@hr.rexera.in>'
+      - key: AI_BASE_URL
+        value: https://generativelanguage.googleapis.com/v1beta/openai
+      - key: AI_API_KEY
+        sync: false
+      - key: AI_MODEL
+        value: gemini-3.1-flash-lite
+      - key: AI_HOURLY_LIMIT
+        value: "150"
+      - key: AI_DAILY_LIMIT
+        value: "1500"
       - key: VITE_SUPABASE_URL
         sync: false
       - key: VITE_SUPABASE_PUBLISHABLE_KEY

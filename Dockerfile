@@ -31,6 +31,7 @@ RUN npm ci --omit=dev
 COPY --from=builder /app/dist ./dist
 COPY server.mjs ./
 COPY supabase/functions/_shared/client-email.mjs ./supabase/functions/_shared/
+COPY server/ai.mjs ./server/
 
 EXPOSE 5180
 

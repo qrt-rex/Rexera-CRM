@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   BookOpenCheck, Briefcase, CalendarCheck2, CheckCircle2, ClipboardList, FileClock, FileText, FolderKanban, Images, PauseCircle,
-  Send, ShieldCheck, UserCheck, UsersRound, ListTodo, Inbox,
+  Send, ShieldCheck, UserCheck, UserCog, UsersRound, ListTodo, Inbox,
 } from 'lucide-react'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
@@ -59,6 +59,7 @@ export function OperationsDashboard() {
         <Stat label="Waiting for my approval" value={toApprove.length} icon={CheckCircle2} tone="green" sub="work done by Admin" />
       </div>
       <TileGrid>
+        <Tile to="/ops-desk" icon={UserCog} label="Operations Dashboard" desc="Cases from Legal: status, tasks, deadlines" tone="orange" badge={active.length} highlight={active.length > 0} />
         <Tile to="/documents" icon={FileText} label="Document Management" desc="Upload & verify client documents" tone="blue" badge={pendingDocs} />
         <Tile to="/work" icon={ClipboardList} label="Tasks & Follow-ups" desc="Kanban of your files and stages" tone="green" badge={openTasks} />
         <Tile to="/reports" icon={BookOpenCheck} label="Reports" desc="Stage-wise and turnaround" tone="navy" />

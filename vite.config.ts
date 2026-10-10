@@ -3,10 +3,11 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { blutecEnv, handleBlutec, type BlutecRequest } from './supabase/functions/_shared/blutec.ts'
 import { checkClientEmail, renderClientEmail, type ClientEmailRequest } from './supabase/functions/_shared/client-email.mjs'
+import { aiConfig, aiOverLimit, answerAi, checkAiRequest } from './server/ai.mjs'
 
 /**
  * Local relay for sending password reset emails via SMTP (Nodemailer) or Resend.
- * Reads SMTP_* or RESEND_API_KEY from .env.local on this computer.
+ * Reads SMTP_* or RESEND_API_KEY from .env on this computer.
  */
 function mailerRelay(mode: string): Plugin {
   return {
@@ -130,7 +131,7 @@ function mailerRelay(mode: string): Plugin {
             success: false,
             configured: false,
             previewLink: resetLink,
-            message: 'No SMTP or email credentials configured in .env.local',
+            message: 'No SMTP or email credentials configured in .env',
           }))
         })
       })
@@ -233,7 +234,7 @@ function mailerRelay(mode: string): Plugin {
           const env = loadEnv(mode, process.cwd(), '')
           const smtpUser = env.SMTP_USER || process.env.SMTP_USER
           const smtpPass = env.SMTP_PASS || process.env.SMTP_PASS
-          if (!smtpUser || !smtpPass) { reply(200, { success: false, configured: false, message: 'Email is not set up on this computer (SMTP_USER / SMTP_PASS in .env.local).' }); return }
+          if (!smtpUser || !smtpPass) { reply(200, { success: false, configured: false, message: 'Email is not set up on this computer (SMTP_USER / SMTP_PASS in .env).' }); return }
           const smtpPort = Number(env.SMTP_PORT || process.env.SMTP_PORT) || 587
           const { html, text } = renderClientEmail(body)
           const cc = (body.cc ?? []).filter(Boolean)
@@ -259,7 +260,7 @@ function mailerRelay(mode: string): Plugin {
 }
 
 /**
- * Local relay for the Blutec dialer/IVR: POST /api/blutec. Reads BLUTEC_* from .env.local on this computer —
+ * Local relay for the Blutec dialer/IVR: POST /api/blutec. Reads BLUTEC_* from .env on this computer —
  * never VITE_-prefixed, so the keys stay out of the browser bundle. (The live site uses the Supabase function instead.)
  */
 function blutecRelay(mode: string): Plugin {
@@ -284,7 +285,33 @@ function blutecRelay(mode: string): Plugin {
   }
 }
 
+/** Local relay for Rexy, the AI assistant: POST /api/ai-chat. Reads OPENAI_API_KEY from .env — never VITE_, so it stays off the browser. */
+function aiRelay(mode: string): Plugin {
+  return {
+    name: 'ai-relay',
+    configureServer(server) {
+      server.middlewares.use('/api/ai-chat', (req, res) => {
+        const reply = (status: number, body: unknown) => { res.statusCode = status; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(body)) }
+        if (req.method !== 'POST') { res.statusCode = 405; res.end(); return }
+        let raw = ''
+        req.on('data', (c) => { raw += c; if (raw.length > 60_000) req.destroy() })
+        req.on('end', async () => {
+          let body: { messages: { role: string; content: string }[]; context: string }
+          try { body = JSON.parse(raw || '{}') } catch { reply(400, { success: false, message: 'Bad JSON' }); return }
+          const problem = checkAiRequest(body)
+          if (problem) { reply(400, { success: false, message: problem }); return }
+          const env = loadEnv(mode, process.cwd(), ['OPENAI_', 'AI_'])
+          const limited = aiOverLimit(req.socket.remoteAddress ?? 'local', { hourly: Number(env.AI_HOURLY_LIMIT || 150), daily: Number(env.AI_DAILY_LIMIT || 1500) })
+          if (limited) { reply(429, { success: false, message: limited }); return }
+          const r = await answerAi(body, aiConfig((k) => env[k]))
+          reply(r.status, r.body)
+        })
+      })
+    },
+  }
+}
+
 export default defineConfig(({ mode }) => ({
-  plugins: [react(), tailwindcss(), blutecRelay(mode), mailerRelay(mode)],
+  plugins: [react(), tailwindcss(), blutecRelay(mode), mailerRelay(mode), aiRelay(mode)],
   server: { port: 5180 },
 }))

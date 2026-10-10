@@ -1,18 +1,83 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { MessagesSquare, Paperclip, Send, X } from 'lucide-react'
+import { Download, Eye, FileText, Image as ImageIcon, MessagesSquare, Paperclip, Send, X } from 'lucide-react'
 import type { FileRef } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useMe } from '../../lib/auth'
 import { markThreadRead, sendMessage } from '../../lib/actions'
 import { roleLabel } from '../../lib/rbac'
 import { ago, fmtTime } from '../../lib/format'
-import { checkFile, deleteFile, fileSize, saveFile } from '../../lib/files'
-import { FileLink } from '../../components/FileField'
+import { checkFile, deleteFile, fileSize, getFile, openFile, saveFile } from '../../lib/files'
 import { ZoomAvatar } from '../../components/PhotoZoom'
 import { Button, Card, cx, EmptyState, PageHeader, SearchBox, useRun, useToast } from '../../components/ui'
 
 /** Documents that can be shared in chat. */
 const SHARE_TYPES = '.pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.txt,image/png,image/jpeg,image/webp,application/pdf'
+const isImage = (f: FileRef) => f.type.startsWith('image/')
+
+/**
+ * Looks the file up in this browser's file store: undefined while checking, null when it isn't stored here,
+ * otherwise an object URL (photos, revoked when the view goes away) or '' (documents: stored, no URL needed).
+ */
+function useFileUrl(file: FileRef, makeUrl: boolean) {
+  const [url, setUrl] = useState<string | null | undefined>(undefined)
+  useEffect(() => {
+    let alive = true, made: string | null = null
+    getFile(file.id).then((b) => {
+      if (!alive) return
+      if (!b) { setUrl(null); return }
+      made = makeUrl ? URL.createObjectURL(b) : null
+      setUrl(made ?? '')
+    }).catch(() => alive && setUrl(null))
+    return () => { alive = false; if (made) URL.revokeObjectURL(made) }
+  }, [file.id, makeUrl])
+  return url
+}
+
+/** A shared photo (shown in the bubble) or document (a card with open / download). */
+function ChatAttachment({ file, mine }: { file: FileRef; mine: boolean }) {
+  const toast = useToast()
+  const image = isImage(file)
+  const url = useFileUrl(file, image)
+  // url: undefined = checking, null = not on this computer, '' = stored document, otherwise the photo
+  const open = (download = false) => openFile(file, download).catch((e) => toast('error', e instanceof Error ? e.message : 'Could not open the file.'))
+  const muted = mine ? 'text-white/70' : 'text-mute'
+  if (image && url) {
+    return (
+      <button type="button" onClick={() => open()} className="mt-1.5 block overflow-hidden rounded-xl" title={`${file.name} · tap to open`}>
+        <img src={url} alt={file.name} className="max-h-60 w-full max-w-72 object-cover" />
+      </button>
+    )
+  }
+  const ext = (file.name.split('.').pop() ?? '').toUpperCase().slice(0, 4)
+  const missing = url === null
+  return (
+    <div className={cx('mt-1.5 flex items-center gap-2.5 rounded-xl p-2', mine ? 'bg-white/15' : 'bg-card2')}>
+      <span className={cx('grid h-10 w-10 shrink-0 place-items-center rounded-lg text-[10px] font-extrabold', mine ? 'bg-white/20 text-white' : 'bg-brand-soft text-brand-ink')}>
+        {image ? <ImageIcon className="size-5" /> : ext || <FileText className="size-5" />}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[13px] font-semibold" title={file.name}>{file.name}</span>
+        <span className={cx('block text-[10px]', muted)}>{missing ? 'Not stored on this computer — ask the sender to share it again' : fileSize(file.size)}</span>
+      </span>
+      {!missing && <>
+        <button type="button" onClick={() => open()} aria-label={`Open ${file.name}`} title="Open" className={cx('grid size-8 shrink-0 place-items-center rounded-lg', mine ? 'hover:bg-white/20' : 'hover:bg-card')}><Eye className="size-4" /></button>
+        <button type="button" onClick={() => open(true)} aria-label={`Download ${file.name}`} title="Download" className={cx('grid size-8 shrink-0 place-items-center rounded-lg', mine ? 'hover:bg-white/20' : 'hover:bg-card')}><Download className="size-4" /></button>
+      </>}
+    </div>
+  )
+}
+
+/** Attachment waiting to be sent: a small picture for photos, a paperclip for documents. */
+function PendingChip({ file, onRemove }: { file: FileRef; onRemove: () => void }) {
+  const url = useFileUrl(file, isImage(file))
+  return (
+    <span className="flex max-w-56 items-center gap-1.5 rounded-full border border-line bg-card2 py-1 pl-1.5 pr-1 text-xs">
+      {url ? <img src={url} alt="" className="size-6 rounded-full object-cover" /> : <Paperclip className="ml-1 size-3.5 shrink-0 text-mute" />}
+      <span className="truncate">{file.name}</span>
+      <button aria-label={`Remove ${file.name}`} onClick={onRemove} className="grid size-5 place-items-center rounded-full hover:bg-card"><X className="size-3" /></button>
+    </span>
+  )
+}
 
 export default function Messages() {
   const db = useDb()
@@ -47,7 +112,12 @@ export default function Messages() {
     } catch (e) { toast('error', e instanceof Error ? e.message : 'Could not attach the file.') } finally { setBusy(false) }
   }
   const send = async () => { if (peer && await run(() => sendMessage(me, peer, text, files))) { setText(''); setFiles([]) } }
-  const last = (m?: { body: string; attachments?: FileRef[] }) => m ? (m.body || `📎 ${m.attachments?.length ?? 0} document(s)`) : ''
+  const last = (m?: { body: string; attachments?: FileRef[] }) => {
+    if (!m) return ''
+    if (m.body) return m.body
+    const a = m.attachments ?? [], photos = a.filter(isImage).length
+    return photos === a.length ? `📷 ${photos > 1 ? `${photos} photos` : 'Photo'}` : `📎 ${a.length > 1 ? `${a.length} files` : a[0]?.name ?? 'File'}`
+  }
 
   return (
     <div>
@@ -85,12 +155,7 @@ export default function Messages() {
                     {!mine && <ZoomAvatar name={sender.name} photo={sender.photo} size={28} sub={roleLabel(sender.role)} />}
                     <div className={cx('max-w-[75%] rounded-2xl px-4 py-2 text-sm', mine ? 'rounded-br-md bg-brand text-white' : 'rounded-bl-md border border-line bg-card')}>
                       {m.body && <p className="whitespace-pre-line">{m.body}</p>}
-                      {m.attachments?.map((f) => (
-                        <div key={f.id} className={cx('mt-1.5 flex items-center gap-2 rounded-xl px-2.5 py-1.5', mine ? 'bg-white/15' : 'bg-card2')}>
-                          <span className={cx('min-w-0 flex-1', mine && '[&_button]:text-white')}><FileLink file={f} /></span>
-                          <span className={cx('shrink-0 text-[10px]', mine ? 'text-white/70' : 'text-mute')}>{fileSize(f.size)}</span>
-                        </div>
-                      ))}
+                      {m.attachments?.map((f) => <ChatAttachment key={f.id} file={f} mine={mine} />)}
                       <p className={cx('mt-0.5 text-right text-[10px]', mine ? 'text-white/70' : 'text-mute')}>{fmtTime(m.at)}</p>
                     </div>
                   </div>
@@ -100,12 +165,7 @@ export default function Messages() {
             </div>
             {files.length > 0 && (
               <div className="flex flex-wrap gap-2 border-t border-line px-3 pt-3">
-                {files.map((f) => (
-                  <span key={f.id} className="flex max-w-56 items-center gap-1.5 rounded-full border border-line bg-card2 py-1 pl-3 pr-1 text-xs">
-                    <Paperclip className="size-3.5 shrink-0 text-mute" /><span className="truncate">{f.name}</span>
-                    <button aria-label={`Remove ${f.name}`} onClick={() => { deleteFile(f.id).catch(() => {}); setFiles((x) => x.filter((y) => y.id !== f.id)) }} className="grid size-5 place-items-center rounded-full hover:bg-card"><X className="size-3" /></button>
-                  </span>
-                ))}
+                {files.map((f) => <PendingChip key={f.id} file={f} onRemove={() => { deleteFile(f.id).catch(() => {}); setFiles((x) => x.filter((y) => y.id !== f.id)) }} />)}
               </div>
             )}
             <div className="flex gap-2 border-t border-line p-3">

@@ -4,6 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import nodemailer from 'nodemailer'
 import { checkClientEmail, renderClientEmail } from './supabase/functions/_shared/client-email.mjs'
+import { aiConfig, aiOverLimit, answerAi, checkAiRequest } from './server/ai.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DIST_DIR = path.resolve(__dirname, 'dist')
@@ -374,6 +375,19 @@ async function handleSendClientEmail(req, res) {
   }
 }
 
+// Rexy AI assistant: the OpenAI key stays here; the browser sends the question + what the user can see
+async function handleAiChat(req, res) {
+  let body
+  try { body = await readJsonBody(req) } catch (err) { return sendJson(res, 400, { success: false, message: err.message }) }
+  const problem = checkAiRequest(body)
+  if (problem) return sendJson(res, 400, { success: false, message: problem })
+  const ip = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '?'
+  const limited = aiOverLimit(ip, { hourly: Number(getEnv('AI_HOURLY_LIMIT', '150')), daily: Number(getEnv('AI_DAILY_LIMIT', '1500')) })
+  if (limited) return sendJson(res, 429, { success: false, message: limited })
+  const r = await answerAi(body, aiConfig((k) => getEnv(k)))
+  return sendJson(res, r.status, r.body)
+}
+
 // -------------------------------------------------------------
 // Static File Serving with SPA fallback
 // -------------------------------------------------------------
@@ -458,6 +472,10 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === '/api/send-client-email' && req.method === 'POST') {
     return handleSendClientEmail(req, res)
+  }
+
+  if (pathname === '/api/ai-chat' && req.method === 'POST') {
+    return handleAiChat(req, res)
   }
 
   // Static Assets and SPA routing

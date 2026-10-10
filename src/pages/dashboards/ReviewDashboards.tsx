@@ -8,11 +8,11 @@ import { useMe } from '../../lib/auth'
 import { usersWithRole } from '../../lib/actions'
 import { collections, monthStart, pipelineTotals, revenueByMonth, waitingFor } from '../../lib/metrics'
 import { fmtDateTime, inr, inrShort, today } from '../../lib/format'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { FileLink } from '../../components/FileField'
 import { TasksPanel } from '../../components/TasksPanel'
 import { WorkProgressPanel } from '../../components/WorkProgressPanel'
-import { EmptyState } from '../../components/ui'
+import { Button, EmptyState } from '../../components/ui'
 import { Bars, HBars } from '../../components/charts'
 import { BookingRow } from '../../components/booking'
 import { Greeting, LoginLogoutCard, MiniStat, Section, Tile, TileGrid, UpcomingEvents, ViewAll } from './widgets'
@@ -71,6 +71,7 @@ export function AccountsDashboard() {
 export function LegalDashboard() {
   const db = useDb()
   const me = useMe()
+  const nav = useNavigate()
   const waiting = waitingFor(db, me).filter((b) => b.status === 'PENDING_LEGAL')
   const withOps = db.bookings.filter((b) => b.status === 'IN_OPERATIONS').length
   const overdue = db.bookings.filter((b) => !['COMPLETED', 'REJECTED'].includes(b.status) && !!b.deadline && b.deadline < today()).length
@@ -84,7 +85,8 @@ export function LegalDashboard() {
 
   return (
     <div>
-      <Greeting subtitle="Legal · review CRM entries and assign them to the Operation team" />
+      <Greeting subtitle="Legal · review CRM entries and assign them to the Operation team"
+        right={<Button variant="accent" size="lg" icon={UserCog} onClick={() => nav('/ops-desk?view=assign')}>Assign to Operations{waiting.length ? ` · ${waiting.length}` : ''}</Button>} />
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <MiniStat label="Waiting for legal" value={waiting.length} icon={FileSearch} tone="violet" />
         <MiniStat label="With Operations" value={withOps} icon={UserCog} tone="cyan" />
@@ -93,6 +95,7 @@ export function LegalDashboard() {
       </div>
       <TileGrid>
         <Tile to="/approvals" icon={Scale} label="CRM entries to review" desc="Show & assign to the operation team" tone="violet" badge={waiting.length} highlight={waiting.length > 0} />
+        <Tile to="/ops-desk" icon={UserCog} label="Operations Dashboard" desc="Cases you assigned: status, tasks, deadlines" tone="orange" badge={withOps} />
         <Tile to="/work" icon={Briefcase} label="Client work monitor" desc="Every file, every stage" tone="cyan" />
         <Tile to="/documents" icon={FileText} label="Document forms" desc="Client documents & verification" tone="blue" />
         <Tile to="/leave" icon={CalendarCheck2} label="Leave approvals" desc="Sales team requests" tone="amber" badge={pendingLeave} />
@@ -101,7 +104,7 @@ export function LegalDashboard() {
       </TileGrid>
       <div className="mt-6 grid gap-6 xl:grid-cols-3">
         <Section title="Review & assign" subtitle="Pick an operations member and the furthest stage they may reach" icon={Scale} className="xl:col-span-2" action={<ViewAll to="/approvals" />}>
-          {waiting.length ? waiting.slice(0, 6).map((b) => <BookingRow key={b.id} b={b} />) : <EmptyState icon={CheckCircle2} title="Nothing to review" text="Files approved by Accounts appear here." />}
+          {waiting.length ? waiting.slice(0, 6).map((b) => <BookingRow key={b.id} b={b} onDone={(k) => k === 'ASSIGN_OPS' && nav(`/ops-desk?case=${b.id}`)} />) : <EmptyState icon={CheckCircle2} title="Nothing to review" text="Files approved by Accounts appear here." />}
         </Section>
         <div className="space-y-6">
           <Section title="Operation team workload" icon={UserCog}><div className="max-h-96 overflow-y-auto p-5"><HBars data={workload} /></div></Section>

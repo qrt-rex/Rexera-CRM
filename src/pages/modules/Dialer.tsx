@@ -93,7 +93,7 @@ function ConnectionPill({ bt, ivr }: { bt: ReturnType<typeof useBlutec>; ivr: bo
           <p className="font-semibold">To connect (done once by IT):</p>
           <ol className="list-decimal space-y-1 pl-5 text-mute">
             <li>In Blutec, make a dedicated <b>API user</b> (Company Admin, never used to sign in to the website), create a <b>long-lived API token</b> (blt_…) and — once Blutec support has enabled Click-to-Call — a <b>Click-to-Call credential</b> (key id, API key, signing secret).</li>
-            <li>On this computer, add them to <code>.env.local</code> (never in a VITE_ variable): <code>BLUTEC_KEY_ID</code>, <code>BLUTEC_API_KEY</code>, <code>BLUTEC_SIGNING_SECRET</code>, <code>BLUTEC_TOKEN</code>, <code>BLUTEC_IVR_EMAIL</code>, <code>BLUTEC_IVR_PASSWORD</code> — then restart the app.</li>
+            <li>On this computer, add them to <code>.env</code> (never in a VITE_ variable): <code>BLUTEC_KEY_ID</code>, <code>BLUTEC_API_KEY</code>, <code>BLUTEC_SIGNING_SECRET</code>, <code>BLUTEC_TOKEN</code>, <code>BLUTEC_IVR_EMAIL</code>, <code>BLUTEC_IVR_PASSWORD</code> — then restart the app.</li>
             <li>For the live site, set the same values as Supabase function secrets and deploy the <code>blutec</code> function.</li>
           </ol>
           <p className="text-xs text-mute">Until then, “Call now” opens your phone's dialler and you log the outcome by hand.</p>

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Briefcase, Download, Plus } from 'lucide-react'
+import { Briefcase, Download, FileText, Plus } from 'lucide-react'
 import type { BookingStatus } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
@@ -8,7 +8,8 @@ import { userName, visibleBookings } from '../../lib/actions'
 import { BOOKING_STATUS, STAGES, stageLabel } from '../../lib/workflow'
 import { bookingMoney, downloadCsv, fmtDateTime, inr, today } from '../../lib/format'
 import { pipelineTotals } from '../../lib/metrics'
-import { Button, Card, EmptyState, PageHeader, SearchBox, Table, Td, Th, usePaged } from '../../components/ui'
+import { Button, Card, EmptyState, PageHeader, SearchBox, Table, Td, Th, usePaged, useRun } from '../../components/ui'
+import { openBookingPdf } from '../../lib/bookingPdf'
 import { BookingStatusBadge, DeadlineBadge, MoneyBar, PriorityBadge } from '../../components/booking'
 import { StageSelect } from '../../components/StageControls'
 import { MiniStat } from '../dashboards/widgets'
@@ -24,6 +25,9 @@ export default function Bookings() {
   const [owner, setOwner] = useState('')
   const status = (params.get('status') ?? '') as BookingStatus | ''
   const all = useMemo(() => visibleBookings(db, me), [db, me])
+  const run = useRun()
+  // Legal, the Operation team and Admin get the case table: ID, company, BDM, service, paid with GST, status, PDF
+  const desk = ['legal', 'operations', 'admin'].includes(me.role)
 
   const list = useMemo(() => {
     const s = q.toLowerCase()
@@ -69,7 +73,28 @@ export default function Bookings() {
             </select>
           )}
         </div>
-        {!list.length ? <EmptyState icon={Briefcase} title="No CRM entries" text="Try another filter, or create a new entry." /> : (
+        {!list.length ? <EmptyState icon={Briefcase} title="No CRM entries" text="Try another filter, or create a new entry." /> : desk ? (
+          <Table>
+            <thead><tr><Th>CRM ID</Th><Th>Company name</Th><Th>BDM / Sales person</Th><Th>Service</Th><Th className="text-right">Amount paid <span className="normal-case">(incl. GST)</span></Th><Th>Status</Th><Th className="text-center">PDF</Th></tr></thead>
+            <tbody>
+              {slice.map((b) => {
+                const m = bookingMoney(b)
+                const pending = b.payments.filter((p) => !p.verified).length
+                return (
+                  <tr key={b.id} className="hover:bg-card2/60">
+                    <Td className="whitespace-nowrap"><Link to={`/bookings/${b.id}`} className="font-mono text-xs font-semibold text-brand-ink hover:underline">{b.bookingId}</Link></Td>
+                    <Td><Link to={`/bookings/${b.id}`} className="block font-semibold hover:text-brand-ink">{b.companyName}</Link><span className="text-[11px] text-mute">{b.contactPerson}</span></Td>
+                    <Td className="text-sm">{b.createdBy ? userName(db, b.createdBy) : b.ownerName ?? '—'}</Td>
+                    <Td><span className="block max-w-52 truncate" title={b.serviceName}>{b.serviceName}</span></Td>
+                    <Td className="whitespace-nowrap text-right"><span className="block font-bold tabular-nums">{inr(m.collected)}</span><span className="text-[11px] text-mute">of {inr(m.quotedWithGst)}{pending ? ` · ${pending} unverified` : ''}</span></Td>
+                    <Td><BookingStatusBadge b={b} />{b.opsMemberId && <span className="mt-0.5 block text-[11px] text-mute">{stageLabel(b.stage, b.stageOutcome)}</span>}</Td>
+                    <Td className="text-center"><Button size="sm" variant="outline" icon={FileText} aria-label={`View PDF of ${b.bookingId}`} onClick={() => run(() => openBookingPdf(db, b))}>View</Button></Td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </Table>
+        ) : (
           <Table>
             <thead><tr><Th>Client</Th><Th>Service</Th><Th>Status · stage</Th><Th className="w-52">Payment</Th><Th>Owner</Th><Th>Created</Th></tr></thead>
             <tbody>

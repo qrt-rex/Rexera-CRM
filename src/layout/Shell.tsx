@@ -19,6 +19,7 @@ import { Logo } from '../components/Logo'
 import { MiniCalendar } from './MiniCalendar'
 import { BreakBanner, BreakReminder } from '../pages/dashboards/widgets'
 import { CommandPalette } from './CommandPalette'
+import { AiAssistant } from '../components/AiAssistant'
 
 export function useUnread() {
   const db = useDb()
@@ -174,6 +175,7 @@ export function Shell() {
       </Modal>
       <NotificationBubble />
       <BreakReminder />
+      <AiAssistant />
       {warnIn !== null && (
         <div className="anim-pop fixed bottom-6 left-1/2 z-[95] flex -translate-x-1/2 items-center gap-3 rounded-2xl border border-line bg-card px-5 py-3 shadow-pop">
           <span className="text-sm">You'll be signed out in <b>{Math.ceil(warnIn / 1000)}s</b> for inactivity.</span>

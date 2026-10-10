@@ -6,7 +6,7 @@ import { ToastProvider, Button, Skeleton } from './components/ui'
 import { Shell } from './layout/Shell'
 import { canOpenDashboard } from './lib/rbac'
 import { moduleByKey, canSee } from './lib/modules'
-import type { Role } from './lib/types'
+import type { Perm, Role } from './lib/types'
 import Login from './pages/Login'
 
 const ResetPassword = lazy(() => import('./pages/ResetPassword'))
@@ -42,6 +42,7 @@ const Pf = lazy(() => import('./pages/hr/Pf'))
 const Incentives = lazy(() => import('./pages/hr/Incentives'))
 const IncentiveSettings = lazy(() => import('./pages/hr/IncentiveSettings'))
 const BreakSettings = lazy(() => import('./pages/hr/BreakSettings'))
+const OpsDesk = lazy(() => import('./pages/modules/OpsDesk'))
 const Performance = lazy(() => import('./pages/hr/Performance'))
 const Recruitment = lazy(() => import('./pages/hr/Recruitment'))
 const ApiKeys = lazy(() => import('./pages/it/ApiKeys'))
@@ -60,9 +61,9 @@ function RequireAuth({ children }: { children: ReactNode }) {
   return <>{children}</>
 }
 
-function Guard({ m, children }: { m: string; children: ReactNode }) {
+function Guard({ m, perm, children }: { m: string; perm?: Perm; children: ReactNode }) {
   const { can } = useAuth()
-  return canSee(moduleByKey(m), can) ? <>{children}</> : <NotFound />
+  return canSee(moduleByKey(m), can) && (!perm || can(perm)) ? <>{children}</> : <NotFound />
 }
 
 function DashboardRoute() {
@@ -119,7 +120,7 @@ export default function App() {
               <Route path="/team" element={<Guard m="team"><S><TeamProgress /></S></Guard>} />
               <Route path="/assign" element={<Guard m="assign"><S><Assign /></S></Guard>} />
               <Route path="/bookings" element={<Guard m="bookings"><S><Bookings /></S></Guard>} />
-              <Route path="/bookings/new" element={<Guard m="bookings"><S><BookingForm /></S></Guard>} />
+              <Route path="/bookings/new" element={<Guard m="bookings" perm="bookings.create"><S><BookingForm /></S></Guard>} />
               <Route path="/bookings/:id/edit" element={<Guard m="bookings"><S><BookingForm /></S></Guard>} />
               <Route path="/bookings/:id" element={<Guard m="bookings"><S><BookingDetail /></S></Guard>} />
               <Route path="/approvals" element={<Guard m="approvals"><S><Approvals /></S></Guard>} />
@@ -146,6 +147,7 @@ export default function App() {
               <Route path="/incentives" element={<Guard m="incentives"><S><Incentives /></S></Guard>} />
               <Route path="/incentive-settings" element={<Guard m="incentive-settings"><S><IncentiveSettings /></S></Guard>} />
               <Route path="/break-settings" element={<Guard m="break-settings"><S><BreakSettings /></S></Guard>} />
+              <Route path="/ops-desk" element={<Guard m="ops-desk"><S><OpsDesk /></S></Guard>} />
               <Route path="/performance" element={<Guard m="performance"><S><Performance /></S></Guard>} />
               <Route path="/recruitment" element={<Guard m="recruitment"><S><Recruitment /></S></Guard>} />
               <Route path="/candidates" element={<Guard m="candidates"><S><Candidates /></S></Guard>} />
