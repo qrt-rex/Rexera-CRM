@@ -7,9 +7,9 @@ import { useAuth, useMe } from '../../lib/auth'
 import { createLead, logCall, setLeadStatus, visibleLeads } from '../../lib/actions'
 import { CALL_OUTCOMES, LEAD_STATUS, OPEN_LEAD } from '../../lib/workflow'
 import { addDays, fmtDate, fmtDateTime, fmtTime, inr, normPhone, today, ymd } from '../../lib/format'
-import { blutec, dialerKey, DialerError, FINAL_STATUSES, isHot, type AgentConnect, type BlutecStatus, type CallStatus, type Ivr, type IvrStats } from '../../lib/dialer'
+import { blutec, dialerKey, DialerError, FINAL_STATUSES, isHot, type AgentConnect, type BlutecCampaign, type BlutecStatus, type CallStatus, type Ivr, type IvrStats } from '../../lib/dialer'
 import { rolesOf } from '../../lib/rbac'
-import { Badge, Button, Card, CardHeader, cx, EmptyState, Input, Modal, PageHeader, Table, Tabs, Td, Textarea, Th, useConfirm, useRun, useToast } from '../../components/ui'
+import { Badge, Button, Card, CardHeader, cx, EmptyState, Input, Modal, Select, PageHeader, Table, Tabs, Td, Textarea, Th, useConfirm, useRun, useToast } from '../../components/ui'
 import { salesNumbers } from '../../lib/metrics'
 import { MiniStat } from '../dashboards/widgets'
 
@@ -108,6 +108,49 @@ function ConnectionPill({ bt, ivr }: { bt: ReturnType<typeof useBlutec>; ivr: bo
   )
 }
 
+/** Copies a Blutec campaign's leads into the CRM, so they join the queue (numbers already in the CRM are skipped). */
+function BlutecImport() {
+  const db = useDb()
+  const me = useMe()
+  const toast = useToast()
+  const [open, setOpen] = useState(false)
+  const [camps, setCamps] = useState<BlutecCampaign[] | null>(null)
+  const [pick, setPick] = useState('')
+  const [busy, setBusy] = useState(false)
+  const load = () => { setOpen(true); setCamps(null); blutec.campaigns().then(setCamps, (e: Error) => { setCamps([]); toast('error', e.message) }) }
+  const importLeads = async () => {
+    setBusy(true)
+    try {
+      const leads = await blutec.campaignLeads(Number(pick))
+      const have = new Set(db.leads.map((l) => l.phone))
+      const camp = camps?.find((c) => String(c.id) === pick)?.name ?? 'Blutec'
+      let added = 0
+      for (const b of leads) {
+        const phone = normPhone(b.phone)
+        if (have.has(phone)) continue
+        have.add(phone)
+        try { createLead(me, { name: b.name?.trim() || `Lead ${phone.slice(-4)}`, company: '', phone, email: '', city: '', state: 'Gujarat', service: '', source: `Blutec: ${camp}`, notes: '', assignedTo: me.id }); added++ } catch { /* invalid number: skip */ }
+      }
+      toast('success', `${added} new leads added from ${camp} (${leads.length - added} already in the CRM or invalid)`)
+      setOpen(false)
+    } catch (e) { toast('error', e instanceof Error ? e.message : 'Import failed.') }
+    finally { setBusy(false) }
+  }
+  return (
+    <>
+      <Button size="sm" variant="soft" icon={UserPlus} onClick={load}>Import from Blutec</Button>
+      <Modal open={open} onClose={() => setOpen(false)} title="Import leads from Blutec" footer={<><Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button disabled={!pick || busy} onClick={importLeads}>{busy ? 'Importing…' : 'Import'}</Button></>}>
+        {!camps ? <p className="text-sm text-mute">Loading campaigns…</p> : (
+          <Select label="Campaign" value={pick} onChange={(e) => setPick(e.target.value)}>
+            <option value="">Choose a campaign</option>
+            {camps.map((c) => <option key={c.id} value={c.id}>{c.name} · {c.status}{c.total_leads != null ? ` · ${c.total_leads} leads` : ''}</option>)}
+          </Select>
+        )}
+      </Modal>
+    </>
+  )
+}
+
 function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
   const db = useDb()
   const me = useMe()
@@ -197,7 +240,7 @@ function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
       </div>
       <div className="grid gap-6 xl:grid-cols-[340px_1fr_320px]">
         <Card className="overflow-hidden xl:max-h-[70vh] xl:overflow-y-auto">
-          <CardHeader title="Queue" subtitle={`${queue.length} leads`} />
+          <CardHeader title="Queue" subtitle={`${queue.length} leads`} action={bt.status?.dnc && <BlutecImport />} />
           {!queue.length && <EmptyState icon={PhoneCall} title="Queue is empty" text="Great work! Add leads or ask your team leader for more." />}
           <ul>
             {queue.map((l) => (

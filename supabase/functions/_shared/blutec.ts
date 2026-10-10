@@ -25,6 +25,8 @@ export type BlutecRequest =
   | { action: 'dncCheck'; phone: string }
   | { action: 'dncAdd'; phone: string; reason?: string }
   | { action: 'callStatus'; refId: string }
+  | { action: 'campaigns' }
+  | { action: 'campaignLeads'; id: number }
   | { action: 'ivrList' }
   | { action: 'ivrStats'; id: number }
   | { action: 'ivrControl'; id: number; op: 'start' | 'pause' | 'resume' | 'stop' }
@@ -54,6 +56,11 @@ async function dialerApi(e: BlutecEnv, method: 'GET' | 'POST', path: string, bod
     method, headers: { Authorization: `Bearer ${e.token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined,
   })
   return { status: res.status, body: await res.json().catch(() => ({ success: false, message: `Dialer answered ${res.status}` })) }
+}
+/** Blutec answers lists as `data: [...]` or `data: { <key>: [...] }`. */
+const rows = (body: unknown, key: string): unknown[] => {
+  const d = (body as { data?: unknown })?.data
+  return Array.isArray(d) ? d : Array.isArray((d as Record<string, unknown>)?.[key]) ? (d as Record<string, unknown[]>)[key] : []
 }
 async function isDnc(e: BlutecEnv, phone: string) {
   const r = await dialerApi(e, 'GET', `/api/dnc/check?phone=${encodeURIComponent(toE164ish(phone))}`)
@@ -141,6 +148,20 @@ export async function handleBlutec(req: BlutecRequest, e: BlutecEnv): Promise<Bl
         const p = toE164ish(req.phone)
         if (p.length < 10 || p.length > 15) return fail(422, 'The number must have 10–15 digits.', 'VALIDATION_ERROR')
         return await dialerApi(e, 'POST', '/api/dnc', { phone: p, reason: String(req.reason ?? 'Customer asked not to be called').slice(0, 200), source: 'rexera-crm' })
+      }
+      case 'campaigns': {
+        if (!dncReady(e)) return fail(503, 'Blutec campaigns need the Blutec API token (BLUTEC_TOKEN).', 'NOT_CONFIGURED')
+        const r = await dialerApi(e, 'GET', '/api/campaigns?limit=100')
+        if (r.status !== 200) return r
+        return { status: 200, body: { success: true, data: rows(r.body, 'campaigns') } }
+      }
+      case 'campaignLeads': {
+        if (!dncReady(e)) return fail(503, 'Blutec campaigns need the Blutec API token (BLUTEC_TOKEN).', 'NOT_CONFIGURED')
+        const lists = await dialerApi(e, 'GET', `/api/campaigns/${Number(req.id)}/lead-lists`)
+        if (lists.status !== 200) return lists
+        // ponytail: first 500 leads of each list; page through /leads?page= if lists grow bigger
+        const pages = await Promise.all(rows(lists.body, 'lead_lists').map((l) => dialerApi(e, 'GET', `/api/lead-lists/${Number((l as { id: number }).id)}/leads?limit=500`)))
+        return { status: 200, body: { success: true, data: pages.flatMap((p) => p.status === 200 ? rows(p.body, 'leads') : []) } }
       }
       case 'callStatus':
         if (!dialerReady(e)) return fail(503, 'Click-to-call is not configured.', 'NOT_CONFIGURED')
