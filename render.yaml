@@ -39,3 +39,7 @@ services:
         sync: false
       - key: BLUTEC_IVR_PASSWORD
         sync: false
+      - key: DIALER_ACCESS_KEY
+        sync: false
+      - key: IVR_ACCESS_KEY
+        sync: false

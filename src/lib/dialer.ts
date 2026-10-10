@@ -1,5 +1,3 @@
-import { cloudConfig, getSupabase } from './supabase'
-
 /**
  * Talks to the Blutec relay at /api/blutec — the local dev server (vite.config.ts) or, on the live site, server.mjs. Secrets live only on the relay; the browser never sees them.
  */
@@ -15,19 +13,21 @@ export interface AgentConnect { id: number; lead_phone: string; agent_name: stri
 
 export class DialerError extends Error { constructor(message: string, public code?: string, public status?: number) { super(message) } }
 
-async function endpoint(): Promise<{ url: string; headers: Record<string, string> }> {
+const KEY = 'rexera-dialer-key'
+/** The access key this computer sends to the live server (set once in the Dialer → connection window). */
+export const dialerKey = {
+  get: () => { try { return localStorage.getItem(KEY) ?? '' } catch { return '' } },
+  set: (k: string) => { try { localStorage.setItem(KEY, k.trim()) } catch { /* ignore */ } },
+}
+
+function endpoint(): { url: string; headers: Record<string, string> } {
   if (import.meta.env.DEV) return { url: '/api/blutec', headers: {} }
-  const cfg = cloudConfig()
-  if (cfg.status !== 'ready') throw new DialerError('The dialer needs the online database (Supabase) connected for the live site.', 'NOT_CONNECTED')
-  const sb = await getSupabase()
-  const { data } = await sb.auth.getSession()
-  if (!data.session) throw new DialerError('Sign in to the online CRM to use the dialer.', 'NOT_SIGNED_IN')
   // the live server (server.mjs) relays to Blutec with the BLUTEC_* settings from Render
-  return { url: '/api/blutec', headers: { Authorization: `Bearer ${data.session.access_token}` } }
+  return { url: '/api/blutec', headers: { 'X-Dialer-Key': dialerKey.get() } }
 }
 
 async function call<T>(body: Record<string, unknown>): Promise<T> {
-  const { url, headers } = await endpoint()
+  const { url, headers } = endpoint()
   let res: Response
   try { res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) }) }
   catch { throw new DialerError('Could not reach the dialer relay.', 'OFFLINE') }

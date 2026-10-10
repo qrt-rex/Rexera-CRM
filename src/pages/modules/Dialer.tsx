@@ -7,7 +7,7 @@ import { useAuth, useMe } from '../../lib/auth'
 import { createLead, logCall, setLeadStatus, visibleLeads } from '../../lib/actions'
 import { CALL_OUTCOMES, LEAD_STATUS, OPEN_LEAD } from '../../lib/workflow'
 import { addDays, fmtDate, fmtDateTime, fmtTime, inr, normPhone, today, ymd } from '../../lib/format'
-import { blutec, DialerError, FINAL_STATUSES, isHot, type AgentConnect, type BlutecStatus, type CallStatus, type Ivr, type IvrStats } from '../../lib/dialer'
+import { blutec, dialerKey, DialerError, FINAL_STATUSES, isHot, type AgentConnect, type BlutecStatus, type CallStatus, type Ivr, type IvrStats } from '../../lib/dialer'
 import { rolesOf } from '../../lib/rbac'
 import { Badge, Button, Card, CardHeader, cx, EmptyState, Input, Modal, PageHeader, Table, Tabs, Td, Textarea, Th, useConfirm, useRun, useToast } from '../../components/ui'
 import { salesNumbers } from '../../lib/metrics'
@@ -79,6 +79,7 @@ export default function Dialer() {
 
 function ConnectionPill({ bt, ivr }: { bt: ReturnType<typeof useBlutec>; ivr: boolean }) {
   const [open, setOpen] = useState(false)
+  const [key, setKey] = useState(dialerKey.get)
   const ok = ivr ? bt.status?.ivr : bt.status?.dialer
   return (
     <>
@@ -89,12 +90,16 @@ function ConnectionPill({ bt, ivr }: { bt: ReturnType<typeof useBlutec>; ivr: bo
       <Modal open={open} onClose={() => setOpen(false)} title="Blutec dialer connection" size="lg" footer={<><Button variant="outline" icon={RefreshCcw} onClick={bt.check}>Check again</Button><Button onClick={() => setOpen(false)}>Close</Button></>}>
         <div className="space-y-3 text-sm">
           <p>Click-to-call: <b className={bt.status?.dialer ? 'text-ok' : 'text-warn'}>{bt.status?.dialer ? 'connected' : 'not set up'}</b> · DND check: <b className={bt.status?.dnc ? 'text-ok' : 'text-warn'}>{bt.status?.dnc ? 'on' : 'not set up'}</b> · IVR: <b className={bt.status?.ivr ? 'text-ok' : 'text-warn'}>{bt.status?.ivr ? 'connected' : 'not set up'}</b>{bt.error ? ` · ${bt.error}` : ''}</p>
+          {!import.meta.env.DEV && <form className="flex items-end gap-2" onSubmit={(e) => { e.preventDefault(); dialerKey.set(key); bt.check() }}>
+            <Input className="flex-1" label="Dialer access key (this computer)" type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} hint="From the Super Admin. Use the IVR key on the Super Admin's computer." />
+            <Button type="submit">Save</Button>
+          </form>}
           <p className="text-mute">Calls ring <b>your own phone</b> first (the number set for your agent in Blutec), then connect the client. Each CRM user's email must be added as an agent in Blutec.</p>
           <p className="font-semibold">To connect (done once by IT):</p>
           <ol className="list-decimal space-y-1 pl-5 text-mute">
             <li>In Blutec, make a dedicated <b>API user</b> (Company Admin, never used to sign in to the website), create a <b>long-lived API token</b> (blt_…) and — once Blutec support has enabled Click-to-Call — a <b>Click-to-Call credential</b> (key id, API key, signing secret).</li>
             <li>On this computer, add them to <code>.env.local</code> (never in a VITE_ variable): <code>BLUTEC_KEY_ID</code>, <code>BLUTEC_API_KEY</code>, <code>BLUTEC_SIGNING_SECRET</code>, <code>BLUTEC_TOKEN</code>, <code>BLUTEC_IVR_EMAIL</code>, <code>BLUTEC_IVR_PASSWORD</code> — then restart the app.</li>
-            <li>For the live site, set the same values in Render → Environment, then Manual Deploy → “Clear build cache &amp; deploy”.</li>
+            <li>For the live site, set the same values in Render → Environment, plus <code>DIALER_ACCESS_KEY</code> (staff) and <code>IVR_ACCESS_KEY</code> (Super Admin) — any long random text — then enter the key above on each computer.</li>
           </ol>
           <p className="text-xs text-mute">Until then, “Call now” opens your phone's dialler and you log the outcome by hand.</p>
         </div>

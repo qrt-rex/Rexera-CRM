@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import nodemailer from 'nodemailer'
-import { createClient } from '@supabase/supabase-js'
+import crypto from 'node:crypto'
 import { checkClientEmail, renderClientEmail } from './supabase/functions/_shared/client-email.mjs'
 import { blutecEnv, handleBlutec } from './supabase/functions/_shared/blutec.ts'
 
@@ -422,29 +422,24 @@ function serveStaticFile(req, res, pathname) {
 }
 
 // -------------------------------------------------------------
-// Blutec dialer / IVR relay (same checks as the `blutec` Edge Function, but reads BLUTEC_* from Render's environment)
+// Blutec dialer / IVR relay. The CRM signs in only inside the browser, so the server can't verify users;
+// instead each staff computer is set up once with DIALER_ACCESS_KEY (IVR campaigns need IVR_ACCESS_KEY).
+// ponytail: shared keys, per-user checks once CRM sign-in moves to Supabase Auth
 // -------------------------------------------------------------
 const IVR_ACTIONS = ['ivrList', 'ivrStats', 'ivrControl', 'ivrConnects']
+const sameKey = (given, expected) => !!expected && crypto.timingSafeEqual(
+  crypto.createHash('sha256').update(String(given)).digest(), crypto.createHash('sha256').update(expected).digest())
 
 async function handleBlutecRelay(req, res) {
-  const sbUrl = getEnv('VITE_SUPABASE_URL') || getEnv('SUPABASE_URL')
-  const sbKey = getEnv('VITE_SUPABASE_PUBLISHABLE_KEY')
-  if (!sbUrl || !sbKey) return sendJson(res, 503, { success: false, message: 'Server is missing VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY.' })
-  const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '')
-  if (!token) return sendJson(res, 401, { success: false, message: 'Sign in to the CRM first.' })
-
-  // the user's own token: Supabase verifies it, and row-level security applies to the lookup
-  const sb = createClient(sbUrl, sbKey, { auth: { persistSession: false }, global: { headers: { Authorization: `Bearer ${token}` } } })
-  const { data: who } = await sb.auth.getUser(token)
-  if (!who?.user) return sendJson(res, 401, { success: false, message: 'Sign in to the CRM first.' })
-  const { data: me } = await sb.from('app_users').select('id, role, email, active').eq('auth_user_id', who.user.id).maybeSingle()
-  if (!me?.active) return sendJson(res, 403, { success: false, message: 'Your CRM account is not active.' })
+  const dialerKey = getEnv('DIALER_ACCESS_KEY')
+  if (!dialerKey) return sendJson(res, 503, { success: false, code: 'NOT_CONFIGURED', message: 'Set DIALER_ACCESS_KEY on the server (Render → Environment).' })
+  const given = req.headers['x-dialer-key'] || ''
+  const ivrOk = sameKey(given, getEnv('IVR_ACCESS_KEY'))
+  if (!ivrOk && !sameKey(given, dialerKey)) return sendJson(res, 401, { success: false, code: 'NO_KEY', message: 'Enter the dialer access key on this computer (ask the Super Admin).' })
 
   let body
   try { body = await readJsonBody(req) } catch { return sendJson(res, 400, { success: false, message: 'Bad JSON' }) }
-  if (IVR_ACTIONS.includes(body.action) && me.role !== 'superadmin') return sendJson(res, 403, { success: false, message: 'IVR campaigns are for the Super Admin only.' })
-  // people can only place calls from their own dialer agent
-  if (body.action === 'call') body = { ...body, agentEmail: me.email }
+  if (IVR_ACTIONS.includes(body.action) && !ivrOk) return sendJson(res, 403, { success: false, message: 'IVR campaigns need the IVR access key.' })
 
   const r = await handleBlutec(body, blutecEnv({ ...fileEnv, ...process.env }))
   sendJson(res, r.status, r.body)
