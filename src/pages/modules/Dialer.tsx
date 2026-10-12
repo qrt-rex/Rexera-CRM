@@ -323,6 +323,7 @@ function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
               {callLead.followUp && <Badge tone="amber">Follow-up {fmtDate(callLead.followUp)}</Badge>}
             </div>
             {live?.info && (live.info.disposition || live.info.hangup_cause) && <p className="mb-2 text-xs text-mute">{[live.info.disposition, live.info.hangup_cause?.replace(/_/g, ' ').toLowerCase()].filter(Boolean).join(' · ')}</p>}
+            {ended && live?.info && !live.info.answer_time && <p className="mb-2 rounded-lg bg-warn-soft px-2.5 py-1.5 text-xs font-medium text-warn">Your phone didn't pick up, so the client was never dialled. Check the phone number on your Blutec agent profile.</p>}
             {ended && isHot(live?.info?.disposition) && <p className="mb-2 rounded-lg bg-violet-500/10 px-2.5 py-1.5 text-xs font-semibold text-violet-600 dark:text-violet-300">🔥 Hot prospect — save “Interested” to create the CRM entry</p>}
             {callLead.notes && <p className="mb-3 line-clamp-3 whitespace-pre-line rounded-lg bg-card2 px-3 py-2 text-xs" title={callLead.notes}>{callLead.notes}</p>}
             {call?.phone && !ended && <Button className="mb-3 w-full" variant="danger" icon={PhoneOff} onClick={endPhoneCall}>End call</Button>}
