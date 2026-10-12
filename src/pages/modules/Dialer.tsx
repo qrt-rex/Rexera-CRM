@@ -271,6 +271,7 @@ function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
                 <div className="mt-4 w-full rounded-2xl border border-line bg-card2 p-3 text-sm">
                   <p className="font-semibold">{ended ? 'Call ended' : live.status === 'accepted' || live.status === 'initiated' ? 'Ringing your phone…' : `Call ${live.status.replace(/_/g, ' ')}`}</p>
                   {live.info && <p className="text-xs text-mute">{live.info.talk_duration_seconds != null ? `Talk ${Math.round(live.info.talk_duration_seconds / 60 * 10) / 10} min` : ''}{live.info.disposition ? ` · ${live.info.disposition}` : ''}{live.info.hangup_cause ? ` · ${live.info.hangup_cause.replace(/_/g, ' ').toLowerCase()}` : ''}</p>}
+                  {ended && live.info && !live.info.answer_time && <p className="mt-1 text-xs text-warn">Your phone didn't pick up, so the client was never dialled. Check the phone number on your Blutec agent profile.</p>}
                   {ended && isHot(live.info?.disposition) && <p className="mt-1 text-xs font-semibold text-violet-600 dark:text-violet-300">🔥 Hot prospect — save “Interested” to create the CRM entry</p>}
                 </div>
               )}
