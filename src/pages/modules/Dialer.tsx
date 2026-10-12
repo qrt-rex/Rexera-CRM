@@ -4,7 +4,7 @@ import { Ban, Briefcase, CircleCheck, CircleDashed, Flame, History, Pause, Phone
 import type { CallOutcome, Lead } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
-import { createLead, logCall, setLeadStatus, visibleLeads } from '../../lib/actions'
+import { createLead, logCall, setLeadStatus, userName, visibleLeads } from '../../lib/actions'
 import { CALL_OUTCOMES, LEAD_STATUS, OPEN_LEAD } from '../../lib/workflow'
 import { addDays, fmtDate, fmtDateTime, fmtTime, inr, normPhone, today, ymd } from '../../lib/format'
 import { blutec, dialerKey, DialerError, FINAL_STATUSES, isHot, type AgentConnect, type BlutecCampaign, type BlutecStatus, type CallStatus, type Ivr, type IvrStats } from '../../lib/dialer'
@@ -126,13 +126,23 @@ function BlutecImport() {
       const have = new Set(db.leads.map((l) => l.phone))
       const camp = camps?.find((c) => String(c.id) === pick)?.name ?? 'Blutec'
       let added = 0
+      const notMine: string[] = []
       for (const b of leads) {
         const phone = normPhone(b.phone)
-        if (have.has(phone)) continue
+        if (have.has(phone)) {
+          // already in the CRM: say why it isn't in this person's queue (someone else's, or closed)
+          const l = db.leads.find((x) => x.phone === phone)
+          if (l && !(OPEN_LEAD.includes(l.status) && (l.assignedTo === me.id || !l.assignedTo))) {
+            notMine.push(`${l.name} (${phone}) — ${l.assignedTo && l.assignedTo !== me.id ? `assigned to ${userName(db, l.assignedTo)}` : LEAD_STATUS[l.status].label}`)
+          }
+          continue
+        }
         have.add(phone)
-        try { createLead(me, { name: b.name?.trim() || `Lead ${phone.slice(-4)}`, company: '', phone, email: '', city: '', state: 'Gujarat', service: '', source: `Blutec: ${camp}`, notes: '', assignedTo: me.id }); added++ } catch { /* invalid number: skip */ }
+        const name = [b.name, b.full_name, [b.first_name, b.last_name].filter(Boolean).join(' ')].map((x) => x?.trim()).find(Boolean)
+        try { createLead(me, { name: name || `Lead ${phone.slice(-4)}`, company: '', phone, email: '', city: '', state: 'Gujarat', service: '', source: `Blutec: ${camp}`, notes: '', assignedTo: me.id }); added++ } catch { /* invalid number: skip */ }
       }
       toast('success', `${added} new leads added from ${camp} (${leads.length - added} already in the CRM or invalid)`)
+      if (notMine.length) toast('warning', `Already in the CRM, so not in your queue: ${notMine.join('; ')}. Ask your team leader to assign them to you.`)
       setOpen(false)
     } catch (e) { toast('error', e instanceof Error ? e.message : 'Import failed.') }
     finally { setBusy(false) }

@@ -8,7 +8,7 @@ export interface CallStatus {
   hangup_cause?: string; disposition?: string; recording_status?: string
 }
 export interface BlutecCampaign { id: number; name: string; status: string; total_leads?: number; fresh_leads?: number }
-export interface BlutecLead { id: number; phone: string; name?: string; status?: string }
+export interface BlutecLead { id: number; phone: string; name?: string; full_name?: string; first_name?: string; last_name?: string; status?: string }
 export interface Ivr { id: number; name: string; status: string; broadcast_status: string; max_concurrent_calls?: number; agent_connect_enabled?: boolean }
 export interface IvrStats { broadcast_status: string; dialing_now: number; total_leads: number; dialed: number; answered: number; pressed_1: number; remaining: number }
 export interface AgentConnect { id: number; lead_phone: string; agent_name: string; status: string; wait_seconds: number; talk_seconds: number; hangup_by?: string; recording?: boolean; created_at: string }

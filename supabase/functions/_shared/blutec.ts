@@ -12,6 +12,8 @@ export interface BlutecEnv {
   keyId?: string
   apiKey?: string
   signingSecret?: string
+  /** a DID of the company's (the one campaigns use) shown to the agent and the client; unset = Blutec picks */
+  callerId?: string
   /** long-lived dialer API token (blt_…), for the DND list */
   token?: string
   ivrUrl?: string
@@ -134,7 +136,7 @@ export async function handleBlutec(req: BlutecRequest, e: BlutecEnv): Promise<Bl
         // numbers on the company's Do-Not-Disturb list are never dialled (a failed check doesn't block the call)
         if (dncReady(e) && await isDnc(e, destination).catch(() => false)) return fail(409, 'This number is on the Do-Not-Disturb list — it can’t be called.', 'DND')
         const uuid = await agentUuid(e, req.agentEmail)
-        return await signed(e, 'POST', '/api/v1/click-to-call', '', { agent_uuid: uuid, destination_number: destination, ring_timeout: 30, custom_identifier: req.leadId ? { crm_lead_id: req.leadId } : undefined },
+        return await signed(e, 'POST', '/api/v1/click-to-call', '', { agent_uuid: uuid, destination_number: destination, caller_id: e.callerId || undefined, ring_timeout: 30, custom_identifier: req.leadId ? { crm_lead_id: req.leadId } : undefined },
           req.attempt ? `crm-${req.leadId ?? phone}-${req.attempt}` : undefined)
       }
       case 'dncCheck': {
@@ -203,7 +205,7 @@ export function blutecEnv(env: Record<string, string | undefined>): BlutecEnv {
   const v = (...keys: string[]) => keys.map((k) => env[k]?.trim()).find(Boolean)
   return {
     dialerUrl: v('BLUTEC_DIALER_URL'), keyId: v('BLUTEC_KEY_ID', 'BTC_KEY_ID'), apiKey: v('BLUTEC_API_KEY', 'BTC_API_KEY'),
-    signingSecret: v('BLUTEC_SIGNING_SECRET', 'BTC_SIGNING_SECRET'), token: v('BLUTEC_TOKEN', 'BLUTEC_API_TOKEN'),
+    signingSecret: v('BLUTEC_SIGNING_SECRET', 'BTC_SIGNING_SECRET'), callerId: v('BLUTEC_CALLER_ID')?.replace(/\D/g, '') || undefined, token: v('BLUTEC_TOKEN', 'BLUTEC_API_TOKEN'),
     ivrUrl: v('BLUTEC_IVR_URL'), ivrEmail: v('BLUTEC_IVR_EMAIL'), ivrPassword: v('BLUTEC_IVR_PASSWORD'),
   }
 }
