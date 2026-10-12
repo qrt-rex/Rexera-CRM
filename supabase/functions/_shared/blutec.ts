@@ -127,7 +127,7 @@ export async function handleBlutec(req: BlutecRequest, e: BlutecEnv): Promise<Bl
         // numbers on the company's Do-Not-Disturb list are never dialled (a failed check doesn't block the call)
         if (dncReady(e) && await isDnc(e, destination).catch(() => false)) return fail(409, 'This number is on the Do-Not-Disturb list — it can’t be called.', 'DND')
         const uuid = await agentUuid(e, req.agentEmail)
-        return await signed(e, 'POST', '/api/v1/click-to-call', '', { agent_uuid: uuid, destination_number: destination, custom_identifier: req.leadId ? { crm_lead_id: req.leadId } : undefined },
+        return await signed(e, 'POST', '/api/v1/click-to-call', '', { agent_uuid: uuid, destination_number: destination, ring_timeout: 30, custom_identifier: req.leadId ? { crm_lead_id: req.leadId } : undefined },
           req.attempt ? `crm-${req.leadId ?? phone}-${req.attempt}` : undefined)
       }
       case 'dncCheck': {
