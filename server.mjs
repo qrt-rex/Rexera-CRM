@@ -495,6 +495,10 @@ const server = http.createServer(async (req, res) => {
       uptime: process.uptime(),
       timestamp: new Date().toISOString(),
       smtpConfigured: Boolean(getEnv('SMTP_USER') && getEnv('SMTP_PASS')),
+      // AI assistant set-up at a glance (never the key itself)
+      aiConfigured: Boolean(getEnv('AI_API_KEY') || getEnv('OPENAI_API_KEY')),
+      aiProvider: (() => { try { return new URL(getEnv('AI_BASE_URL') || 'https://api.openai.com/v1').host } catch { return 'invalid AI_BASE_URL' } })(),
+      aiModel: getEnv('AI_MODEL') || getEnv('OPENAI_MODEL') || 'gpt-4.1-mini',
     })
   }
 
