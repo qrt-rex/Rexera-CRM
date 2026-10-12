@@ -4,6 +4,7 @@ import { AlertCircle, CheckCircle2, Eye, EyeOff, KeyRound, Loader2, Lock, Shield
 import { resetPasswordWithToken, verifyResetToken, PASSWORD_HINT, PASSWORD_RULE } from '../lib/actions'
 import { completePasswordReset, getSupabase } from '../lib/supabase'
 import { Logo } from '../components/Logo'
+import { CLOUD, cloudSignOut } from '../lib/cloud'
 import { Button } from '../components/ui'
 
 export default function ResetPassword() {
@@ -30,7 +31,7 @@ export default function ResetPassword() {
 
     async function checkToken() {
       // 1. Check local token
-      if (token) {
+      if (token && !CLOUD) {
         const res = verifyResetToken(token, emailParam)
         if (!mounted) return
         if (res.valid) {
@@ -94,13 +95,17 @@ export default function ResetPassword() {
     setLoading(true)
     try {
       // 1. Reset in local CRM store if token exists
-      if (token) {
+      if (token && !CLOUD) {
         await resetPasswordWithToken(token, password, confirm, emailParam || email)
       }
 
 
       // 2. Also reset in Supabase if session active
-      try {
+      if (CLOUD) {
+        // the reset link signed this browser in; the person now signs in normally (password + code)
+        await completePasswordReset(password)
+        await cloudSignOut()
+      } else try {
         await completePasswordReset(password)
       } catch {
         // Ok if not running Supabase session

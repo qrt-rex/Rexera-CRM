@@ -6,6 +6,7 @@ import nodemailer from 'nodemailer'
 import crypto from 'node:crypto'
 import { checkClientEmail, renderClientEmail } from './supabase/functions/_shared/client-email.mjs'
 import { aiConfig, aiOverLimit, answerAi, checkAiRequest } from './server/ai.mjs'
+import { setPassword } from './server/users.mjs'
 import { blutecEnv, handleBlutec } from './supabase/functions/_shared/blutec.ts'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -460,6 +461,16 @@ async function handleBlutecRelay(req, res) {
 }
 
 // -------------------------------------------------------------
+// Passwords with Supabase sign-in (server/users.mjs)
+// -------------------------------------------------------------
+async function handleSetPassword(req, res) {
+  let body
+  try { body = await readJsonBody(req) } catch { return sendJson(res, 400, { success: false, message: 'Bad JSON' }) }
+  const r = await setPassword(getEnv, req.headers.authorization, body)
+  sendJson(res, r.status, r.body)
+}
+
+// -------------------------------------------------------------
 // Server creation
 // -------------------------------------------------------------
 const server = http.createServer(async (req, res) => {
@@ -502,6 +513,10 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === '/api/ai-chat' && req.method === 'POST') {
     return handleAiChat(req, res)
+  }
+
+  if (pathname === '/api/users/password' && req.method === 'POST') {
+    return handleSetPassword(req, res).catch((err) => sendJson(res, 502, { success: false, message: err.message }))
   }
 
   if (pathname === '/api/blutec' && req.method === 'POST') {

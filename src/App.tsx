@@ -1,8 +1,9 @@
-import { lazy, Suspense, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, type ReactNode } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams, Link } from 'react-router-dom'
 import { Compass } from 'lucide-react'
 import { AuthProvider, useAuth } from './lib/auth'
-import { ToastProvider, Button, Skeleton } from './components/ui'
+import { ToastProvider, Button, Skeleton, useToast } from './components/ui'
+import { onSyncError } from './lib/store'
 import { Shell } from './layout/Shell'
 import { canOpenDashboard } from './lib/rbac'
 import { moduleByKey, canSee } from './lib/modules'
@@ -109,10 +110,18 @@ const Loading = () => (
   </div>
 )
 
+/** Shows a message when Supabase refuses a change (the screen then reloads from the database). */
+function SyncErrors() {
+  const toast = useToast()
+  useEffect(() => onSyncError((m) => toast('error', m)), [toast])
+  return null
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <ToastProvider>
+        <SyncErrors />
         <AuthProvider>
           <Routes>
             {/* Direct Home Redirects */}

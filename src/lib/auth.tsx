@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Perm, User } from './types'
-import { useDb, mutate } from './store'
+import { useDb, mutate, clearCloudDb, saved } from './store'
+import { CLOUD, cloudSignOut, cloudUserId } from './cloud'
 import { effectivePerms } from './rbac'
 import { nowIso, uid } from './format'
 
@@ -27,7 +28,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const db = useDb()
   const [session, setSession] = useState<Session | null>(readSession)
   const user = useMemo(() => {
-    const u = session ? db.users.find((x) => x.id === session.userId) : null
+    // with Supabase, the saved session only counts while its Supabase sign-in belongs to the same person
+    const u = session && (!CLOUD || cloudUserId() === session.userId) ? db.users.find((x) => x.id === session.userId) : null
     return u && u.active ? u : null
   }, [db.users, session])
   const perms = useMemo(() => effectivePerms(db, user), [db, user])
@@ -46,6 +48,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try { localStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
     if (reason) sessionStorage.setItem('rexera-signout-reason', reason)
     setSession(null)
+    // the sign-out entry is saved before the Supabase session ends
+    if (CLOUD) void saved().catch(() => undefined).then(cloudSignOut).then(clearCloudDb)
   }, [])
 
   // sign-out in another tab signs out here too
@@ -57,7 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // a deactivated account is signed out immediately
   useEffect(() => {
-    if (session && !user) signOut('Your account is no longer active.')
+    if (session && !user) signOut(CLOUD && !cloudUserId() ? 'Please sign in again.' : 'Your account is no longer active.')
   }, [session, user, signOut])
 
   // IT used "sign out everyone": sessions started before that moment end

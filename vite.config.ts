@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { blutecEnv, handleBlutec, type BlutecRequest } from './supabase/functions/_shared/blutec.ts'
 import { checkClientEmail, renderClientEmail, type ClientEmailRequest } from './supabase/functions/_shared/client-email.mjs'
 import { aiConfig, aiOverLimit, answerAi, checkAiRequest } from './server/ai.mjs'
+import { setPassword } from './server/users.mjs'
 
 /**
  * Local relay for sending password reset emails via SMTP (Nodemailer) or Resend.
@@ -311,7 +312,28 @@ function aiRelay(mode: string): Plugin {
   }
 }
 
+/** Local copy of the live server's POST /api/users/password (Supabase sign-in accounts). Reads SUPABASE_* from .env. */
+function usersRelay(mode: string): Plugin {
+  return {
+    name: 'users-relay',
+    configureServer(server) {
+      server.middlewares.use('/api/users/password', (req, res) => {
+        if (req.method !== 'POST') { res.statusCode = 405; res.end(); return }
+        let raw = ''
+        req.on('data', (c) => { raw += c; if (raw.length > 10_000) req.destroy() })
+        req.on('end', async () => {
+          const env = loadEnv(mode, process.cwd(), ['SUPABASE_', 'VITE_SUPABASE_'])
+          let r: Awaited<ReturnType<typeof setPassword>>
+          try { r = await setPassword((k) => env[k], req.headers.authorization, JSON.parse(raw || '{}')) }
+          catch (e) { r = { status: 400, body: { success: false, message: e instanceof Error ? e.message : 'Bad request' } } }
+          res.statusCode = r.status; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(r.body))
+        })
+      })
+    },
+  }
+}
+
 export default defineConfig(({ mode }) => ({
-  plugins: [react(), tailwindcss(), blutecRelay(mode), mailerRelay(mode), aiRelay(mode)],
+  plugins: [react(), tailwindcss(), blutecRelay(mode), mailerRelay(mode), aiRelay(mode), usersRelay(mode)],
   server: { port: 5180 },
 }))

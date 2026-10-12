@@ -15,6 +15,8 @@ COPY . .
 # Render passes its Environment values to Docker builds only when declared here; Vite bakes them into the site
 ARG VITE_SUPABASE_URL
 ARG VITE_SUPABASE_PUBLISHABLE_KEY
+# supabase = the CRM's data lives in Supabase (sign-in with Supabase Auth); unset = in each browser
+ARG VITE_DATA_BACKEND
 
 # Build production bundle
 RUN npm run build
@@ -35,7 +37,7 @@ RUN npm ci --omit=dev
 COPY --from=builder /app/dist ./dist
 COPY server.mjs ./
 COPY supabase/functions/_shared/client-email.mjs supabase/functions/_shared/blutec.ts ./supabase/functions/_shared/
-COPY server/ai.mjs ./server/
+COPY server/ai.mjs server/users.mjs ./server/
 
 EXPOSE 5180
 

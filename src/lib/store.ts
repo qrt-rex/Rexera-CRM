@@ -3,12 +3,14 @@ import { produce, setAutoFreeze } from 'immer'
 import type { DB } from './types'
 import { buildSeed, SEED_VERSION } from './seed'
 import { upgradeDb } from './hrsuite'
+import { CLOUD, loadCloud, pushChanges, watchCloud, unwatchCloud } from './cloud'
 
 /**
  * Local document store. All collections live in one in-memory document, saved to the browser's IndexedDB
  * (hundreds of MB available — enough for thousands of client files) and synced across tabs. Writes go through
  * `mutate`, which uses structural sharing (only the records you change are copied), so large data stays fast.
- * Swapping this for the Supabase API later only touches lib/actions.ts.
+ * With VITE_DATA_BACKEND=supabase the document is filled from Supabase instead and every change is written back
+ * (lib/cloud.ts); nothing is kept in the browser then.
  */
 setAutoFreeze(false)
 const LEGACY_KEY = 'rexera-crm-db'          // older builds kept everything in localStorage
@@ -47,6 +49,7 @@ async function idbPut(value: DB) {
 
 // ------------------------------------------------------------------ load / save
 export async function initStore() {
+  if (CLOUD) return reloadFromCloud(true)
   let loaded: DB | undefined
   try {
     loaded = await idbGet()
@@ -68,6 +71,7 @@ export async function initStore() {
 let timer: ReturnType<typeof setTimeout> | null = null
 let saving: Promise<void> = Promise.resolve()
 async function persistNow() {
+  if (CLOUD) return
   const snapshot = db
   if (backend === 'indexeddb') {
     try { await idbPut(snapshot); channel?.postMessage('changed'); return } catch { backend = 'localstorage' }
@@ -80,6 +84,7 @@ function save() {
   timer = setTimeout(() => { timer = null; saving = saving.then(persistNow) }, 200)
 }
 export function flushSaves() {
+  if (CLOUD) return cloudSaving
   if (timer) { clearTimeout(timer); timer = null; saving = saving.then(persistNow) }
   return saving
 }
@@ -101,25 +106,79 @@ if (typeof window !== 'undefined') {
 }
 
 export const getDb = () => db
-export const storageBackend = () => backend
+export const storageBackend = () => (CLOUD ? 'supabase' : backend)
+
+// ------------------------------------------------------------------ Supabase (VITE_DATA_BACKEND=supabase)
+let skeleton: DB | undefined
+/** App defaults with no records: what the CRM shows before sign-in, and the base the tables are laid over. */
+async function emptyDb(): Promise<DB> {
+  skeleton ??= upgradeDb(await buildSeed())
+  const d = structuredClone(skeleton)
+  for (const [k, v] of Object.entries(d)) if (Array.isArray(v) && k !== 'upgrades') (d as unknown as Record<string, unknown[]>)[k] = []
+  return d
+}
+async function fromCloud(loaded: DB): Promise<DB> {
+  const base = await emptyDb()
+  const d = { ...base, ...Object.fromEntries(Object.entries(loaded).filter(([, v]) => v !== undefined)) } as DB
+  d.settings = { ...base.settings, ...loaded.settings }
+  // no data-version row yet (nothing migrated): don't re-run the one-time upgrades over the tables
+  if (loaded.version == null) { d.version = base.version; d.upgrades = base.upgrades }
+  return upgradeDb(d)
+}
+let cloudSaving: Promise<void> = Promise.resolve()
+const syncListeners = new Set<(message: string) => void>()
+/** The screen shows these: a change Supabase refused (the data is then reloaded, so the screen matches the database). */
+export function onSyncError(fn: (message: string) => void) { syncListeners.add(fn); return () => { syncListeners.delete(fn) } }
+
+/** Loads everything this person may see from Supabase (after sign-in, or at start-up with a saved session). */
+export async function reloadFromCloud(first = false) {
+  db = await fromCloud(await loadCloud())
+  if (!first) emit()
+  await watchCloud(async (next) => { db = await fromCloud(next); emit() })
+}
+/** Signed out: forget everything that was loaded. */
+export async function clearCloudDb() {
+  await unwatchCloud()
+  db = await fromCloud(await loadCloud())
+  emit()
+}
+function pushToCloud(prev: DB, next: DB) {
+  const run = cloudSaving.then(async () => {
+    const errors = await pushChanges(prev, next)
+    if (!errors.length) return
+    const msg = /row-level security|permission/i.test(errors[0]) ? "You don't have access to save that." : errors[0]
+    syncListeners.forEach((l) => l(`Not saved: ${msg}`))
+    db = await fromCloud(await loadCloud())
+    emit()
+    throw new Error(msg)
+  })
+  cloudSaving = run.catch(() => undefined)
+  return run
+}
+let lastSave: Promise<void> = Promise.resolve()
+/** Resolves once the latest change reached Supabase; rejects if it was refused. Browser mode: resolves at once. */
+export const saved = () => (CLOUD ? lastSave : Promise.resolve())
 
 /** Applies a change. Only the records touched are copied, so this stays fast with thousands of client files. */
 export function mutate<T = void>(fn: (d: DB) => T): T {
   let out!: T
+  const prev = db
   db = produce(db, (draft) => { out = fn(draft as DB) })
-  save()
+  if (CLOUD) { if (db !== prev) { lastSave = pushToCloud(prev, db); lastSave.catch(() => undefined) } } else save()
   emit()
   return out
 }
 
 /** Replaces all data at once (restore from a backup, legacy import). */
 export function replaceDb(next: DB) {
+  const prev = db
   db = upgradeDb(next)
-  save()
+  if (CLOUD) { lastSave = pushToCloud(prev, db); lastSave.catch(() => undefined) } else save()
   emit()
 }
 
 export async function resetDemoData() {
+  if (CLOUD) throw new Error('Demo data can’t be loaded into the live database.')
   db = upgradeDb(await buildSeed())
   save()
   emit()

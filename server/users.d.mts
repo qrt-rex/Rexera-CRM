@@ -1,0 +1,1 @@
+export declare function setPassword(env: (key: string) => string | undefined, authorization: string | undefined, body: unknown): Promise<{ status: number; body: { success: boolean; message?: string } }>

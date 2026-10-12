@@ -4,6 +4,7 @@ import { Check, CheckCircle2, Copy, ExternalLink, Loader2, Mail } from 'lucide-r
 import { createPasswordResetLink } from '../lib/actions'
 import { sendPasswordResetEmail, cloudConfig } from '../lib/supabase'
 import { sendResetEmailClient } from '../lib/emailClient'
+import { CLOUD } from '../lib/cloud'
 import { Button, Input, Modal } from './ui'
 
 export function ResetPasswordModal({ open, onClose, email: fixedEmail }: { open: boolean; onClose: () => void; email?: string }) {
@@ -37,6 +38,14 @@ export function ResetPasswordModal({ open, onClose, email: fixedEmail }: { open:
     setLoading(true)
 
     try {
+      // Supabase sign-in: Supabase emails the reset link itself (the CRM's own links would only change a browser copy)
+      if (CLOUD) {
+        await sendPasswordResetEmail(email.trim())
+        setEmailDelivered(true)
+        setSent(true)
+        return
+      }
+
       // 1. Generate local token-based reset link
       const { resetLink } = createPasswordResetLink(email)
       setDirectLink(resetLink)

@@ -2,7 +2,8 @@ import type {
   Booking, BookingStatus, BDoc, Branch, BreakPolicy, CallOutcome, ClientEmailLog, Shift, CandidateApplication, CandidateForm, DaySession, DB, EventItem, FileRef, Invoice, InvoiceItem, Lead, LeaveType, Perm, Post, Role, Scheme, User,
 } from './types'
 import { effectivePerms, isMaster, MASTER_ROLES, rolesOf, roleLabel } from './rbac'
-import { getDb, mutate } from './store'
+import { clearCloudDb, getDb, mutate, reloadFromCloud, saved } from './store'
+import { CLOUD, cloudSetOwnPassword, cloudSetPassword, cloudSignIn, cloudSignOut, cloudUserId } from './cloud'
 import { bookingBranch, directorBranches, isBranchScoped, leadBranch, NO_BRANCH } from './branches'
 import { hashPassword } from './crypto'
 import { CALL_OUTCOMES, FINAL_STAGE, OPEN_LEAD, STAGE_OUTCOMES, STAGES, stageLabel } from './workflow'
@@ -49,6 +50,7 @@ const pending = new Map<string, Pending>()
 const genCode = () => String(Math.floor(100000 + Math.random() * 900000))
 
 export async function loginStep1(login: string, password: string) {
+  if (CLOUD) return cloudLoginStep1(login, password)
   const d = getDb()
   const key = login.trim().toLowerCase()
   const fail = d.loginFails[key]
@@ -74,12 +76,28 @@ export async function loginStep1(login: string, password: string) {
     })
     throw new ActionError('Wrong username or password.')
   }
+  return passwordOk(d, u)
+}
+
+/** Supabase checks the password (and rate-limits wrong ones); then this person's data is loaded and the same rules apply. */
+async function cloudLoginStep1(login: string, password: string) {
+  if (!(await cloudSignIn(login, password))) throw new ActionError('Wrong username or password.')
+  await reloadFromCloud()
+  const u = getDb().users.find((x) => x.id === cloudUserId())
+  try {
+    assert(u, 'This sign-in is not linked to a CRM account. Ask IT Support.')
+    return passwordOk(getDb(), u)
+  } catch (e) { await cloudSignOut(); await clearCloudDb(); throw e }
+}
+
+/** Password accepted: the account may still be closed for today, and then the 6-digit code is issued. */
+function passwordOk(d: DB, u: User) {
   assert(u.active, 'This account is deactivated. Contact your administrator.')
   const ended = dayLockOn(d) ? d.sessions.find((x) => x.userId === u.id && x.date === today())?.logoutAt : undefined
   assert(!ended || isMaster(u), `You logged out for today at ${ended ? new Date(ended).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }) : ''}. You can sign in again tomorrow — or ask HR to re-open your day.`)
   const mt = d.settings.maintenance
   assert(!mt?.on || isMaster(u), `Rexera CRM is under maintenance${mt?.message ? `: ${mt.message}` : '.'} Please try again later.`)
-  mutate((m) => { delete m.loginFails[key] })
+  if (!CLOUD) mutate((m) => { delete m.loginFails[u.username.toLowerCase()]; delete m.loginFails[u.email.toLowerCase()] })
   const token = uid('tmp-')
   const code = genCode()
   pending.set(token, { userId: u.id, code, expires: Date.now() + 5 * 60000, attempts: 0, resends: 0 })
@@ -119,7 +137,8 @@ export function verifyCode(token: string, code: string): string {
 export async function changePassword(me: User, next: string, again: string) {
   assert(PASSWORD_RULE.test(next), `Use ${PASSWORD_HINT}`)
   assert(next === again, 'The two passwords do not match.')
-  const h = await hashPassword(me.username, next)
+  if (CLOUD) await cloudSetOwnPassword(next)
+  const h = CLOUD ? '' : await hashPassword(me.username, next)
   mutate((d) => {
     const u = d.users.find((x) => x.id === me.id)!
     u.passHash = h
@@ -1595,13 +1614,16 @@ export async function createUser(me: User, i: UserInput, password: string, resum
   assert(!d.users.some((u) => u.username.toLowerCase() === i.username.toLowerCase()), 'Username already taken.')
   assert(!d.users.some((u) => u.email.toLowerCase() === i.email.toLowerCase()), 'Email already used.')
   checkBranches(d, i)
-  const passHash = await hashPassword(i.username.trim(), password)
+  const passHash = CLOUD ? '' : await hashPassword(i.username.trim(), password)
+  const id = uid('u-')
   mutate((m) => {
-    const created: User = { ...i, id: uid('u-'), username: i.username.trim(), email: i.email.trim().toLowerCase(), phone: i.phone ? normPhone(i.phone) : '', extraRoles: [], grants: [], denies: [], joinedOn: i.joinedOn || today(), active: true, passHash, resume }
+    const created: User = { ...i, id, username: i.username.trim(), email: i.email.trim().toLowerCase(), phone: i.phone ? normPhone(i.phone) : '', extraRoles: [], grants: [], denies: [], joinedOn: i.joinedOn || today(), active: true, passHash, resume }
     m.users.push(created)
     audit(m, me.id, 'USER_CREATE', `${i.name} (${roleLabel(i.role)})`)
     fireAutomation(m, 'welcome', [created])
   })
+  // the CRM row must exist before the server creates the sign-in account for it
+  if (CLOUD) { await saved(); await cloudSetPassword(id, password) }
 }
 
 export function updateUser(me: User, id: string, patch: Partial<Pick<User, 'name' | 'email' | 'phone' | 'role' | 'extraRoles' | 'grants' | 'denies' | 'active' | 'teamLeadId' | 'department' | 'designation' | 'salary' | 'target' | 'branchId' | 'branchIds'>>) {
@@ -1632,7 +1654,8 @@ export async function resetUserPassword(me: User, id: string, password: string) 
   assert(u, 'User not found.')
   assert(!rolesOf(u).includes('superadmin') || isSA(me), "Only a Super Admin can reset a Super Admin's password.")
   assert(PASSWORD_RULE.test(password), `Password: ${PASSWORD_HINT}`)
-  const h = await hashPassword(u.username, password)
+  if (CLOUD) await cloudSetPassword(id, password)
+  const h = CLOUD ? '' : await hashPassword(u.username, password)
   mutate((d) => { const x = d.users.find((y) => y.id === id)!; x.passHash = h; delete x.needsPasswordReset; audit(d, me.id, 'PASSWORD_RESET', u.name) })
 }
 
