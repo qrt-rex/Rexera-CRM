@@ -1,5 +1,5 @@
 import {
-  BarChart3, BellRing, BookOpenCheck, Briefcase, CalendarDays, ClipboardCheck, Coffee, FileText, Package, FolderKanban, Images, IndianRupee,
+  BarChart3, BellRing, BookOpenCheck, Briefcase, CalendarDays, Cloud, ClipboardCheck, Coffee, FileText, Package, FolderKanban, Images, IndianRupee,
   KeyRound, Megaphone, MessagesSquare, Phone, Settings, ShieldCheck, Sparkles, UserCheck, UserCog, UserPlus, Users, UsersRound,
   CalendarCheck2, Network, ScrollText, Wallet, Receipt, Landmark, Trophy, SlidersHorizontal, Gauge, KeySquare, DatabaseBackup, DatabaseZap, MailPlus, ClipboardList, FilePen, Inbox, type LucideIcon,
 } from 'lucide-react'
@@ -41,6 +41,7 @@ export const MODULES: ModuleDef[] = [
   { key: 'payslips', path: '/payslips', label: 'Payslips', desc: 'Printable payslips for finalised months', icon: Receipt, tone: 'cyan', perms: [], group: 'People', hrOnly: true },
   { key: 'pf', path: '/pf', label: 'PF Management', desc: 'PF rules, wage limits, UANs', icon: Landmark, tone: 'green', perms: ['payroll.view', 'payroll.manage'], group: 'People', hrOnly: true },
   { key: 'incentives', path: '/incentives', label: 'Sales Incentives', desc: 'Daily, weekly and monthly incentive per sales person', icon: Trophy, tone: 'orange', perms: ['incentives.manage', 'payroll.view'], group: 'People', hrOnly: true },
+  { key: 'incentives-cloud', path: '/incentives/supabase', label: 'Sales Incentives · Supabase', desc: 'Deals closed, collections and incentive per sales person, calculated in Supabase', icon: Cloud, tone: 'blue', perms: ['incentives.manage', 'payroll.view'], group: 'People', hrOnly: true },
   { key: 'incentive-settings', path: '/incentive-settings', label: 'Incentive Settings', desc: 'Thresholds and slabs, versioned', icon: SlidersHorizontal, tone: 'amber', perms: ['incentives.manage'], group: 'People', hrOnly: true },
   { key: 'assets', path: '/assets', label: 'Assets & Expenses', desc: 'Company assets, office inventory and expenses', icon: Package, tone: 'violet', perms: ['assets.manage'], group: 'People', hrOnly: true },
   { key: 'break-settings', path: '/break-settings', label: 'Break Time', desc: 'Lunch break window, late-break warning and HR alerts', icon: Coffee, tone: 'amber', perms: ['employees.manage'], group: 'People', hrOnly: true },

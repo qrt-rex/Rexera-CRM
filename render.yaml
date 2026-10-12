@@ -53,3 +53,9 @@ services:
         sync: false
       - key: IVR_ACCESS_KEY
         sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: REPORTS_ACCESS_KEY
+        sync: false

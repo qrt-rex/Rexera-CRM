@@ -42,6 +42,7 @@ const Payroll = lazy(() => import('./pages/hr/Payroll'))
 const Payslips = lazy(() => import('./pages/hr/Payslips'))
 const Pf = lazy(() => import('./pages/hr/Pf'))
 const Incentives = lazy(() => import('./pages/hr/Incentives'))
+const CloudIncentives = lazy(() => import('./pages/hr/CloudIncentives'))
 const IncentiveSettings = lazy(() => import('./pages/hr/IncentiveSettings'))
 const BreakSettings = lazy(() => import('./pages/hr/BreakSettings'))
 const OpsDesk = lazy(() => import('./pages/modules/OpsDesk'))
@@ -166,6 +167,7 @@ export default function App() {
               <Route path="/payslips" element={<Guard m="payslips"><S><Payslips /></S></Guard>} />
               <Route path="/pf" element={<Guard m="pf"><S><Pf /></S></Guard>} />
               <Route path="/incentives" element={<Guard m="incentives"><S><Incentives /></S></Guard>} />
+              <Route path="/incentives/supabase" element={<Guard m="incentives-cloud"><S><CloudIncentives /></S></Guard>} />
               <Route path="/incentive-settings" element={<Guard m="incentive-settings"><S><IncentiveSettings /></S></Guard>} />
               <Route path="/break-settings" element={<Guard m="break-settings"><S><BreakSettings /></S></Guard>} />
               <Route path="/ops-desk" element={<Guard m="ops-desk"><S><OpsDesk /></S></Guard>} />

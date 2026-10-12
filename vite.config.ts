@@ -5,6 +5,7 @@ import { blutecEnv, handleBlutec, type BlutecRequest } from './supabase/function
 import { checkClientEmail, renderClientEmail, type ClientEmailRequest } from './supabase/functions/_shared/client-email.mjs'
 import { aiConfig, aiOverLimit, answerAi, checkAiRequest } from './server/ai.mjs'
 import { setPassword } from './server/users.mjs'
+import { incentiveReport, reportConfig } from './server/incentives.mjs'
 
 /**
  * Local relay for sending password reset emails via SMTP (Nodemailer) or Resend.
@@ -333,7 +334,29 @@ function usersRelay(mode: string): Plugin {
   }
 }
 
+/** Local relay for the Supabase incentive report: GET /api/incentive-report?month=YYYY-MM (secret key stays here). */
+function reportRelay(mode: string): Plugin {
+  return {
+    name: 'report-relay',
+    configureServer(server) {
+      server.middlewares.use('/api/incentive-report', async (req, res) => {
+        if (req.method !== 'GET') { res.statusCode = 405; res.end(); return }
+        res.setHeader('Content-Type', 'application/json')
+        try {
+          const env = loadEnv(mode, process.cwd(), ['SUPABASE_', 'VITE_SUPABASE_'])
+          const r = await incentiveReport(new URL(req.url ?? '', 'http://localhost').searchParams, reportConfig((k) => env[k]))
+          res.statusCode = r.status
+          res.end(JSON.stringify(r.body))
+        } catch (err) {
+          res.statusCode = 500
+          res.end(JSON.stringify({ success: false, message: err instanceof Error ? err.message : 'Report failed' }))
+        }
+      })
+    },
+  }
+}
+
 export default defineConfig(({ mode }) => ({
-  plugins: [react(), tailwindcss(), blutecRelay(mode), mailerRelay(mode), aiRelay(mode), usersRelay(mode)],
+  plugins: [react(), tailwindcss(), blutecRelay(mode), mailerRelay(mode), aiRelay(mode), usersRelay(mode), reportRelay(mode)],
   server: { port: 5180 },
 }))

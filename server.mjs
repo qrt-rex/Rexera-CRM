@@ -7,6 +7,7 @@ import crypto from 'node:crypto'
 import { checkClientEmail, renderClientEmail } from './supabase/functions/_shared/client-email.mjs'
 import { aiConfig, aiOverLimit, answerAi, checkAiRequest } from './server/ai.mjs'
 import { setPassword } from './server/users.mjs'
+import { incentiveReport, reportConfig } from './server/incentives.mjs'
 import { blutecEnv, handleBlutec } from './supabase/functions/_shared/blutec.ts'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -471,6 +472,18 @@ async function handleSetPassword(req, res) {
 }
 
 // -------------------------------------------------------------
+// Sales incentive report from Supabase (salaries and payouts): only computers set up with REPORTS_ACCESS_KEY
+// ponytail: shared key, per-user checks once CRM sign-in moves to Supabase Auth
+// -------------------------------------------------------------
+async function handleIncentiveReport(req, res, query) {
+  const reportsKey = getEnv('REPORTS_ACCESS_KEY')
+  if (!reportsKey) return sendJson(res, 503, { success: false, code: 'NOT_CONFIGURED', message: 'Set REPORTS_ACCESS_KEY on the server (Render → Environment).' })
+  if (!sameKey(req.headers['x-reports-key'] || '', reportsKey)) return sendJson(res, 401, { success: false, code: 'NO_KEY', message: 'Enter the reports access key on this computer (ask the Super Admin).' })
+  const r = await incentiveReport(query, reportConfig((k) => getEnv(k)))
+  sendJson(res, r.status, r.body)
+}
+
+// -------------------------------------------------------------
 // Server creation
 // -------------------------------------------------------------
 const server = http.createServer(async (req, res) => {
@@ -525,6 +538,10 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === '/api/blutec' && req.method === 'POST') {
     return handleBlutecRelay(req, res).catch((err) => sendJson(res, 502, { success: false, message: err.message }))
+  }
+
+  if (pathname === '/api/incentive-report' && req.method === 'GET') {
+    return handleIncentiveReport(req, res, parsedUrl.searchParams)
   }
 
   // Static Assets and SPA routing
