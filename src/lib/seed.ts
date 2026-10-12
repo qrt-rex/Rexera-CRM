@@ -92,11 +92,12 @@ export async function buildSeed(): Promise<DB> {
     ['u-hr2', 'Kavita Menon', 'hr.in', 'hr', 'Human Resources'],
     ['u-it', 'Nitin Joshi', 'it', 'it', 'IT'],
     ['u-sup', 'Farah Ali', 'support', 'support', 'Customer Support'],
+    ['u-bd', 'Sanjay Trivedi', 'branch', 'branchdirector', 'Management'],
   ]
   const designations: Record<Role, string> = {
     superadmin: 'Director', admin: 'Admin Executive', accounts: 'Accounts Manager', legal: 'Legal Head',
     operations: 'Operations Executive', teamlead: 'Sales Team Leader', sales: 'Business Development Executive', hr: 'HR Manager',
-    it: 'IT Support Engineer', support: 'Customer Support Executive',
+    it: 'IT Support Engineer', support: 'Customer Support Executive', branchdirector: 'Branch Director',
   }
   const users: User[] = []
   for (const [i, [id, name, username, role, dept, tl]] of people.entries()) {
@@ -247,7 +248,7 @@ export async function buildSeed(): Promise<DB> {
       bookingId: b.id, client: b.companyName, gstin: b.gstin, state: b.state,
       items: [{ desc: b.serviceName, sac: '998311', qty: 1, rate: b.totalQuoted, gstRate: 18 }],
       paid, status: paid >= total - 1 ? 'PAID' : paid > 0 ? 'PARTIALLY_PAID' : 'ISSUED',
-      date: b.createdAt.slice(0, 10), due: ymd(addDays(b.createdAt, 15)), salesPerson: b.createdBy, createdBy: 'u-acc',
+      date: ymd(b.createdAt), due: ymd(addDays(b.createdAt, 15)), salesPerson: b.createdBy, createdBy: 'u-acc',
     } satisfies Invoice
   })
 

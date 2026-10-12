@@ -35,7 +35,7 @@ export default function BookingForm() {
     contactPerson: existing.contactPerson, mobile: existing.mobile, email: existing.email, pan: existing.pan, gstin: existing.gstin,
     paymentContact: existing.paymentContact ?? existing.mobile, paymentEmail: existing.paymentEmail ?? '',
     services: existing.services?.map((s) => ({ serviceId: s.serviceId, price: s.price })) ?? [{ serviceId: existing.serviceId, price: existing.totalQuoted }],
-    combo: existing.combo?.months, totalQuoted: existing.totalQuoted, mode: existing.mode, bookingDate: existing.bookingDate ?? existing.createdAt.slice(0, 10),
+    combo: existing.combo?.months, totalQuoted: existing.totalQuoted, mode: existing.mode, bookingDate: existing.bookingDate ?? ymd(existing.createdAt),
     payments: [], closedBy: existing.closedBy ?? existing.createdBy,
     successFee: existing.successFee ?? { type: 'PCT', value: existing.successFeePct || 0 }, remarks: existing.remarks ?? '', priority: existing.priority, teamLeadId: existing.teamLeadId,
   } : {

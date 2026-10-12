@@ -6,7 +6,7 @@ import { useAuth, useMe } from '../../lib/auth'
 import { userName, visibleBookings } from '../../lib/actions'
 import { collections, monthStart, pipelineTotals, revenueByMonth } from '../../lib/metrics'
 import { BOOKING_STATUS, STAGES } from '../../lib/workflow'
-import { bookingMoney, daysBetween, downloadCsv, inr, inrShort, today } from '../../lib/format'
+import { bookingMoney, daysBetween, downloadCsv, inr, inrShort, today, ymd } from '../../lib/format'
 import { rolesOf, roleLabel } from '../../lib/rbac'
 import { Avatar, Badge, Button, Card, CardHeader, PageHeader, Progress, Table, Tabs, Td, Th } from '../../components/ui'
 import { Bars, Donut, HBars } from '../../components/charts'
@@ -31,13 +31,13 @@ export default function Reports() {
   const byStage = STAGES.map((s, i) => ({ label: `${i + 1}. ${s}`, value: books.filter((b) => b.opsMemberId && b.stage === i + 1 && b.status !== 'COMPLETED').length }))
   const turnaround = useMemo(() => {
     const done = books.filter((b) => b.status === 'COMPLETED')
-    return done.length ? Math.round(done.reduce((s, b) => s + daysBetween(b.createdAt.slice(0, 10), b.updatedAt.slice(0, 10)), 0) / done.length) : 0
+    return done.length ? Math.round(done.reduce((s, b) => s + daysBetween(ymd(b.createdAt), ymd(b.updatedAt)), 0) / done.length) : 0
   }, [books])
   const sales = db.users.filter((u) => u.active && rolesOf(u).some((r) => r === 'sales' || r === 'teamlead'))
   const tabs: { id: Tab; label: string }[] = [{ id: 'overview', label: 'Overview' }, { id: 'progress', label: 'Work progress' }, { id: 'services', label: 'Service reports' }, { id: 'revenue', label: 'Profit & revenue' }, { id: 'cards', label: 'Report cards' }, ...(can('reports.export') ? [{ id: 'export' as Tab, label: 'Export data' }] : [])]
 
   const exports: [string, () => void][] = [
-    ['All CRM entries', () => downloadCsv(`crm-entries-${today()}.csv`, books.map((b) => { const m = bookingMoney(b); return { id: b.bookingId, company: b.companyName, service: b.serviceName, status: BOOKING_STATUS[b.status].label, stage: b.stage, quoted: m.quotedWithGst, collected: m.collected, outstanding: m.outstanding, sales: userName(db, b.createdBy), created: b.createdAt.slice(0, 10) } }))],
+    ['All CRM entries', () => downloadCsv(`crm-entries-${today()}.csv`, books.map((b) => { const m = bookingMoney(b); return { id: b.bookingId, company: b.companyName, service: b.serviceName, status: BOOKING_STATUS[b.status].label, stage: b.stage, quoted: m.quotedWithGst, collected: m.collected, outstanding: m.outstanding, sales: userName(db, b.createdBy), created: ymd(b.createdAt) } }))],
     ['Payments / collections', () => downloadCsv(`collections-${today()}.csv`, books.flatMap((b) => b.payments.map((p) => ({ booking: b.bookingId, company: b.companyName, part: p.part, date: p.date, mode: p.mode, amount: p.amount, gst: p.gst, total: p.total, verified: p.verified ? 'yes' : 'no', sales: userName(db, b.createdBy) }))))],
     ['User collections (this month)', () => downloadCsv(`user-collections-${today()}.csv`, sales.map((u) => ({ name: u.name, role: roleLabel(u.role), collected: collections(db, [u.id], monthStart()), target: u.target ?? '' })))],
     ['Leads', () => downloadCsv(`leads-${today()}.csv`, db.leads.map((l) => ({ code: l.code, name: l.name, phone: l.phone, status: l.status, service: l.service, owner: userName(db, l.assignedTo), calls: l.calls.length })))],

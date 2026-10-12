@@ -7,7 +7,7 @@ import { isMaster } from './rbac'
 import { hashPassword } from './crypto'
 import { DEMO_PASSWORD, SEED_VERSION } from './seed'
 import { listDatasets, saveDatasets, type Dataset } from './imports'
-import { addDays, fmtDate, nowIso, uid } from './format'
+import { addDays, fmtDate, nowIso, uid, ymd } from './format'
 import { cloudConfig, pingCloud } from './supabase'
 import { exportFiles, importFiles, putFiles, storageRoom, storedLegacyIds, type StoredFile } from './files'
 
@@ -104,7 +104,9 @@ export async function downloadBackup(me: User, passphrase?: string) {
     const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await keyFrom(passphrase, salt), new TextEncoder().encode(text))
     text = JSON.stringify({ app: 'rexera-crm', format: 1, encrypted: true, exportedAt: nowIso(), salt: b64(salt), iv: b64(iv), data: b64(new Uint8Array(data)) } satisfies EncryptedFile)
   }
-  const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')
+  // local date and time in the file name (e.g. 2026-10-10-14-05), not UTC
+  const now = new Date()
+  const stamp = `${ymd(now)}-${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}`
   const a = document.createElement('a')
   a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }))
   a.download = `rexera-backup-${stamp}${passphrase ? '-encrypted' : ''}.json`

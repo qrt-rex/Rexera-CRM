@@ -11,6 +11,7 @@ import Login from './pages/Login'
 
 const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 const Dashboard = lazy(() => import('./pages/dashboards/Dashboard'))
+const BranchDashboard = lazy(() => import('./pages/dashboards/BranchDashboard').then((m) => ({ default: m.BranchDashboard })))
 const Leads = lazy(() => import('./pages/modules/Leads'))
 const Dialer = lazy(() => import('./pages/modules/Dialer'))
 const Bookings = lazy(() => import('./pages/modules/Bookings'))
@@ -43,6 +44,7 @@ const Incentives = lazy(() => import('./pages/hr/Incentives'))
 const IncentiveSettings = lazy(() => import('./pages/hr/IncentiveSettings'))
 const BreakSettings = lazy(() => import('./pages/hr/BreakSettings'))
 const OpsDesk = lazy(() => import('./pages/modules/OpsDesk'))
+const AssetsPage = lazy(() => import('./pages/hr/Assets'))
 const Performance = lazy(() => import('./pages/hr/Performance'))
 const Recruitment = lazy(() => import('./pages/hr/Recruitment'))
 const ApiKeys = lazy(() => import('./pages/it/ApiKeys'))
@@ -72,6 +74,15 @@ function DashboardRoute() {
   if (!user) return null
   if (!role || !canOpenDashboard(user, role as Role)) return <Navigate to={`/dashboard/${user.role}`} replace />
   return <Dashboard role={role as Role} />
+}
+
+/** One branch's dashboard (/branches/:id) — Branch Directors (their own branches only, checked inside) and Super Admin / IT. */
+function BranchRoute() {
+  const { user } = useAuth()
+  const { id } = useParams()
+  if (!user) return null
+  if (!id || !canOpenDashboard(user, 'branchdirector')) return <Navigate to={`/dashboard/${user.role}`} replace />
+  return <BranchDashboard branchId={id} />
 }
 
 function HomeRedirect() {
@@ -115,6 +126,7 @@ export default function App() {
               <Route index element={<HomeRedirect />} />
               <Route path="/dashboard" element={<HomeRedirect />} />
               <Route path="/dashboard/:role" element={<S><DashboardRoute /></S>} />
+              <Route path="/branches/:id" element={<S><BranchRoute /></S>} />
               <Route path="/leads" element={<Guard m="leads"><S><Leads /></S></Guard>} />
               <Route path="/dialer" element={<Guard m="dialer"><S><Dialer /></S></Guard>} />
               <Route path="/team" element={<Guard m="team"><S><TeamProgress /></S></Guard>} />
@@ -148,6 +160,7 @@ export default function App() {
               <Route path="/incentive-settings" element={<Guard m="incentive-settings"><S><IncentiveSettings /></S></Guard>} />
               <Route path="/break-settings" element={<Guard m="break-settings"><S><BreakSettings /></S></Guard>} />
               <Route path="/ops-desk" element={<Guard m="ops-desk"><S><OpsDesk /></S></Guard>} />
+              <Route path="/assets" element={<Guard m="assets"><S><AssetsPage /></S></Guard>} />
               <Route path="/performance" element={<Guard m="performance"><S><Performance /></S></Guard>} />
               <Route path="/recruitment" element={<Guard m="recruitment"><S><Recruitment /></S></Guard>} />
               <Route path="/candidates" element={<Guard m="candidates"><S><Candidates /></S></Guard>} />

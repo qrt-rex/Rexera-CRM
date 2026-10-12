@@ -1,5 +1,7 @@
 import type { DB, IncentiveRules, Perm, PfSettings, Role } from './types'
 import { defaultAutomations } from './emailTemplates'
+import { DEFAULT_ROLE_PERMS } from './rbac'
+import { ymd } from './format'
 
 export const DEFAULT_PF: PfSettings = {
   enabled: true, employeePct: 12, employerPct: 12, epsPct: 8.33, ceilingEnabled: false, wageCeiling: 15000, floorEnabled: false, wageFloor: 0, ptEnabled: true, basicPct: 50, hraPct: 40,
@@ -109,6 +111,61 @@ export function upgradeDb(d: DB): DB {
     const rename: Record<string, string> = { 'PAN card': 'Company PAN card', 'GSTIN certificate': 'GST certificate' }
     for (const b of d.bookings) for (const doc of b.documents) if (rename[doc.category]) doc.category = rename[doc.category]!
     d.upgrades.push('doc-categories-2')
+  }
+  // Branch Director role: give it its starting permissions once (the Super Admin edits them in Access Management)
+  if (!d.rolePerms.branchdirector) d.rolePerms.branchdirector = [...DEFAULT_ROLE_PERMS.branchdirector]
+  if (!d.upgrades.includes('branch-director-user-1')) {
+    // sample Branch Director sign-in (username "branch", the shared demo password) for data seeded before the role existed
+    if (!d.users.some((u) => u.id === 'u-bd' || u.username === 'branch')) {
+      d.users.push({
+        id: 'u-bd', name: 'Sanjay Trivedi', username: 'branch', role: 'branchdirector', email: 'branch@rexera.co.in',
+        phone: '9825734521', extraRoles: [], grants: [], denies: [], department: 'Management', designation: 'Branch Director',
+        joinedOn: ymd(new Date()), active: true,
+        passHash: 'cace833659d8f65bd4e48102bd803b27137f879a62461a9cc304416018272fbf', // sha256("rexera:branch:<DEMO_PASSWORD>")
+        address: { line: '', city: 'Ahmedabad', state: 'Gujarat', pin: '380009', country: 'India' },
+      })
+    }
+    d.upgrades.push('branch-director-user-1')
+  }
+  if (!d.upgrades.includes('branch-dashboards-1')) {
+    // short codes for the three company branches (editable in Access → Settings)
+    const codes: Record<string, string> = { 'br-amd-a': 'AMD-A', 'br-amd-y': 'AMD-Y', 'br-vdr': 'VDR' }
+    for (const b of d.settings.branches ?? []) if (!b.code && codes[b.id]) b.code = codes[b.id]
+    // one sample Branch Director per branch (shared demo password), each tied to their own branch
+    const demo: [string, string, string, string, string][] = [
+      ['u-bd', 'Sanjay Trivedi', 'branch', 'br-amd-a', 'cace833659d8f65bd4e48102bd803b27137f879a62461a9cc304416018272fbf'],
+      ['u-bd2', 'Nikhil Parmar', 'branch.y', 'br-amd-y', '8658e264239077f4bfcbd24dd7ed46df91d8baae206578e0829145c555ccf34a'],
+      ['u-bd3', 'Ritu Shah', 'branch.vdr', 'br-vdr', 'be22715f7c482c02bddeeccfce66a959a1d4375b9025c4531764249e12212746'],
+    ]
+    for (const [id, name, username, branch, passHash] of demo) {
+      if (!d.settings.branches?.some((b) => b.id === branch)) continue
+      const u = d.users.find((x) => x.id === id)
+      if (u) { if (u.role === 'branchdirector' && !u.branchId && !u.branchIds?.length) { u.branchId = branch; u.branchIds = [branch] } continue }
+      if (d.users.some((x) => x.username === username)) continue
+      d.users.push({
+        id, name, username, role: 'branchdirector', email: `${username.replace('.', '_')}@rexera.co.in`,
+        phone: `98257${String(34521 + demo.findIndex((x) => x[0] === id) * 1111).padStart(5, '0')}`, extraRoles: [], grants: [], denies: [],
+        department: 'Management', designation: 'Branch Director', joinedOn: ymd(new Date()), active: true, passHash, // sha256("rexera:<username>:<DEMO_PASSWORD>")
+        branchId: branch, branchIds: [branch],
+        address: { line: '', city: branch === 'br-vdr' ? 'Vadodara' : 'Ahmedabad', state: 'Gujarat', pin: '', country: 'India' },
+      })
+    }
+    d.upgrades.push('branch-dashboards-1')
+  }
+  d.assets ??= []
+  d.stock ??= []
+  d.expenses ??= []
+  if (!d.upgrades.includes('assets-1')) {
+    d.rolePerms.hr = [...new Set([...(d.rolePerms.hr ?? []), 'assets.manage' as Perm])]
+    d.upgrades.push('assets-1')
+  }
+  if (!d.upgrades.includes('content-perms-1')) {
+    // schemes: Admin + Operation team; sales information gets its own permission (Team Leader, Admin, Operation team)
+    const add = (r: Role, ...p: Perm[]) => { d.rolePerms[r] = [...new Set([...(d.rolePerms[r] ?? []), ...p])] }
+    add('admin', 'schemes.manage', 'salesinfo.manage')
+    add('operations', 'schemes.manage', 'salesinfo.manage')
+    add('teamlead', 'salesinfo.manage')
+    d.upgrades.push('content-perms-1')
   }
   if (!d.upgrades.includes('salary-structure-1')) {
     // Basic 50% · HRA 40% of basic · rest other allowance · PF 12% each side on the full basic

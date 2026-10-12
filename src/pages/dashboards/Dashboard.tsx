@@ -6,6 +6,7 @@ import { SuperAdminDashboard } from './SuperAdminDashboard'
 import { HrDashboard } from './HrDashboard'
 import { SupportDashboard } from './SupportDashboards'
 import { ItDashboard } from './ItDashboard'
+import { BranchDashboard } from './BranchDashboard'
 
 export default function Dashboard({ role }: { role: Role }) {
   switch (role) {
@@ -19,5 +20,6 @@ export default function Dashboard({ role }: { role: Role }) {
     case 'superadmin': return <SuperAdminDashboard />
     case 'it': return <ItDashboard />
     case 'support': return <SupportDashboard />
+    case 'branchdirector': return <BranchDashboard />
   }
 }

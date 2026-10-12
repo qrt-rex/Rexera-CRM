@@ -1,10 +1,10 @@
-export type Role = 'superadmin' | 'admin' | 'accounts' | 'legal' | 'operations' | 'teamlead' | 'sales' | 'hr' | 'it' | 'support'
+export type Role = 'superadmin' | 'admin' | 'accounts' | 'legal' | 'operations' | 'teamlead' | 'sales' | 'hr' | 'it' | 'support' | 'branchdirector'
 
 export type Perm =
   | 'leads.own' | 'leads.manage' | 'leads.assign' | 'dialer.use'
   | 'bookings.create' | 'bookings.own' | 'bookings.team' | 'bookings.all'
   | 'bookings.approve_tl' | 'bookings.accounts' | 'bookings.legal' | 'bookings.process' | 'bookings.admin'
-  | 'content.view' | 'content.manage' | 'schemes.view' | 'schemes.manage'
+  | 'content.view' | 'content.manage' | 'salesinfo.manage' | 'schemes.view' | 'schemes.manage'
   | 'broadcasts.view' | 'broadcasts.manage'
   | 'billing.own' | 'billing.create' | 'billing.manage'
   | 'team.progress' | 'team.assign'
@@ -14,7 +14,7 @@ export type Perm =
   | 'documents.forms' | 'reports.view' | 'reports.export'
   | 'access.manage' | 'audit.view'
   | 'payroll.view' | 'payroll.manage' | 'incentives.manage' | 'recruitment.manage' | 'performance.view'
-  | 'email.send'
+  | 'email.send' | 'assets.manage'
 
 export interface Address { line: string; city: string; state: string; pin: string; country: string }
 
@@ -47,6 +47,10 @@ export interface User {
   resume?: FileRef
   /** own shift (HR → Break Time); anything left out follows the company break policy */
   shift?: Shift
+  /** the branch this person works in (Access → Settings → branches) */
+  branchId?: string
+  /** Branch Director: the branches they run (empty = every branch) */
+  branchIds?: string[]
 }
 
 /** A person's own break window, time zone and weekly off days. */
@@ -221,7 +225,7 @@ export interface Invoice {
 }
 
 /** Company branch: invoices show its address and GSTIN. */
-export interface Branch { id: string; name: string; address: string; city: string; state: string; pin: string; gstin: string; phone: string; email: string }
+export interface Branch { id: string; name: string; /** short code shown on dashboards, e.g. AMD-A */ code?: string; address: string; city: string; state: string; pin: string; gstin: string; phone: string; email: string }
 
 export interface Scheme { id: string; title: string; category: string; summary: string; benefit: string; eligibility: string; active: boolean; createdAt: string; by: string }
 export interface Post { id: string; kind: 'FLYER' | 'POST' | 'SALES_INFO'; title: string; body: string; theme: string; createdAt: string; by: string; pinned?: boolean }
@@ -466,6 +470,52 @@ export interface IncentiveRules {
   updatedBy: string
 }
 
+// ------------------------------------------------------------------ company assets, inventory, expenses (HR)
+export type AssetStatus = 'IN_STOCK' | 'ASSIGNED' | 'REPAIR' | 'RETIRED'
+export interface AssetEvent { at: string; by: string; action: 'ADDED' | 'ASSIGNED' | 'RETURNED' | 'REPAIR' | 'RETIRED' | 'BACK_IN_STOCK' | 'EDITED'; userId?: string; note?: string }
+/** One individually tracked item (laptop, phone, SIM, chair…). */
+export interface Asset {
+  id: string
+  /** RX-AST-0001 */
+  tag: string
+  name: string
+  category: string
+  brand?: string
+  model?: string
+  serial?: string
+  purchaseDate?: string
+  cost?: number
+  vendor?: string
+  warrantyUntil?: string
+  location?: string
+  condition?: 'NEW' | 'GOOD' | 'FAIR' | 'POOR'
+  status: AssetStatus
+  assignedTo?: string
+  assignedOn?: string
+  notes?: string
+  invoice?: FileRef
+  history: AssetEvent[]
+  createdAt: string
+}
+export interface StockMove { at: string; by: string; qty: number; note?: string; issuedTo?: string }
+/** Consumables counted by quantity (stationery, pantry, toner…). */
+export interface StockItem { id: string; name: string; category: string; unit: string; qty: number; minQty: number; unitCost?: number; location?: string; moves: StockMove[]; createdAt: string }
+export interface Expense {
+  id: string
+  date: string
+  category: string
+  description: string
+  /** amount before GST */
+  amount: number
+  gst: number
+  vendor?: string
+  paidVia: 'CASH' | 'UPI' | 'BANK' | 'CARD' | 'CHEQUE'
+  paidBy?: string
+  bill?: FileRef
+  by: string
+  createdAt: string
+}
+
 export interface DB {
   version: number
   users: User[]
@@ -501,6 +551,9 @@ export interface DB {
   candidates: CandidateApplication[]
   /** files from the old CRM's uploads folder that no client file refers to (kept so nothing is lost) */
   legacyFiles?: LegacyFile[]
+  assets?: Asset[]
+  stock?: StockItem[]
+  expenses?: Expense[]
   /** one-time data upgrades already applied */
   upgrades: string[]
 }

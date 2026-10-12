@@ -6,7 +6,7 @@ import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
 import { assignLeads, deleteLeads, importLeads, setLeadStatus, userName, visibleLeads } from '../../lib/actions'
 import { LEAD_STATUS, OPEN_LEAD } from '../../lib/workflow'
-import { ago, downloadCsv, fmtDate, fmtDateTime, inr, parseCsv, today } from '../../lib/format'
+import { ago, downloadCsv, fmtDate, fmtDateTime, inr, parseCsv, today, ymd } from '../../lib/format'
 import { rolesOf } from '../../lib/rbac'
 import {
   Button, Card, Checkbox, Drawer, EmptyState, FileButton, Input, Menu, MenuItem, Modal, PageHeader, SearchBox, Select, Table, Td, Textarea, Th, Tabs, useConfirm, useRun, useToast, Badge,
@@ -85,7 +85,7 @@ export default function Leads() {
       <PageHeader title="CRM Leads" subtitle={can('leads.manage') ? 'All leads across the company' : can('leads.assign') ? 'Your leads and your team’s' : 'Leads assigned to you'} icon={UserPlus}
         actions={<>
           <FileButton accept=".csv,text/csv" onFile={onImport}><Button variant="outline" icon={Upload}>Import CSV</Button></FileButton>
-          <Button variant="outline" icon={Download} onClick={() => downloadCsv(`leads-${t}.csv`, list.map((l) => ({ code: l.code, name: l.name, company: l.company, phone: l.phone, email: l.email, city: l.city, state: l.state, service: l.service, source: l.source, price: l.price ?? '', status: l.status, follow_up: l.followUp ?? '', owner: userName(db, l.assignedTo), created: l.createdAt.slice(0, 10) })))}>Export</Button>
+          <Button variant="outline" icon={Download} onClick={() => downloadCsv(`leads-${t}.csv`, list.map((l) => ({ code: l.code, name: l.name, company: l.company, phone: l.phone, email: l.email, city: l.city, state: l.state, service: l.service, source: l.source, price: l.price ?? '', status: l.status, follow_up: l.followUp ?? '', owner: userName(db, l.assignedTo), created: ymd(l.createdAt) })))}>Export</Button>
           <Button variant="accent" icon={Plus} onClick={() => setForm({ open: true })}>New lead</Button>
         </>} />
 

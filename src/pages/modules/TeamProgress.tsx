@@ -16,9 +16,9 @@ export default function TeamProgress() {
   const [to, setTo] = useState(today())
   const team = db.users.filter((u) => u.active && rolesOf(u).some((r) => r === 'sales' || r === 'teamlead') && (can('reports.view') && me.role !== 'teamlead' ? true : u.teamLeadId === me.id || u.id === me.id))
   const rows = useMemo(() => team.map((u) => {
-    const calls = db.leads.flatMap((l) => l.calls).filter((c) => c.by === u.id && c.at.slice(0, 10) >= from && c.at.slice(0, 10) <= to)
+    const calls = db.leads.flatMap((l) => l.calls).filter((c) => c.by === u.id && ymd(c.at) >= from && ymd(c.at) <= to)
     const leads = db.leads.filter((l) => l.assignedTo === u.id)
-    const bookings = db.bookings.filter((b) => b.createdBy === u.id && b.createdAt.slice(0, 10) >= from && b.createdAt.slice(0, 10) <= to)
+    const bookings = db.bookings.filter((b) => b.createdBy === u.id && ymd(b.createdAt) >= from && ymd(b.createdAt) <= to)
     const coll = collections(db, [u.id], from, to)
     const target = u.target ?? 300000
     return { u, calls: calls.length, talk: Math.round(calls.reduce((s, c) => s + c.durationSec, 0) / 60), interested: leads.filter((l) => l.status === 'INTERESTED').length, converted: leads.filter((l) => l.status === 'CONVERTED').length, bookings: bookings.length, coll, target, pct: Math.min(100, Math.round((coll / target) * 100)) }

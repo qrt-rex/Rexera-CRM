@@ -25,14 +25,18 @@ export default function Content() {
   const [confirm, node] = useConfirm()
   const [params, setParams] = useSearchParams()
   const tab = (params.get('tab') as Kind) || 'FLYER'
-  const manage = can('content.manage')
+  // flyers & posts: Admin + Operation team · sales information: also Team Leaders
+  const canKind = (k: Kind) => can(k === 'SALES_INFO' ? 'salesinfo.manage' : 'content.manage')
+  const manage = canKind(tab)
+  const kinds = (['FLYER', 'POST', 'SALES_INFO'] as Kind[]).filter(canKind)
   const [edit, setEdit] = useState<(Omit<Post, 'id' | 'createdAt' | 'by'> & { id?: string }) | null>(null)
   const list = db.posts.filter((p) => p.kind === tab).sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || b.createdAt.localeCompare(a.createdAt))
 
   const share = (p: Post) => { navigator.clipboard?.writeText(`${p.title}\n\n${p.body}\n\n— Rexera Financial Services`).then(() => toast('success', 'Copied — paste it into WhatsApp or email'), () => toast('error', 'Copy blocked by the browser')) }
   return (
     <div>
-      <PageHeader title="Flyers, Posts & Sales Info" subtitle={manage ? 'Create material — sales teams are notified' : 'Ready-to-share material (view only)'} icon={Images}
+      <PageHeader title="Flyers, Posts & Sales Info" icon={Images}
+        subtitle={manage ? 'Create material — sales teams are notified' : tab === 'SALES_INFO' ? 'Sales information is added by Team Leaders, Admin and the Operation team (view only)' : 'Flyers and posts are made by Admin and the Operation team (view only)'}
         actions={<>{!manage && <Badge tone="gray"><Eye className="size-3" />View only</Badge>}{manage && <Button variant="accent" icon={Plus} onClick={() => setEdit({ kind: tab, title: '', body: '', theme: 'navy', pinned: false })}>New {tab === 'SALES_INFO' ? 'sales info' : tab.toLowerCase()}</Button>}</>} />
       <Tabs className="mb-5 w-fit" value={tab} onChange={(t) => setParams({ tab: t })} tabs={[
         { id: 'FLYER', label: 'Flyers', icon: Images, count: db.posts.filter((p) => p.kind === 'FLYER').length },
@@ -81,7 +85,9 @@ export default function Content() {
       <Modal open={!!edit} onClose={() => setEdit(null)} title={edit?.id ? 'Edit' : 'Create'}
         footer={<><Button variant="outline" onClick={() => setEdit(null)}>Cancel</Button><Button onClick={async () => { if (edit && await run(() => upsertPost(me, edit), 'Saved')) setEdit(null) }}>Save</Button></>}>
         {edit && <div className="grid gap-4">
-          <Select label="Type" value={edit.kind} onChange={(e) => setEdit({ ...edit, kind: e.target.value as Kind })}><option value="FLYER">Flyer</option><option value="POST">Post</option><option value="SALES_INFO">Sales information</option></Select>
+          {kinds.length > 1 && <Select label="Type" value={edit.kind} onChange={(e) => setEdit({ ...edit, kind: e.target.value as Kind })}>
+            {kinds.map((k) => <option key={k} value={k}>{k === 'FLYER' ? 'Flyer' : k === 'POST' ? 'Post' : 'Sales information'}</option>)}
+          </Select>}
           <Input label="Title" required value={edit.title} onChange={(e) => setEdit({ ...edit, title: e.target.value })} />
           <Textarea label="Text" rows={5} value={edit.body} onChange={(e) => setEdit({ ...edit, body: e.target.value })} />
           <div><span className="mb-1.5 block text-xs font-semibold text-mute">Theme</span><div className="flex gap-2">{Object.keys(THEMES).map((t) => <button key={t} aria-label={t} onClick={() => setEdit({ ...edit, theme: t })} className={cx('size-9 rounded-xl bg-gradient-to-br', THEMES[t], edit.theme === t && 'ring-4 ring-accent/40')} />)}</div></div>

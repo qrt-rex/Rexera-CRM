@@ -8,6 +8,7 @@ import { DEMO_PASSWORD, PRESET_USERS } from '../lib/seed'
 import { ROLES } from '../lib/rbac'
 import { isEmail } from '../lib/format'
 import { Logo } from '../components/Logo'
+import { IstClock, LoginShowcase, LoginVideo, useMedia } from '../components/LoginShowcase'
 import { ResetPasswordModal } from '../components/ResetPasswordModal'
 import { Button, Modal, Input, cx } from '../components/ui'
 import { sendOtpEmailClient } from '../lib/emailClient'
@@ -36,6 +37,7 @@ export default function Login() {
 
   useEffect(() => { if (step === 'code') setTimeout(() => boxes.current[0]?.focus(), 50) }, [step])
   // signing in always lands on the person's dashboard
+  const wide = useMedia('(min-width: 1024px)') // one video only: in the left panel on big screens, above the form on phones
   if (user) return <Navigate to={`/dashboard/${user.role}`} replace />
 
   const submit = async (e: FormEvent) => {
@@ -93,14 +95,18 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-[#2E3A8C] p-0 lg:p-3">
       <div className="mx-auto flex min-h-screen max-w-[1400px] overflow-hidden bg-white lg:min-h-[calc(100vh-24px)] lg:rounded-sm">
-        {/* left: illustration */}
-        <section className="relative hidden flex-1 flex-col bg-[#FFFCFB] p-10 lg:flex">
-          <Logo size="lg" fixed />
-          <div className="flex flex-1 items-center justify-center">
-            <Illustration />
+        {/* left: introduction, welcome video and services + India time */}
+        <section className="relative hidden flex-1 flex-col overflow-hidden bg-[#FFFCFB] p-10 lg:flex">
+          <div aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(#2E3A8C0a_1px,transparent_1px),linear-gradient(90deg,#2E3A8C0a_1px,transparent_1px)] [background-size:40px_40px] [mask-image:linear-gradient(to_bottom,black,transparent_85%)]" />
+          <div className="relative flex items-start justify-between gap-4">
+            <Logo size="lg" fixed />
+            <IstClock />
           </div>
-          <div className="grid grid-cols-3 gap-4 text-[#2E3A8C]">
-            {[['140+', 'Government schemes & services'], ['9-stage', 'Tracked processing pipeline'], ['1 login', 'Every team, every role']].map(([a, b]) => (
+          <div className="relative flex flex-1 items-center justify-center py-6">
+            {wide && <LoginShowcase />}
+          </div>
+          <div className="relative grid grid-cols-3 gap-4 text-[#2E3A8C]">
+            {[['140+', 'Government schemes & services'], ['8-stage', 'Tracked processing pipeline'], ['1 login', 'Every team, every role']].map(([a, b]) => (
               <div key={a} className="rounded-2xl border border-[#E3E6EB] bg-white p-4 shadow-sm">
                 <p className="text-xl font-extrabold">{a}</p><p className="text-xs text-[#6B7280]">{b}</p>
               </div>
@@ -116,6 +122,10 @@ export default function Login() {
             <div className="mx-auto mb-8 flex w-fit items-center rounded-2xl border-2 border-[#F4A12A] bg-white px-6 py-3 shadow-lg">
               <Logo size="md" fixed />
             </div>
+            {!wide && step === 'password' && <>
+              <IstClock size="sm" className="mx-auto mb-6 w-fit" />
+              <LoginVideo className="mb-8 rounded-3xl border-2 border-[#F4A12A] shadow-xl" />
+            </>}
 
             {step === 'password' ? (
               <form onSubmit={submit} className="anim-fade-up" noValidate>
@@ -220,64 +230,5 @@ export default function Login() {
       </div>
       <ResetPasswordModal open={forgot} onClose={() => setForgot(false)} />
     </div>
-  )
-}
-
-function Illustration() {
-  return (
-    <svg viewBox="0 0 560 460" className="w-full max-w-[560px]" role="img" aria-label="Team analysing dashboards">
-      <defs>
-        <linearGradient id="band" x1="0" x2="1"><stop offset="0" stopColor="#3B6FC4" /><stop offset=".5" stopColor="#2E5AAE" /><stop offset="1" stopColor="#3B6FC4" /></linearGradient>
-        <linearGradient id="bandTop" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="#2a4f98" /><stop offset="1" stopColor="#3463b6" /></linearGradient>
-      </defs>
-      <ellipse cx="280" cy="395" rx="230" ry="38" fill="#EEF2FA" />
-      {/* back half of ring */}
-      <path d="M90 150 Q280 40 470 150 L470 300 Q280 200 90 300 Z" fill="url(#bandTop)" opacity=".95" />
-      {/* screen content back */}
-      <g opacity=".95">
-        <path d="M140 160 q30 -40 60 0 t60 -10" stroke="#F47B20" strokeWidth="5" fill="none" strokeLinecap="round" />
-        <path d="M140 175 q30 -30 60 5 t60 -15" stroke="#fff" strokeWidth="3" fill="none" strokeLinecap="round" opacity=".8" />
-        {[0, 1, 2, 3, 4].map((r) => [0, 1, 2, 3].map((c) => (
-          <rect key={`${r}${c}`} x={290 + c * 18} y={110 + r * 16} width="11" height="11" rx="2" fill={(r + c) % 3 === 0 ? '#F47B20' : (r * c) % 2 ? '#fff' : '#1b2a55'} />
-        )))}
-        <circle cx="400" cy="140" r="18" fill="none" stroke="#fff" strokeWidth="7" strokeDasharray="70 120" />
-        <circle cx="436" cy="168" r="16" fill="none" stroke="#F47B20" strokeWidth="6" strokeDasharray="60 120" />
-        {[0, 1, 2, 3, 4, 5].map((i) => <rect key={i} x={392 + i * 10} y={190 - i * 4} width="4" height={30 + i * 4} rx="2" fill="#fff" opacity=".85" />)}
-      </g>
-      {/* front half */}
-      <path d="M90 300 Q280 200 470 300 L470 330 Q280 250 90 330 Z" fill="#244a92" />
-      <path d="M90 230 L90 330 Q120 315 150 302 L150 214 Q118 220 90 230Z" fill="url(#band)" />
-      <path d="M410 214 L410 302 Q440 315 470 330 L470 230 Q442 220 410 214Z" fill="url(#band)" />
-      <path d="M150 260 Q280 210 410 260 L410 330 Q280 290 150 330Z" fill="url(#band)" />
-      <g>
-        {[0, 1, 2, 3].map((i) => <rect key={i} x={175 + i * 16} y={300 - i * 10} width="9" height={22 + i * 10} rx="2" fill={i === 2 ? '#F47B20' : '#132a5c'} />)}
-        <circle cx="300" cy="285" r="18" fill="#fff" /><path d="M300 285 L300 267 A18 18 0 0 1 317 291 Z" fill="#F4A12A" />
-        <rect x="335" y="270" width="50" height="5" rx="2.5" fill="#fff" opacity=".85" /><rect x="335" y="282" width="36" height="5" rx="2.5" fill="#fff" opacity=".6" />
-      </g>
-      {/* floating cards */}
-      <g className="anim-float">
-        <rect x="30" y="300" width="120" height="78" rx="10" fill="#fff" stroke="#E3E6EB" />
-        <rect x="42" y="312" width="58" height="6" rx="3" fill="#2E3A8C" />
-        {[0, 1, 2, 3, 4].map((i) => <rect key={i} x={46 + i * 18} y={360 - [20, 32, 16, 40, 28][i]!} width="10" height={[20, 32, 16, 40, 28][i]} rx="2" fill={i === 3 ? '#F47B20' : '#9fb3e6'} />)}
-      </g>
-      <g className="anim-float" style={{ animationDelay: '1.2s' }}>
-        <rect x="430" y="330" width="110" height="64" rx="10" fill="#fff" stroke="#E3E6EB" />
-        <path d="M444 378 L468 360 L488 368 L520 344" stroke="#0E9F6E" strokeWidth="3.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-        <rect x="444" y="342" width="40" height="5" rx="2.5" fill="#2E3A8C" />
-      </g>
-      {/* cubes & plant */}
-      {[[500, 70, 14], [520, 120, 10], [470, 105, 18]].map(([x, y, s], i) => (
-        <g key={i} className="anim-float" style={{ animationDelay: `${i * 0.6}s` }}>
-          <path d={`M${x} ${y} l${s} -${s / 2} l${s} ${s / 2} l-${s} ${s / 2}z`} fill="#dfe6f6" />
-          <path d={`M${x} ${y} l${s} ${s / 2} v${s} l-${s} -${s / 2}z`} fill="#c4d0ee" />
-          <path d={`M${x + 2 * s} ${y} l-${s} ${s / 2} v${s} l${s} -${s / 2}z`} fill="#aebde6" />
-        </g>
-      ))}
-      <g transform="translate(60 70)">
-        <path d="M20 60 C18 40 10 25 0 10 M20 60 C22 38 30 22 42 8 M20 60 C20 45 22 30 20 0" stroke="#2E5AAE" strokeWidth="2.5" fill="none" />
-        <path d="M0 10 q8 2 6 12 q-8 -2 -6 -12 M42 8 q-2 10 -10 10 q0 -10 10 -10 M20 0 q6 6 0 14 q-6 -8 0 -14" fill="#3B6FC4" />
-        <path d="M8 60 h24 l-4 22 h-16z" fill="#dfe6f6" />
-      </g>
-    </svg>
   )
 }

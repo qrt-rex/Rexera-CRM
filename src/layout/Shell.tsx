@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import {
   Bell, ChevronDown, ChevronRight, Home, LayoutGrid, LogOut, Mail, Menu as MenuIcon, Moon, Search, Settings, ShieldCheck, Sun, UserCheck, X, Monitor,
   HelpCircle, SlidersHorizontal, Users, CalendarCheck2, TrendingUp, GraduationCap, FileText, Inbox, PartyPopper, BarChart3,
-  Wallet, Receipt, Landmark, Trophy, Briefcase, Wrench, MailPlus, ClipboardList, FilePen, Coffee,
+  Wallet, Receipt, Landmark, Trophy, Briefcase, Wrench, MailPlus, ClipboardList, FilePen, Coffee, Package,
 } from 'lucide-react'
 import type { Perm } from '../lib/types'
 import { Rexy } from '../components/hr/Mascots'
@@ -13,7 +13,7 @@ import { MODULES, canSee } from '../lib/modules'
 import { isMaster, ROLES, roleLabel } from '../lib/rbac'
 import { markRead, runBreakMonitor, runComboReminders, runTaskReminders } from '../lib/actions'
 import { runScheduledAutomations } from '../lib/email'
-import { ago } from '../lib/format'
+import { ago, today } from '../lib/format'
 import { Avatar, Button, cx, Menu, MenuItem, Modal } from '../components/ui'
 import { Logo } from '../components/Logo'
 import { MiniCalendar } from './MiniCalendar'
@@ -57,6 +57,15 @@ export function Shell() {
     tick()
     const t = setInterval(tick, 5 * 60000)
     return () => clearInterval(t)
+  }, [])
+  // a new day starts at midnight even when the CRM was left open: redraw every page so dates, "today" and the
+  // login / logout card move to the new day (checked every 30 s; nothing re-renders while the day is the same)
+  const [, setDay] = useState(today)
+  useEffect(() => {
+    const i = setInterval(() => setDay((d) => (today() === d ? d : today())), 30000)
+    const onShow = () => { if (document.visibilityState === 'visible') setDay((d) => (today() === d ? d : today())) }
+    document.addEventListener('visibilitychange', onShow)
+    return () => { clearInterval(i); document.removeEventListener('visibilitychange', onShow) }
   }, [])
   // lunch break: reminder at the start, late warning a couple of minutes after the end — needs to be on time
   useEffect(() => {
@@ -245,7 +254,7 @@ function Sidebar() {
   )
 }
 
-const HR_PATHS = ['/payroll', '/payslips', '/pf', '/incentives', '/incentive-settings', '/break-settings', '/recruitment', '/candidates', '/letters', '/performance', '/email-center']
+const HR_PATHS = ['/payroll', '/payslips', '/pf', '/incentives', '/incentive-settings', '/break-settings', '/assets', '/recruitment', '/candidates', '/letters', '/performance', '/email-center']
 
 /** HR navigation: each item keeps its own colour; only pages that exist and the user may open are listed. */
 const HR_MENU: { label: string; to: string; icon: typeof Home; color: string; perms: Perm[] }[] = [
@@ -258,6 +267,7 @@ const HR_MENU: { label: string; to: string; icon: typeof Home; color: string; pe
   { label: 'PF Management', to: '/pf', icon: Landmark, color: 'text-green-600 bg-green-100 dark:bg-green-500/15 dark:text-green-300', perms: ['payroll.view', 'payroll.manage'] },
   { label: 'Sales Incentives', to: '/incentives', icon: Trophy, color: 'text-orange-600 bg-orange-100 dark:bg-orange-500/15 dark:text-orange-300', perms: ['incentives.manage', 'payroll.view'] },
   { label: 'Incentive Settings', to: '/incentive-settings', icon: SlidersHorizontal, color: 'text-amber-600 bg-amber-100 dark:bg-amber-500/15 dark:text-amber-300', perms: ['incentives.manage'] },
+  { label: 'Assets & Expenses', to: '/assets', icon: Package, color: 'text-violet-600 bg-violet-100 dark:bg-violet-500/15 dark:text-violet-300', perms: ['assets.manage'] },
   { label: 'Recruitment', to: '/recruitment', icon: Briefcase, color: 'text-blue-600 bg-blue-100 dark:bg-blue-500/15 dark:text-blue-300', perms: ['recruitment.manage'] },
   { label: 'Candidate Forms', to: '/candidates', icon: ClipboardList, color: 'text-indigo-600 bg-indigo-100 dark:bg-indigo-500/15 dark:text-indigo-300', perms: ['recruitment.manage'] },
   { label: 'Letters', to: '/letters', icon: FilePen, color: 'text-fuchsia-600 bg-fuchsia-100 dark:bg-fuchsia-500/15 dark:text-fuchsia-300', perms: ['employees.manage'] },

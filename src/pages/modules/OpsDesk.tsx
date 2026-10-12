@@ -61,7 +61,7 @@ export default function OpsDesk() {
     hold: cases.filter((b) => b.status === 'ON_HOLD').length,
     overdue: cases.filter(overdue).length,
     week: cases.filter((b) => OPEN.includes(b.status) && b.deadline && b.deadline >= today() && b.deadline <= ymd(addDays(new Date(), 7))).length,
-    done: cases.filter((b) => b.status === 'COMPLETED' && b.updatedAt.slice(0, 10) >= month).length,
+    done: cases.filter((b) => b.status === 'COMPLETED' && ymd(b.updatedAt) >= month).length,
   }
 
   const list = useMemo(() => cases
@@ -80,7 +80,7 @@ export default function OpsDesk() {
       u, active: mine.filter((b) => b.status === 'IN_OPERATIONS').length, admin: mine.filter((b) => b.status === 'WITH_ADMIN' || b.status === 'OPS_REVIEW').length,
       hold: mine.filter((b) => b.status === 'ON_HOLD').length, overdue: mine.filter(overdue).length,
       tasks: mine.filter((b) => OPEN.includes(b.status)).reduce((n, b) => n + b.tasks.filter((t) => !t.done).length, 0),
-      done: mine.filter((b) => b.status === 'COMPLETED' && b.updatedAt.slice(0, 10) >= month).length,
+      done: mine.filter((b) => b.status === 'COMPLETED' && ymd(b.updatedAt) >= month).length,
     }
   }).sort((a, b) => b.active + b.hold - (a.active + a.hold)), [ops, cases, month])
 

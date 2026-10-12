@@ -51,7 +51,7 @@ export function salesNumbers(db: DB, me: User) {
   return {
     toCall: mine.filter((l) => OPEN_LEAD.includes(l.status)).length,
     followUps: mine.filter((l) => OPEN_LEAD.includes(l.status) && l.followUp && l.followUp <= t).length,
-    callsToday: db.leads.reduce((n, l) => n + l.calls.filter((c) => c.by === me.id && c.at.slice(0, 10) === t).length, 0),
+    callsToday: db.leads.reduce((n, l) => n + l.calls.filter((c) => c.by === me.id && ymd(c.at) === t).length, 0),
     converted: mine.filter((l) => l.status === 'CONVERTED').length,
   }
 }

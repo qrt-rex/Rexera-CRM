@@ -168,7 +168,10 @@ function BranchesCard() {
       <div className="grid gap-4 p-5 xl:grid-cols-3">
         {list.map((b, i) => (
           <div key={b.id} className="grid gap-3 rounded-2xl border border-line p-4">
-            <Input label="Branch name" value={b.name} onChange={(e) => set(i, { name: e.target.value })} />
+            <div className="grid grid-cols-[1fr_110px] gap-3">
+              <Input label="Branch name" value={b.name} onChange={(e) => set(i, { name: e.target.value })} />
+              <Input label="Code" value={b.code ?? ''} maxLength={10} placeholder="AMD-A" hint="On dashboards" onChange={(e) => set(i, { code: e.target.value.toUpperCase() })} />
+            </div>
             <Input label="Address" value={b.address} onChange={(e) => set(i, { address: e.target.value })} placeholder="Building, street, area" />
             <div className="grid grid-cols-2 gap-3">
               <CityInput value={b.city} onChange={(v) => set(i, { city: v })} onState={(s) => set(i, { state: s })} />

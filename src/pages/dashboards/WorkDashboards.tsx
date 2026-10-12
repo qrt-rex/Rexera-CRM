@@ -10,7 +10,7 @@ import { userName, usersWithRole } from '../../lib/actions'
 import { isMaster } from '../../lib/rbac'
 import { monthStart, waitingFor } from '../../lib/metrics'
 import { STAGES } from '../../lib/workflow'
-import { fmtDate } from '../../lib/format'
+import { fmtDate, ymd } from '../../lib/format'
 import { EmptyState, Stat } from '../../components/ui'
 import { HBars } from '../../components/charts'
 import { BookingRow, BookingStatusBadge, DeadlineBadge, StageTrack } from '../../components/booking'
@@ -101,7 +101,7 @@ export function AdminDashboard() {
   const assigned = db.bookings.filter((b) => b.status === 'WITH_ADMIN' && (sa || b.adminId === me.id))
   const completed = db.bookings.filter((b) => b.status === 'COMPLETED' && (sa || b.adminId === me.id))
   const hold = db.bookings.filter((b) => b.status === 'ON_HOLD' && (sa || b.adminId === me.id || b.holdFrom === 'WITH_ADMIN'))
-  const monthDone = completed.filter((b) => b.updatedAt.slice(0, 10) >= monthStart()).length
+  const monthDone = completed.filter((b) => ymd(b.updatedAt) >= monthStart()).length
   const sentForApproval = db.bookings.filter((b) => b.status === 'OPS_REVIEW' && (sa || b.adminId === me.id)).length
 
   return (

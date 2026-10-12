@@ -7,7 +7,7 @@ import { useDb } from '../../lib/store'
 import { useMe } from '../../lib/auth'
 import { usersWithRole } from '../../lib/actions'
 import { collections, monthStart, pipelineTotals, revenueByMonth, waitingFor } from '../../lib/metrics'
-import { fmtDateTime, inr, inrShort, today } from '../../lib/format'
+import { fmtDateTime, inr, inrShort, today, ymd } from '../../lib/format'
 import { Link, useNavigate } from 'react-router-dom'
 import { FileLink } from '../../components/FileField'
 import { TasksPanel } from '../../components/TasksPanel'
@@ -75,7 +75,7 @@ export function LegalDashboard() {
   const waiting = waitingFor(db, me).filter((b) => b.status === 'PENDING_LEGAL')
   const withOps = db.bookings.filter((b) => b.status === 'IN_OPERATIONS').length
   const overdue = db.bookings.filter((b) => !['COMPLETED', 'REJECTED'].includes(b.status) && !!b.deadline && b.deadline < today()).length
-  const done = db.bookings.filter((b) => b.status === 'COMPLETED' && b.updatedAt.slice(0, 10) >= monthStart()).length
+  const done = db.bookings.filter((b) => b.status === 'COMPLETED' && ymd(b.updatedAt) >= monthStart()).length
   const ops = usersWithRole(db, 'operations')
   const workload = useMemo(() => ops.map((u) => ({
     label: u.name, value: db.bookings.filter((b) => b.opsMemberId === u.id && ['IN_OPERATIONS', 'ON_HOLD'].includes(b.status)).length, sub: 'active files',

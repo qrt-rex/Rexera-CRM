@@ -3,6 +3,7 @@ import type {
 } from './types'
 import { effectivePerms, isMaster, MASTER_ROLES, rolesOf, roleLabel } from './rbac'
 import { getDb, mutate } from './store'
+import { bookingBranch, directorBranches, isBranchScoped, leadBranch, NO_BRANCH } from './branches'
 import { hashPassword } from './crypto'
 import { CALL_OUTCOMES, FINAL_STAGE, OPEN_LEAD, STAGE_OUTCOMES, STAGES, stageLabel } from './workflow'
 import { fireAutomation } from './email'
@@ -538,6 +539,11 @@ export function reopenDay(me: User, userId: string) {
 // ============================================================ leads
 export function visibleLeads(d: DB, me: User): Lead[] {
   const p = effectivePerms(d, me)
+  // Branch Director: leads with people in their branches, plus unassigned leads to hand out
+  if (isBranchScoped(me)) {
+    const mine = new Set(directorBranches(d, me))
+    return d.leads.filter((l) => !l.assignedTo || l.assignedTo === me.id || mine.has(leadBranch(d, l) ?? NO_BRANCH))
+  }
   if (p.has('leads.manage')) return d.leads
   const team = new Set(d.users.filter((u) => u.teamLeadId === me.id).map((u) => u.id))
   return d.leads.filter((l) =>
@@ -602,6 +608,13 @@ export function assignLeads(me: User, ids: string[], userId: string) {
     const target = d.users.find((u) => u.id === userId)
     assert(target, 'Pick a sales person.')
     if (!has(me, 'leads.manage')) assert(target.teamLeadId === me.id || target.id === me.id, 'You can assign only to your team.')
+    // a Branch Director assigns only to people in their branches, and only leads that are unassigned or already in them
+    if (isBranchScoped(me)) {
+      const mine = directorBranches(d, me)
+      assert(!!target.branchId && mine.includes(target.branchId), `${target.name} is not in your branch.`)
+      const seen = new Set(visibleLeads(d, me).map((l) => l.id))
+      assert(ids.every((id) => seen.has(id)), 'Some of these leads belong to another branch.')
+    }
     for (const l of d.leads) if (ids.includes(l.id)) l.assignedTo = userId
     notify(d, [userId], `${ids.length} lead(s) assigned to you`, `by ${me.name}`, '/leads', 'action')
     audit(d, me.id, 'LEAD_ASSIGN', `${ids.length} lead(s) → ${target.name}`)
@@ -666,6 +679,11 @@ export function importLeads(me: User, rows: Record<string, string>[]) {
 // ============================================================ bookings (CRM entries)
 export function visibleBookings(d: DB, me: User): Booking[] {
   const p = effectivePerms(d, me)
+  // Branch Director: only the client files booked by people in their branches
+  if (isBranchScoped(me)) {
+    const mine = new Set(directorBranches(d, me))
+    return d.bookings.filter((b) => b.createdBy === me.id || mine.has(bookingBranch(d, b) ?? NO_BRANCH))
+  }
   if (p.has('bookings.all')) return d.bookings
   const team = new Set(d.users.filter((u) => u.teamLeadId === me.id).map((u) => u.id))
   return d.bookings.filter((b) => b.createdBy === me.id || (p.has('bookings.team') && (b.teamLeadId === me.id || team.has(b.createdBy))))
@@ -1109,7 +1127,7 @@ export function setDeduction(me: User, id: string, amount: number) {
   })
 }
 
-const commentKind: Record<Role, string> = { superadmin: 'Super Admin', admin: 'Admin', accounts: 'Accounts', legal: 'Legal', operations: 'Operations', teamlead: 'Team Leader', sales: 'BDE', hr: 'HR', it: 'IT', support: 'Customer Support' }
+const commentKind: Record<Role, string> = { superadmin: 'Super Admin', admin: 'Admin', accounts: 'Accounts', legal: 'Legal', operations: 'Operations', teamlead: 'Team Leader', sales: 'BDE', hr: 'HR', it: 'IT', support: 'Customer Support', branchdirector: 'Branch Director' }
 /** The Operation team and Admin (and Super Admin / IT) email clients from the file. */
 export function canEmailClient(d: DB, me: User, b: Booking) {
   if (!visibleBookings(d, me).some((x) => x.id === b.id)) return false
@@ -1336,7 +1354,9 @@ export function saveBranches(me: User, branches: Branch[]) {
   assert(branches.every((b) => b.name.trim()), 'Every branch needs a name.')
   assert(branches.every((b) => !b.gstin || isGstin(b.gstin)), 'A branch GSTIN is not valid.')
   assert(branches.every((b) => !b.phone || isPhone(b.phone)), 'A branch phone must be a 10-digit number.')
-  mutate((d) => { d.settings.branches = branches.map((b) => ({ ...b, gstin: b.gstin.toUpperCase().trim() })); audit(d, me.id, 'SETTINGS', 'Updated invoice branches') })
+  const codes = branches.map((b) => b.code?.trim().toUpperCase()).filter(Boolean)
+  assert(new Set(codes).size === codes.length, 'Two branches have the same code.')
+  mutate((d) => { d.settings.branches = branches.map((b) => ({ ...b, code: b.code?.trim().toUpperCase() || undefined, gstin: b.gstin.toUpperCase().trim() })); audit(d, me.id, 'SETTINGS', 'Updated invoice branches') })
 }
 export function cancelInvoice(me: User, id: string) {
   need(me, 'billing.manage')
@@ -1362,18 +1382,30 @@ export function deleteScheme(me: User, id: string) {
   need(me, 'schemes.manage')
   mutate((d) => { d.schemes = d.schemes.filter((x) => x.id !== id) })
 }
+/** Flyers & posts: Admin and the Operation team. Sales information: also Team Leaders. */
+const postPerm = (kind: Post['kind']): Perm => (kind === 'SALES_INFO' ? 'salesinfo.manage' : 'content.manage')
+export const canEditPost = (me: User, kind: Post['kind']) => has(me, postPerm(kind))
 export function upsertPost(me: User, p: Omit<Post, 'id' | 'createdAt' | 'by'> & { id?: string }) {
-  need(me, 'content.manage')
+  const kindName = (k: Post['kind']) => (k === 'SALES_INFO' ? 'sales information' : k === 'FLYER' ? 'flyers' : 'posts')
+  assert(canEditPost(me, p.kind), `You can't add or edit ${kindName(p.kind)}.`)
   assert(p.title.trim(), 'Title is required.')
   mutate((d) => {
-    if (p.id) { Object.assign(d.posts.find((x) => x.id === p.id)!, p); return }
+    if (p.id) {
+      const cur = d.posts.find((x) => x.id === p.id)
+      assert(cur, 'Not found.')
+      // changing the type can't be used to edit something you may not (e.g. turning a flyer into sales info)
+      assert(canEditPost(me, cur.kind), `You can't edit ${kindName(cur.kind)}.`)
+      Object.assign(cur, p); return
+    }
     d.posts.unshift({ ...p, id: uid('po-'), createdAt: nowIso(), by: me.id })
     const label = p.kind === 'FLYER' ? 'flyer' : p.kind === 'POST' ? 'post' : 'sales information'
     notify(d, usersWithRole(d, 'sales', 'teamlead').map((u) => u.id), `New ${label}`, p.title, '/content', 'info')
   })
 }
 export function deletePost(me: User, id: string) {
-  need(me, 'content.manage')
+  const cur = getDb().posts.find((x) => x.id === id)
+  assert(cur, 'Not found.')
+  assert(canEditPost(me, cur.kind), "You don't have access to delete this.")
   mutate((d) => { d.posts = d.posts.filter((x) => x.id !== id) })
 }
 
@@ -1538,7 +1570,13 @@ export function markThreadRead(me: User, other: string) {
 }
 
 // ============================================================ users & access
-export type UserInput = Pick<User, 'name' | 'username' | 'email' | 'phone' | 'role' | 'department' | 'designation'> & { teamLeadId?: string; salary?: number; joinedOn?: string }
+export type UserInput = Pick<User, 'name' | 'username' | 'email' | 'phone' | 'role' | 'department' | 'designation'> & { teamLeadId?: string; salary?: number; joinedOn?: string; branchId?: string; branchIds?: string[] }
+/** A branch id must be one of the company's branches (Access → Settings). */
+function checkBranches(d: DB, i: { branchId?: string; branchIds?: string[] }) {
+  const ids = new Set((d.settings.branches ?? []).map((b) => b.id))
+  assert(!i.branchId || ids.has(i.branchId), 'Pick a branch from the list.')
+  assert(!i.branchIds || i.branchIds.every((b) => ids.has(b)), 'Pick branches from the list.')
+}
 
 /** 8–16 characters with upper case, lower case, a number and a symbol. */
 export const PASSWORD_RULE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,16}$/
@@ -1556,6 +1594,7 @@ export async function createUser(me: User, i: UserInput, password: string, resum
   const d = getDb()
   assert(!d.users.some((u) => u.username.toLowerCase() === i.username.toLowerCase()), 'Username already taken.')
   assert(!d.users.some((u) => u.email.toLowerCase() === i.email.toLowerCase()), 'Email already used.')
+  checkBranches(d, i)
   const passHash = await hashPassword(i.username.trim(), password)
   mutate((m) => {
     const created: User = { ...i, id: uid('u-'), username: i.username.trim(), email: i.email.trim().toLowerCase(), phone: i.phone ? normPhone(i.phone) : '', extraRoles: [], grants: [], denies: [], joinedOn: i.joinedOn || today(), active: true, passHash, resume }
@@ -1565,11 +1604,12 @@ export async function createUser(me: User, i: UserInput, password: string, resum
   })
 }
 
-export function updateUser(me: User, id: string, patch: Partial<Pick<User, 'name' | 'email' | 'phone' | 'role' | 'extraRoles' | 'grants' | 'denies' | 'active' | 'teamLeadId' | 'department' | 'designation' | 'salary' | 'target'>>) {
+export function updateUser(me: User, id: string, patch: Partial<Pick<User, 'name' | 'email' | 'phone' | 'role' | 'extraRoles' | 'grants' | 'denies' | 'active' | 'teamLeadId' | 'department' | 'designation' | 'salary' | 'target' | 'branchId' | 'branchIds'>>) {
   need(me, 'access.manage', 'employees.manage')
   mutate((d) => {
     const u = d.users.find((x) => x.id === id)
     assert(u, 'User not found.')
+    checkBranches(d, patch)
     const accessChange = ['role', 'extraRoles', 'grants', 'denies', 'active'].some((k) => k in patch)
     const touchesSA = rolesOf(u).includes('superadmin') || patch.role === 'superadmin' || !!patch.extraRoles?.includes('superadmin')
     assert(!touchesSA || isSA(me), 'Only a Super Admin can change Super Admin accounts or make someone a Super Admin.')

@@ -11,6 +11,7 @@ export const ROLES: { id: Role; label: string; short: string; color: string; des
   { id: 'hr', label: 'HR', short: 'HR', color: '#059669', desc: 'People, attendance, leave and company updates' },
   { id: 'it', label: 'IT Support', short: 'IT', color: '#475569', desc: 'Master access: users & access, API keys, backups, system tools' },
   { id: 'support', label: 'Customer Support', short: 'CS', color: '#0D9488', desc: 'Answers client queries, follows up documents and status' },
+  { id: 'branchdirector', label: 'Branch Director', short: 'BD', color: '#0369A1', desc: 'Runs a branch: branch-wise progress, every sales person, assigns clients' },
 ]
 
 export const roleLabel = (r: Role) => ROLES.find((x) => x.id === r)?.label ?? r
@@ -46,9 +47,10 @@ export const PERM_GROUPS: { group: string; perms: { id: Perm; label: string }[] 
     group: 'Content',
     perms: [
       { id: 'content.view', label: 'View flyers, posts & sales info' },
-      { id: 'content.manage', label: 'Create / edit flyers, posts & sales info' },
+      { id: 'content.manage', label: 'Create / edit flyers & posts (Admin, Operation Team)' },
+      { id: 'salesinfo.manage', label: 'Add / edit sales information (Team Leader, Admin, Operation Team)' },
       { id: 'schemes.view', label: 'View schemes' },
-      { id: 'schemes.manage', label: 'Manage schemes' },
+      { id: 'schemes.manage', label: 'Add / edit schemes (Admin, Operation Team)' },
       { id: 'broadcasts.view', label: 'View broadcasts' },
       { id: 'broadcasts.manage', label: 'Publish broadcasts' },
       { id: 'documents.forms', label: 'Client document forms' },
@@ -72,6 +74,7 @@ export const PERM_GROUPS: { group: string; perms: { id: Perm; label: string }[] 
       { id: 'events.manage', label: 'Create events' },
       { id: 'performance.view', label: 'Performance report cards' },
       { id: 'recruitment.manage', label: 'Recruitment & data import' },
+      { id: 'assets.manage', label: 'Company assets, inventory & expenses' },
     ],
   },
   {
@@ -101,22 +104,24 @@ const common: Perm[] = ['broadcasts.view', 'messages.use', 'schemes.view', 'cont
 
 export const DEFAULT_ROLE_PERMS: Record<Role, Perm[]> = {
   superadmin: [...ALL_PERMS],
-  admin: [...common, 'bookings.all', 'bookings.admin', 'content.manage', 'employees.view', 'documents.forms', 'reports.view'],
+  admin: [...common, 'bookings.all', 'bookings.admin', 'content.manage', 'salesinfo.manage', 'schemes.manage', 'employees.view', 'documents.forms', 'reports.view'],
   accounts: [...common, 'bookings.all', 'bookings.accounts', 'billing.create', 'billing.manage', 'reports.view', 'reports.export'],
   legal: [...common, 'bookings.all', 'bookings.legal', 'documents.forms', 'leave.approve', 'reports.view'],
-  operations: [...common, 'bookings.all', 'bookings.process', 'content.manage', 'employees.view', 'documents.forms', 'reports.view', 'events.manage'],
+  operations: [...common, 'bookings.all', 'bookings.process', 'content.manage', 'salesinfo.manage', 'schemes.manage', 'employees.view', 'documents.forms', 'reports.view', 'events.manage'],
   teamlead: [
-    ...common, 'leads.own', 'leads.assign', 'dialer.use', 'bookings.create', 'bookings.own', 'bookings.team', 'bookings.approve_tl',
+    ...common, 'salesinfo.manage', 'leads.own', 'leads.assign', 'dialer.use', 'bookings.create', 'bookings.own', 'bookings.team', 'bookings.approve_tl',
     'billing.own', 'billing.create', 'team.progress', 'team.assign', 'documents.forms', 'leave.approve', 'reports.view',
   ],
   sales: [...common, 'leads.own', 'dialer.use', 'bookings.create', 'bookings.own', 'billing.own', 'billing.create', 'documents.forms'],
   hr: [
     ...common, 'attendance.all', 'leave.approve', 'employees.view', 'employees.manage', 'events.manage', 'broadcasts.manage',
     'templates.manage', 'reports.view', 'reports.export', 'audit.view',
-    'payroll.view', 'payroll.manage', 'incentives.manage', 'recruitment.manage', 'performance.view', 'email.send',
+    'payroll.view', 'payroll.manage', 'incentives.manage', 'recruitment.manage', 'performance.view', 'email.send', 'assets.manage',
   ],
   it: [...ALL_PERMS],
   support: [...common, 'bookings.all', 'documents.forms', 'templates.manage'],
+  // starting set — the Super Admin changes it in Access Management → Roles
+  branchdirector: [...common, 'leads.manage', 'leads.assign', 'team.progress', 'team.assign', 'bookings.all', 'attendance.all', 'employees.view', 'reports.view', 'reports.export'],
 }
 
 /** Permissions a role may never hold, whatever the matrix or per-user grants say. */
@@ -127,6 +132,10 @@ export const RESERVED: Partial<Record<Perm, Role[]>> = {
   'payroll.view': ['superadmin', 'hr'],
   'payroll.manage': ['superadmin', 'hr'],
   'incentives.manage': ['superadmin', 'hr'],
+  // schemes, flyers & posts: Admin and the Operation team; sales information: also Team Leaders (Super Admin / IT always)
+  'schemes.manage': ['superadmin', 'admin', 'operations'],
+  'content.manage': ['superadmin', 'admin', 'operations'],
+  'salesinfo.manage': ['superadmin', 'admin', 'operations', 'teamlead'],
 }
 
 export function rolesOf(u: User): Role[] {

@@ -22,7 +22,7 @@ export default function Schemes() {
 
   return (
     <div>
-      <PageHeader title="Schemes" subtitle={manage ? 'Publish schemes — sales teams are notified instantly' : 'Government schemes you can offer (view only)'} icon={Sparkles}
+      <PageHeader title="Schemes" subtitle={manage ? 'Publish schemes — sales teams are notified instantly' : 'Government schemes you can offer — added by Admin and the Operation team (view only)'} icon={Sparkles}
         actions={<>{!manage && <Badge tone="gray"><Eye className="size-3" />View only</Badge>}{manage && <Button variant="accent" icon={Plus} onClick={() => setEdit({ ...blank })}>Add scheme</Button>}</>} />
       <SearchBox value={q} onChange={setQ} placeholder="Search schemes…" className="mb-5 max-w-md" />
       {!list.length ? <Card><EmptyState icon={Sparkles} title="No schemes" /></Card> : (

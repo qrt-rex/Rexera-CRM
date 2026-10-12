@@ -4,7 +4,7 @@ import { effectivePerms, roleLabel } from './rbac'
 import { MODULES, canSee } from './modules'
 import { dayStatus, monthStart, todaySession, waitingFor } from './metrics'
 import { BOOKING_STATUS, OPEN_LEAD, stageLabel } from './workflow'
-import { bookingMoney, fmtDate, fmtTime, today } from './format'
+import { bookingMoney, fmtDate, fmtTime, today, ymd } from './format'
 
 /**
  * What Rexy may know about the signed-in person: only data their role can see in the CRM, summarised and capped so the
@@ -48,6 +48,20 @@ export function buildAiContext(db: DB, me: User): string {
     .map((r) => ({ r, row: r.rows.find((x) => x.userId === me.id) })).find((x) => x.row)
   if (pay?.row) ctx.myLatestPayslip = { month: pay.r.month, status: pay.r.status, net: pay.row.net, gross: pay.row.gross, basic: pay.row.basic, pfEmployee: pay.row.pfEmployee, professionalTax: pay.row.pt, paidDays: pay.row.paidDays, lopDays: pay.row.lopDays, page: '/payslips' }
 
+  // ---- company assets with me; HR also sees the totals
+  const mineAssets = (db.assets ?? []).filter((a) => a.assignedTo === me.id && a.status === 'ASSIGNED')
+  if (mineAssets.length) ctx.myCompanyAssets = mineAssets.map((a) => ({ tag: a.tag, item: a.name, serial: a.serial, since: a.assignedOn ? fmtDate(a.assignedOn) : undefined }))
+  if (can('assets.manage')) {
+    const m = t.slice(0, 7)
+    ctx.companyAssets = {
+      assets: (db.assets ?? []).filter((a) => a.status !== 'RETIRED').length, withEmployees: (db.assets ?? []).filter((a) => a.status === 'ASSIGNED').length,
+      underRepair: (db.assets ?? []).filter((a) => a.status === 'REPAIR').length,
+      lowStock: (db.stock ?? []).filter((s) => s.qty <= s.minQty).map((s) => `${s.name} (${s.qty} ${s.unit})`).slice(0, 10),
+      expensesThisMonth: Math.round((db.expenses ?? []).filter((e) => e.date.startsWith(m)).reduce((n, e) => n + e.amount + e.gst, 0)),
+      page: '/assets',
+    }
+  }
+
   // ---- calendar, inbox
   ctx.upcomingEvents = db.events.filter((e) => e.date >= t).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 8).map((e) => ({ title: e.title, date: fmtDate(e.date), time: e.kind === 'HOLIDAY' ? 'all day' : e.time, kind: e.kind.toLowerCase() }))
   const unread = db.notices.filter((n) => n.userId === me.id && !n.read)
@@ -82,7 +96,7 @@ export function buildAiContext(db: DB, me: User): string {
     ctx.leads = {
       open: open.length, converted: leads.filter((l) => l.status === 'CONVERTED').length,
       followUpsDue: open.filter((l) => l.followUp && l.followUp <= t).slice(0, 10).map((l) => ({ name: l.name, company: l.company, followUp: fmtDate(l.followUp!), status: l.status })),
-      callsToday: db.leads.reduce((n, l) => n + l.calls.filter((c) => c.by === me.id && c.at.slice(0, 10) === t).length, 0),
+      callsToday: db.leads.reduce((n, l) => n + l.calls.filter((c) => c.by === me.id && ymd(c.at) === t).length, 0),
     }
   }
 

@@ -12,6 +12,7 @@ import { rolesOf } from '../../lib/rbac'
 import { Badge, Button, Card, CardHeader, cx, EmptyState, Input, Modal, Select, PageHeader, Table, Tabs, Td, Textarea, Th, useConfirm, useRun, useToast } from '../../components/ui'
 import { salesNumbers } from '../../lib/metrics'
 import { MiniStat } from '../dashboards/widgets'
+import { CallWindow } from '../../components/CallWindow'
 
 /** Blutec connection state, checked once per page view. */
 function useBlutec() {
@@ -169,21 +170,34 @@ function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
     }), [db, me, t])
   const [currentId, setCurrentId] = useState<string | null>(null)
   const current = queue.find((l) => l.id === currentId) ?? queue[0]
-  const [manualStart, setManualStart] = useState<number | null>(null)
+  /** The call in progress (Blutec click-to-call, or the person's own phone): drives the floating call window. */
+  const [call, setCall] = useState<{ leadId: string; startedAt: number; endedAt?: number; phone: boolean } | null>(null)
+  const [winHidden, setWinHidden] = useState(false)
   const [live, setLive] = useState<{ refId: string; status: string; info?: CallStatus } | null>(null)
   const poll = useRef<ReturnType<typeof setInterval> | null>(null)
   const retry = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [tick, setTick] = useState(0)
-  useEffect(() => { if (manualStart === null) return; const i = setInterval(() => setTick((x) => x + 1), 1000); return () => clearInterval(i) }, [manualStart])
+  const running = !!call && !call.endedAt
+  useEffect(() => { if (!running) return; const i = setInterval(() => setTick((x) => x + 1), 1000); return () => clearInterval(i) }, [running])
   useEffect(() => () => { if (poll.current) clearInterval(poll.current); if (retry.current) clearTimeout(retry.current) }, [])
   void tick
-  const manualSecs = manualStart ? Math.floor((Date.now() - manualStart) / 1000) : 0
-  const ended = !!live && FINAL_STATUSES.includes(live.status)
-  const secs = live?.info?.talk_duration_seconds ?? live?.info?.duration_seconds ?? manualSecs
-  const suggested: CallOutcome | undefined = ended ? (isHot(live?.info?.disposition) ? 'INTERESTED' : !live?.info?.answer_time ? 'NO_ANSWER' : undefined) : undefined
+  const ended = (!!live && FINAL_STATUSES.includes(live.status)) || !!call?.endedAt
+  // Blutec reported the end: stop the window's clock
+  useEffect(() => { if (live && FINAL_STATUSES.includes(live.status)) setCall((c) => c && !c.endedAt ? { ...c, endedAt: Date.now() } : c) }, [live])
+  const elapsed = call ? Math.max(0, Math.floor(((call.endedAt ?? Date.now()) - call.startedAt) / 1000)) : 0
+  const secs = live?.info?.talk_duration_seconds ?? live?.info?.duration_seconds ?? elapsed
+  const clock = `${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`
+  const suggested: CallOutcome | undefined = ended && live ? (isHot(live.info?.disposition) ? 'INTERESTED' : !live.info?.answer_time ? 'NO_ANSWER' : undefined) : undefined
+  const callLead = call ? queue.find((l) => l.id === call.leadId) ?? db.leads.find((l) => l.id === call.leadId) : undefined
+  const windowOpen = !!call && !!callLead && !winHidden
+  const callStatus = !call ? '' : ended ? 'Call ended' : call.phone ? 'On call · your phone'
+    : !live ? 'Placing the call…' : live.status === 'waiting_for_a_free_line' ? 'All lines busy — retrying'
+      : live.status === 'accepted' || live.status === 'initiated' ? 'Ringing your phone…' : live.status.replace(/_/g, ' ')
   const n = salesNumbers(db, me)
-  const myCallsToday = db.leads.flatMap((l) => l.calls.filter((c) => c.by === me.id && c.at.slice(0, 10) === t).map((c) => ({ ...c, lead: l }))).sort((a, b) => b.at.localeCompare(a.at))
-  const reset = () => { if (poll.current) clearInterval(poll.current); if (retry.current) clearTimeout(retry.current); poll.current = null; retry.current = null; setLive(null); setManualStart(null) }
+  const myCallsToday = db.leads.flatMap((l) => l.calls.filter((c) => c.by === me.id && ymd(c.at) === t).map((c) => ({ ...c, lead: l }))).sort((a, b) => b.at.localeCompare(a.at))
+  const reset = () => { if (poll.current) clearInterval(poll.current); if (retry.current) clearTimeout(retry.current); poll.current = null; retry.current = null; setLive(null); setCall(null); setWinHidden(false) }
+  const startPhoneCall = (l: Lead) => { setCall({ leadId: l.id, startedAt: Date.now(), phone: true }); setWinHidden(false) }
+  const endPhoneCall = () => setCall((c) => c && !c.endedAt ? { ...c, endedAt: Date.now() } : c)
   /** The client asked not to be called: Blutec's DND list (when connected) + the lead leaves every queue. */
   const markDnd = async (l: Lead) => {
     if (!(await confirm(`Do not call ${l.name} again?`, `${bt.status?.dnc ? 'The number is added to the company’s Do-Not-Disturb list in Blutec, so no campaign or click-to-call dials it, and ' : ''}the lead is marked “Not interested” with a note.`, true))) return
@@ -197,6 +211,7 @@ function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
 
   const dial = async (l: Lead, attempt = `${Date.now()}`, retried = false) => {
     retry.current = null
+    if (!retried) { setLive(null); setCall({ leadId: l.id, startedAt: Date.now(), phone: false }); setWinHidden(false) }
     let r: { ref_id: string; status: string }
     try { r = await blutec.clickToCall(me.email, l.phone, l.id, attempt) }
     catch (e) {
@@ -208,7 +223,7 @@ function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
         retry.current = setTimeout(() => dial(l, attempt, true), 15_000)
         return
       }
-      setLive(null)
+      setLive(null); setCall(null)
       toast('error', code === 'DND' ? `${l.name} is on the Do-Not-Disturb list — this number can't be called.` : e instanceof Error ? e.message : 'The call could not be placed.')
       return
     }
@@ -257,7 +272,7 @@ function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
         {current ? (
           <Card className="p-6">
             <div className="flex flex-col items-center text-center">
-              <span className={cx('grid size-24 place-items-center rounded-full text-3xl font-extrabold text-white', (live && !ended) || manualStart ? 'bg-ok anim-ring' : 'bg-brand')}>{current.name.split(' ').map((w) => w[0]).slice(0, 2).join('')}</span>
+              <span className={cx('grid size-24 place-items-center rounded-full text-3xl font-extrabold text-white', running && call?.leadId === current.id ? 'bg-ok anim-ring' : 'bg-brand')}>{current.name.split(' ').map((w) => w[0]).slice(0, 2).join('')}</span>
               <h2 className="mt-4 text-2xl font-extrabold">{current.name}</h2>
               <p className="text-mute">{current.company || 'No company'} · {current.city || current.state}</p>
               <p className="mt-2 font-mono text-xl tracking-wider">{current.phone}</p>
@@ -267,32 +282,59 @@ function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
                 {current.price != null && <Badge tone="green">{inr(current.price)}</Badge>}
                 {current.followUp && <Badge tone="amber">Follow-up {fmtDate(current.followUp)}</Badge>}
               </div>
-              {live && (
-                <div className="mt-4 w-full rounded-2xl border border-line bg-card2 p-3 text-sm">
-                  <p className="font-semibold">{ended ? 'Call ended' : live.status === 'accepted' || live.status === 'initiated' ? 'Ringing your phone…' : `Call ${live.status.replace(/_/g, ' ')}`}</p>
-                  {live.info && <p className="text-xs text-mute">{live.info.talk_duration_seconds != null ? `Talk ${Math.round(live.info.talk_duration_seconds / 60 * 10) / 10} min` : ''}{live.info.disposition ? ` · ${live.info.disposition}` : ''}{live.info.hangup_cause ? ` · ${live.info.hangup_cause.replace(/_/g, ' ').toLowerCase()}` : ''}</p>}
-                  {ended && isHot(live.info?.disposition) && <p className="mt-1 text-xs font-semibold text-violet-600 dark:text-violet-300">🔥 Hot prospect — save “Interested” to create the CRM entry</p>}
+              {call && call.leadId === current.id && (
+                <div className="mt-4 flex w-full items-center gap-3 rounded-2xl border border-line bg-card2 p-3 text-left text-sm">
+                  <span className={cx('size-2.5 shrink-0 rounded-full', running ? 'animate-pulse bg-ok' : 'bg-mute')} />
+                  <span className="min-w-0 flex-1"><b>{callStatus}</b> <span className="font-mono text-mute">{clock}</span>
+                    <span className="block text-xs text-mute">{winHidden ? 'The call window is hidden.' : 'Use the call window — drag it anywhere on the screen.'}</span></span>
+                  {winHidden && <Button size="sm" variant="soft" icon={PhoneCall} onClick={() => setWinHidden(false)}>Show call window</Button>}
                 </div>
               )}
-              {manualStart !== null && <p className="mt-4 font-mono text-3xl font-bold text-ok">{String(Math.floor(manualSecs / 60)).padStart(2, '0')}:{String(manualSecs % 60).padStart(2, '0')}</p>}
               <div className="mt-5 flex flex-wrap justify-center gap-3">
-                {bt.status?.dialer
-                  ? (!live || ended ? <Button size="lg" variant="success" icon={PhoneCall} onClick={() => dial(current)}>{ended ? 'Call again' : 'Call now'}</Button> : <Button size="lg" variant="outline" icon={PhoneOff} onClick={reset}>Hide call</Button>)
-                  : manualStart === null
-                    ? <a href={`tel:+91${current.phone}`} onClick={() => setManualStart(Date.now())}><Button size="lg" variant="success" icon={PhoneCall}>Call now</Button></a>
-                    : <Button size="lg" variant="danger" icon={PhoneOff} onClick={() => setManualStart(null)}>End call</Button>}
+                {call && call.leadId === current.id && !ended
+                  ? (call.phone ? <Button size="lg" variant="danger" icon={PhoneOff} onClick={endPhoneCall}>End call</Button> : <Button size="lg" variant="outline" icon={PhoneOff} onClick={reset}>Cancel call</Button>)
+                  : bt.status?.dialer
+                    ? <Button size="lg" variant="success" icon={PhoneCall} onClick={() => dial(current)}>{ended && call?.leadId === current.id ? 'Call again' : 'Call now'}</Button>
+                    : <a href={`tel:+91${current.phone}`} onClick={() => startPhoneCall(current)}><Button size="lg" variant="success" icon={PhoneCall}>{ended && call?.leadId === current.id ? 'Call again' : 'Call now'}</Button></a>}
                 <Button size="lg" variant="outline" icon={SkipForward} onClick={next}>Skip</Button>
                 <Button size="lg" variant="ghost" icon={Ban} onClick={() => markDnd(current)}>Do not call</Button>
                 {can('bookings.create') && <Button size="lg" variant="soft" icon={Briefcase} onClick={() => nav(`/bookings/new?lead=${current.id}`)}>Book</Button>}
               </div>
               {current.notes && <p className="mt-5 w-full whitespace-pre-line rounded-xl bg-card2 p-3 text-left text-sm">{current.notes}</p>}
             </div>
-            <div className="mt-6 border-t border-line pt-5">
-              <h4 className="mb-3 font-bold">Outcome</h4>
-              <CallLogger lead={current} seconds={secs} suggested={suggested} onDone={afterSave} />
-            </div>
+            {/* while the call window is open, the outcome is logged there */}
+            {!(windowOpen && call?.leadId === current.id) && (
+              <div className="mt-6 border-t border-line pt-5">
+                <h4 className="mb-3 font-bold">Outcome</h4>
+                <CallLogger lead={current} seconds={call?.leadId === current.id ? secs : 0} suggested={suggested} onDone={afterSave} />
+              </div>
+            )}
           </Card>
         ) : <Card><EmptyState icon={Phone} title="Nothing to dial" /></Card>}
+
+        {windowOpen && callLead && (
+          <CallWindow title={callLead.name} subtitle={<span className="font-mono">{callLead.phone}</span>} status={callStatus} timer={clock} live={running}
+            onClose={() => setWinHidden(true)} closeLabel="Hide call window">
+            <div className="mb-3 flex flex-wrap gap-1.5">
+              <Badge tone={LEAD_STATUS[callLead.status].tone}>{LEAD_STATUS[callLead.status].label}</Badge>
+              {callLead.company && <Badge tone="gray">{callLead.company}</Badge>}
+              {callLead.service && <Badge tone="navy">{callLead.service}</Badge>}
+              {callLead.price != null && <Badge tone="green">{inr(callLead.price)}</Badge>}
+              {callLead.followUp && <Badge tone="amber">Follow-up {fmtDate(callLead.followUp)}</Badge>}
+            </div>
+            {live?.info && (live.info.disposition || live.info.hangup_cause) && <p className="mb-2 text-xs text-mute">{[live.info.disposition, live.info.hangup_cause?.replace(/_/g, ' ').toLowerCase()].filter(Boolean).join(' · ')}</p>}
+            {ended && isHot(live?.info?.disposition) && <p className="mb-2 rounded-lg bg-violet-500/10 px-2.5 py-1.5 text-xs font-semibold text-violet-600 dark:text-violet-300">🔥 Hot prospect — save “Interested” to create the CRM entry</p>}
+            {callLead.notes && <p className="mb-3 line-clamp-3 whitespace-pre-line rounded-lg bg-card2 px-3 py-2 text-xs" title={callLead.notes}>{callLead.notes}</p>}
+            {call?.phone && !ended && <Button className="mb-3 w-full" variant="danger" icon={PhoneOff} onClick={endPhoneCall}>End call</Button>}
+            {!call?.phone && !ended && <p className="mb-3 text-xs text-mute">Answer your phone to connect the client. You can note the outcome now or when the call ends.</p>}
+            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-mute">Outcome</p>
+            <CallLogger lead={callLead} seconds={secs} suggested={suggested} onDone={afterSave} />
+            <div className="mt-3 flex gap-2 border-t border-line pt-3">
+              <Button size="sm" variant="ghost" icon={Ban} className="flex-1" onClick={() => markDnd(callLead)}>Do not call</Button>
+              {can('bookings.create') && <Button size="sm" variant="soft" icon={Briefcase} className="flex-1" onClick={() => nav(`/bookings/new?lead=${callLead.id}`)}>Book</Button>}
+            </div>
+          </CallWindow>
+        )}
 
         <Card className="overflow-hidden">
           <CardHeader title="Today's calls" subtitle={`${myCallsToday.length} logged`} />

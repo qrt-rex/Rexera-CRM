@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  BarChart3, Bell, Briefcase, CalendarDays, ChevronRight, Download, Eye, FileBarChart, FileText, Home, IndianRupee, KeyRound,
+  BarChart3, Bell, Briefcase, Building2, CalendarDays, ChevronRight, Download, Eye, FileBarChart, FileText, Home, IndianRupee, KeyRound,
   LayoutDashboard, Megaphone, MessageSquare, MessagesSquare, PieChart, Settings, Sparkles, TrendingUp, UserCheck, UserCog, UserPlus,
   Users, UsersRound, Images, Workflow, Trophy,
 } from 'lucide-react'
@@ -9,12 +9,14 @@ import { useDb } from '../../lib/store'
 import { useMe } from '../../lib/auth'
 import { collections, invoiceSummary, monthStart, presentToday, revenueByMonth, todaySession } from '../../lib/metrics'
 import { BOOKING_STATUS } from '../../lib/workflow'
-import { fmtDate, fmtTime, inr, inrShort, today } from '../../lib/format'
+import { fmtDate, fmtTime, inr, inrShort, today, ymd } from '../../lib/format'
 import { ROLES, rolesOf } from '../../lib/rbac'
 import { Avatar, Card, cx, Progress } from '../../components/ui'
 import { Bars, Donut, HBars } from '../../components/charts'
 import { useUnread } from '../../layout/Shell'
 import { LoginLogoutCard, RecentActivity, Section, Tile } from './widgets'
+import { BranchCards } from './BranchDashboard'
+import { branchList } from '../../lib/branches'
 
 export function SuperAdminDashboard() {
   const db = useDb()
@@ -24,9 +26,16 @@ export function SuperAdminDashboard() {
   const att = presentToday(db)
   const inv = invoiceSummary(db)
   const rev = revenueByMonth(db)
-  const thisMonth = rev[rev.length - 1]?.value ?? 0
-  const lastMonth = rev[rev.length - 2]?.value ?? 0
-  const growth = lastMonth ? Math.round(((thisMonth - lastMonth) / lastMonth) * 100) : 0
+  // fair comparison: collections so far this month vs the same days of last month (not a part month vs a full one)
+  const growth = useMemo(() => {
+    const now = new Date(), d = now.getDate()
+    const prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    const prevEnd = new Date(now.getFullYear(), now.getMonth() - 1, Math.min(d, new Date(now.getFullYear(), now.getMonth(), 0).getDate()))
+    const sum = (from: string, to: string) => db.bookings.reduce((s, b) => s + b.payments.reduce((m, p) => m + (p.date >= from && p.date <= to ? p.total : 0), 0), 0)
+    const cur = sum(monthStart(), today()), last = sum(ymd(prevStart), ymd(prevEnd))
+    const label = (x: Date) => x.toLocaleDateString('en-IN', { month: 'short' })
+    return { pct: last ? Math.round(((cur - last) / last) * 100) : null, title: `Collections 1–${d} ${label(now)} vs 1–${prevEnd.getDate()} ${label(prevStart)}: ${inr(cur)} vs ${inr(last)}` }
+  }, [db.bookings, today()])  // eslint-disable-line react-hooks/exhaustive-deps -- recalculates when the day changes
   const todays = db.events.filter((e) => e.date === today())
   const pipeline = useMemo(() => {
     const m = new Map<string, number>()
@@ -71,7 +80,7 @@ export function SuperAdminDashboard() {
         <Link to="/billing"><Card className="flex h-full items-center gap-3 p-4 transition hover:shadow-pop">
           <span className="grid size-11 place-items-center rounded-xl bg-accent-soft text-accent"><IndianRupee className="size-5" /></span>
           <div className="min-w-0 flex-1"><p className="text-[11px] font-semibold text-mute">Invoice / Bill</p><p className="text-xl font-extrabold">{inr(inv.billed)}</p><p className="text-[11px] text-mute">Collected {inrShort(inv.collected)}</p></div>
-          <span className={cx('text-xs font-bold', growth >= 0 ? 'text-ok' : 'text-bad')}>{growth >= 0 ? '↑' : '↓'} {Math.abs(growth)}%</span>
+          {growth.pct !== null && <span title={growth.title} className={cx('text-right text-xs font-bold', growth.pct >= 0 ? 'text-ok' : 'text-bad')}>{growth.pct >= 0 ? '↑' : '↓'} {Math.abs(growth.pct)}%<span className="block text-[9px] font-semibold text-mute">vs last month</span></span>}
         </Card></Link>
         <Link to="/attendance"><Card className="h-full p-4 transition hover:shadow-pop">
           <div className="flex items-center gap-3"><span className="grid size-11 place-items-center rounded-xl bg-violet-500/12 text-violet-600 dark:text-violet-300"><UserCheck className="size-5" /></span>
@@ -80,9 +89,31 @@ export function SuperAdminDashboard() {
         </Card></Link>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[1fr_280px]">
-        <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
-          {tiles.map((t) => <Tile key={t.label} {...t} />)}
+      {/* every branch at a glance — each opens its own branch dashboard */}
+      {branchList(db).length > 0 && (
+        <div className="mb-6">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="flex items-center gap-2 font-bold"><Building2 className="size-5 text-brand-ink" />Branches</p>
+            <Link to="/dashboard/branchdirector" className="text-xs font-bold text-brand-ink hover:underline">All branches dashboard →</Link>
+          </div>
+          <BranchCards />
+        </div>
+      )}
+
+      <div className="grid items-start gap-5 xl:grid-cols-[1fr_280px]">
+        {/* left column: tiles, then the charts straight under them (no empty gap beside the taller side column) */}
+        <div className="min-w-0 space-y-6">
+          <div className="grid content-start gap-4 sm:grid-cols-2">
+            {tiles.map((t) => <Tile key={t.label} {...t} />)}
+          </div>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Section title="Collections · last 6 months" icon={TrendingUp} className="lg:col-span-2">
+              <div className="p-5"><Bars data={rev} format={inrShort} highlightLast height={210} /></div>
+            </Section>
+            <Section title="Client files by status" icon={Sparkles}><div className="p-5"><Donut data={pipeline} label="Files by status" /></div></Section>
+            <Section title="Top performers this month" icon={Trophy}><div className="p-5"><HBars data={performers} format={inrShort} /></div></Section>
+          </div>
+          <RecentActivity limit={7} />
         </div>
         <aside className="space-y-4">
           <LoginLogoutCard />
@@ -110,14 +141,6 @@ export function SuperAdminDashboard() {
         </aside>
       </div>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-3">
-        <Section title="Collections · last 6 months" icon={TrendingUp} className="xl:col-span-2">
-          <div className="p-5"><Bars data={rev} format={inrShort} highlightLast height={210} /></div>
-        </Section>
-        <Section title="Client files by status" icon={Sparkles}><div className="p-5"><Donut data={pipeline} label="Files by status" /></div></Section>
-        <Section title="Top performers this month" icon={Trophy}><div className="p-5"><HBars data={performers} format={inrShort} /></div></Section>
-        <div className="xl:col-span-2"><RecentActivity limit={7} /></div>
-      </div>
       <p className="mt-6 flex items-center gap-2 text-xs text-mute"><UserPlus className="size-3.5" />Tip: open any role’s dashboard from “All dashboards” to see exactly what that team sees.</p>
     </div>
   )
