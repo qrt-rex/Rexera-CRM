@@ -115,7 +115,10 @@ const DEC_META: Record<Decision['kind'], { label: string; icon: LucideIcon; vari
   RETURN_ADMIN: { label: 'Return to Admin', icon: RotateCcw, variant: 'outline' },
 }
 
-export function DecisionButtons({ b, size = 'md' }: { b: Booking; size?: 'sm' | 'md' }) {
+/** Legal handing a file that already has an Operations member to someone else. */
+const reassign = (b: Booking, k: Decision['kind']) => k === 'ASSIGN_OPS' && !!b.opsMemberId
+
+export function DecisionButtons({ b, size = 'md', onDone }: { b: Booking; size?: 'sm' | 'md'; onDone?: (kind: Decision['kind']) => void }) {
   const db = useDb()
   const me = useMe()
   const [kind, setKind] = useState<Decision['kind'] | null>(null)
@@ -124,14 +127,15 @@ export function DecisionButtons({ b, size = 'md' }: { b: Booking; size?: 'sm' | 
   return (
     <>
       <div className="flex flex-wrap gap-2">
-        {kinds.map((k) => { const m = DEC_META[k]; return <Button key={k} size={size} variant={m.variant} icon={m.icon} onClick={() => setKind(k)}>{m.label}</Button> })}
+        {kinds.map((k) => { const m = DEC_META[k]; return <Button key={k} size={size} variant={reassign(b, k) ? 'outline' : m.variant} icon={m.icon} onClick={() => setKind(k)}>{reassign(b, k) ? 'Reassign Operations' : m.label}</Button> })}
       </div>
-      <DecisionModal b={b} kind={kind} onClose={() => setKind(null)} />
+      <DecisionModal b={b} kind={kind} onClose={() => setKind(null)} onDone={onDone} />
     </>
   )
 }
 
-export function DecisionModal({ b, kind, onClose }: { b: Booking; kind: Decision['kind'] | null; onClose: () => void }) {
+/** `onDone` runs after the decision is saved (e.g. go to the Operations Dashboard after assigning). */
+export function DecisionModal({ b, kind, onClose, onDone }: { b: Booking; kind: Decision['kind'] | null; onClose: () => void; onDone?: (kind: Decision['kind']) => void }) {
   const db = useDb()
   const me = useMe()
   const run = useRun()
@@ -147,7 +151,7 @@ export function DecisionModal({ b, kind, onClose }: { b: Booking; kind: Decision
     setRemark(''); setOps(b.opsMemberId ?? ''); setAdmin(b.adminId ?? ''); setMaxStage(Math.max(b.maxStage, 6)); setDeadline(b.deadline || '')
   }, [kind, b])
   if (!kind) return null
-  const m = DEC_META[kind]
+  const m = reassign(b, kind) ? { ...DEC_META[kind], label: 'Reassign Operations' } : DEC_META[kind]
   const needsReason = ['REJECT', 'HOLD', 'RETURN_OPS', 'RETURN_ADMIN'].includes(kind)
   const load = (id: string) => db.bookings.filter((x) => (x.opsMemberId === id && x.status === 'IN_OPERATIONS') || (x.adminId === id && x.status === 'WITH_ADMIN')).length
 
@@ -157,7 +161,7 @@ export function DecisionModal({ b, kind, onClose }: { b: Booking; kind: Decision
     else if (kind === 'ASSIGN_ADMIN') dec = { kind, remark, adminId: admin }
     else dec = { kind, remark } as Decision
     const ok = await run(() => decide(me, b.id, dec), `${m.label}: done`)
-    if (ok) onClose()
+    if (ok) { onClose(); onDone?.(kind) }
   }
 
   return (
@@ -198,7 +202,7 @@ export function DecisionModal({ b, kind, onClose }: { b: Booking; kind: Decision
 }
 
 /** Compact row used by dashboard queues. */
-export function BookingRow({ b, showActions = true }: { b: Booking; showActions?: boolean }) {
+export function BookingRow({ b, showActions = true, onDone }: { b: Booking; showActions?: boolean; onDone?: (kind: Decision['kind']) => void }) {
   const db = useDb()
   const m = bookingMoney(b)
   return (
@@ -218,7 +222,7 @@ export function BookingRow({ b, showActions = true }: { b: Booking; showActions?
         <p className="text-sm font-bold">{inr(m.collected)}</p>
         <p className="text-[11px] text-mute">of {inr(m.quotedWithGst)}</p>
       </div>
-      {showActions && <DecisionButtons b={b} size="sm" />}
+      {showActions && <DecisionButtons b={b} size="sm" onDone={onDone} />}
     </div>
   )
 }

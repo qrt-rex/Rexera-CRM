@@ -3,7 +3,10 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import nodemailer from 'nodemailer'
+import crypto from 'node:crypto'
 import { checkClientEmail, renderClientEmail } from './supabase/functions/_shared/client-email.mjs'
+import { aiConfig, aiOverLimit, answerAi, checkAiRequest } from './server/ai.mjs'
+import { blutecEnv, handleBlutec } from './supabase/functions/_shared/blutec.ts'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DIST_DIR = path.resolve(__dirname, 'dist')
@@ -374,6 +377,19 @@ async function handleSendClientEmail(req, res) {
   }
 }
 
+// Rexy AI assistant: the OpenAI key stays here; the browser sends the question + what the user can see
+async function handleAiChat(req, res) {
+  let body
+  try { body = await readJsonBody(req) } catch (err) { return sendJson(res, 400, { success: false, message: err.message }) }
+  const problem = checkAiRequest(body)
+  if (problem) return sendJson(res, 400, { success: false, message: problem })
+  const ip = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '?'
+  const limited = aiOverLimit(ip, { hourly: Number(getEnv('AI_HOURLY_LIMIT', '150')), daily: Number(getEnv('AI_DAILY_LIMIT', '1500')) })
+  if (limited) return sendJson(res, 429, { success: false, message: limited })
+  const r = await answerAi(body, aiConfig((k) => getEnv(k)))
+  return sendJson(res, r.status, r.body)
+}
+
 // -------------------------------------------------------------
 // Static File Serving with SPA fallback
 // -------------------------------------------------------------
@@ -420,6 +436,30 @@ function serveStaticFile(req, res, pathname) {
 }
 
 // -------------------------------------------------------------
+// Blutec dialer / IVR relay. The CRM signs in only inside the browser, so the server can't verify users;
+// instead each staff computer is set up once with DIALER_ACCESS_KEY (IVR campaigns need IVR_ACCESS_KEY).
+// ponytail: shared keys, per-user checks once CRM sign-in moves to Supabase Auth
+// -------------------------------------------------------------
+const IVR_ACTIONS = ['ivrList', 'ivrStats', 'ivrControl', 'ivrConnects']
+const sameKey = (given, expected) => !!expected && crypto.timingSafeEqual(
+  crypto.createHash('sha256').update(String(given)).digest(), crypto.createHash('sha256').update(expected).digest())
+
+async function handleBlutecRelay(req, res) {
+  const dialerKey = getEnv('DIALER_ACCESS_KEY')
+  if (!dialerKey) return sendJson(res, 503, { success: false, code: 'NOT_CONFIGURED', message: 'Set DIALER_ACCESS_KEY on the server (Render → Environment).' })
+  const given = req.headers['x-dialer-key'] || ''
+  const ivrOk = sameKey(given, getEnv('IVR_ACCESS_KEY'))
+  if (!ivrOk && !sameKey(given, dialerKey)) return sendJson(res, 401, { success: false, code: 'NO_KEY', message: 'Enter the dialer access key on this computer (ask the Super Admin).' })
+
+  let body
+  try { body = await readJsonBody(req) } catch { return sendJson(res, 400, { success: false, message: 'Bad JSON' }) }
+  if (IVR_ACTIONS.includes(body.action) && !ivrOk) return sendJson(res, 403, { success: false, message: 'IVR campaigns need the IVR access key.' })
+
+  const r = await handleBlutec(body, blutecEnv({ ...fileEnv, ...process.env }))
+  sendJson(res, r.status, r.body)
+}
+
+// -------------------------------------------------------------
 // Server creation
 // -------------------------------------------------------------
 const server = http.createServer(async (req, res) => {
@@ -460,6 +500,14 @@ const server = http.createServer(async (req, res) => {
     return handleSendClientEmail(req, res)
   }
 
+  if (pathname === '/api/ai-chat' && req.method === 'POST') {
+    return handleAiChat(req, res)
+  }
+
+  if (pathname === '/api/blutec' && req.method === 'POST') {
+    return handleBlutecRelay(req, res).catch((err) => sendJson(res, 502, { success: false, message: err.message }))
+  }
+
   // Static Assets and SPA routing
   if (req.method === 'GET' || req.method === 'HEAD') {
     return serveStaticFile(req, res, pathname)
@@ -472,6 +520,7 @@ server.listen(PORT, HOST, () => {
   console.log(`\n======================================================`)
   console.log(`🚀 Rexera CRM Live Production Server is running!`)
   console.log(`👉 URL: http://${HOST}:${PORT} (listening on all interfaces)`)
+  console.log(`📞 Dialer: ${blutecEnv({ ...fileEnv, ...process.env }).keyId ? 'Configured' : '⚠️ NOT configured (Set BLUTEC_KEY_ID, BLUTEC_API_KEY, BLUTEC_SIGNING_SECRET)'}`)
   console.log(`📧 SMTP: ${getEnv('SMTP_USER') ? `Configured (${getEnv('SMTP_USER')})` : '⚠️ NOT configured (Set SMTP_USER & SMTP_PASS)'}`)
   console.log(`======================================================\n`)
 })

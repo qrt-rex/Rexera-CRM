@@ -5,7 +5,7 @@
  *
  *   node supabase/migrate-from-backup.mjs <backup.json> [--passphrase "…"] [--dry-run] [--create-auth-users]
  *
- * Reads SUPABASE_URL and SUPABASE_SECRET_KEY from the environment or from .env.local (never commit that file).
+ * Reads SUPABASE_URL and SUPABASE_SECRET_KEY from the environment or from .env / .env.local (never commit them).
  * The secret key bypasses row-level security, so this script must only ever run on a trusted machine/server.
  * Re-runnable: every table is upserted by its primary key; the audit log is only copied into an empty table.
  * --create-auth-users creates a Supabase Auth account (no password) for each active user and links it; people
@@ -22,17 +22,19 @@ const flag = (n) => args.includes(`--${n}`)
 const opt = (n) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : undefined }
 if (!file) { console.error('Usage: node supabase/migrate-from-backup.mjs <backup.json> [--passphrase "…"] [--dry-run] [--create-auth-users]'); process.exit(1) }
 
-if (existsSync('.env.local')) {
-  for (const line of readFileSync('.env.local', 'utf8').split(/\r?\n/)) {
+// .env.local (if any) wins over the main .env; real environment variables win over both
+for (const f of ['.env.local', '.env']) {
+  if (!existsSync(f)) continue
+  for (const line of readFileSync(f, 'utf8').split(/\r?\n/)) {
     const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/)
-    if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '')
+    if (m && m[2] && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '')
   }
 }
 const URL_ = process.env.SUPABASE_URL
 const KEY = process.env.SUPABASE_SECRET_KEY
 const dry = flag('dry-run')
-if (!dry && (!URL_ || !/^https:\/\/.+\.supabase\.(co|in)\/?$/.test(URL_))) { console.error('Set SUPABASE_URL (https://<project-ref>.supabase.co) in .env.local'); process.exit(1) }
-if (!dry && !KEY?.startsWith('sb_secret_')) { console.error('Set SUPABASE_SECRET_KEY (sb_secret_…) in .env.local'); process.exit(1) }
+if (!dry && (!URL_ || !/^https:\/\/.+\.supabase\.(co|in)\/?$/.test(URL_))) { console.error('Set SUPABASE_URL (https://<project-ref>.supabase.co) in .env'); process.exit(1) }
+if (!dry && !KEY?.startsWith('sb_secret_')) { console.error('Set SUPABASE_SECRET_KEY (sb_secret_…) in .env'); process.exit(1) }
 
 // ------------------------------------------------------------------ read (and decrypt) the backup
 async function readBackup() {

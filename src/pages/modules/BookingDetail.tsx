@@ -5,6 +5,7 @@ import {
   MessageSquare, Pencil, Plus, Receipt, Send, ShieldCheck, Trash2, Upload, X, Lock, Mail,
 } from 'lucide-react'
 import { ClientEmailComposer } from '../../components/ClientEmail'
+import { openBookingPdf } from '../../lib/bookingPdf'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
 import {
@@ -53,6 +54,7 @@ export default function BookingDetail() {
             {b.holdReason && <p className="mt-2 inline-flex rounded-lg bg-warn-soft px-3 py-1 text-sm font-medium text-warn">On hold: {b.holdReason}</p>}
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button variant="outline" icon={FileText} onClick={() => run(() => openBookingPdf(db, b))}>PDF</Button>
             {canEmailClient(db, me, b) && <Button variant="accent" icon={Mail} onClick={() => setMail(true)}>Email client</Button>}
             {canEditBooking(db, me, b) && <Link to={`/bookings/${b.id}/edit`}><Button variant="outline" icon={Pencil}>Edit</Button></Link>}
             {can('billing.create', 'billing.manage') && !invoices.length && !['PENDING_TL', 'REJECTED'].includes(b.status) && (

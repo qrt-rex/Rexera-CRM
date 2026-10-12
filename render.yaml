@@ -23,7 +23,33 @@ services:
         sync: false
       - key: SMTP_FROM
         value: '"Rexera CRM" <no-reply@hr.rexera.in>'
+      - key: AI_BASE_URL
+        value: https://generativelanguage.googleapis.com/v1beta/openai
+      - key: AI_API_KEY
+        sync: false
+      - key: AI_MODEL
+        value: gemini-3.1-flash-lite
+      - key: AI_HOURLY_LIMIT
+        value: "150"
+      - key: AI_DAILY_LIMIT
+        value: "1500"
       - key: VITE_SUPABASE_URL
         sync: false
       - key: VITE_SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: BLUTEC_KEY_ID
+        sync: false
+      - key: BLUTEC_API_KEY
+        sync: false
+      - key: BLUTEC_SIGNING_SECRET
+        sync: false
+      - key: BLUTEC_TOKEN
+        sync: false
+      - key: BLUTEC_IVR_EMAIL
+        sync: false
+      - key: BLUTEC_IVR_PASSWORD
+        sync: false
+      - key: DIALER_ACCESS_KEY
+        sync: false
+      - key: IVR_ACCESS_KEY
         sync: false
