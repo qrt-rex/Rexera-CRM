@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
 import { parseCsvRows, uid, nowIso } from './format'
+import { CLOUD } from './cloud'
+import { getSupabase } from './supabase'
 
 /**
  * Imported tables (Recruitment → Import). Every CSV file, and every non-empty sheet of an Excel workbook,
  * becomes one table with its own columns. Tables live in this browser's IndexedDB, which holds far more
  * than localStorage, and are shared by everyone who signs in on this browser.
+ * With Supabase (VITE_DATA_BACKEND=supabase) they live in the recruitment_datasets / recruitment_rows tables instead.
  */
 export interface Dataset {
   id: string
@@ -52,14 +55,53 @@ channel?.addEventListener('message', () => { cache = null; emit() })
 
 export async function listDatasets(): Promise<Dataset[]> {
   if (cache) return cache
-  const all = ((await tx<Dataset[]>('readonly', (s) => s.getAll() as IDBRequest<Dataset[]>)) ?? []).sort((a, b) => b.importedAt.localeCompare(a.importedAt))
+  const all = (CLOUD ? await cloudList() : (await tx<Dataset[]>('readonly', (s) => s.getAll() as IDBRequest<Dataset[]>)) ?? []).sort((a, b) => b.importedAt.localeCompare(a.importedAt))
   cache = all
   return all
 }
 async function changed() { cache = null; emit(); channel?.postMessage('changed') }
-export async function saveDatasets(list: Dataset[]) { await tx('readwrite', (s) => { for (const d of list) s.put(d) }); await changed() }
-export async function deleteDataset(id: string) { await tx('readwrite', (s) => s.delete(id)); await changed() }
-export async function renameDataset(d: Dataset, name: string) { await tx('readwrite', (s) => s.put({ ...d, name: name.trim() || d.name })); await changed() }
+export async function saveDatasets(list: Dataset[]) {
+  if (CLOUD) { for (const d of list) await cloudSave(d) } else await tx('readwrite', (s) => { for (const d of list) s.put(d) })
+  await changed()
+}
+export async function deleteDataset(id: string) {
+  if (CLOUD) await check((await getSupabase()).from('recruitment_datasets').delete().eq('id', id))
+  else await tx('readwrite', (s) => s.delete(id))
+  await changed()
+}
+export async function renameDataset(d: Dataset, name: string) {
+  const next = { ...d, name: name.trim() || d.name }
+  if (CLOUD) await check((await getSupabase()).from('recruitment_datasets').update({ name: next.name }).eq('id', d.id))
+  else await tx('readwrite', (s) => s.put(next))
+  await changed()
+}
+
+// ------------------------------------------------------------------ Supabase tables
+const check = async (q: PromiseLike<{ error: { message: string } | null }>) => { const { error } = await q; if (error) throw new Error(error.message) }
+type SetRow = { id: string; name: string; file_name: string; sheet: string | null; kind: Dataset['kind']; columns: string[]; imported_at: string; imported_by: string | null; bytes: number }
+async function cloudList(): Promise<Dataset[]> {
+  const sb = await getSupabase()
+  const { data: sets, error } = await sb.from('recruitment_datasets').select('*')
+  if (error) throw new Error(error.message)
+  const rows = new Map<string, string[][]>()
+  // ponytail: reads every row of every table; page per table if imports grow past tens of thousands of rows
+  for (let from = 0; ; from += 1000) {
+    const { data, error: e } = await sb.from('recruitment_rows').select('dataset_id, row_no, cells').order('dataset_id').order('row_no').range(from, from + 999)
+    if (e) throw new Error(e.message)
+    for (const r of data as { dataset_id: string; cells: string[] }[]) { if (!rows.has(r.dataset_id)) rows.set(r.dataset_id, []); rows.get(r.dataset_id)!.push(r.cells) }
+    if (data.length < 1000) break
+  }
+  return (sets as SetRow[]).map((x) => ({ id: x.id, name: x.name, fileName: x.file_name, ...(x.sheet ? { sheet: x.sheet } : {}), kind: x.kind, columns: x.columns,
+    rows: rows.get(x.id) ?? [], importedAt: new Date(x.imported_at).toISOString(), importedBy: x.imported_by ?? '', bytes: x.bytes }))
+}
+async function cloudSave(d: Dataset) {
+  const sb = await getSupabase()
+  const set: SetRow = { id: d.id, name: d.name, file_name: d.fileName, sheet: d.sheet ?? null, kind: d.kind, columns: d.columns, imported_at: d.importedAt, imported_by: d.importedBy || null, bytes: d.bytes }
+  await check(sb.from('recruitment_datasets').upsert(set, { onConflict: 'id' }))
+  await check(sb.from('recruitment_rows').delete().eq('dataset_id', d.id))
+  const rows = d.rows.map((cells, i) => ({ dataset_id: d.id, row_no: i + 1, cells }))
+  for (let i = 0; i < rows.length; i += 500) await check(sb.from('recruitment_rows').insert(rows.slice(i, i + 500)))
+}
 
 export function useDatasets() {
   const [state, setState] = useState<{ list: Dataset[]; loading: boolean; error: string }>({ list: cache ?? [], loading: !cache, error: '' })

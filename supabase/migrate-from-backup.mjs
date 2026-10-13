@@ -10,6 +10,9 @@
  * Re-runnable: every table is upserted by its primary key; the audit log is only copied into an empty table.
  * --create-auth-users creates a Supabase Auth account (no password) for each active user and links it; people
  * then set their password with "Forgot password" / an invite from the Supabase dashboard.
+ * Uploaded files in the backup (payment proofs, documents, resumes, attachments) go to the private "crm-files" bucket,
+ * named by their file id; documents the app once kept inline (dataUrl) become files there too. Old-CRM uploads
+ * aren't in backups: upload them with supabase/upload-old-crm-files.mjs.
  */
 import { readFileSync, existsSync } from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
@@ -54,11 +57,23 @@ async function readBackup() {
 
 // ------------------------------------------------------------------ run
 const backup = await readBackup()
+// documents the app once kept inline (data: URLs) become ordinary files
+const inline = []
+for (const b of backup.db.bookings ?? []) for (const x of b.documents ?? []) {
+  const m = !x.file && typeof x.dataUrl === 'string' && x.dataUrl.match(/^data:([^;,]+)?(;base64)?,(.*)$/s)
+  if (!m) continue
+  const ref = { id: `file-inline-${x.id}`, name: x.name, type: m[1] || 'application/octet-stream', size: x.size ?? 0, at: x.at }
+  inline.push({ ...ref, data: m[2] ? m[3] : Buffer.from(decodeURIComponent(m[3])).toString('base64') })
+  x.file = ref
+  delete x.dataUrl
+}
+const files = [...(backup.files ?? []), ...inline]
 const rows = mapAll(backup)
 console.log(`Backup from ${backup.exportedAt} by ${backup.exportedBy} · app data version ${backup.db.version}`)
 if (dry) {
   for (const [table] of ORDER) console.log(`  ${table.padEnd(26)} ${String(rows[table]?.length ?? 0).padStart(6)} rows`)
   for (const table of APPEND_ONLY) console.log(`  ${table.padEnd(26)} ${String(rows[table].length).padStart(6)} rows (only into an empty table)`)
+  console.log(`  ${'files → crm-files'.padEnd(26)} ${String(files.length).padStart(6)} (${inline.length} from inline documents)`)
   console.log('\nDry run — nothing was written.')
   process.exit(0)
 }
@@ -91,6 +106,16 @@ for (const table of APPEND_ONLY) {
   total += rows[table].length
   console.log(`✓ ${table.padEnd(26)} ${rows[table].length}`)
 }
+
+// uploaded files → Storage (a file already there is kept: re-running uploads only what's missing)
+let sent = 0, kept = 0
+for (const f of files) {
+  const { error } = await sb.storage.from('crm-files').upload(f.id, Buffer.from(f.data, 'base64'), { contentType: f.type || 'application/octet-stream', upsert: false })
+  if (!error) sent++
+  else if (/exists|duplicate/i.test(error.message)) kept++
+  else { console.error(`✗ file ${f.name} (${f.id}): ${error.message}`); process.exit(1) }
+}
+console.log(`✓ ${'files → crm-files'.padEnd(26)} ${sent} uploaded${kept ? `, ${kept} already there` : ''}`)
 
 if (flag('create-auth-users')) {
   const { data: existing, error } = await sb.auth.admin.listUsers({ perPage: 1000 })
