@@ -24,6 +24,7 @@ import { FileLink } from '../../components/FileField'
 import {
   Avatar, Badge, Button, Card, CardHeader, Checkbox, cx, EmptyState, FileButton, Input, Modal, Select, Table, Tabs, Td, Textarea, Th, readAsDataUrl, useRun,
 } from '../../components/ui'
+import { canSee, moduleByKey } from '../../lib/modules'
 import { BookingStatusBadge, ChainStepper, DeadlineBadge, DecisionButtons, PriorityBadge, StageTrack } from '../../components/booking'
 
 type Tab = 'overview' | 'processing' | 'documents' | 'timeline' | 'legacy'
@@ -60,7 +61,10 @@ export default function BookingDetail() {
             {can('billing.create', 'billing.manage') && !invoices.length && !['PENDING_TL', 'REJECTED'].includes(b.status) && (
               <Button variant="outline" icon={Receipt} onClick={async () => { const inv = await run(() => invoiceFromBooking(me, b.id, can('billing.manage') ? 'TAX' : 'PROFORMA'), 'Invoice raised'); if (typeof inv === 'string') nav(`/billing/${inv}`) }}>Raise invoice</Button>
             )}
-            {invoices.map((i) => <Link key={i.id} to={`/billing/${i.id}`}><Button variant="soft" icon={Receipt}>{i.number}</Button></Link>)}
+            {/* the invoice page needs billing access; others (e.g. Operations) just see the number */}
+            {invoices.map((i) => canSee(moduleByKey('billing'), can)
+              ? <Link key={i.id} to={`/billing/${i.id}`}><Button variant="soft" icon={Receipt}>{i.number}</Button></Link>
+              : <span key={i.id} className="inline-flex h-10 items-center gap-2 rounded-xl bg-card2 px-4 font-mono text-sm font-semibold text-mute"><Receipt className="size-4" />{i.number}</span>)}
           </div>
         </div>
         <div className="border-t border-line bg-card2/50 px-6 py-5"><ChainStepper b={b} /></div>

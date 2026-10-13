@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { CalendarCheck2, Check, Plus, X } from 'lucide-react'
 import type { FileRef, LeaveType } from '../../lib/types'
 import { useDb } from '../../lib/store'
-import { useMe } from '../../lib/auth'
+import { useAuth, useMe } from '../../lib/auth'
 import { applyLeave, canDecideLeave, cancelLeave, decideLeave, LEAVE_ATTACHMENT_AFTER_DAYS, leaveApprovers, userName } from '../../lib/actions'
 import { DOC_TYPES } from '../../lib/files'
 import { FileField, FileLink } from '../../components/FileField'
@@ -11,13 +11,13 @@ import { daysBetween, fmtDate, today } from '../../lib/format'
 import { roleLabel } from '../../lib/rbac'
 import { Badge, Button, Card, EmptyState, Input, Modal, PageHeader, Select, Table, Tabs, Td, Textarea, Th, useRun } from '../../components/ui'
 
-const QUOTA: Record<LeaveType, number> = { CL: 12, SL: 8, EL: 15, LOP: 0 }
 const NAMES: Record<LeaveType, string> = { CL: 'Casual leave', SL: 'Sick leave', EL: 'Earned leave', LOP: 'Loss of pay' }
 const tone = { PENDING: 'amber', APPROVED: 'green', REJECTED: 'red', CANCELLED: 'gray' } as const
 
 export default function Leave() {
   const db = useDb()
   const me = useMe()
+  const { can } = useAuth()
   const run = useRun()
   const [params, setParams] = useSearchParams()
   const [open, setOpen] = useState(false)
@@ -30,27 +30,16 @@ export default function Leave() {
   const toDecide = db.leaves.filter((l) => canDecideLeave(db, me, l))
   const decidedByMe = db.leaves.filter((l) => l.decidedBy === me.id)
   const [tab, setTab] = useState<'mine' | 'approve' | 'history'>(toDecide.length ? 'approve' : 'mine')
-  const used = useMemo(() => {
-    const u: Record<LeaveType, number> = { CL: 0, SL: 0, EL: 0, LOP: 0 }
-    for (const l of mine) if (l.status === 'APPROVED' && l.from.slice(0, 4) === today().slice(0, 4)) u[l.type] += l.days
-    return u
-  }, [mine])
+  // approving tabs only for people who approve leave (sales staff just see their own requests)
+  const approver = can('leave.approve') || toDecide.length > 0 || decidedByMe.length > 0
   const days = f.to >= f.from ? daysBetween(f.from, f.to) + 1 : 0
 
   return (
     <div>
       <PageHeader title="Leave" subtitle={`Your requests go to: ${leaveApprovers(me.role).map(roleLabel).join(' / ')}`} icon={CalendarCheck2}
         actions={<Button variant="accent" icon={Plus} onClick={() => setOpen(true)}>Request my leave</Button>} />
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {(Object.keys(QUOTA) as LeaveType[]).map((t) => (
-          <Card key={t} className="p-4">
-            <p className="text-xs font-semibold text-mute">{NAMES[t]}</p>
-            <p className="mt-1 text-2xl font-extrabold">{t === 'LOP' ? used.LOP : QUOTA[t] - used[t]}<span className="text-sm font-medium text-mute"> {t === 'LOP' ? 'days taken' : `of ${QUOTA[t]} left`}</span></p>
-          </Card>
-        ))}
-      </div>
       <Card className="overflow-hidden">
-        <div className="border-b border-line p-4"><Tabs value={tab} onChange={setTab} tabs={[{ id: 'mine', label: 'My requests', count: mine.length }, { id: 'approve', label: 'To approve', count: toDecide.length }, { id: 'history', label: 'Decided by me', count: decidedByMe.length }]} /></div>
+        <div className="border-b border-line p-4"><Tabs value={tab} onChange={setTab} tabs={[{ id: 'mine', label: 'My requests', count: mine.length }, ...(approver ? [{ id: 'approve' as const, label: 'To approve', count: toDecide.length }, { id: 'history' as const, label: 'Decided by me', count: decidedByMe.length }] : [])]} /></div>
         {(() => {
           const list = tab === 'mine' ? mine : tab === 'approve' ? toDecide : decidedByMe
           if (!list.length) return <EmptyState icon={CalendarCheck2} title={tab === 'approve' ? 'Nothing to approve' : 'No requests'} />
@@ -81,7 +70,7 @@ export default function Leave() {
       <Modal open={open} onClose={() => setOpen(false)} title="Request my leave"
         footer={<><Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button onClick={async () => { if (await run(() => applyLeave(me, f), 'Leave requested')) { setOpen(false); setF({ type: 'CL', from: today(), to: today(), reason: '' }) } }}>Submit request</Button></>}>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Select label="Leave type" value={f.type} onChange={(e) => setF({ ...f, type: e.target.value as LeaveType })} className="sm:col-span-2">{(Object.keys(NAMES) as LeaveType[]).map((t) => <option key={t} value={t}>{NAMES[t]}{t !== 'LOP' ? ` · ${QUOTA[t] - used[t]} left` : ''}</option>)}</Select>
+          <Select label="Leave type" value={f.type} onChange={(e) => setF({ ...f, type: e.target.value as LeaveType })} className="sm:col-span-2">{(Object.keys(NAMES) as LeaveType[]).map((t) => <option key={t} value={t}>{NAMES[t]}</option>)}</Select>
           <Input label="From" type="date" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value, to: e.target.value > f.to ? e.target.value : f.to })} />
           <Input label="To" type="date" value={f.to} min={f.from} onChange={(e) => setF({ ...f, to: e.target.value })} hint={`${days} day(s)`} />
           <Textarea label="Reason" required value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} className="sm:col-span-2" />

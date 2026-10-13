@@ -12,6 +12,7 @@ import { roleLabel } from '../../lib/rbac'
 import { Button, EmptyState, Stat, useToast } from '../../components/ui'
 import { BookingStatusBadge } from '../../components/booking'
 import { Greeting, LoginLogoutCard, Section, Tile, TileGrid, ViewAll } from './widgets'
+import { MESSAGES_ENABLED } from '../../lib/modules'
 
 export function SupportDashboard() {
   const db = useDb()
@@ -68,7 +69,7 @@ export function SupportDashboard() {
       <TileGrid>
         <Tile to="/bookings" icon={Briefcase} label="Client files" desc="Status, payments, documents (view)" tone="violet" />
         <Tile to="/documents" icon={FileText} label="Document forms" desc="Upload what clients send" tone="blue" badge={missingKyc.length} />
-        <Tile to="/messages" icon={MessageSquare} label="Messages" desc="Team chat and shared documents" tone="green" />
+        {MESSAGES_ENABLED && <Tile to="/messages" icon={MessageSquare} label="Messages" desc="Team chat and shared documents" tone="green" />}
         <Tile to="/schemes" icon={Sparkles} label="Schemes" tone="green" viewOnly />
         <Tile to="/broadcasts" icon={Megaphone} label="Broadcasts" tone="red" viewOnly />
         <Tile to="/leave?new=1" icon={CalendarCheck2} label="Request my leave" tone="violet" />

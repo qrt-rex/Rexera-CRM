@@ -42,7 +42,7 @@ export default function Employees() {
     const d = form.data
     if (!form.user) {
       setTried(true)
-      if (pwError || !resume) return
+      if (pwError) return
     }
     const ok = form.user
       ? await run(() => updateUser(me, form.user!.id, { name: d.name, email: d.email, phone: d.phone, department: d.department, designation: d.designation, teamLeadId: d.teamLeadId, salary: d.salary, branchId: d.branchId, ...(form.user!.role === 'branchdirector' ? { branchIds: d.branchIds ?? [] } : {}) }), 'Employee updated')
@@ -111,7 +111,7 @@ export default function Employees() {
       </Drawer>
 
       <Modal open={form.open} onClose={closeForm} title={form.user ? `Edit ${form.user.name}` : 'Add employee'} size="lg"
-        subtitle={form.user ? 'Role and access are changed in Access Management.' : 'Set their first password and attach their resume. They can change the password later in Settings → Security.'}
+        subtitle={form.user ? 'Role and access are changed in Access Management.' : 'Set their first password (attaching a resume is optional). They can change the password later in Settings → Security.'}
         footer={<><Button variant="outline" onClick={closeForm}>Cancel</Button><Button onClick={save}>Save</Button></>}>
         <div className="grid gap-4 sm:grid-cols-2">
           {(['name', 'username', 'email', 'department', 'designation'] as const).map((k) => (
@@ -141,7 +141,7 @@ export default function Employees() {
             <Input label="Password" required type={pw.show ? 'text' : 'password'} autoComplete="new-password" value={pw.password} onChange={(e) => setPw({ ...pw, password: e.target.value })} error={tried && pwError && pwError !== 'The two passwords do not match.' ? pwError : undefined} hint={PASSWORD_HINT} />
             <Input label="Confirm password" required type={pw.show ? 'text' : 'password'} autoComplete="new-password" value={pw.confirm} onChange={(e) => setPw({ ...pw, confirm: e.target.value })} error={tried && pwError === 'The two passwords do not match.' ? pwError : undefined} />
             <label className="flex items-center gap-2 text-xs text-mute sm:col-span-2"><input type="checkbox" checked={pw.show} onChange={(e) => setPw({ ...pw, show: e.target.checked })} className="accent-[var(--brand)]" />Show password</label>
-            <div className="sm:col-span-2"><FileField label="Resume" required accept={RESUME_TYPES} acceptLabel="PDF or Word" value={resume} onChange={setResume} error={tried && !resume ? "Attach the new joinee's resume." : undefined} /></div>
+            <div className="sm:col-span-2"><FileField label="Resume (optional)" accept={RESUME_TYPES} acceptLabel="PDF or Word" value={resume} onChange={setResume} /></div>
           </div>
         )}
       </Modal>

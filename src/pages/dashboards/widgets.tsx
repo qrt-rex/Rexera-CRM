@@ -130,7 +130,7 @@ export function LoginLogoutCard({ className }: { className?: string }) {
           : <>
             {paused
               ? <Button size="sm" variant="success" icon={Play} onClick={() => run(() => resumeDay(me), 'Welcome back — day resumed')}>Resume</Button>
-              : <Button size="sm" variant="soft" icon={Pause} disabled={!inBreakWindow(now, bp) || left <= 0} title={`Lunch break: ${breakLabel(bp)}`} onClick={() => run(() => pauseDay(me), `Day paused · ${mmss(left)} of break left`)}>{inBreakWindow(now, bp) ? (left <= 0 ? 'Break used' : 'Pause') : `Break ${breakLabel(bp)}`}</Button>}
+              : <Button size="sm" variant="soft" icon={Pause} disabled={!inBreakWindow(now, bp) || left <= 0} title={`Lunch break: ${breakLabel(bp)}`} onClick={() => run(() => pauseDay(me), `Day paused · ${mmss(left)} of break left`)}>{inBreakWindow(now, bp) ? (left <= 0 ? 'Break used' : 'Pause') : 'Break'}</Button>}
             <Button size="sm" variant="outline" icon={Square} onClick={logout}>End my day</Button>
           </>}
       </div>
@@ -155,10 +155,11 @@ export function BreakReminder() {
   return null
 }
 
-/** Shown on every page while the person is on a break. */
+/** While the person's day is paused, this covers the whole CRM: nothing can be done until they resume (or sign out). */
 export function BreakBanner() {
   const db = useDb()
   const me = useMe()
+  const { signOut } = useAuth()
   const run = useRun()
   const s = todaySession(db, me.id)
   const paused = onBreak(s)
@@ -167,11 +168,16 @@ export function BreakBanner() {
   const left = breakLeftMs(s, now)
   const late = breakReview(s, now)
   return (
-    <div role={late.state === 'STILL_AWAY' ? 'alert' : 'status'} className={cx('mb-5 flex flex-wrap items-center gap-3 rounded-2xl border px-4 py-3 text-sm', left > 0 ? 'border-warn/40 bg-warn-soft text-warn' : 'border-bad/40 bg-bad-soft text-bad')}>
-      <Pause className="size-4" />
-      <b>{late.state === 'STILL_AWAY' ? `Late from break · ${late.lateMinutes} min` : 'Your day is paused'}</b>
-      <span className="text-ink/70">{left > 0 ? `${mmss(left)} of lunch break left (${breakLabel(breakFor(me, db))})` : late.state === 'STILL_AWAY' ? breakFor(me, db).warnMessage : 'Lunch break ended — please resume your day'}</span>
-      <Button size="sm" variant="success" icon={Play} className="ml-auto" onClick={() => run(() => resumeDay(me), 'Welcome back — day resumed')}>Resume my day</Button>
+    <div className="fixed inset-0 z-[90] grid place-items-center bg-ink/60 p-4 backdrop-blur-sm">
+      <div role={late.state === 'STILL_AWAY' ? 'alert' : 'dialog'} aria-modal="true" aria-label="Your day is paused"
+        className={cx('w-full max-w-sm rounded-3xl border bg-card p-6 text-center shadow-pop', left > 0 ? 'border-warn/40' : 'border-bad/40')}>
+        <span className={cx('mx-auto grid size-14 place-items-center rounded-2xl', left > 0 ? 'bg-warn-soft text-warn' : 'bg-bad-soft text-bad')}><Pause className="size-7" /></span>
+        <h2 className="mt-4 text-lg font-extrabold">{late.state === 'STILL_AWAY' ? `Late from break · ${late.lateMinutes} min` : 'Your day is paused'}</h2>
+        <p className="mt-1 text-sm text-mute">{left > 0 ? `${mmss(left)} of lunch break left (${breakLabel(breakFor(me, db))})` : late.state === 'STILL_AWAY' ? breakFor(me, db).warnMessage : 'Lunch break ended — please resume your day'}</p>
+        <p className="mt-2 text-xs text-mute">The CRM is locked until you resume.</p>
+        <Button variant="success" icon={Play} className="mt-5 w-full" onClick={() => run(() => resumeDay(me), 'Welcome back — day resumed')}>Resume my day</Button>
+        <button className="mt-3 text-xs font-semibold text-mute hover:text-ink" onClick={() => signOut()}>Sign out</button>
+      </div>
     </div>
   )
 }

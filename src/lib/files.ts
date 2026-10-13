@@ -1,10 +1,16 @@
 import type { FileRef } from './types'
 import { nowIso, uid } from './format'
+import { CLOUD } from './cloud'
+import { getSupabase } from './supabase'
 
 /**
- * Uploaded files (resumes, leave attachments, candidate CVs) live in their own IndexedDB store so the main data
- * document stays small and quick to save. Records keep only a FileRef.
+ * Uploaded files (resumes, leave attachments, candidate CVs, payment proofs, client documents) live in their own
+ * IndexedDB store so the main data document stays small and quick to save. Records keep only a FileRef.
+ * With Supabase (VITE_DATA_BACKEND=supabase) every file is also stored in the private "crm-files" bucket, so anyone
+ * signed in can open it on any computer; this browser keeps a copy.
  */
+const BUCKET = 'crm-files'
+const bucket = async () => (await getSupabase()).storage.from(BUCKET)
 const DB_NAME = 'rexera-files', STORE = 'files'
 
 export const DOC_TYPES = 'application/pdf,image/png,image/jpeg,image/webp'
@@ -39,21 +45,38 @@ export function checkFile(f: File, accept: string, label: string) {
 
 export async function saveFile(f: File): Promise<FileRef> {
   const ref: FileRef = { id: uid('file-'), name: f.name, type: f.type || 'application/octet-stream', size: f.size, at: nowIso() }
+  if (CLOUD) {
+    const { error } = await (await bucket()).upload(ref.id, f, { contentType: ref.type, upsert: false })
+    if (error) throw new Error(`Could not upload ${f.name}: ${error.message}`)
+  }
   await tx('readwrite', (s) => { s.put({ ...ref, blob: f }) })
   return ref
 }
 export async function getFile(id: string): Promise<Blob | undefined> {
   const row = await tx<{ blob: Blob } | undefined>('readonly', (s) => s.get(id) as IDBRequest<{ blob: Blob } | undefined>)
-  return row?.blob
+  if (row?.blob || !CLOUD) return row?.blob
+  // added on another computer: fetch it once and keep a copy here
+  const { data } = await (await bucket()).download(id)
+  if (data) await tx('readwrite', (s) => { s.put({ id, blob: data }) }).catch(() => undefined)
+  return data ?? undefined
 }
-export async function deleteFile(id: string) { await tx('readwrite', (s) => { s.delete(id) }) }
+export async function deleteFile(id: string) {
+  await tx('readwrite', (s) => { s.delete(id) })
+  if (CLOUD) await (await bucket()).remove([id]).catch(() => undefined)
+}
 
 /** Opens the file in a new tab (PDF / image) or downloads it. */
 export async function openFile(ref: FileRef, download = false) {
-  const blob = await getFile(ref.id)
-  if (!blob) throw new Error('This file is not stored in this browser (it may have been added on another computer).')
-  const url = URL.createObjectURL(blob)
-  if (!download && /^(application\/pdf|image\/)/.test(ref.type)) window.open(url, '_blank', 'noopener')
+  // the tab opens straight away, while this is still the click: opened after loading the file, browsers block it
+  const viewer = !download && /^(application\/pdf|image\/)/.test(ref.type) ? window.open('', '_blank') : null
+  if (viewer) viewer.opener = null
+  const blob = await getFile(ref.id).catch(() => undefined)
+  if (!blob) {
+    viewer?.close()
+    throw new Error(CLOUD ? 'This file could not be found.' : 'This file is not stored in this browser (it may have been added on another computer).')
+  }
+  const url = URL.createObjectURL(blob.type ? blob : new Blob([blob], { type: ref.type }))
+  if (viewer) viewer.location.href = url
   else { const a = document.createElement('a'); a.href = url; a.download = ref.name; a.click() }
   setTimeout(() => URL.revokeObjectURL(url), 60_000)
 }

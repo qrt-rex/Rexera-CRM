@@ -4,8 +4,9 @@ import { Check, CheckCircle2, Clock, PauseCircle, PlayCircle, RotateCcw, Send, S
 import type { Booking } from '../lib/types'
 import { useDb } from '../lib/store'
 import { useMe } from '../lib/auth'
-import { availableDecisions, decide, userName, usersWithRole, type Decision } from '../lib/actions'
-import { BOOKING_STATUS, CHAIN, HOLD_REASONS, STAGES, stageLabel } from '../lib/workflow'
+import { addDocuments, availableDecisions, decide, userName, usersWithRole, type Decision } from '../lib/actions'
+import { BOOKING_STATUS, CHAIN, hasLegalDoc, HOLD_REASONS, LEGAL_DOC_CATEGORIES, STAGES, stageLabel } from '../lib/workflow'
+import { DocUploader, type PendingDoc } from './DocUploader'
 import { addDays, bookingMoney, fmtDate, inr, ymd } from '../lib/format'
 import { Badge, Button, cx, Input, Modal, Progress, Select, Textarea, useRun } from './ui'
 
@@ -144,6 +145,9 @@ export function DecisionModal({ b, kind, onClose, onDone }: { b: Booking; kind: 
   const [admin, setAdmin] = useState('')
   const [maxStage, setMaxStage] = useState(6)
   const [deadline, setDeadline] = useState('')
+  const [legalDocs, setLegalDocs] = useState<PendingDoc[]>([])
+  // Legal hands a file to Operations only once the client's Agreement / Undertaking is on it
+  const needsLegalDoc = kind === 'ASSIGN_OPS' && b.status === 'PENDING_LEGAL' && !hasLegalDoc(db.bookings.find((x) => x.id === b.id) ?? b)
   const opsUsers = usersWithRole(db, 'operations')
   const admins = usersWithRole(db, 'admin')
   useEffect(() => {
@@ -166,8 +170,15 @@ export function DecisionModal({ b, kind, onClose, onDone }: { b: Booking; kind: 
 
   return (
     <Modal open onClose={onClose} title={m.label} subtitle={`${b.bookingId} · ${b.companyName} · ${b.serviceName}`}
-      footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button variant={m.variant === 'outline' ? 'primary' : m.variant} icon={m.icon} onClick={submit}>{m.label}</Button></>}>
+      footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button variant={m.variant === 'outline' ? 'primary' : m.variant} icon={m.icon} disabled={needsLegalDoc} onClick={submit}>{m.label}</Button></>}>
       <div className="space-y-4">
+        {needsLegalDoc && (
+          <div className="space-y-3 rounded-xl border border-warn/40 bg-warn-soft p-3">
+            <p className="text-sm font-semibold text-warn">Add this client's Agreement or Undertaking before assigning the file to Operations.</p>
+            <DocUploader label="Agreement / Undertaking" value={legalDocs} onChange={setLegalDocs} categories={LEGAL_DOC_CATEGORIES}
+              onUpload={async (docs) => { const ok = await run(() => addDocuments(me, b.id, docs), 'Document added'); if (ok) setLegalDocs([]); return ok }} />
+          </div>
+        )}
         {kind === 'APPROVE' && b.status !== 'PENDING_TL' && (
           <div className="rounded-xl bg-ok-soft px-4 py-3 text-sm text-ok">Approving verifies all {b.payments.length} payment(s) ({inr(bookingMoney(b).collected)}) and sends the file to Legal.</div>
         )}

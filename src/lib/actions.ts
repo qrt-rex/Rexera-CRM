@@ -6,7 +6,7 @@ import { clearCloudDb, getDb, mutate, reloadFromCloud, saved } from './store'
 import { CLOUD, cloudSetOwnPassword, cloudSetPassword, cloudSignIn, cloudSignOut, cloudUserId } from './cloud'
 import { bookingBranch, directorBranches, isBranchScoped, leadBranch, NO_BRANCH } from './branches'
 import { hashPassword } from './crypto'
-import { CALL_OUTCOMES, FINAL_STAGE, OPEN_LEAD, STAGE_OUTCOMES, STAGES, stageLabel } from './workflow'
+import { CALL_OUTCOMES, FINAL_STAGE, hasLegalDoc, OPEN_LEAD, STAGE_OUTCOMES, STAGES, stageLabel } from './workflow'
 import { fireAutomation } from './email'
 import { addDays, daysBetween, fmtDate, isEmail, isGstin, isPan, isPhone, normPhone, nowIso, round2, today, uid, ymd } from './format'
 
@@ -668,25 +668,44 @@ export function logCall(me: User, leadId: string, outcome: CallOutcome, note: st
   })
 }
 
+/** Column names people (and the old CRM's exports) use for each lead field; matched ignoring case, spaces, _ and -. */
+const LEAD_COLUMNS: Record<string, string[]> = {
+  name: ['name', 'client name', 'contact name', 'contact person', 'person name', 'full name', 'lead name', 'customer name'],
+  phone: ['phone', 'mobile', 'mobile no', 'mobile number', 'phone no', 'phone number', 'contact', 'contact no', 'contact number', 'company mobile', 'whatsapp', 'whatsapp number'],
+  company: ['company', 'company name', 'business', 'business name', 'firm', 'firm name', 'organisation', 'organization', 'client company', 'startup name'],
+  email: ['email', 'email id', 'email address', 'mail', 'company email'],
+  city: ['city', 'location', 'company city'], state: ['state', 'company state'],
+  service: ['service', 'services', 'service name', 'scheme', 'requirement', 'product'],
+  source: ['source', 'lead source'], price: ['price', 'amount', 'quote', 'quoted', 'value', 'deal value'], notes: ['notes', 'note', 'remarks', 'remark', 'comment', 'comments'],
+}
+const colKey = (k: string) => k.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+function leadField(r: Record<string, string>, field: string) {
+  const want = new Set(LEAD_COLUMNS[field])
+  for (const [k, v] of Object.entries(r)) if (want.has(colKey(k)) && v?.trim()) return v.trim()
+  return ''
+}
+
+/** Bulk lead import (CSV): Super Admin only, as in the old CRM. */
 export function importLeads(me: User, rows: Record<string, string>[]) {
-  need(me, 'leads.own', 'leads.manage')
+  assert(isSA(me), 'Only a Super Admin can import leads.')
   return mutate((d) => {
     let added = 0, skipped = 0
     const errors: string[] = []
     const phones = new Set(d.leads.map((l) => l.phone))
-    rows.forEach((r, i) => {
-      const phone = normPhone(r.phone ?? r.mobile ?? '')
-      const name = r.name ?? r['client name'] ?? ''
-      const priceRaw = r.price ?? r.amount ?? ''
+    rows.forEach((raw, i) => {
+      const r = Object.fromEntries(Object.keys(LEAD_COLUMNS).map((f) => [f, leadField(raw, f)])) as Record<string, string>
+      const phone = normPhone(r.phone)
+      const name = r.name || r.company
+      const priceRaw = r.price
       const price = priceRaw ? Number(priceRaw.replace(/[₹,\s]/g, '')) : undefined
       if (!name || !isPhone(phone)) { errors.push(`Row ${i + 2}: name and a valid phone are required`); return }
       if (price !== undefined && !Number.isFinite(price)) { errors.push(`Row ${i + 2}: price is not a number`); return }
       if (phones.has(phone)) { skipped++; return }
       phones.add(phone)
       d.leads.unshift({
-        id: uid('lead-'), code: `LD-${d.counters.lead++}`, name, phone, company: r.company ?? '', email: r.email ?? '',
-        city: r.city ?? '', state: r.state ?? '', service: r.service ?? '', source: r.source || 'Import', price,
-        status: 'NEW', notes: r.notes ?? '', assignedTo: me.id, createdBy: me.id, createdAt: nowIso(), calls: [],
+        id: uid('lead-'), code: `LD-${d.counters.lead++}`, name, phone, company: r.company, email: r.email,
+        city: r.city, state: r.state, service: r.service, source: r.source || 'Import', price,
+        status: 'NEW', notes: r.notes, assignedTo: me.id, createdBy: me.id, createdAt: nowIso(), calls: [],
       })
       added++
     })
@@ -988,6 +1007,7 @@ export function decide(me: User, id: string, dec: Decision) {
         const ops = d.users.find((u) => u.id === dec.opsMemberId)
         assert(ops && rolesOf(ops).includes('operations'), 'Pick an Operation Team member.')
         assert(dec.maxStage >= 1 && dec.maxStage <= STAGES.length, 'Pick the furthest stage allowed.')
+        if (b.status === 'PENDING_LEGAL') assert(hasLegalDoc(b), "Add the client's Agreement or Undertaking first (Documents), then assign the file to Operations.")
         const first = !b.opsMemberId
         b.opsMemberId = ops.id
         b.maxStage = dec.maxStage
@@ -1601,7 +1621,7 @@ function checkBranches(d: DB, i: { branchId?: string; branchIds?: string[] }) {
 export const PASSWORD_RULE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,16}$/
 export const PASSWORD_HINT = '8–16 characters with upper case, lower case, a number and a symbol.'
 
-/** HR sets the first password and must attach the new joinee's resume. */
+/** HR sets the first password; the resume is optional here (the public application form requires one). */
 export async function createUser(me: User, i: UserInput, password: string, resume: FileRef | undefined) {
   need(me, 'access.manage', 'employees.manage')
   assert(i.name.trim() && i.username.trim(), 'Name and username are required.')
@@ -1609,7 +1629,6 @@ export async function createUser(me: User, i: UserInput, password: string, resum
   assert(!i.phone || isPhone(i.phone), 'Enter a valid 10-digit phone.')
   assert(i.role !== 'superadmin' || isSA(me), 'Only a Super Admin can create a Super Admin.')
   assert(PASSWORD_RULE.test(password), `Password: ${PASSWORD_HINT}`)
-  assert(resume, "Attach the new joinee's resume.")
   const d = getDb()
   assert(!d.users.some((u) => u.username.toLowerCase() === i.username.toLowerCase()), 'Username already taken.')
   assert(!d.users.some((u) => u.email.toLowerCase() === i.email.toLowerCase()), 'Email already used.')

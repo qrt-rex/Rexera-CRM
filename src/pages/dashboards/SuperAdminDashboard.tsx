@@ -17,6 +17,7 @@ import { useUnread } from '../../layout/Shell'
 import { LoginLogoutCard, RecentActivity, Section, Tile } from './widgets'
 import { BranchCards } from './BranchDashboard'
 import { branchList } from '../../lib/branches'
+import { MESSAGES_ENABLED } from '../../lib/modules'
 
 export function SuperAdminDashboard() {
   const db = useDb()
@@ -60,7 +61,7 @@ export function SuperAdminDashboard() {
     { to: '/broadcasts', icon: Megaphone, label: 'New Update by Company', desc: 'Create & view updates', tone: 'orange' as const },
     { to: '/work', icon: Workflow, label: 'Admin Process', desc: 'Client work processing', tone: 'violet' as const },
     { to: '/reports?tab=cards', icon: FileBarChart, label: 'Report Card Generate', desc: 'Reports card & analysis', tone: 'navy' as const },
-    { to: '/messages', icon: MessagesSquare, label: 'Message to Message', desc: 'Internal messaging system', tone: 'red' as const },
+    ...(MESSAGES_ENABLED ? [{ to: '/messages', icon: MessagesSquare, label: 'Message to Message', desc: 'Internal messaging system', tone: 'red' as const }] : []),
     { to: '/access?tab=roles', icon: Settings, label: 'All Role Setting', desc: 'Roles, permissions & settings', tone: 'navy' as const },
   ]
 

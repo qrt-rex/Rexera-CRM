@@ -9,7 +9,7 @@ import type { Perm } from '../lib/types'
 import { Rexy } from '../components/hr/Mascots'
 import { useDb } from '../lib/store'
 import { applyTheme, getTheme, useAuth, useMe, type Theme } from '../lib/auth'
-import { MODULES, canSee } from '../lib/modules'
+import { MESSAGES_ENABLED, MODULES, canSee } from '../lib/modules'
 import { isMaster, ROLES, roleLabel } from '../lib/rbac'
 import { markRead, runBreakMonitor, runComboReminders, runTaskReminders } from '../lib/actions'
 import { runScheduledAutomations } from '../lib/email'
@@ -119,7 +119,7 @@ export function Shell() {
           </button>
           <div className="flex items-center gap-1">
             <button onClick={cycleTheme} title={`Theme: ${theme}`} aria-label="Change theme" className="hidden size-10 place-items-center rounded-xl text-mute hover:bg-card2 hover:text-ink sm:grid"><ThemeIcon className="size-5" /></button>
-            {can('messages.use') && (
+            {MESSAGES_ENABLED && can('messages.use') && (
               <Link to="/messages" aria-label="Messages" className="relative hidden size-10 place-items-center rounded-xl text-mute hover:bg-card2 hover:text-ink sm:grid">
                 <Mail className="size-5" />
                 {unread.messages > 0 && <span className="absolute -right-0.5 -top-0.5 grid h-5 min-w-5 place-items-center rounded-full bg-bad px-1 text-[10px] font-bold text-white ring-2 ring-card">{unread.messages}</span>}
@@ -164,7 +164,10 @@ export function Shell() {
             </div>
           )}
           {maintenance?.on && !isMaster(me) ? (
-            <div className="grid place-items-center py-24 text-center">
+            <div className="grid place-items-center py-16 text-center">
+              {/* the company's maintenance picture: public/maintenance.jpg (hidden until that file is added) */}
+              <img src="/maintenance.jpg" alt="Rexera CRM is under maintenance" className="mb-6 max-h-[45vh] w-auto max-w-full rounded-2xl object-contain"
+                onError={(e) => { e.currentTarget.style.display = 'none' }} />
               <span className="mb-4 grid size-16 place-items-center rounded-2xl bg-warn-soft text-warn"><Wrench className="size-8" /></span>
               <h2 className="text-xl font-extrabold">We'll be right back</h2>
               <p className="mt-1 max-w-md text-sm text-mute">Rexera CRM is under maintenance{maintenance.message ? `: ${maintenance.message}` : '.'} Your work is saved — please check back shortly.</p>
@@ -245,10 +248,6 @@ function Sidebar() {
           <Mail className="size-5" /><span className="flex-1">Email</span>
           <span className={cx('grid h-6 min-w-6 place-items-center rounded-full px-1.5 text-[11px] font-bold', unread.emails ? 'bg-accent text-white' : 'bg-brand-soft text-brand-ink')}>{unread.emails}</span>
         </NavLink>
-        <NavLink to="/notifications" className={({ isActive }) => cx(item, isActive ? active : idle)}>
-          <Bell className="size-5" /><span className="flex-1">Notification</span>
-          <span className={cx('grid h-6 min-w-6 place-items-center rounded-full px-1.5 text-[11px] font-bold', unread.notices.length ? 'bg-bad text-white' : 'bg-card2 text-mute')}>{unread.notices.length}</span>
-        </NavLink>
       </div>
     </div>
   )
@@ -294,7 +293,7 @@ function HrSidebar() {
         <NavLink to={`/dashboard/${isMaster(me) ? 'hr' : me.role}`} className={({ isActive }) => cx(item, 'mb-2 py-2.5 text-sm', isActive ? 'bg-brand text-white shadow-md shadow-brand/25' : 'text-ink/80 hover:bg-white/70 dark:hover:bg-white/5')}>
           <Home className="size-[18px]" />Dashboard
         </NavLink>
-        {HR_MENU.filter((m) => !m.perms.length || can(...m.perms)).map((m) => {
+        {HR_MENU.filter((m) => (m.to !== '/messages' || MESSAGES_ENABLED) && (!m.perms.length || can(...m.perms))).map((m) => {
           const active = m.to.includes('?') ? here === m.to : loc.pathname === m.to
           return (
             <Link key={m.label} to={m.to} className={cx(item, active ? 'bg-white text-ink shadow-sm dark:bg-white/10' : 'text-ink/80 hover:bg-white/70 dark:hover:bg-white/5')}>
@@ -312,10 +311,6 @@ function HrSidebar() {
         <NavLink to="/inbox" className={({ isActive }) => cx(item, 'text-sm', isActive ? 'bg-white dark:bg-white/10' : 'text-ink/80 hover:bg-white/70 dark:hover:bg-white/5')}>
           <Mail className="size-5" /><span className="flex-1">Email</span>
           <span className={cx('grid h-6 min-w-6 place-items-center rounded-full px-1.5 text-[11px] font-bold', unread.emails ? 'bg-accent text-white' : 'bg-white text-brand-ink dark:bg-white/10')}>{unread.emails}</span>
-        </NavLink>
-        <NavLink to="/notifications" className={() => cx(item, 'text-sm text-ink/80 hover:bg-white/70 dark:hover:bg-white/5')}>
-          <Bell className="size-5" /><span className="flex-1">Notification</span>
-          <span className={cx('grid h-6 min-w-6 place-items-center rounded-full px-1.5 text-[11px] font-bold', unread.notices.length ? 'bg-bad text-white' : 'bg-white text-mute dark:bg-white/10')}>{unread.notices.length}</span>
         </NavLink>
       </div>
     </div>
@@ -380,22 +375,25 @@ function NotificationBubble() {
   const me = useMe()
   const nav = useNavigate()
   const unread = useUnread()
-  const [dismissed, setDismissed] = useState<string | null>(null)
+  // once the newest notification is read or closed, the popup stays away until a newer one arrives
+  const seenKey = `rexera-popup-seen-${me.id}`
+  const [seenAt, setSeenAt] = useState(() => { try { return localStorage.getItem(seenKey) ?? '' } catch { return '' } })
   const [off] = useState(() => { try { return localStorage.getItem(POPUP_KEY) === '1' } catch { return false } })
-  const n = unread.notices[0]
-  if (off || !n || dismissed === n.id) return null
+  const n = unread.notices.reduce<typeof unread.notices[number] | undefined>((a, x) => (!a || x.at > a.at ? x : a), undefined) // newest unread
+  if (off || !n || n.at <= seenAt) return null
+  const done = () => { setSeenAt(n.at); try { localStorage.setItem(seenKey, n.at) } catch { /* ignore */ } }
   return (
     // sits just under the header's bell icon, pointing up at it
     <div className="no-print anim-fade-up fixed right-3 top-[76px] z-[60] w-[min(88vw,320px)] sm:right-20 lg:right-[168px]">
       <div className="relative rounded-[28px] border-[3px] border-ink bg-card p-4 pr-9 shadow-[6px_6px_0_var(--ink)] dark:border-line dark:shadow-pop">
         <svg className="absolute -top-[22px] right-8 text-ink dark:text-line" width="34" height="24" viewBox="0 0 34 24"><path d="M2 24 L30 2 L20 24" fill="var(--card)" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" /></svg>
-        <button aria-label="Dismiss" className="absolute right-3 top-3 text-mute hover:text-ink" onClick={() => setDismissed(n.id)}><X className="size-4" /></button>
+        <button aria-label="Dismiss" className="absolute right-3 top-3 text-mute hover:text-ink" onClick={done}><X className="size-4" /></button>
         <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-accent"><Bell className="size-3.5 anim-float" />New notification</p>
         <p className="mt-1 text-sm font-bold">{n.title}</p>
         <p className="line-clamp-2 text-xs text-mute">{n.body}</p>
         <div className="mt-3 flex gap-2">
-          <Button size="sm" variant="accent" onClick={() => { markRead(me, n.id); if (n.link) nav(n.link) }}>View</Button>
-          <Button size="sm" variant="ghost" onClick={() => markRead(me, n.id)}>Mark read</Button>
+          <Button size="sm" variant="accent" onClick={() => { done(); markRead(me, n.id); if (n.link) nav(n.link) }}>View</Button>
+          <Button size="sm" variant="ghost" onClick={() => { done(); markRead(me, n.id) }}>Mark read</Button>
         </div>
       </div>
     </div>

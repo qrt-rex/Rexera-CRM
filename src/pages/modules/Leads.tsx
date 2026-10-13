@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Briefcase, ChevronDown, Download, Pencil, Phone, Plus, RefreshCcw, Trash2, Upload, UserPlus, Users } from 'lucide-react'
+import { Briefcase, ChevronDown, Download, Pencil, Plus, Trash2, Upload, UserPlus, Users } from 'lucide-react'
 import type { Lead, LeadStatus } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
@@ -9,7 +9,7 @@ import { LEAD_STATUS, OPEN_LEAD } from '../../lib/workflow'
 import { ago, downloadCsv, fmtDate, fmtDateTime, inr, parseCsv, today, ymd } from '../../lib/format'
 import { rolesOf } from '../../lib/rbac'
 import {
-  Button, Card, Checkbox, Drawer, EmptyState, FileButton, Input, Menu, MenuItem, Modal, PageHeader, SearchBox, Select, Table, Td, Textarea, Th, Tabs, useConfirm, useRun, useToast, Badge,
+  Button, Card, Checkbox, Drawer, EmptyState, FileButton, Menu, MenuItem, Modal, PageHeader, SearchBox, Select, Table, Td, Th, Tabs, useConfirm, useRun, useToast, Badge,
 } from '../../components/ui'
 import { LeadFormModal } from '../../components/LeadForm'
 import { CallLogger } from './Dialer'
@@ -36,7 +36,6 @@ export default function Leads() {
   const [form, setForm] = useState<{ open: boolean; lead?: Lead }>({ open: false })
   const [assignTo, setAssignTo] = useState('')
   const [assignOpen, setAssignOpen] = useState(false)
-  const [quick, setQuick] = useState<{ lead: Lead; status: LeadStatus; note: string; followUp: string } | null>(null)
   // changing the status from the list; an interested (hot) lead can go straight to a CRM entry
   const changeStatus = async (l: Lead, status: LeadStatus, note = '', followUp?: string) => {
     if (await run(() => setLeadStatus(me, l.id, status, note, followUp || undefined), `${l.name}: ${LEAD_STATUS[status].label}`) && status === 'INTERESTED' && can('bookings.create')) {
@@ -84,7 +83,7 @@ export default function Leads() {
     <div>
       <PageHeader title="CRM Leads" subtitle={can('leads.manage') ? 'All leads across the company' : can('leads.assign') ? 'Your leads and your team’s' : 'Leads assigned to you'} icon={UserPlus}
         actions={<>
-          <FileButton accept=".csv,text/csv" onFile={onImport}><Button variant="outline" icon={Upload}>Import CSV</Button></FileButton>
+          {rolesOf(me).includes('superadmin') && <FileButton accept=".csv,text/csv" onFile={onImport}><Button variant="outline" icon={Upload}>Import CSV</Button></FileButton>}
           <Button variant="outline" icon={Download} onClick={() => downloadCsv(`leads-${t}.csv`, list.map((l) => ({ code: l.code, name: l.name, company: l.company, phone: l.phone, email: l.email, city: l.city, state: l.state, service: l.service, source: l.source, price: l.price ?? '', status: l.status, follow_up: l.followUp ?? '', owner: userName(db, l.assignedTo), created: ymd(l.createdAt) })))}>Export</Button>
           <Button variant="accent" icon={Plus} onClick={() => setForm({ open: true })}>New lead</Button>
         </>} />
@@ -138,10 +137,8 @@ export default function Leads() {
                   <Td className="text-xs">{l.assignedTo ? userName(db, l.assignedTo) : <Badge tone="amber">Unassigned</Badge>}</Td>
                   <Td className="text-right">
                     <div className="flex justify-end gap-1">
-                      <Button size="sm" variant="soft" icon={Phone} onClick={() => setParams({ open: l.id })}>Call</Button>
                       <Menu width="w-56" trigger={(o) => <Button size="sm" variant="outline" icon={ChevronDown} aria-expanded={o}>Update</Button>}>
                         {(close) => <>
-                          <MenuItem icon={RefreshCcw} onClick={() => { close(); setQuick({ lead: l, status: l.status, note: '', followUp: l.followUp ?? '' }) }}>Change status</MenuItem>
                           <MenuItem icon={Pencil} onClick={() => { close(); setForm({ open: true, lead: l }) }}>Change info</MenuItem>
                           {l.status !== 'CONVERTED' && can('bookings.create') && <MenuItem icon={Briefcase} onClick={() => { close(); nav(`/bookings/new?lead=${l.id}`) }}>Book as CRM entry</MenuItem>}
                         </>}
@@ -157,15 +154,6 @@ export default function Leads() {
       </Card>
 
       <LeadFormModal open={form.open} lead={form.lead} onClose={() => setForm({ open: false })} />
-
-      <Modal open={!!quick} onClose={() => setQuick(null)} title={quick ? `Update ${quick.lead.name}` : ''} subtitle={quick?.lead.code} size="sm"
-        footer={<><Button variant="outline" onClick={() => setQuick(null)}>Cancel</Button><Button onClick={async () => { if (quick) { const q2 = quick; setQuick(null); await changeStatus(q2.lead, q2.status, q2.note, q2.followUp) } }}>Save</Button></>}>
-        {quick && <div className="grid gap-4">
-          <Select label="Status" value={quick.status} onChange={(e) => setQuick({ ...quick, status: e.target.value as LeadStatus })}>{(Object.keys(LEAD_STATUS) as LeadStatus[]).map((s) => <option key={s} value={s}>{LEAD_STATUS[s].label}</option>)}</Select>
-          {OPEN_LEAD.includes(quick.status) && <Input label="Next follow-up" type="date" min={t} value={quick.followUp} onChange={(e) => setQuick({ ...quick, followUp: e.target.value })} />}
-          <Textarea label="Note" rows={2} value={quick.note} onChange={(e) => setQuick({ ...quick, note: e.target.value })} placeholder="What happened?" />
-        </div>}
-      </Modal>
 
       <Modal open={assignOpen} onClose={() => setAssignOpen(false)} title={`Assign ${sel.length} lead(s)`} size="sm"
         footer={<><Button variant="outline" onClick={() => setAssignOpen(false)}>Cancel</Button><Button onClick={async () => { if (await run(() => assignLeads(me, sel, assignTo), 'Leads assigned')) { setAssignOpen(false); setSel([]) } }}>Assign</Button></>}>

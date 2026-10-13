@@ -89,6 +89,12 @@ export function AiAssistant() {
   const endRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const first = me.name.split(' ')[0]
+  // the button can be dragged anywhere (it can cover things); where it was left is remembered on this computer
+  const POS_KEY = 'rexera-rexy-pos'
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(() => { try { return JSON.parse(localStorage.getItem(POS_KEY) || 'null') } catch { return null } })
+  const drag = useRef<{ id: number; dx: number; dy: number; sx: number; sy: number; moved: boolean } | null>(null)
+  const moved = useRef(false)
+  const clamp = (p: { x: number; y: number }) => ({ x: Math.max(4, Math.min(p.x, innerWidth - 68)), y: Math.max(4, Math.min(p.y, innerHeight - 68)) })
 
   useEffect(() => { setMsgs(load(me.id)) }, [me.id])
   useEffect(() => { save(me.id, msgs) }, [me.id, msgs])
@@ -177,8 +183,30 @@ export function AiAssistant() {
         </section>
       )}
 
-      <button onClick={() => setOpen(!open)} aria-label={open ? 'Close Rexy' : 'Open Rexy, your AI assistant'} title="Ask Rexy"
-        className="group fixed bottom-5 right-4 z-[75] grid size-14 place-items-center rounded-full bg-gradient-to-br from-[#4453b5] to-[#0891b2] text-white shadow-lg shadow-brand/30 ring-4 ring-white/70 transition hover:scale-105 dark:ring-white/10 sm:right-6 sm:size-16">
+      <button aria-label={open ? 'Close Rexy' : 'Open Rexy, your AI assistant'} title="Ask Rexy · drag to move"
+        onClick={() => { if (moved.current) { moved.current = false; return } setOpen(!open) }}
+        onPointerDown={(e) => {
+          const r = e.currentTarget.getBoundingClientRect()
+          drag.current = { id: e.pointerId, dx: e.clientX - r.left, dy: e.clientY - r.top, sx: e.clientX, sy: e.clientY, moved: false }
+          try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* dragging still works */ }
+        }}
+        onPointerMove={(e) => {
+          const d = drag.current
+          if (d?.id !== e.pointerId) return
+          if (!d.moved && Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < 6) return // a tap, not a drag
+          d.moved = true
+          setPos(clamp({ x: e.clientX - d.dx, y: e.clientY - d.dy }))
+        }}
+        onPointerUp={(e) => {
+          const d = drag.current
+          drag.current = null
+          if (!d?.moved) return
+          moved.current = true
+          const p = clamp({ x: e.clientX - d.dx, y: e.clientY - d.dy })
+          try { localStorage.setItem(POS_KEY, JSON.stringify(p)) } catch { /* ignore */ }
+        }}
+        style={pos ? { left: clamp(pos).x, top: clamp(pos).y, right: 'auto', bottom: 'auto' } : undefined}
+        className="group fixed bottom-5 right-4 z-[75] grid touch-none size-14 place-items-center rounded-full bg-gradient-to-br from-[#4453b5] to-[#0891b2] text-white shadow-lg shadow-brand/30 ring-4 ring-white/70 transition hover:scale-105 dark:ring-white/10 sm:right-6 sm:size-16">
         {open ? <X className="size-6" /> : <span className="grid size-12 place-items-center overflow-hidden rounded-full bg-white/95 sm:size-[52px]"><Rexy pose="wave" className="h-11 w-11 transition group-hover:rotate-6" /></span>}
         {!open && !msgs.length && <span className="absolute -right-0.5 -top-0.5 flex size-4"><span className="absolute inline-flex size-full animate-ping rounded-full bg-accent opacity-60" /><span className="relative inline-flex size-4 rounded-full border-2 border-white bg-accent" /></span>}
       </button>

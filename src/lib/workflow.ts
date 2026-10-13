@@ -106,12 +106,15 @@ export const DOC_FORM: { cat: string; short: string; hint: string }[] = [
   { cat: 'Passport / photo', short: 'Passport / photo', hint: 'Passport copy or passport-size photo' },
   { cat: 'CMA report', short: 'CMA', hint: 'Credit monitoring arrangement data' },
 ]
+/** Legal attaches one of these to the client's file before handing it to Operations. */
+export const LEGAL_DOC_CATEGORIES = ['Agreement', 'Undertaking']
+export const hasLegalDoc = (b: { documents: { category: string }[] }) => b.documents.some((x) => LEGAL_DOC_CATEGORIES.includes(x.category))
 /** Counts as KYC in the missing-KYC lists. */
 export const KYC_CATEGORIES = ['KYC', 'Aadhaar card', 'Company PAN card', 'Passport / photo']
 
 export const DOC_CATEGORIES = [
   ...DOC_FORM.map((d) => d.cat),
-  'CRM', 'Quotation (QT)', 'Agreement', 'Payment receipt', 'F.R (Financial report)', 'D.P.R (Detailed project report)', 'KYC', 'Company documents',
+  'CRM', 'Quotation (QT)', 'Agreement', 'Undertaking', 'Payment receipt', 'F.R (Financial report)', 'D.P.R (Detailed project report)', 'KYC', 'Company documents',
   'Government certificates', 'Financial', 'Other',
 ]
 
@@ -131,6 +134,7 @@ export function guessCategory(name: string, fallback = 'Other') {
   if (/\bcma\b/.test(n)) return 'CMA report'
   if (/passport|photo/.test(n)) return 'Passport / photo'
   if (/agree|contract/.test(n)) return 'Agreement'
+  if (/undertak/.test(n)) return 'Undertaking'
   if (/quot|\bqt\b|proposal/.test(n)) return 'Quotation (QT)'
   if (/\bcrm\b/.test(n)) return 'CRM'
   if (/pitch|deck/.test(n)) return 'Pitch deck'

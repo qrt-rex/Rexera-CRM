@@ -66,4 +66,6 @@ export const MODULES: ModuleDef[] = [
 ]
 
 export const moduleByKey = (k: string) => MODULES.find((m) => m.key === k)!
-export const canSee = (m: ModuleDef, has: (...p: Perm[]) => boolean) => !m.perms.length || has(...m.perms)
+/** Messages is switched off for now (the code stays); set to true to bring the module back everywhere. */
+export const MESSAGES_ENABLED = false
+export const canSee = (m: ModuleDef, has: (...p: Perm[]) => boolean) => (m.key !== 'messages' || MESSAGES_ENABLED) && (!m.perms.length || has(...m.perms))
