@@ -103,15 +103,44 @@ export async function storageRoom() {
 // ------------------------------------------------------------------ backups
 export interface StoredFile extends FileRef { data: string }
 const toB64 = (b: Blob) => new Promise<string>((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] ?? ''); r.onerror = rej; r.readAsDataURL(b) })
-/** Files added in the CRM. Old-CRM files (gigabytes) are left out — they can be attached again from the export folder. */
-export async function exportFiles(): Promise<StoredFile[]> {
+/** Every uploaded file the CRM data points at (proofs, documents, resumes, attachments, bills…), wherever it sits. */
+export function fileRefsIn(data: unknown): FileRef[] {
+  const out = new Map<string, FileRef>()
+  const walk = (v: unknown) => {
+    if (Array.isArray(v)) { v.forEach(walk); return }
+    if (!v || typeof v !== 'object') return
+    const o = v as Record<string, unknown>
+    if (typeof o.id === 'string' && typeof o.name === 'string' && typeof o.type === 'string' && typeof o.size === 'number' && typeof o.at === 'string') out.set(o.id, o as unknown as FileRef)
+    else Object.values(o).forEach(walk)
+  }
+  walk(data)
+  return [...out.values()]
+}
+
+/**
+ * Files added in the CRM. Old-CRM files (gigabytes) are left out — they can be attached again from the export folder.
+ * With Supabase, `refs` (the files the data points at) are fetched from the bucket when this browser has no copy;
+ * `missing` lists any that couldn't be fetched.
+ */
+export async function exportFiles(refs?: FileRef[]): Promise<{ files: StoredFile[]; missing: FileRef[] }> {
+  const files: StoredFile[] = [], missing: FileRef[] = []
+  if (CLOUD && refs) {
+    const todo = refs.filter((r) => !r.id.startsWith('lg-f-'))
+    const worker = async () => {
+      for (let r = todo.shift(); r; r = todo.shift()) {
+        const blob = await getFile(r.id).catch(() => undefined)
+        if (blob) files.push({ ...r, data: await toB64(blob) }); else missing.push(r)
+      }
+    }
+    await Promise.all(Array.from({ length: 4 }, worker))
+    return { files, missing }
+  }
   const keys = (await tx<IDBValidKey[]>('readonly', (s) => s.getAllKeys())).map(String).filter((k) => !k.startsWith('lg-f-'))
-  const out: StoredFile[] = []
   for (const id of keys) {
     const row = await tx<(FileRef & { blob: Blob }) | undefined>('readonly', (s) => s.get(id) as IDBRequest<(FileRef & { blob: Blob }) | undefined>)
-    if (row) { const { blob, ...ref } = row; out.push({ ...ref, data: await toB64(blob) }) }
+    if (row) { const { blob, ...ref } = row; files.push({ ...ref, data: await toB64(blob) }) }
   }
-  return out
+  return { files, missing }
 }
 export async function importFiles(list: StoredFile[]) {
   for (const { data, ...ref } of list) {

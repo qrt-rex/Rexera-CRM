@@ -9,7 +9,7 @@ import { DEMO_PASSWORD, SEED_VERSION } from './seed'
 import { listDatasets, saveDatasets, type Dataset } from './imports'
 import { addDays, fmtDate, nowIso, uid, ymd } from './format'
 import { cloudConfig, pingCloud } from './supabase'
-import { exportFiles, importFiles, putFiles, storageRoom, storedLegacyIds, type StoredFile } from './files'
+import { exportFiles, fileRefsIn, importFiles, putFiles, storageRoom, storedLegacyIds, type StoredFile } from './files'
 
 function needMaster(me: User) {
   if (!isMaster(me)) throw new ActionError('Only IT Support or Super Admin can do that.')
@@ -90,15 +90,19 @@ async function keyFrom(pass: string, salt: Uint8Array) {
 }
 
 /** Downloads include uploaded files (resumes, leave attachments); in-browser snapshots don't need them (restores never delete files). */
-async function buildBackup(me: User, withFiles = false): Promise<BackupFile> {
-  return { app: 'rexera-crm', format: 1, exportedAt: nowIso(), exportedBy: me.name, seedVersion: SEED_VERSION, db: getDb(), imports: await listDatasets().catch(() => []), files: withFiles ? await exportFiles().catch(() => []) : undefined }
+async function buildBackup(me: User, withFiles = false): Promise<BackupFile & { missing: number }> {
+  const db = getDb()
+  // with Supabase the files are fetched from the bucket, so a backup from any computer has all of them
+  const f = withFiles ? await exportFiles(fileRefsIn(db)).catch(() => ({ files: [], missing: [] })) : undefined
+  return { app: 'rexera-crm', format: 1, exportedAt: nowIso(), exportedBy: me.name, seedVersion: SEED_VERSION, db, imports: await listDatasets().catch(() => []), files: f?.files, missing: f?.missing.length ?? 0 }
 }
 
 /** Full backup (all CRM data + imported recruitment tables), optionally encrypted with AES-256-GCM. */
 export async function downloadBackup(me: User, passphrase?: string) {
   needMaster(me)
   if (passphrase !== undefined && passphrase.length < 8) throw new ActionError('Use a passphrase of at least 8 characters.')
-  let text = JSON.stringify(await buildBackup(me, true))
+  const { missing, ...backup } = await buildBackup(me, true)
+  let text = JSON.stringify(backup)
   if (passphrase) {
     const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12))
     const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await keyFrom(passphrase, salt), new TextEncoder().encode(text))
@@ -112,7 +116,9 @@ export async function downloadBackup(me: User, passphrase?: string) {
   a.download = `rexera-backup-${stamp}${passphrase ? '-encrypted' : ''}.json`
   a.click()
   setTimeout(() => URL.revokeObjectURL(a.href), 2000)
-  mutate((d) => { logBackup(d, { by: me.id, kind: 'DOWNLOAD', note: a.download, bytes: text.length, encrypted: !!passphrase }); log(d, me.id, 'BACKUP_DOWNLOAD', `${a.download} · ${Math.round(text.length / 1024)} KB`) })
+  const note = `${a.download}${missing ? ` · ${missing} file(s) could not be fetched` : ''}`
+  mutate((d) => { logBackup(d, { by: me.id, kind: 'DOWNLOAD', note, bytes: text.length, encrypted: !!passphrase }); log(d, me.id, 'BACKUP_DOWNLOAD', `${note} · ${Math.round(text.length / 1024)} KB`) })
+  if (missing) throw new ActionError(`Backup downloaded, but ${missing} uploaded file(s) could not be fetched from Supabase and aren't in it. Try again, or check the crm-files bucket.`)
 }
 
 /** Reads a backup file; returns 'needs-passphrase' for encrypted files when no passphrase is given. */
@@ -182,7 +188,8 @@ export async function listSnapshots(): Promise<SnapshotInfo[]> {
 }
 export async function createSnapshot(me: User, label: string, kind: 'SNAPSHOT' | 'AUTO_SNAPSHOT' = 'SNAPSHOT') {
   needMaster(me)
-  const payload = JSON.stringify(await buildBackup(me))
+  const { missing: _none, ...snap } = await buildBackup(me)
+  const payload = JSON.stringify(snap)
   await snapTx('readwrite', (s) => { s.put({ id: uid('snap-'), at: nowIso(), by: me.id, label, bytes: payload.length, payload } satisfies Snapshot) })
   const all = await listSnapshots()
   for (const old of all.slice(MAX_SNAPSHOTS)) await snapTx('readwrite', (s) => s.delete(old.id))
