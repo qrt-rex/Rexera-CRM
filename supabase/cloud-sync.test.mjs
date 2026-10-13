@@ -77,4 +77,16 @@ assert.deepEqual(await writes(withAsset, produce(withAsset, (d) => {
 assert.deepEqual(await writes(base, produce(base, (d) => { d.rolePerms.sales = [...d.rolePerms.sales, 'reports.view'] })),
   ['role_permissions delete (role=sales)', `role_permissions insert ${new Set(base.rolePerms.sales).size + 1}`], 'role permissions: rewrite that role only')
 
+// an uploaded sheet: the batch row before its leads (the leads refer to it)
+const uploaded = await writes(base, produce(base, (d) => {
+  d.leadUploads = [{ id: 'lup-1', fileName: 'oct.xlsx', size: 10, totalRows: 2, imported: 2, by: a.id, at }]
+  for (const n of [1, 2]) d.leads.unshift({ ...structuredClone(lead), id: `lead-up-${n}`, code: `LD-90${n}`, phone: `900000000${n}`, assignedTo: undefined, calls: [], uploadId: 'lup-1' })
+}))
+assert.deepEqual(uploaded, ['lead_uploads insert 1', 'leads insert 2'], 'upload batch, then its leads')
+
+// forwarding a lead is one update of that lead (owner, chain, history ride along)
+assert.deepEqual(await writes(base, produce(base, (d) => {
+  d.leads[0].assignedTo = b.id; (d.leads[0].chain ??= []).push({ to: b.id, by: a.id, at, kind: 'FORWARDED', note: 'x' })
+})), [`leads update 1 (id=${lead.id})`], 'forward a lead')
+
 console.log('✓ cloud sync writes only what changed')

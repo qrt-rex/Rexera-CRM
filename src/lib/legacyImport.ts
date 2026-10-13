@@ -1,7 +1,7 @@
-import type { BComment, BDoc, Booking, BookingStatus, DB, Invoice, Lead, LeadStatus, LegacyRow, Notice, Payment, Role, Service, StageMove, User, Approval } from './types'
+import type { BComment, BDoc, Booking, BookingStatus, DB, Invoice, Lead, LeadUpload, LegacyRow, Notice, Payment, Role, Service, StageMove, User, Approval } from './types'
 import { invoiceTotals, normPhone, round2 } from './format'
 import { PRESET_USERS } from './seed'
-import { guessCategory, STAGES, stageLabel } from './workflow'
+import { dispositionToStatus, guessCategory, STAGES, stageLabel } from './workflow'
 
 /**
  * Import from the old PHP CRM (phpMyAdmin / MariaDB .sql dump).
@@ -459,31 +459,57 @@ export function buildImport(tables: DumpTables, current: DB, opts: ImportOptions
   if (ownerUnknown) notes.push(`${ownerUnknown} file(s) were closed by someone who isn't a user in the old CRM; the closer's name is shown on the file.`)
   if (unknownStatus) notes.push(`${unknownStatus} file(s) had an unusual status text; they are “On hold” with the original text as the reason.`)
 
-  // ---------------------------------------------------------- leads (+ assignment & activity)
-  const assignments = new Map<string, LegacyRow>()
-  for (const a of T('lead_assignments')) if ((a.assignment_status ?? 'Active') === 'Active') assignments.set(a.lead_id!, a)
+  // ---------------------------------------------------------- leads (old leads module: uploads, assignment chain, activity)
+  const uploads: LeadUpload[] = T('lead_uploads').map((u) => ({
+    id: `lg-lup-${u.id}`, fileName: (u.original_filename || u.filename || 'Uploaded sheet')!.trim(), size: num(u.file_size), totalRows: num(u.total_rows),
+    imported: num(u.imported_count), by: userFromId(u.uploaded_by)?.id ?? '', at: ist(u.uploaded_at) ?? now,
+  }))
+  const uploadIds = new Set(uploads.map((u) => u.id))
+  // every assignment, oldest first: the hand-over chain; the active one is the current owner and disposition
+  const assignmentsOf = new Map<string, LegacyRow[]>()
+  for (const a of T('lead_assignments')) assignmentsOf.set(a.lead_id!, [...(assignmentsOf.get(a.lead_id!) ?? []), a])
+  for (const list of assignmentsOf.values()) list.sort((x, y) => (x.assigned_at ?? '').localeCompare(y.assigned_at ?? '') || num(x.id) - num(y.id))
   const activity = new Map<string, LegacyRow[]>()
   for (const a of T('lead_activity')) activity.set(a.lead_id!, [...(activity.get(a.lead_id!) ?? []), a])
-  const DISP: Record<string, LeadStatus> = { new: 'NEW', intro: 'ATTEMPTED', contacted: 'ATTEMPTED', 'call back': 'CALL_BACK', callback: 'CALL_BACK', interested: 'INTERESTED', 'not interested': 'NOT_INTERESTED', converted: 'CONVERTED', closed: 'NOT_INTERESTED' }
   const phones = new Set(base.leads.filter((l) => !l.id.startsWith('lg-')).map((l) => l.phone))
   const leads: Lead[] = []
   let leadsSkipped = 0
+  const text = (v: string | null | undefined) => (blank(v) || ['na', 'n/a', '#n/a', '-'].includes(v!.trim().toLowerCase()) ? undefined : v!.trim())
   for (const r of T('leads')) {
-    const phone = normPhone(r.phone ?? r.alternate_phone ?? '')
+    const phone = normPhone(r.phone ?? '') || normPhone(r.alternate_phone ?? '')
     if (!/^[6-9]\d{9}$/.test(phone) || phones.has(phone)) { leadsSkipped++; continue }
     phones.add(phone)
-    const a = assignments.get(r.id!)
-    const log = (activity.get(r.id!) ?? []).map((x) => `• ${x.created_at ?? ''} ${x.action ?? ''}${x.new_value ? `: ${x.new_value}` : ''}${x.notes ? ` — ${x.notes}` : ''}`)
+    const list = assignmentsOf.get(r.id!) ?? []
+    const a = [...list].reverse().find((x) => (x.assignment_status ?? 'Active') === 'Active')
+    const chain = list.filter((x) => userFromId(x.employee_id)).map((x, i) => ({
+      to: userFromId(x.employee_id)!.id, by: userFromId(x.reassigned_from)?.id ?? userFromId(x.assigned_by)?.id ?? '', at: ist(x.assigned_at) ?? now,
+      kind: (x.reassigned_from ? 'FORWARDED' : i ? 'REASSIGNED' : 'ASSIGNED') as 'ASSIGNED' | 'REASSIGNED' | 'FORWARDED',
+    }))
+    const history = (activity.get(r.id!) ?? []).map((x) => ({
+      at: ist(x.created_at) ?? now, by: userFromId(x.user_id)?.id ?? '', action: (x.action ?? 'Activity').trim(),
+      note: [x.old_value && x.new_value ? `${x.old_value} → ${x.new_value}` : x.new_value, x.notes].filter((v) => v && v.trim()).join(' — ') || undefined,
+    })).sort((x, y) => y.at.localeCompare(x.at))
+    let extra: Record<string, string> | undefined
+    try { const e = r.extra_data ? JSON.parse(r.extra_data) : null; if (e && typeof e === 'object') extra = Object.fromEntries(Object.entries(e).map(([k, v]) => [k, String(v)])) } catch { /* not JSON: kept in legacy */ }
+    const owner = userFromId(a?.employee_id)
+    const uploadId = r.upload_id ? `lg-lup-${r.upload_id}` : undefined
     leads.push({
-      id: `lg-l-${r.id}`, code: (r.lead_code ?? '').trim() || `LG-${r.id}`, name: r.name ?? '', company: r.company_name ?? '', phone, email: r.email ?? '',
+      id: `lg-l-${r.id}`, code: (r.lead_code ?? '').trim() || `LG-${r.id}`, name: r.name ?? '', company: r.company_name ?? '', phone, email: (text(r.email) ?? '').toLowerCase(),
       city: r.city ?? '', state: r.state ?? '', service: r.product_service ?? '', source: r.lead_source ?? 'Old CRM',
       price: a && num(a.conversion_value) > 0 ? num(a.conversion_value) : undefined,
-      status: (a ? DISP[(a.disposition_status ?? 'new').toLowerCase()] : undefined) ?? (r.status === 'Converted' ? 'CONVERTED' : r.status === 'Closed' ? 'NOT_INTERESTED' : 'NEW'),
-      followUp: day(a?.follow_up_date), notes: [r.requirement, r.notes, a?.disposition_notes, log.length ? `Old CRM activity:\n${log.join('\n')}` : ''].filter((x) => x && x.trim()).join('\n\n'),
-      assignedTo: userFromId(a?.employee_id)?.id, createdBy: userFromId(r.created_by)?.id ?? '', createdAt: ist(r.created_at) ?? now, calls: [], legacy: r,
+      status: (a ? dispositionToStatus(a.disposition_status) : undefined) ?? (r.status === 'Converted' ? 'CONVERTED' : r.status === 'Closed' ? 'NOT_INTERESTED' : 'NEW'),
+      followUp: day(a?.follow_up_date), notes: [r.notes, a?.disposition_reason, a?.disposition_notes].filter((x) => x && x.trim()).join('\n\n'),
+      assignedTo: owner?.id, createdBy: userFromId(r.created_by)?.id ?? '', createdAt: ist(r.created_at) ?? now, calls: [], legacy: r,
+      altPhone: text(r.alternate_phone), location: text(r.location), industry: text(r.industry), businessType: text(r.business_type) ?? text(r.lead_type),
+      turnover: text(r.annual_turnover), fundingAmount: text(r.funding_amount), fundingCategory: text(r.funding_category), requirement: text(r.requirement),
+      formAt: ist(r.form_timestamp), extra, uploadId: uploadId && uploadIds.has(uploadId) ? uploadId : undefined,
+      chain: chain.length ? chain : undefined, assignedAt: owner ? ist(a?.assigned_at) : undefined,
+      // as in the old CRM: a lead the owner never opened still shows as new to them
+      seenAt: owner ? ist(a?.employee_viewed_at) : undefined, history: history.length ? history : undefined,
     })
   }
   if (leadsSkipped) notes.push(`${leadsSkipped} lead(s) skipped: no valid 10-digit phone, or the number is already a lead.`)
+  if (uploads.length) notes.push(`${uploads.length} lead upload batch(es) kept in CRM Leads → Upload history.`)
 
   // ---------------------------------------------------------- notifications
   const notices: Notice[] = T('notifications').filter((n) => userFromId(n.user_id)).map((n) => ({
@@ -538,6 +564,7 @@ export function buildImport(tables: DumpTables, current: DB, opts: ImportOptions
     services,
     bookings: [...base.bookings.filter((b) => !b.id.startsWith('lg-')), ...bookings].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
     leads: [...base.leads.filter((l) => !l.id.startsWith('lg-')), ...leads],
+    leadUploads: [...(base.leadUploads ?? []).filter((u) => !u.id.startsWith('lg-')), ...uploads],
     notices: [...base.notices.filter((n) => !n.id.startsWith('lg-')), ...notices],
     pfAccounts: [...base.pfAccounts, ...base.users.filter((u) => !base.pfAccounts.some((p) => p.userId === u.id)).map((u) => ({ userId: u.id, uan: '', enrolled: true }))],
   }

@@ -11,7 +11,7 @@ import { useDb } from '../lib/store'
 import { applyTheme, getTheme, useAuth, useMe, type Theme } from '../lib/auth'
 import { MESSAGES_ENABLED, MODULES, canSee } from '../lib/modules'
 import { isMaster, ROLES, roleLabel } from '../lib/rbac'
-import { markRead, runBreakMonitor, runComboReminders, runTaskReminders } from '../lib/actions'
+import { markRead, overdueLeadsOf, runBreakMonitor, runComboReminders, runTaskReminders, unseenLeadsOf } from '../lib/actions'
 import { runScheduledAutomations } from '../lib/email'
 import { ago, today } from '../lib/format'
 import { Avatar, Button, cx, Menu, MenuItem, Modal } from '../components/ui'
@@ -157,6 +157,7 @@ export function Shell() {
 
         <main id="main" className="mx-auto w-full max-w-[1500px] flex-1 px-4 py-6 sm:px-6 lg:px-8">
           <BreakBanner />
+          {loc.pathname.startsWith('/dashboard') && <OverdueLeadsBanner />}
           {maintenance?.on && isMaster(me) && (
             <div className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-warn/40 bg-warn-soft px-4 py-3 text-sm text-warn">
               <Wrench className="size-4" /><b>Maintenance mode is on</b><span className="text-ink/70">Only IT Support and Super Admin can use the app.{maintenance.message ? ` Message: “${maintenance.message}”` : ''}</span>
@@ -235,7 +236,8 @@ function Sidebar() {
           <SideGroup key={g} label={g} open={openGroups[g] ?? true} onToggle={() => toggle(g)}>
             {visible.filter((m) => m.group === g).map((m) => (
               <NavLink key={m.key} to={m.path} className={() => cx(item, 'py-1.5 text-[13px]', loc.pathname.startsWith(m.path) ? active : idle)}>
-                <m.icon className="size-4 opacity-80" />{m.label}
+                <m.icon className="size-4 opacity-80" /><span className="flex-1">{m.label}</span>
+                {m.key === 'leads' && <LeadsBadge />}
               </NavLink>
             ))}
           </SideGroup>
@@ -368,6 +370,30 @@ function BellMenu() {
       )}
     </Menu>
   )
+}
+
+/** On the dashboard (as in the old CRM): leads still on New from before today block new leads until updated. */
+function OverdueLeadsBanner() {
+  const db = useDb()
+  const me = useMe()
+  const n = overdueLeadsOf(db, me.id).length
+  if (!n) return null
+  return (
+    <div role="alert" className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-bad/40 bg-bad-soft px-4 py-3 text-sm text-bad">
+      <b>Action required: {n} lead(s) without a disposition since yesterday.</b>
+      <span className="text-ink/75">Update them now — until you do, no new leads can be given to you.</span>
+      <Link to="/leads" className="ml-auto rounded-full bg-bad px-4 py-1.5 text-xs font-bold text-white">Open my leads</Link>
+    </div>
+  )
+}
+
+/** CRM Leads in the menu: leads still on New from before today (red), or new ones not opened yet. */
+function LeadsBadge() {
+  const db = useDb()
+  const me = useMe()
+  const overdue = overdueLeadsOf(db, me.id).length, fresh = unseenLeadsOf(db, me.id).length
+  if (!overdue && !fresh) return null
+  return <span className={cx('rounded-full px-1.5 text-[10px] font-bold leading-5', overdue ? 'bg-bad text-white' : 'bg-info text-white')} title={overdue ? `${overdue} overdue lead(s)` : `${fresh} new lead(s)`}>{overdue ? `${overdue} pending` : `${fresh} new`}</span>
 }
 
 export const POPUP_KEY = 'rexera-popup-off'

@@ -21,7 +21,7 @@ export default function TeamProgress() {
     const bookings = db.bookings.filter((b) => b.createdBy === u.id && ymd(b.createdAt) >= from && ymd(b.createdAt) <= to)
     const coll = collections(db, [u.id], from, to)
     const target = u.target ?? 300000
-    return { u, calls: calls.length, talk: Math.round(calls.reduce((s, c) => s + c.durationSec, 0) / 60), interested: leads.filter((l) => l.status === 'INTERESTED').length, converted: leads.filter((l) => l.status === 'CONVERTED').length, bookings: bookings.length, coll, target, pct: Math.min(100, Math.round((coll / target) * 100)) }
+    return { u, calls: calls.length, talk: Math.round(calls.reduce((s, c) => s + c.durationSec, 0) / 60), interested: leads.filter((l) => l.status === 'HOT_PROSPECT').length, converted: leads.filter((l) => l.status === 'CONVERTED').length, bookings: bookings.length, coll, target, pct: Math.min(100, Math.round((coll / target) * 100)) }
   }).sort((a, b) => b.coll - a.coll), [team, db, from, to])
 
   return (

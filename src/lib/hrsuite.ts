@@ -1,4 +1,4 @@
-import type { DB, IncentiveRules, Perm, PfSettings, Role } from './types'
+import type { Call, DB, IncentiveRules, Lead, Perm, PfSettings, Role } from './types'
 import { defaultAutomations } from './emailTemplates'
 import { DEFAULT_ROLE_PERMS } from './rbac'
 import { ymd } from './format'
@@ -198,6 +198,19 @@ export function upgradeDb(d: DB): DB {
       })
     }
     d.upgrades.push('qrt-superadmin-1')
+  }
+  d.leadUploads ??= []
+  if (!d.upgrades.includes('lead-dispositions-1')) {
+    // 7 statuses → the dialer's 14 dispositions (the old CRM's list)
+    const ST: Record<string, Lead['status']> = { ATTEMPTED: 'NOT_PICKUP', INTERESTED: 'HOT_PROSPECT', INVALID: 'WRONG_NUMBER' }
+    const OUT: Record<string, Call['outcome']> = { NO_ANSWER: 'NOT_PICKUP', INTERESTED: 'HOT_PROSPECT' }
+    for (const l of d.leads) {
+      l.status = ST[l.status] ?? l.status
+      for (const c of l.calls) c.outcome = OUT[c.outcome] ?? c.outcome
+      // the current owner's lead counts as handed over when it was created (no "new" badge for old leads)
+      if (l.assignedTo && !l.assignedAt) { l.assignedAt = l.createdAt; l.seenAt = l.createdAt }
+    }
+    d.upgrades.push('lead-dispositions-1')
   }
   return d
 }

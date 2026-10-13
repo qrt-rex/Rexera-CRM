@@ -22,10 +22,16 @@ export function mapAll(backup) {
   t.login_attempts = Object.entries(d.loginFails ?? {}).map(([login, f]) => ({ login, failures: f.count, locked_until: s(f.until) }))
 
   t.services = d.services.map((x) => ({ id: x.id, name: x.name, category: x.category, price: x.price, gst_rate: x.gstRate, deduction: x.deduction, active: x.active }))
+  const uploadIds = new Set((d.leadUploads ?? []).map((x) => x.id))
+  t.lead_uploads = (d.leadUploads ?? []).map((x) => ({ id: x.id, file_name: x.fileName, size_bytes: x.size ?? 0, total_rows: x.totalRows ?? 0, imported: x.imported ?? 0, uploaded_by: uref(x.by), uploaded_at: x.at }))
   t.leads = d.leads.map((l) => ({
     id: l.id, code: l.code, name: l.name, company: l.company ?? '', phone: l.phone, email: s(l.email), city: l.city ?? '', state: l.state ?? '',
     service: l.service ?? '', source: l.source ?? '', price: l.price ?? null, status: l.status, follow_up: s(l.followUp), notes: l.notes ?? '',
     assigned_to: uref(l.assignedTo), created_by: uref(l.createdBy), created_at: l.createdAt, legacy: l.legacy ?? null,
+    alt_phone: s(l.altPhone), location: s(l.location), industry: s(l.industry), business_type: s(l.businessType), turnover: s(l.turnover),
+    funding_amount: s(l.fundingAmount), funding_category: s(l.fundingCategory), requirement: s(l.requirement), form_at: s(l.formAt), extra: l.extra ?? null,
+    upload_id: l.uploadId && uploadIds.has(l.uploadId) ? l.uploadId : null, chain: l.chain?.length ? l.chain : null, assigned_at: s(l.assignedAt), seen_at: s(l.seenAt),
+    history: l.history?.length ? l.history : null,
   }))
   t.lead_calls = d.leads.flatMap((l) => l.calls.map((c) => ({ id: c.id, lead_id: l.id, called_at: c.at, called_by: uref(c.by), outcome: c.outcome, note: c.note ?? '', duration_sec: c.durationSec ?? 0 })))
 
@@ -110,7 +116,7 @@ export function mapAll(backup) {
 // parents before children; [table, conflict columns]
 export const ORDER = [
   ['app_users', 'id'], ['app_users_team', 'id'], ['user_extra_roles', 'user_id,role'], ['user_permission_overrides', 'user_id,permission'],
-  ['role_permissions', 'role,permission'], ['login_attempts', 'login'], ['services', 'id'], ['leads', 'id'], ['lead_calls', 'id'],
+  ['role_permissions', 'role,permission'], ['login_attempts', 'login'], ['services', 'id'], ['lead_uploads', 'id'], ['leads', 'id'], ['lead_calls', 'id'],
   ['bookings', 'id'], ['booking_payments', 'id'], ['booking_approvals', 'id'], ['booking_stage_moves', 'id'], ['booking_comments', 'id'],
   ['booking_documents', 'id'], ['booking_client_emails', 'id'], ['booking_tasks', 'id'], ['invoices', 'id'], ['invoice_items', 'invoice_id,position'], ['schemes', 'id'],
   ['posts', 'id'], ['broadcasts', 'id'], ['broadcast_acks', 'broadcast_id,user_id'], ['events', 'id'], ['day_sessions', 'id'],
@@ -165,6 +171,9 @@ export function rowsToDb(input) {
     id: r.id, code: r.code, name: r.name, company: r.company ?? '', phone: r.phone, email: r.email ?? '', city: r.city ?? '', state: r.state ?? '',
     service: r.service ?? '', source: r.source ?? '', price: u(r.price), status: r.status, followUp: u(r.follow_up), notes: r.notes ?? '',
     assignedTo: u(r.assigned_to), createdBy: r.created_by ?? '', createdAt: r.created_at, legacy: u(r.legacy),
+    altPhone: u(r.alt_phone), location: u(r.location), industry: u(r.industry), businessType: u(r.business_type), turnover: u(r.turnover),
+    fundingAmount: u(r.funding_amount), fundingCategory: u(r.funding_category), requirement: u(r.requirement), formAt: u(r.form_at), extra: u(r.extra),
+    uploadId: u(r.upload_id), chain: u(r.chain), assignedAt: u(r.assigned_at), seenAt: u(r.seen_at), history: u(r.history),
     calls: callsOf(r.id).map((c) => ({ id: c.id, at: c.called_at, by: c.called_by ?? '', outcome: c.outcome, note: c.note ?? '', durationSec: c.duration_sec ?? 0 })),
   }))
 
@@ -247,6 +256,7 @@ export function rowsToDb(input) {
     candidateForms: rows('candidate_forms').map((f) => ({ id: f.id, token: f.token, title: f.title, kind: f.kind, department: f.department ?? '', description: f.description ?? '', active: f.active, createdAt: f.created_at, by: f.created_by ?? '' })),
     candidates: rows('candidate_applications').map((c) => opt({ id: c.id, formId: c.form_id, name: c.name, email: c.email, phone: c.phone, city: c.city ?? '', dob: u(c.dob), qualification: c.qualification, college: u(c.college), experience: c.experience ?? '', currentCompany: u(c.current_company), expectedSalary: u(c.expected_salary), noticePeriod: u(c.notice_period), linkedin: u(c.linkedin), message: u(c.message), resume: c.resume, status: c.status, notes: u(c.notes), submittedAt: c.submitted_at })),
     legacyFiles: rows('legacy_files').map((x) => ({ path: x.path, file: x.file, kind: x.kind ?? '' })),
+    leadUploads: rows('lead_uploads').map((x) => ({ id: x.id, fileName: x.file_name, size: x.size_bytes ?? 0, totalRows: x.total_rows ?? 0, imported: x.imported ?? 0, by: x.uploaded_by ?? '', at: x.uploaded_at })),
     assets: rows('company_assets').map((a) => opt({
       id: a.id, tag: a.tag, name: a.name, category: a.category, brand: u(a.brand), model: u(a.model), serial: u(a.serial), purchaseDate: u(a.purchase_date), cost: u(a.cost),
       vendor: u(a.vendor), warrantyUntil: u(a.warranty_until), location: u(a.location), condition: u(a.condition), status: a.status, assignedTo: u(a.assigned_to),

@@ -62,26 +62,47 @@ export const CHAIN = [
   { key: 'DONE', label: 'Completed', role: 'operations' as Role },
 ]
 
+/** The 14 lead dispositions, in the order people pick them (same as the Blutec dialer's call report). */
 export const LEAD_STATUS: Record<LeadStatus, { label: string; tone: Tone }> = {
   NEW: { label: 'New', tone: 'blue' },
-  ATTEMPTED: { label: 'Attempted', tone: 'gray' },
+  ANSWER: { label: 'Answer', tone: 'cyan' },
+  INTRO: { label: 'Intro', tone: 'violet' },
+  HOT_PROSPECT: { label: 'Hot prospect', tone: 'orange' },
   CALL_BACK: { label: 'Call back', tone: 'amber' },
-  INTERESTED: { label: 'Interested · hot prospect', tone: 'violet' },
+  NOT_PICKUP: { label: 'Not pickup', tone: 'gray' },
+  BUSY: { label: 'Busy', tone: 'gray' },
+  VOICE_MAIL: { label: 'Voice mail', tone: 'gray' },
   NOT_INTERESTED: { label: 'Not interested', tone: 'red' },
+  WRONG_NUMBER: { label: 'Wrong number', tone: 'red' },
+  DND: { label: 'DND', tone: 'red' },
+  LANGUAGE_ISSUE: { label: 'Language issue', tone: 'gray' },
+  SCRAP: { label: 'Scrap', tone: 'red' },
   CONVERTED: { label: 'Converted', tone: 'green' },
-  INVALID: { label: 'Invalid', tone: 'gray' },
 }
-export const OPEN_LEAD: LeadStatus[] = ['NEW', 'ATTEMPTED', 'CALL_BACK', 'INTERESTED']
+/** Still being worked on (in the queue and dialer). */
+export const OPEN_LEAD: LeadStatus[] = ['NEW', 'ANSWER', 'INTRO', 'HOT_PROSPECT', 'CALL_BACK', 'NOT_PICKUP', 'BUSY', 'VOICE_MAIL', 'LANGUAGE_ISSUE']
+/** Dead ends. */
+export const CLOSED_LEAD: LeadStatus[] = ['NOT_INTERESTED', 'WRONG_NUMBER', 'DND', 'SCRAP']
+/** These ask for the next follow-up date. */
+export const FOLLOW_UP_LEAD: LeadStatus[] = ['INTRO', 'HOT_PROSPECT', 'CALL_BACK']
 
-export const CALL_OUTCOMES: { id: CallOutcome; label: string; to: LeadStatus; tone: Tone }[] = [
-  { id: 'NO_ANSWER', label: 'No answer', to: 'ATTEMPTED', tone: 'gray' },
-  { id: 'BUSY', label: 'Busy', to: 'ATTEMPTED', tone: 'gray' },
-  { id: 'CALL_BACK', label: 'Call back later', to: 'CALL_BACK', tone: 'amber' },
-  { id: 'INTERESTED', label: 'Interested', to: 'INTERESTED', tone: 'violet' },
-  { id: 'CONVERTED', label: 'Converted (sale)', to: 'CONVERTED', tone: 'green' },
-  { id: 'NOT_INTERESTED', label: 'Not interested', to: 'NOT_INTERESTED', tone: 'red' },
-  { id: 'WRONG_NUMBER', label: 'Wrong number', to: 'INVALID', tone: 'red' },
-]
+/** A call ends with any disposition but New; the lead takes that disposition. */
+export const CALL_OUTCOMES: { id: CallOutcome; label: string; to: LeadStatus; tone: Tone }[] = (Object.keys(LEAD_STATUS) as LeadStatus[])
+  .filter((k): k is CallOutcome => k !== 'NEW').map((k) => ({ id: k, label: LEAD_STATUS[k].label, to: k, tone: LEAD_STATUS[k].tone }))
+
+/** A disposition written as text (Blutec's call report, old-CRM rows, a sheet column) → the status, if it names one. */
+export function dispositionToStatus(text?: string | null): LeadStatus | undefined {
+  const k = (text ?? '').toLowerCase().replace(/[^a-z]/g, '')
+  if (!k) return undefined
+  const byLabel = (Object.keys(LEAD_STATUS) as LeadStatus[]).find((s) => LEAD_STATUS[s].label.toLowerCase().replace(/[^a-z]/g, '') === k)
+  if (byLabel) return byLabel
+  const ALIAS: Record<string, LeadStatus> = {
+    contacted: 'ANSWER', answered: 'ANSWER', interested: 'HOT_PROSPECT', hot: 'HOT_PROSPECT', callback: 'CALL_BACK', followuprequired: 'CALL_BACK',
+    noanswer: 'NOT_PICKUP', notpicked: 'NOT_PICKUP', notpickedup: 'NOT_PICKUP', noresponse: 'NOT_PICKUP', voicemail: 'VOICE_MAIL',
+    invalid: 'WRONG_NUMBER', wrong: 'WRONG_NUMBER', closed: 'NOT_INTERESTED', sale: 'CONVERTED', booked: 'CONVERTED',
+  }
+  return ALIAS[k]
+}
 
 export const SERVICE_CATEGORIES = [
   'Government Grants & Schemes',

@@ -42,6 +42,8 @@ export function LeadFormModal({ open, onClose, lead }: { open: boolean; onClose:
         <Input label="Company" value={f.company} onChange={(e) => set('company', e.target.value)} />
         <div><PhoneInput label="Mobile" required value={f.phone} onChange={(v) => set('phone', v)} />{dup && <p className="mt-1 text-[11px] text-bad">Already a lead: {dup.code} · {dup.name}</p>}</div>
         <Input label="Email" type="email" value={f.email} onChange={(e) => set('email', e.target.value)} />
+        <Input label="Alternate phone" value={f.altPhone ?? ''} onChange={(e) => set('altPhone', e.target.value || undefined)} />
+        <Input label="Address / location" value={f.location ?? ''} onChange={(e) => set('location', e.target.value || undefined)} />
         <CityInput value={f.city} onChange={(v) => set('city', v)} onState={(s) => set('state', s)} />
         <StateSelect value={f.state} onChange={(v) => set('state', v)} />
         <Select label="Service interest" value={f.service} onChange={(e) => set('service', e.target.value)}>
@@ -56,6 +58,7 @@ export function LeadFormModal({ open, onClose, lead }: { open: boolean; onClose:
             {assignees.map((u) => <option key={u.id} value={u.id}>{u.name}{u.id === me.id ? ' (me)' : ''}</option>)}
           </Select>
         )}
+        <Textarea label="Requirement" rows={2} value={f.requirement ?? ''} onChange={(e) => set('requirement', e.target.value || undefined)} className="sm:col-span-2" />
         <Textarea label="Notes" value={f.notes} onChange={(e) => set('notes', e.target.value)} className="sm:col-span-2" />
       </div>
     </Modal>

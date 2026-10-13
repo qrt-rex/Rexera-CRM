@@ -69,6 +69,13 @@ db.legacyFiles = [{ path: 'uploads/a.pdf', file: { id: 'lg-f-1', name: 'a.pdf', 
 db.assets = [{ id: 'as-1', tag: 'RX-AST-0001', name: 'Laptop', category: 'IT', serial: 'SN1', status: 'ASSIGNED', assignedTo: a.id, assignedOn: '2026-10-01', createdAt: at, history: [{ at, by: a.id, action: 'ADDED' }, { at, by: a.id, action: 'ASSIGNED', userId: a.id, note: 'new joiner' }] }]
 db.stock = [{ id: 'st-1', name: 'A4 paper', category: 'Stationery', unit: 'ream', qty: 9, minQty: 2, createdAt: at, moves: [{ at, by: a.id, qty: 10 }, { at, by: a.id, qty: -1, issuedTo: b.id }] }]
 db.expenses = [{ id: 'ex-1', date: '2026-10-10', category: 'Pantry', description: 'Tea', amount: 500, gst: 25, paidVia: 'UPI', by: a.id, createdAt: at }]
+db.leadUploads = [{ id: 'lup-1', fileName: 'leads oct.xlsx', size: 2048, totalRows: 3, imported: 1, by: a.id, at }]
+Object.assign(db.leads[0], {
+  altPhone: '9123456780', location: 'SG Highway', industry: 'Retail', businessType: 'Proprietor', turnover: '0-20L', fundingAmount: '25L', fundingCategory: 'Grant',
+  requirement: 'Seed fund', formAt: at, extra: { 'Submitted Page': '/grants' }, uploadId: 'lup-1', assignedAt: at, seenAt: at,
+  chain: [{ to: a.id, by: b.id, at, kind: 'ASSIGNED' }, { to: b.id, by: a.id, at, kind: 'FORWARDED', note: 'Gujarati speaker' }],
+  history: [{ at, by: a.id, action: 'Forwarded to B', note: 'Gujarati speaker' }],
+})
 check('demo data', db)
 
 const file = process.argv[2]

@@ -59,8 +59,12 @@ export interface Shift { breakStart?: string; breakEnd?: string; timeZone?: stri
 /** Every original column of a record imported from the old CRM, exactly as it was. */
 export type LegacyRow = Record<string, string | null>
 
-export type LeadStatus = 'NEW' | 'ATTEMPTED' | 'CALL_BACK' | 'INTERESTED' | 'NOT_INTERESTED' | 'CONVERTED' | 'INVALID'
-export type CallOutcome = 'NO_ANSWER' | 'BUSY' | 'CALL_BACK' | 'INTERESTED' | 'NOT_INTERESTED' | 'CONVERTED' | 'WRONG_NUMBER'
+/** Lead dispositions — the same list as the Blutec dialer's call report (and the old CRM). */
+export type LeadStatus =
+  | 'NEW' | 'ANSWER' | 'INTRO' | 'HOT_PROSPECT' | 'CALL_BACK' | 'NOT_PICKUP' | 'BUSY' | 'VOICE_MAIL'
+  | 'NOT_INTERESTED' | 'WRONG_NUMBER' | 'DND' | 'LANGUAGE_ISSUE' | 'SCRAP' | 'CONVERTED'
+/** A call ends with a disposition (any status but New). */
+export type CallOutcome = Exclude<LeadStatus, 'NEW'>
 
 export interface Call { id: string; at: string; by: string; outcome: CallOutcome; note: string; durationSec: number }
 
@@ -84,7 +88,33 @@ export interface Lead {
   createdAt: string
   calls: Call[]
   legacy?: LegacyRow
+  /** from uploaded sheets / web forms (old CRM fields) */
+  altPhone?: string
+  location?: string
+  industry?: string
+  businessType?: string
+  turnover?: string
+  fundingAmount?: string
+  fundingCategory?: string
+  requirement?: string
+  /** when the client filled the form (sheet timestamp) */
+  formAt?: string
+  /** every other column of the uploaded row, as it was */
+  extra?: Record<string, string>
+  /** the upload batch it came from (Leads → Upload history) */
+  uploadId?: string
+  /** who handed the lead to whom, oldest first */
+  chain?: LeadHop[]
+  /** when the current owner got it; and when they first opened it (unseen = "new" badge) */
+  assignedAt?: string
+  seenAt?: string
+  /** what happened to the lead, newest first */
+  history?: LeadEvent[]
 }
+export interface LeadHop { to: string; by: string; at: string; kind: 'ASSIGNED' | 'REASSIGNED' | 'FORWARDED'; note?: string }
+export interface LeadEvent { at: string; by: string; action: string; note?: string }
+/** One uploaded lead sheet (Super Admin → Leads → Upload). */
+export interface LeadUpload { id: string; fileName: string; size: number; totalRows: number; imported: number; by: string; at: string }
 
 export type BookingStatus =
   | 'PENDING_TL' | 'PENDING_ACCOUNTS' | 'ACCOUNTS_HOLD' | 'PENDING_LEGAL'
@@ -551,6 +581,7 @@ export interface DB {
   candidates: CandidateApplication[]
   /** files from the old CRM's uploads folder that no client file refers to (kept so nothing is lost) */
   legacyFiles?: LegacyFile[]
+  leadUploads?: LeadUpload[]
   assets?: Asset[]
   stock?: StockItem[]
   expenses?: Expense[]

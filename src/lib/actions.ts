@@ -6,7 +6,7 @@ import { clearCloudDb, getDb, mutate, reloadFromCloud, saved } from './store'
 import { CLOUD, cloudSetOwnPassword, cloudSetPassword, cloudSignIn, cloudSignOut, cloudUserId } from './cloud'
 import { bookingBranch, directorBranches, isBranchScoped, leadBranch, NO_BRANCH } from './branches'
 import { hashPassword } from './crypto'
-import { CALL_OUTCOMES, FINAL_STAGE, hasLegalDoc, OPEN_LEAD, STAGE_OUTCOMES, STAGES, stageLabel } from './workflow'
+import { CALL_OUTCOMES, FINAL_STAGE, hasLegalDoc, LEAD_STATUS, OPEN_LEAD, STAGE_OUTCOMES, STAGES, stageLabel } from './workflow'
 import { fireAutomation } from './email'
 import { addDays, daysBetween, fmtDate, isEmail, isGstin, isPan, isPhone, normPhone, nowIso, round2, today, uid, ymd } from './format'
 
@@ -570,13 +570,40 @@ export function visibleLeads(d: DB, me: User): Lead[] {
     (p.has('leads.assign') && (team.has(l.assignedTo ?? '') || !l.assignedTo)))
 }
 
-export type LeadInput = Pick<Lead, 'name' | 'company' | 'phone' | 'email' | 'city' | 'state' | 'service' | 'source' | 'notes'> & { price?: number; followUp?: string; assignedTo?: string }
+export type LeadInput = Pick<Lead, 'name' | 'company' | 'phone' | 'email' | 'city' | 'state' | 'service' | 'source' | 'notes'> & {
+  price?: number; followUp?: string; assignedTo?: string
+} & Partial<Pick<Lead, 'altPhone' | 'location' | 'industry' | 'businessType' | 'turnover' | 'fundingAmount' | 'fundingCategory' | 'requirement'>>
 
 function checkLead(i: LeadInput) {
   assert(i.name.trim().length >= 2, 'Name is required.')
   assert(isPhone(i.phone), 'Enter a valid 10-digit mobile number.')
   assert(!i.email || isEmail(i.email), 'Enter a valid email.')
   assert(i.price == null || (Number.isFinite(i.price) && i.price >= 0), 'Price must be 0 or more.')
+}
+
+/** Something happened to a lead (shown in its activity, newest first). */
+function leadEvent(l: Lead, by: string, action: string, note?: string) {
+  (l.history ??= []).unshift({ at: nowIso(), by, action, ...(note?.trim() ? { note: note.trim() } : {}) })
+  if (l.history.length > 200) l.history.length = 200
+}
+/** The lead changes hands: kept in its chain, and it shows as new to the person until they open their leads. */
+function handOver(l: Lead, to: string, by: string, kind: 'ASSIGNED' | 'REASSIGNED' | 'FORWARDED', note?: string) {
+  const at = nowIso()
+  ;(l.chain ??= []).push({ to, by, at, kind, ...(note?.trim() ? { note: note.trim() } : {}) })
+  l.assignedTo = to; l.assignedAt = at; l.seenAt = to === by ? at : undefined
+}
+
+const startOfToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime() }
+/** Still "New" from before today: the person must update these before they get more leads (old CRM rule). */
+export const isOverdueLead = (l: Lead) => l.status === 'NEW' && !!l.assignedTo && !!l.assignedAt && new Date(l.assignedAt).getTime() < startOfToday()
+export const overdueLeadsOf = (d: DB, userId: string) => d.leads.filter((l) => l.assignedTo === userId && isOverdueLead(l))
+/** For the people who hand leads out: not given to anyone, or still "New" two days after it was given. */
+export const isPendingLead = (l: Lead, now = Date.now()) => !l.assignedTo || (l.status === 'NEW' && !!l.assignedAt && new Date(l.assignedAt).getTime() <= now - 2 * 86400000)
+/** Leads given to this person that they haven't opened yet. */
+export const unseenLeadsOf = (d: DB, userId: string) => d.leads.filter((l) => l.assignedTo === userId && !l.seenAt && OPEN_LEAD.includes(l.status))
+function assertNoOverdue(d: DB, u: User) {
+  const n = overdueLeadsOf(d, u.id).length
+  assert(!n, `${u.name} has ${n} lead(s) still on “New” from before today — they get new leads once those are updated.`)
 }
 
 export function createLead(me: User, i: LeadInput) {
@@ -587,12 +614,16 @@ export function createLead(me: User, i: LeadInput) {
     const dup = d.leads.find((l) => l.phone === phone)
     assert(!dup, `A lead with this number already exists (${dup?.code}).`)
     const canAssign = has(me, 'leads.assign', 'leads.manage')
+    const to = canAssign && i.assignedTo ? i.assignedTo : me.id
+    const { assignedTo: _ignored, ...fields } = i
     const lead: Lead = {
-      ...i, id: uid('lead-'), code: `LD-${d.counters.lead++}`, phone, price: i.price == null ? undefined : round2(i.price),
-      status: 'NEW', assignedTo: canAssign && i.assignedTo ? i.assignedTo : me.id, createdBy: me.id, createdAt: nowIso(), calls: [],
+      ...fields, id: uid('lead-'), code: `LD-${d.counters.lead++}`, phone, price: i.price == null ? undefined : round2(i.price),
+      status: 'NEW', createdBy: me.id, createdAt: nowIso(), calls: [],
     }
+    handOver(lead, to, me.id, 'ASSIGNED')
+    leadEvent(lead, me.id, 'Lead created')
     d.leads.unshift(lead)
-    if (lead.assignedTo !== me.id) notify(d, [lead.assignedTo], 'New lead assigned to you', `${lead.name} · ${lead.service}`, '/leads', 'action')
+    if (to !== me.id) notify(d, [to], 'New lead assigned to you', `${lead.name} · ${lead.service}`, '/leads', 'action')
     audit(d, me.id, 'LEAD_CREATE', `${lead.code} ${lead.name}`)
     return lead.id
   })
@@ -607,9 +638,21 @@ export function updateLead(me: User, id: string, patch: Partial<LeadInput & { st
       assert(isPhone(patch.phone), 'Enter a valid 10-digit mobile number.')
       assert(!d.leads.some((x) => x.phone === patch.phone && x.id !== id), 'Another lead has this number.')
     }
-    if (patch.assignedTo !== undefined && !has(me, 'leads.assign', 'leads.manage')) delete patch.assignedTo
+    // a new owner goes into the chain (and must have no overdue leads)
+    const to = patch.assignedTo
+    delete patch.assignedTo
     if ('price' in patch) patch.price = patch.price == null || Number.isNaN(patch.price) ? undefined : round2(patch.price)
     Object.assign(l, patch)
+    leadEvent(l, me.id, 'Details edited')
+    if (to && to !== l.assignedTo && has(me, 'leads.assign', 'leads.manage')) {
+      const target = d.users.find((u) => u.id === to)
+      assert(target, 'Pick a sales person.')
+      assertNoOverdue(d, target)
+      const re = !!l.assignedTo
+      handOver(l, to, me.id, re ? 'REASSIGNED' : 'ASSIGNED')
+      leadEvent(l, me.id, `${re ? 'Reassigned' : 'Assigned'} to ${target.name}`)
+      notify(d, [to], 'New lead assigned to you', `${l.name} · by ${me.name}`, '/leads', 'action')
+    }
   })
 }
 
@@ -620,8 +663,18 @@ export function deleteLeads(me: User, ids: string[]) {
     audit(d, me.id, 'LEAD_DELETE', `${ids.length} lead(s)`)
   })
 }
+/** Every lead nobody has been given (old CRM: “Delete all unassigned”). */
+export function deleteUnassignedLeads(me: User) {
+  need(me, 'leads.manage')
+  return mutate((d) => {
+    const n = d.leads.filter((l) => !l.assignedTo).length
+    d.leads = d.leads.filter((l) => l.assignedTo)
+    audit(d, me.id, 'LEAD_DELETE', `${n} unassigned lead(s)`)
+    return n
+  })
+}
 
-export function assignLeads(me: User, ids: string[], userId: string) {
+export function assignLeads(me: User, ids: string[], userId: string, note = '') {
   need(me, 'leads.assign', 'leads.manage')
   mutate((d) => {
     const target = d.users.find((u) => u.id === userId)
@@ -634,24 +687,59 @@ export function assignLeads(me: User, ids: string[], userId: string) {
       const seen = new Set(visibleLeads(d, me).map((l) => l.id))
       assert(ids.every((id) => seen.has(id)), 'Some of these leads belong to another branch.')
     }
-    for (const l of d.leads) if (ids.includes(l.id)) l.assignedTo = userId
-    notify(d, [userId], `${ids.length} lead(s) assigned to you`, `by ${me.name}`, '/leads', 'action')
-    audit(d, me.id, 'LEAD_ASSIGN', `${ids.length} lead(s) → ${target.name}`)
+    assertNoOverdue(d, target)
+    let n = 0
+    for (const l of d.leads) {
+      if (!ids.includes(l.id) || l.assignedTo === userId) continue
+      const re = !!l.assignedTo
+      handOver(l, userId, me.id, re ? 'REASSIGNED' : 'ASSIGNED', note)
+      leadEvent(l, me.id, `${re ? 'Reassigned' : 'Assigned'} to ${target.name}`, note)
+      n++
+    }
+    if (n) notify(d, [userId], `${n} lead(s) assigned to you`, `by ${me.name}`, '/leads', 'action')
+    audit(d, me.id, 'LEAD_ASSIGN', `${n} lead(s) → ${target.name}`)
   })
 }
 
-/** Change a lead's status straight from the list (with an optional note and follow-up date). */
-export function setLeadStatus(me: User, id: string, status: Lead['status'], note = '', followUp?: string) {
+/** The owner passes a lead to a colleague (sales / team leader), with a note; the chain shows who forwarded it. */
+export function forwardLead(me: User, id: string, toId: string, note: string) {
   mutate((d) => {
     const l = d.leads.find((x) => x.id === id)
     assert(l && visibleLeads(d, me).some((x) => x.id === id), 'Lead not found.')
-    if (l.status === status && !note && !followUp) return
-    const stamp = new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: 'numeric', minute: '2-digit' })
-    const line = `[${stamp}] ${me.name}: status ${l.status.replace('_', ' ').toLowerCase()} → ${status.replace('_', ' ').toLowerCase()}${note.trim() ? ` — ${note.trim()}` : ''}`
+    assert(l.assignedTo === me.id || has(me, 'leads.assign', 'leads.manage'), 'Only the person who has this lead can forward it.')
+    const to = d.users.find((u) => u.id === toId && u.active)
+    assert(to && to.id !== l.assignedTo && rolesOf(to).some((r) => r === 'sales' || r === 'teamlead'), 'Pick a colleague in Sales.')
+    assert(note.trim().length >= 3, 'Add a note for your colleague.')
+    assertNoOverdue(d, to)
+    handOver(l, to.id, me.id, 'FORWARDED', note)
+    leadEvent(l, me.id, `Forwarded to ${to.name}`, note)
+    notify(d, [to.id], `${me.name} forwarded a lead to you`, `${l.name} — ${note.trim()}`, '/leads', 'action')
+  })
+}
+
+/** The person opened their leads: anything given to them stops showing as new. */
+export function markLeadsSeen(me: User) {
+  if (!getDb().leads.some((l) => l.assignedTo === me.id && !l.seenAt)) return
+  mutate((d) => { const at = nowIso(); for (const l of d.leads) if (l.assignedTo === me.id && !l.seenAt) l.seenAt = at })
+}
+
+/**
+ * Sets the disposition (from the list or the lead's page). Intro / Hot prospect / Call back take the next follow-up
+ * date; Not interested can carry the reason; Converted the deal value.
+ */
+export function setLeadStatus(me: User, id: string, status: Lead['status'], note = '', followUp?: string, value?: number) {
+  mutate((d) => {
+    const l = d.leads.find((x) => x.id === id)
+    assert(l && visibleLeads(d, me).some((x) => x.id === id), 'Lead not found.')
+    if (l.status === status && !note && !followUp && value == null) return
+    const was = l.status
     l.status = status
-    l.notes = l.notes ? `${l.notes}\n${line}` : line
     if (followUp) l.followUp = followUp
     else if (!OPEN_LEAD.includes(status)) l.followUp = undefined
+    if (status === 'CONVERTED' && value != null && Number.isFinite(value) && value > 0) l.price = round2(value)
+    l.seenAt ??= nowIso()
+    leadEvent(l, me.id, was === status ? `Updated (${LEAD_STATUS[status].label})` : `${LEAD_STATUS[was].label} → ${LEAD_STATUS[status].label}`,
+      [note.trim(), followUp ? `follow-up ${fmtDate(followUp)}` : '', status === 'CONVERTED' && value ? `value ₹${round2(value)}` : ''].filter(Boolean).join(' · '))
   })
 }
 
@@ -665,52 +753,48 @@ export function logCall(me: User, leadId: string, outcome: CallOutcome, note: st
     if (followUp) l.followUp = followUp
     else if (!OPEN_LEAD.includes(l.status)) l.followUp = undefined
     if (note) l.notes = l.notes ? `${l.notes}\n${note}` : note
+    l.seenAt ??= nowIso()
+    leadEvent(l, me.id, `Call · ${LEAD_STATUS[l.status].label}`, [note, durationSec ? `${Math.round(durationSec / 60)} min` : ''].filter(Boolean).join(' · '))
   })
 }
 
-/** Column names people (and the old CRM's exports) use for each lead field; matched ignoring case, spaces, _ and -. */
-const LEAD_COLUMNS: Record<string, string[]> = {
-  name: ['name', 'client name', 'contact name', 'contact person', 'person name', 'full name', 'lead name', 'customer name'],
-  phone: ['phone', 'mobile', 'mobile no', 'mobile number', 'phone no', 'phone number', 'contact', 'contact no', 'contact number', 'company mobile', 'whatsapp', 'whatsapp number'],
-  company: ['company', 'company name', 'business', 'business name', 'firm', 'firm name', 'organisation', 'organization', 'client company', 'startup name'],
-  email: ['email', 'email id', 'email address', 'mail', 'company email'],
-  city: ['city', 'location', 'company city'], state: ['state', 'company state'],
-  service: ['service', 'services', 'service name', 'scheme', 'requirement', 'product'],
-  source: ['source', 'lead source'], price: ['price', 'amount', 'quote', 'quoted', 'value', 'deal value'], notes: ['notes', 'note', 'remarks', 'remark', 'comment', 'comments'],
-}
-const colKey = (k: string) => k.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
-function leadField(r: Record<string, string>, field: string) {
-  const want = new Set(LEAD_COLUMNS[field])
-  for (const [k, v] of Object.entries(r)) if (want.has(colKey(k)) && v?.trim()) return v.trim()
-  return ''
-}
-
-/** Bulk lead import (CSV): Super Admin only, as in the old CRM. */
-export function importLeads(me: User, rows: Record<string, string>[]) {
-  assert(isSA(me), 'Only a Super Admin can import leads.')
+/**
+ * Imports the checked rows of an uploaded sheet as one batch (Super Admin, as in the old CRM). Leads start unassigned
+ * so they can be handed out; the whole batch can be deleted again from the upload history.
+ */
+export function importLeadBatch(me: User, file: { name: string; size: number; totalRows: number }, rows: (Partial<Lead> & { name: string; phone: string })[]) {
+  assert(isSA(me), 'Only a Super Admin can upload leads.')
+  assert(rows.length, 'No valid rows to import.')
   return mutate((d) => {
-    let added = 0, skipped = 0
-    const errors: string[] = []
     const phones = new Set(d.leads.map((l) => l.phone))
-    rows.forEach((raw, i) => {
-      const r = Object.fromEntries(Object.keys(LEAD_COLUMNS).map((f) => [f, leadField(raw, f)])) as Record<string, string>
-      const phone = normPhone(r.phone)
-      const name = r.name || r.company
-      const priceRaw = r.price
-      const price = priceRaw ? Number(priceRaw.replace(/[₹,\s]/g, '')) : undefined
-      if (!name || !isPhone(phone)) { errors.push(`Row ${i + 2}: name and a valid phone are required`); return }
-      if (price !== undefined && !Number.isFinite(price)) { errors.push(`Row ${i + 2}: price is not a number`); return }
-      if (phones.has(phone)) { skipped++; return }
-      phones.add(phone)
-      d.leads.unshift({
-        id: uid('lead-'), code: `LD-${d.counters.lead++}`, name, phone, company: r.company, email: r.email,
-        city: r.city, state: r.state, service: r.service, source: r.source || 'Import', price,
-        status: 'NEW', notes: r.notes, assignedTo: me.id, createdBy: me.id, createdAt: nowIso(), calls: [],
-      })
-      added++
-    })
-    audit(d, me.id, 'LEAD_IMPORT', `${added} added, ${skipped} duplicates skipped`)
-    return { added, skipped, errors }
+    const up = { id: uid('lup-'), fileName: file.name, size: file.size, totalRows: file.totalRows, imported: 0, by: me.id, at: nowIso() }
+    for (const r of rows) {
+      if (!isPhone(r.phone) || phones.has(r.phone)) continue // checked already; a lead added meanwhile wins
+      phones.add(r.phone)
+      const lead: Lead = {
+        ...r, id: uid('lead-'), code: `LD-${d.counters.lead++}`, company: r.company ?? '', email: r.email ?? '', city: r.city ?? '', state: r.state ?? '',
+        service: r.service ?? '', source: r.source ?? `Uploaded: ${file.name}`, notes: r.notes ?? '', status: 'NEW', createdBy: me.id, createdAt: up.at, calls: [], uploadId: up.id,
+      }
+      leadEvent(lead, me.id, 'Uploaded', file.name)
+      d.leads.unshift(lead)
+      up.imported++
+    }
+    ;(d.leadUploads ??= []).unshift(up)
+    audit(d, me.id, 'LEAD_UPLOAD', `${file.name}: ${up.imported} of ${file.totalRows} row(s)`)
+    return up.imported
+  })
+}
+/** Deletes an upload batch and the leads it created (old CRM: “Delete batch”). */
+export function deleteLeadUpload(me: User, uploadId: string) {
+  assert(isSA(me), 'Only a Super Admin can delete an upload.')
+  return mutate((d) => {
+    const up = d.leadUploads?.find((u) => u.id === uploadId)
+    assert(up, 'Upload not found.')
+    const n = d.leads.filter((l) => l.uploadId === uploadId).length
+    d.leads = d.leads.filter((l) => l.uploadId !== uploadId)
+    d.leadUploads = d.leadUploads!.filter((u) => u.id !== uploadId)
+    audit(d, me.id, 'LEAD_UPLOAD_DELETE', `${up.fileName}: ${n} lead(s)`)
+    return n
   })
 }
 

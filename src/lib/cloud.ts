@@ -24,6 +24,7 @@ const SPECS: Spec[] = [
     { prop: ['grants', 'denies'], table: 'user_permission_overrides', fk: 'user_id', mode: 'replace', order: ['permission', true] },
   ] },
   { key: 'services', table: 'services', order: ['name', true] },
+  { key: 'leadUploads', table: 'lead_uploads', order: ['uploaded_at', false] },
   { key: 'leads', table: 'leads', order: ['created_at', false], children: [
     { prop: 'calls', table: 'lead_calls', fk: 'lead_id', mode: 'id', order: ['called_at', false] },
   ] },

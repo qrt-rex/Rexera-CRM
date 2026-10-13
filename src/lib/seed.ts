@@ -2,7 +2,7 @@ import type { Booking, BookingStatus, DB, DaySession, Invoice, Lead, LeadStatus,
 import { DEFAULT_ROLE_PERMS } from './rbac'
 import { hashPassword } from './crypto'
 import { addDays, round2, ymd } from './format'
-import { STAGES } from './workflow'
+import { FOLLOW_UP_LEAD, STAGES } from './workflow'
 import { DEFAULT_INCENTIVE, DEFAULT_PF } from './hrsuite'
 
 export const SEED_VERSION = 6
@@ -128,7 +128,7 @@ export async function buildSeed(): Promise<DB> {
   const last = ['Shah', 'Patel', 'Gupta', 'Sharma', 'Jain', 'Mehta', 'Agarwal', 'Bhatt', 'Trivedi', 'Chauhan']
   const biz = ['Agro Foods', 'Tech Labs', 'Textiles', 'Pharma', 'Solar Energy', 'Packaging', 'Ceramics', 'Organics', 'Logistics', 'EdTech', 'Spices', 'Robotics', 'Dairy', 'Handicrafts', 'Bio Innovations']
   const cities: [string, string][] = [['Ahmedabad', 'Gujarat'], ['Surat', 'Gujarat'], ['Vadodara', 'Gujarat'], ['Rajkot', 'Gujarat'], ['Mumbai', 'Maharashtra'], ['Pune', 'Maharashtra'], ['Jaipur', 'Rajasthan'], ['Indore', 'Madhya Pradesh'], ['Bengaluru', 'Karnataka'], ['Delhi', 'Delhi']]
-  const statuses: LeadStatus[] = ['NEW', 'NEW', 'NEW', 'ATTEMPTED', 'CALL_BACK', 'CALL_BACK', 'INTERESTED', 'INTERESTED', 'NOT_INTERESTED', 'CONVERTED', 'INVALID']
+  const statuses: LeadStatus[] = ['NEW', 'NEW', 'NEW', 'NOT_PICKUP', 'CALL_BACK', 'CALL_BACK', 'HOT_PROSPECT', 'INTRO', 'NOT_INTERESTED', 'CONVERTED', 'WRONG_NUMBER']
   const leads: Lead[] = []
   for (let i = 0; i < 48; i++) {
     const fn = pick(first), ln = pick(last), [city, state] = pick(cities)
@@ -144,15 +144,17 @@ export async function buildSeed(): Promise<DB> {
       city, state, service: svc.name, source: pick(['Website', 'Facebook Ads', 'Google Ads', 'Referral', 'IVR campaign', 'Exhibition']),
       price: rnd() > 0.3 ? svc.price : undefined,
       status,
-      followUp: ['CALL_BACK', 'INTERESTED'].includes(status) ? ymd(addDays(new Date(), between(-2, 4))) : undefined,
-      notes: status === 'INTERESTED' ? 'Wants details of eligibility and timeline.' : '',
+      followUp: FOLLOW_UP_LEAD.includes(status) ? ymd(addDays(new Date(), between(-2, 4))) : undefined,
+      notes: status === 'HOT_PROSPECT' ? 'Wants details of eligibility and timeline.' : '',
       assignedTo: owner, createdBy: owner ?? 'u-sa', createdAt: at(created, between(9, 18), between(0, 59)),
       calls: status === 'NEW' ? [] : Array.from({ length: between(1, 3) }, (_, k) => ({
         id: `call-${i}-${k}`, at: at(Math.max(0, created - k), between(10, 18), between(0, 59)), by: owner ?? 'u-s1',
-        outcome: k === 0 ? ({ ATTEMPTED: 'NO_ANSWER', CALL_BACK: 'CALL_BACK', INTERESTED: 'INTERESTED', NOT_INTERESTED: 'NOT_INTERESTED', CONVERTED: 'CONVERTED', INVALID: 'WRONG_NUMBER', NEW: 'NO_ANSWER' } as const)[status] : 'NO_ANSWER',
+        outcome: k === 0 ? status : 'NOT_PICKUP',
         note: '', durationSec: between(15, 420),
       })),
     })
+    const l = leads[leads.length - 1]!
+    if (owner) { l.assignedAt = l.createdAt; l.seenAt = l.createdAt; l.chain = [{ to: owner, by: 'u-sa', at: l.createdAt, kind: 'ASSIGNED' }] }
   }
 
   // ---------- bookings (CRM entries) ----------

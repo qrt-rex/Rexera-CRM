@@ -5,7 +5,7 @@ import type { CallOutcome, Lead } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
 import { createLead, logCall, setLeadStatus, userName, visibleLeads } from '../../lib/actions'
-import { CALL_OUTCOMES, LEAD_STATUS, OPEN_LEAD } from '../../lib/workflow'
+import { CALL_OUTCOMES, dispositionToStatus, FOLLOW_UP_LEAD, LEAD_STATUS, OPEN_LEAD } from '../../lib/workflow'
 import { addDays, fmtDate, fmtDateTime, fmtTime, inr, normPhone, today, ymd } from '../../lib/format'
 import { blutec, dialerKey, DialerError, FINAL_STATUSES, isHot, type AgentConnect, type BlutecCampaign, type BlutecStatus, type CallStatus, type Ivr, type IvrStats } from '../../lib/dialer'
 import { rolesOf } from '../../lib/rbac'
@@ -33,7 +33,7 @@ export function CallLogger({ lead, seconds = 0, suggested, onDone }: { lead: Lea
   const [follow, setFollow] = useState('')
   useEffect(() => { setOutcome(null); setNote(''); setFollow('') }, [lead.id])
   useEffect(() => { if (suggested) setOutcome(suggested) }, [suggested])
-  const needsFollow = outcome === 'CALL_BACK' || outcome === 'INTERESTED'
+  const needsFollow = !!outcome && FOLLOW_UP_LEAD.includes(outcome)
   const save = async () => {
     if (!outcome) return
     const ok = await run(() => logCall(me, lead.id, outcome, note, needsFollow ? follow || ymd(addDays(new Date(), 1)) : undefined, seconds), 'Call logged')
@@ -197,7 +197,9 @@ function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
   const elapsed = call ? Math.max(0, Math.floor(((call.endedAt ?? Date.now()) - call.startedAt) / 1000)) : 0
   const secs = live?.info?.talk_duration_seconds ?? live?.info?.duration_seconds ?? elapsed
   const clock = `${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`
-  const suggested: CallOutcome | undefined = ended && live ? (isHot(live.info?.disposition) ? 'INTERESTED' : !live.info?.answer_time ? 'NO_ANSWER' : undefined) : undefined
+  // Blutec's disposition when it names one of ours (Not Pickup, Intro…), else hot / not picked up from the call record
+  const blutecOutcome = dispositionToStatus(live?.info?.disposition)
+  const suggested: CallOutcome | undefined = ended && live ? (blutecOutcome && blutecOutcome !== 'NEW' ? blutecOutcome : isHot(live.info?.disposition) ? 'HOT_PROSPECT' : !live.info?.answer_time ? 'NOT_PICKUP' : undefined) : undefined
   const callLead = call ? queue.find((l) => l.id === call.leadId) ?? db.leads.find((l) => l.id === call.leadId) : undefined
   const windowOpen = !!call && !!callLead && !winHidden
   const callStatus = !call ? '' : ended ? 'Call ended' : call.phone ? 'On call · your phone'
@@ -249,7 +251,7 @@ function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
     }, 3000)
   }
   const afterSave = async (o: CallOutcome) => {
-    if ((o === 'INTERESTED' || o === 'CONVERTED') && current && can('bookings.create')) {
+    if ((o === 'HOT_PROSPECT' || o === 'CONVERTED') && current && can('bookings.create')) {
       if (await confirm('Hot prospect — create a CRM entry?', `${current.name}'s details will be filled in for you; you can change anything before saving.`)) { nav(`/bookings/new?lead=${current.id}`); return }
     }
     next()
