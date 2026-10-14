@@ -44,7 +44,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback((reason?: string) => {
     const cur = readSession()
-    if (cur) mutate((d) => d.audit.unshift({ id: uid('a-'), at: nowIso(), by: cur.userId, action: 'SIGN_OUT', detail: reason ?? 'Signed out' }))
+    // with Supabase, only while still signed in there (a failed or expired sign-in can't write the log)
+    if (cur && (!CLOUD || cloudUserId())) mutate((d) => d.audit.unshift({ id: uid('a-'), at: nowIso(), by: cur.userId, action: 'SIGN_OUT', detail: reason ?? 'Signed out' }))
     try { localStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
     if (reason) sessionStorage.setItem('rexera-signout-reason', reason)
     setSession(null)

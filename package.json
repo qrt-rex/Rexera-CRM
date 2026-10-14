@@ -9,6 +9,7 @@
     "start": "node server.mjs",
     "typecheck": "tsc -b",
     "db:migrate": "node supabase/migrate-from-backup.mjs",
+    "db:password": "node supabase/set-password.mjs",
     "db:check": "node src/lib/leadUpload.test.mjs && node supabase/cloud-sync.test.mjs && node supabase/backup-mapping.test.mjs",
     "preview": "vite preview"
   },
