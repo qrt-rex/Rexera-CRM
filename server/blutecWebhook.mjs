@@ -10,18 +10,24 @@ import { createClient } from '@supabase/supabase-js'
 import { dispositionToStatus } from '../src/lib/workflow.ts'
 import { blutecEnv, revealWebhookSecret } from '../supabase/functions/_shared/blutec.ts'
 
-const sha256hmac = (secret, text) => crypto.createHmac('sha256', secret).update(text).digest('hex')
 const same = (a, b) => a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b))
 
 /** Is this delivery really from Blutec? `timestamp` in seconds or ms; older than 10 minutes is refused (replays). */
 export function verifySignature(secret, timestamp, rawBody, signature, now = Date.now()) {
-  if (!secret || !timestamp || !signature) return false
-  const t = Number(timestamp)
-  const ms = t > 1e12 ? t : t * 1000
-  if (!Number.isFinite(ms) || Math.abs(now - ms) > 10 * 60_000) return false
-  const sig = String(signature).replace(/^sha256=/i, '').trim().toLowerCase()
-  return same(sha256hmac(secret, `${timestamp}.${rawBody}`), sig)
+  if (!secret || !signature) return false
+  // with a timestamp Blutec signs `timestamp.body` (and old deliveries are replays); without one, the body alone
+  if (timestamp) {
+    const t = Number(timestamp)
+    const ms = t > 1e12 ? t : t * 1000
+    if (!Number.isFinite(ms) || Math.abs(now - ms) > 10 * 60_000) return false
+  }
+  const mac = crypto.createHmac('sha256', secret).update(timestamp ? `${timestamp}.${rawBody}` : rawBody).digest()
+  const sig = String(signature).replace(/^sha256=/i, '').trim()
+  // hex (any case) or base64
+  return same(mac.toString('hex'), sig.toLowerCase()) || same(mac.toString('base64'), sig)
 }
+/** The webhook's secret token, sent as Authorization: Bearer whk_… (checked when it's set on the server). */
+export const tokenOk = (expected, authorization) => !expected || same(`Bearer ${expected}`, String(authorization ?? '').trim())
 
 /** Indian mobile as the CRM stores it (10 digits), or ''. */
 export const tenDigits = (raw) => {
@@ -79,7 +85,9 @@ async function callsSecret(env, fresh) {
  */
 export async function receive(env, kind, headers, rawBody) {
   const name = kind === 'ivr' ? 'BLUTEC_IVR_WEBHOOK_SECRET' : 'BLUTEC_CALLS_WEBHOOK_SECRET'
-  const ts = headers['x-webhook-timestamp'], sig = headers['x-webhook-signature']
+  // header names differ between Blutec's webhook screens (X-Webhook-Signature / X-Signature …)
+  const ts = headers['x-webhook-timestamp'] ?? headers['x-timestamp'], sig = headers['x-webhook-signature'] ?? headers['x-signature']
+  if (!tokenOk(env(kind === 'ivr' ? 'BLUTEC_IVR_WEBHOOK_TOKEN' : 'BLUTEC_CALLS_WEBHOOK_TOKEN'), headers.authorization)) return { answer: reply(401, { success: false, message: 'Bad token' }) }
   let secret = env(name) || (kind === 'calls' ? await callsSecret(env, false) : '')
   if (!secret) return { answer: reply(503, { success: false, message: kind === 'ivr' ? `Set ${name} on the server.` : `Set ${name} on the server, or connect the webhook from the Dialer (Super Admin).` }) }
   let ok = verifySignature(secret, ts, rawBody, sig)

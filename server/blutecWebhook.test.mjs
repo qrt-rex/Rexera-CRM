@@ -2,7 +2,7 @@
 /** Check for server/blutecWebhook.mjs.   node server/blutecWebhook.test.mjs */
 import assert from 'node:assert/strict'
 import crypto from 'node:crypto'
-import { completedCall, ivrLead, receive, verifySignature } from './blutecWebhook.mjs'
+import { completedCall, ivrLead, receive, tokenOk, verifySignature } from './blutecWebhook.mjs'
 
 // signature: hex HMAC-SHA256 of `${timestamp}.${raw body}` (Blutec's IVR webhook screen)
 const secret = 'whsec_test', body = '{"event":"ivr.interested"}', ts = String(Math.floor(Date.now() / 1000))
@@ -13,6 +13,12 @@ assert.ok(!verifySignature(secret, ts, body + ' ', sig), 'body changed')
 assert.ok(!verifySignature('other', ts, body, sig), 'wrong secret')
 assert.ok(!verifySignature(secret, String(Number(ts) - 3600), body, crypto.createHmac('sha256', secret).update(`${Number(ts) - 3600}.${body}`).digest('hex')), 'an hour old: replay')
 assert.ok(!verifySignature(secret, ts, body, undefined), 'unsigned')
+// screens that sign the body alone (no timestamp header), hex or base64
+assert.ok(verifySignature(secret, undefined, body, crypto.createHmac('sha256', secret).update(body).digest('hex')), 'body-only signature')
+assert.ok(verifySignature(secret, undefined, body, crypto.createHmac('sha256', secret).update(body).digest('base64')), 'base64 signature')
+assert.ok(!verifySignature(secret, undefined, body, sig), 'a timestamped signature is not a body-only one')
+// the Bearer secret token, when set
+assert.ok(tokenOk('whk_x', 'Bearer whk_x') && tokenOk('', undefined) && !tokenOk('whk_x', 'Bearer whk_y') && !tokenOk('whk_x', undefined))
 // a bad signature is refused before anything else happens
 assert.equal((await receive((k) => (k === 'BLUTEC_IVR_WEBHOOK_SECRET' ? secret : ''), 'ivr', { 'x-webhook-timestamp': ts, 'x-webhook-signature': 'bad' }, body)).answer.status, 401)
 

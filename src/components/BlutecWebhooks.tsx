@@ -63,7 +63,7 @@ export function BlutecWebhooks() {
               {h.kind === 'ivr' ? (
                 <ol className="list-decimal space-y-0.5 pl-5 text-xs text-mute">
                   <li>In <b>{h.where}</b>, tick “Send interested leads”, paste this address and save.</li>
-                  <li>Copy the <b>signing secret</b> Blutec shows there into Render → Environment as <code>{h.secret}</code> (redeploys the server).</li>
+                  <li>Copy the <b>signing secret</b> (whsec_…) into Render → Environment as <code>{h.secret}</code>, and the <b>secret token</b> (whk_…) if shown as <code>BLUTEC_IVR_WEBHOOK_TOKEN</code> (redeploys the server).</li>
                   <li>Press <b>Send test</b> in Blutec: it appears below as a test delivery.</li>
                 </ol>
               ) : (
@@ -75,7 +75,7 @@ export function BlutecWebhooks() {
                     <Button size="sm" icon={Link2} onClick={async () => { if (await run(() => blutec.webhookConnect(url), 'Webhook connected in Blutec')) void loadDial() }}>{dial.cfg?.url === url ? 'Connect again' : 'Connect'}</Button>
                     <Button size="sm" variant="outline" icon={Send} disabled={dial.cfg?.url !== url} onClick={async () => { if (await run(() => blutec.webhookTest(), 'Test sent — it shows below in a few seconds')) setTimeout(() => { void load(); void loadDial() }, 4000) }}>Send test</Button>
                   </div>
-                  <p className="text-mute">The signing secret is read from Blutec automatically (or set <code>{h.secret}</code> on Render).</p>
+                  <p className="text-mute">The signing secret is read from Blutec automatically. If Blutec shows this webhook's secrets, set them on Render instead: signing secret (whsec_…) as <code>{h.secret}</code>, secret token (whk_…) as <code>BLUTEC_CALLS_WEBHOOK_TOKEN</code>.</p>
                   {(dial.log?.length ?? 0) > 0 && (
                     <details><summary className="cursor-pointer font-semibold">Blutec’s delivery log ({dial.log!.length})</summary>
                       <ul className="mt-1 space-y-0.5">{dial.log!.slice(0, 10).map((x, i) => <li key={i} className="flex justify-between gap-2"><span>{x.event_type} · {x.status}{x.response_code ? ` (${x.response_code})` : ''}</span><span className="text-mute">{x.created_at ? fmtDateTime(x.created_at) : ''}</span></li>)}</ul>
