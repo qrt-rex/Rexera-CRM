@@ -14,7 +14,7 @@ assert.ok(!verifySignature('other', ts, body, sig), 'wrong secret')
 assert.ok(!verifySignature(secret, String(Number(ts) - 3600), body, crypto.createHmac('sha256', secret).update(`${Number(ts) - 3600}.${body}`).digest('hex')), 'an hour old: replay')
 assert.ok(!verifySignature(secret, ts, body, undefined), 'unsigned')
 // a bad signature is refused before anything else happens
-assert.equal(receive((k) => (k === 'BLUTEC_IVR_WEBHOOK_SECRET' ? secret : ''), 'ivr', { 'x-webhook-timestamp': ts, 'x-webhook-signature': 'bad' }, body).answer.status, 401)
+assert.equal((await receive((k) => (k === 'BLUTEC_IVR_WEBHOOK_SECRET' ? secret : ''), 'ivr', { 'x-webhook-timestamp': ts, 'x-webhook-signature': 'bad' }, body)).answer.status, 401)
 
 // the payload from Blutec's IVR webhook screen
 const ivr = ivrLead({

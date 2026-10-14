@@ -28,6 +28,7 @@ export type BlutecRequest =
   | { action: 'dncAdd'; phone: string; reason?: string }
   | { action: 'callStatus'; refId: string }
   | { action: 'campaigns' }
+  | { action: 'webhookGet' } | { action: 'webhookConnect'; url: string } | { action: 'webhookTest' } | { action: 'webhookDeliveries' }
   | { action: 'campaignLeads'; id: number }
   | { action: 'ivrList' }
   | { action: 'ivrStats'; id: number }
@@ -53,7 +54,7 @@ const dncReady = (e: BlutecEnv) => !!e.token
 const toE164ish = (phone: string) => { const p = String(phone).replace(/\D/g, ''); return p.length === 10 ? `91${p}` : p }
 
 /** Dialer API with the long-lived token (DND list). */
-async function dialerApi(e: BlutecEnv, method: 'GET' | 'POST', path: string, body?: unknown) {
+async function dialerApi(e: BlutecEnv, method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown) {
   const res = await fetch(`${(e.dialerUrl || 'https://dialer.blutec.ai').replace(/\/$/, '')}${path}`, {
     method, headers: { Authorization: `Bearer ${e.token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined,
   })
@@ -63,6 +64,16 @@ async function dialerApi(e: BlutecEnv, method: 'GET' | 'POST', path: string, bod
 const rows = (body: unknown, key: string): unknown[] => {
   const d = (body as { data?: unknown })?.data
   return Array.isArray(d) ? d : Array.isArray((d as Record<string, unknown>)?.[key]) ? (d as Record<string, unknown[]>)[key] : []
+}
+/** The dialer webhook's signing secret, read from Blutec with the long-lived token (null when it can't be read). */
+export async function revealWebhookSecret(e: BlutecEnv): Promise<string | null> {
+  if (!dncReady(e)) return null
+  const r = await dialerApi(e, 'POST', '/api/webhooks/reveal-secret').catch(() => null)
+  const b = r?.status === 200 ? (r.body as { data?: unknown; secret?: unknown }) : null
+  const d = b?.data as Record<string, unknown> | string | undefined
+  // Blutec doesn't document the field name: the secret is the first string among the usual ones
+  const v = typeof d === 'string' ? d : d?.secret ?? d?.signing_secret ?? d?.webhook_secret ?? b?.secret
+  return typeof v === 'string' && v.length >= 8 ? v : null
 }
 async function isDnc(e: BlutecEnv, phone: string) {
   const r = await dialerApi(e, 'GET', `/api/dnc/check?phone=${encodeURIComponent(toE164ish(phone))}`)
@@ -158,6 +169,18 @@ export async function handleBlutec(req: BlutecRequest, e: BlutecEnv): Promise<Bl
         const p = toE164ish(req.phone)
         if (p.length < 10 || p.length > 15) return fail(422, 'The number must have 10–15 digits.', 'VALIDATION_ERROR')
         return await dialerApi(e, 'POST', '/api/dnc', { phone: p, reason: String(req.reason ?? 'Customer asked not to be called').slice(0, 200), source: 'rexera-crm' })
+      }
+      // ---- dialer call webhook (Super Admin): set up through the API with the long-lived token — no Blutec screen needed
+      case 'webhookGet':
+      case 'webhookConnect':
+      case 'webhookTest':
+      case 'webhookDeliveries': {
+        if (!dncReady(e)) return fail(503, 'The webhook needs the Blutec API token (BLUTEC_TOKEN).', 'NOT_CONFIGURED')
+        if (req.action === 'webhookGet') return await dialerApi(e, 'GET', '/api/webhooks')
+        if (req.action === 'webhookTest') return await dialerApi(e, 'POST', '/api/webhooks/test')
+        if (req.action === 'webhookDeliveries') return await dialerApi(e, 'GET', '/api/webhooks/deliveries')
+        if (!/^https:\/\/[^\s]+\/api\/blutec\/webhook\/calls$/.test(req.url)) return fail(422, 'The webhook address must be this CRM’s https …/api/blutec/webhook/calls.', 'VALIDATION_ERROR')
+        return await dialerApi(e, 'PUT', '/api/webhooks', { url: req.url, enabled: true, events: ['call.initiated', 'call.completed'] })
       }
       case 'campaigns': {
         if (!dncReady(e)) return fail(503, 'Blutec campaigns need the Blutec API token (BLUTEC_TOKEN).', 'NOT_CONFIGURED')

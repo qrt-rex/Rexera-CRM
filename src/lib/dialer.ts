@@ -11,6 +11,8 @@ export interface CallStatus {
   hangup_cause?: string; disposition?: string; recording_status?: string
 }
 export interface BlutecCampaign { id: number; name: string; status: string; total_leads?: number; fresh_leads?: number }
+export interface WebhookConfig { url?: string; enabled?: boolean; events?: string[] }
+export interface WebhookDelivery { event_type?: string; status?: string; response_code?: number; attempts?: number; created_at?: string }
 export interface BlutecLead { id: number; phone: string; name?: string; full_name?: string; first_name?: string; last_name?: string; status?: string }
 export interface Ivr { id: number; name: string; status: string; broadcast_status: string; max_concurrent_calls?: number; agent_connect_enabled?: boolean }
 export interface IvrStats { broadcast_status: string; dialing_now: number; total_leads: number; dialed: number; answered: number; pressed_1: number; remaining: number }
@@ -66,6 +68,11 @@ export const blutec = {
   dncAdd: (phone: string, reason: string) => call<unknown>({ action: 'dncAdd', phone, reason }),
   callStatus: (refId: string) => call<CallStatus>({ action: 'callStatus', refId }),
   campaigns: () => call<BlutecCampaign[]>({ action: 'campaigns' }),
+  /** Dialer call webhook (Super Admin): set up through Blutec's API with the server's long-lived token. */
+  webhookGet: () => call<WebhookConfig | null>({ action: 'webhookGet' }),
+  webhookConnect: (url: string) => call<unknown>({ action: 'webhookConnect', url }),
+  webhookTest: () => call<unknown>({ action: 'webhookTest' }),
+  webhookDeliveries: () => call<{ items?: WebhookDelivery[] } | WebhookDelivery[]>({ action: 'webhookDeliveries' }),
   campaignLeads: (id: number) => call<BlutecLead[]>({ action: 'campaignLeads', id }),
   ivrList: () => call<Ivr[]>({ action: 'ivrList' }),
   ivrStats: (id: number) => call<IvrStats>({ action: 'ivrStats', id }),

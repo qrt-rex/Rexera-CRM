@@ -8,6 +8,7 @@
 import crypto from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 import { dispositionToStatus } from '../src/lib/workflow.ts'
+import { blutecEnv, revealWebhookSecret } from '../supabase/functions/_shared/blutec.ts'
 
 const sha256hmac = (secret, text) => crypto.createHmac('sha256', secret).update(text).digest('hex')
 const same = (a, b) => a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b))
@@ -65,14 +66,26 @@ const admin = (env) => {
   return url && secret.startsWith('sb_secret_') ? createClient(url, secret, { auth: { persistSession: false, autoRefreshToken: false } }) : null
 }
 
+// the dialer webhook's secret can come straight from Blutec (BLUTEC_TOKEN) instead of Render; kept here once read
+let revealed = null
+async function callsSecret(env, fresh) {
+  if (fresh || !revealed) revealed = await revealWebhookSecret(blutecEnv({ BLUTEC_TOKEN: env('BLUTEC_TOKEN'), BLUTEC_API_TOKEN: env('BLUTEC_API_TOKEN'), BLUTEC_DIALER_URL: env('BLUTEC_DIALER_URL') })).catch(() => null)
+  return revealed
+}
+
 /**
- * Checks one delivery. Returns the HTTP answer at once and a `work` promise that stores it (run after answering:
+ * Checks one delivery. Resolves with the HTTP answer and a `work` promise that stores it (run after answering:
  * Blutec retries slow endpoints). `kind` is 'ivr' or 'calls'.
  */
-export function receive(env, kind, headers, rawBody) {
-  const secret = env(kind === 'ivr' ? 'BLUTEC_IVR_WEBHOOK_SECRET' : 'BLUTEC_CALLS_WEBHOOK_SECRET')
-  if (!secret) return { answer: reply(503, { success: false, message: `Set ${kind === 'ivr' ? 'BLUTEC_IVR_WEBHOOK_SECRET' : 'BLUTEC_CALLS_WEBHOOK_SECRET'} on the server.` }) }
-  if (!verifySignature(secret, headers['x-webhook-timestamp'], rawBody, headers['x-webhook-signature'])) return { answer: reply(401, { success: false, message: 'Bad signature' }) }
+export async function receive(env, kind, headers, rawBody) {
+  const name = kind === 'ivr' ? 'BLUTEC_IVR_WEBHOOK_SECRET' : 'BLUTEC_CALLS_WEBHOOK_SECRET'
+  const ts = headers['x-webhook-timestamp'], sig = headers['x-webhook-signature']
+  let secret = env(name) || (kind === 'calls' ? await callsSecret(env, false) : '')
+  if (!secret) return { answer: reply(503, { success: false, message: kind === 'ivr' ? `Set ${name} on the server.` : `Set ${name} on the server, or connect the webhook from the Dialer (Super Admin).` }) }
+  let ok = verifySignature(secret, ts, rawBody, sig)
+  // a secret read from Blutec may have been renewed there since: read it once more
+  if (!ok && kind === 'calls' && !env(name)) { secret = await callsSecret(env, true); ok = !!secret && verifySignature(secret, ts, rawBody, sig) }
+  if (!ok) return { answer: reply(401, { success: false, message: 'Bad signature' }) }
   let p
   try { p = JSON.parse(rawBody) } catch { return { answer: reply(400, { success: false, message: 'Bad JSON' }) } }
   const sb = admin(env)

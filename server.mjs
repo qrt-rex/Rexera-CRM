@@ -154,7 +154,7 @@ function readRawBody(req, limit = 256_000) {
 async function handleBlutecWebhook(req, res, kind) {
   let raw
   try { raw = await readRawBody(req) } catch { return sendJson(res, 413, { success: false, message: 'Payload too large' }) }
-  const { answer, work } = receiveBlutecWebhook(getEnv, kind, req.headers, raw)
+  const { answer, work } = await receiveBlutecWebhook(getEnv, kind, req.headers, raw)
   sendJson(res, answer.status, answer.body)
   if (answer.status !== 200) console.warn(`[blutec webhook ${kind}] refused: ${answer.body.message}`)
   work?.catch((e) => console.error(`[blutec webhook ${kind}] ${e.message}`))
@@ -464,7 +464,8 @@ function serveStaticFile(req, res, pathname) {
 // instead each staff computer is set up once with DIALER_ACCESS_KEY (IVR campaigns need IVR_ACCESS_KEY).
 // ponytail: shared keys, per-user checks once CRM sign-in moves to Supabase Auth
 // -------------------------------------------------------------
-const IVR_ACTIONS = ['ivrList', 'ivrStats', 'ivrControl', 'ivrConnects']
+// IVR campaigns and the dialer webhook setup: Super Admin / IT (or the IVR access key until the Supabase switch)
+const IVR_ACTIONS = ['ivrList', 'ivrStats', 'ivrControl', 'ivrConnects', 'webhookGet', 'webhookConnect', 'webhookTest', 'webhookDeliveries']
 const sameKey = (given, expected) => !!expected && crypto.timingSafeEqual(
   crypto.createHash('sha256').update(String(given)).digest(), crypto.createHash('sha256').update(expected).digest())
 
