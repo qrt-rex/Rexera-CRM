@@ -32,7 +32,8 @@ export default function Login() {
   const [otpNotice, setOtpNotice] = useState('')
   const [code, setCode] = useState(['', '', '', '', '', ''])
   const [forgot, setForgot] = useState(false)
-  const [reason] = useState(() => sessionStorage.getItem('rexera-signout-reason'))
+  // read on every render: a sign-out can happen while this page is already open
+  const reason = sessionStorage.getItem('rexera-signout-reason')
   const boxes = useRef<(HTMLInputElement | null)[]>([])
 
   useEffect(() => { if (step === 'code') setTimeout(() => boxes.current[0]?.focus(), 50) }, [step])

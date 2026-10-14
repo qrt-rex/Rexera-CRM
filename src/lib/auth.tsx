@@ -48,9 +48,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (cur && (!CLOUD || cloudUserId())) mutate((d) => d.audit.unshift({ id: uid('a-'), at: nowIso(), by: cur.userId, action: 'SIGN_OUT', detail: reason ?? 'Signed out' }))
     try { localStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
     if (reason) sessionStorage.setItem('rexera-signout-reason', reason)
+    console.warn('[sign-in] signed out:', reason ?? 'by the person')
     setSession(null)
-    // the sign-out entry is saved before the Supabase session ends
-    if (CLOUD) void saved().catch(() => undefined).then(cloudSignOut).then(clearCloudDb)
+    // the sign-out entry is saved before the Supabase session ends — unless someone signed in again meanwhile
+    // (ending the Supabase session then would sign the new person straight out)
+    if (CLOUD) void saved().catch(() => undefined).then(async () => { if (!readSession()) { await cloudSignOut(); await clearCloudDb() } })
   }, [])
 
   // sign-out in another tab signs out here too
