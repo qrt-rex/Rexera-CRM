@@ -11,6 +11,7 @@ import { blutec, dialerKey, ivrKey, KEYLESS, DialerError, FINAL_STATUSES, isHot,
 import { rolesOf } from '../../lib/rbac'
 import { Badge, Button, Card, CardHeader, cx, EmptyState, Input, Modal, PageHeader, Table, Tabs, Td, Textarea, Th, useConfirm, useRun, useToast } from '../../components/ui'
 import { BlutecWebhooks } from '../../components/BlutecWebhooks'
+import { DialerCampaigns } from '../../components/DialerCampaigns'
 import { salesNumbers } from '../../lib/metrics'
 import { MiniStat } from '../dashboards/widgets'
 import { CallWindow } from '../../components/CallWindow'
@@ -75,7 +76,7 @@ export default function Dialer() {
       {tab === 'calls' ? <CallsTab bt={bt} /> : tab === 'ivr' ? <IvrTab bt={bt} manage /> : (
         <Card><EmptyState icon={Phone} title="Dialer is for sales people" text="Calls are used by sales people and team leaders; IVR campaigns are run by the Super Admin." /></Card>
       )}
-      {tab === 'ivr' && <BlutecWebhooks />}
+      {tab === 'ivr' && <><DialerCampaigns /><BlutecWebhooks /></>}
     </div>
   )
 }
@@ -320,6 +321,9 @@ function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
 }
 
 /** IVR broadcasts: live stats, start / pause / resume / stop (managers), and the people who pressed the key (hot prospects). */
+/** 102200 → 102.2k, as Blutec shows it. */
+const short = (n: number) => (n >= 1e5 ? `${(n / 1000).toFixed(1)}k` : (n ?? 0).toLocaleString('en-IN'))
+
 function IvrTab({ bt, manage }: { bt: ReturnType<typeof useBlutec>; manage: boolean }) {
   const db = useDb()
   const me = useMe()
@@ -395,13 +399,19 @@ function IvrTab({ bt, manage }: { bt: ReturnType<typeof useBlutec>; manage: bool
               {st === 'paused' && <Button size="sm" variant="success" icon={Play} onClick={() => control('resume')}>Resume</Button>}
               {(st === 'running' || st === 'paused') && <Button size="sm" variant="danger" icon={Square} onClick={() => control('stop')}>Stop</Button>}
             </span>} />
-          {stats ? (
-            <div className="grid grid-cols-2 gap-3 p-5 sm:grid-cols-3 xl:grid-cols-6">
-              {([['Total leads', stats.total_leads], ['Dialed', stats.dialed], ['Answered', stats.answered], ['Pressed key', stats.pressed_1], ['Dialing now', stats.dialing_now], ['Remaining', stats.remaining]] as [string, number][]).map(([k, v]) => (
-                <div key={k} className="rounded-xl bg-card2 p-3"><p className="text-[11px] text-mute">{k}</p><p className="text-xl font-extrabold tabular-nums">{(v ?? 0).toLocaleString('en-IN')}</p></div>
+          {stats ? (<>
+            {/* the same view as Blutec OBD: dial progress, then queued · dialing · completed · interested · total */}
+            <div className="px-5 pt-5">
+              <div className="mb-1 flex justify-between text-[11px] font-semibold text-mute"><span>DIAL PROGRESS</span><span className="tabular-nums">{short(stats.dialed)} / {short(stats.total_leads)} · {stats.total_leads ? Math.round((stats.dialed / stats.total_leads) * 100) : 0}%</span></div>
+              <div className="h-2 overflow-hidden rounded-full bg-card2"><div className="h-full rounded-full bg-ok transition-all" style={{ width: `${stats.total_leads ? Math.min(100, (stats.dialed / stats.total_leads) * 100) : 0}%` }} /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 p-5 sm:grid-cols-3 xl:grid-cols-5">
+              {([['Queued', stats.queued], ['Dialing', stats.dialing], ['Completed', stats.completed], ['Interested', stats.interested], ['Total leads', stats.total_leads]] as [string, number][]).map(([k, v]) => (
+                <div key={k} className={cx('rounded-xl p-3', k === 'Interested' ? 'bg-warn-soft' : 'bg-card2')}><p className="text-[11px] uppercase text-mute">{k}</p><p className="text-xl font-extrabold tabular-nums" title={(v ?? 0).toLocaleString('en-IN')}>{short(v)}</p></div>
               ))}
             </div>
-          ) : <p className="p-6 text-sm text-mute">{cur ? 'Loading live stats…' : 'Choose a campaign on the left.'}</p>}
+            {stats.total_leads === 0 && stats.dialed === 0 && <p className="px-4 pb-4 text-sm text-mute">Blutec reports no numbers in this campaign yet. If it does have leads in Blutec, open the browser console (F12) and send the line starting “[ivr stats] Blutec answered”.</p>}
+          </>) : <p className="p-6 text-sm text-mute">{cur ? 'Loading live stats…' : 'Choose a campaign on the left.'}</p>}
           {!manage && <p className="border-t border-line px-5 py-2 text-xs text-mute">Starting and stopping broadcasts is for team leaders and admins.</p>}
         </Card>
       </div>

@@ -15,7 +15,8 @@ export interface WebhookConfig { url?: string; enabled?: boolean; events?: strin
 export interface WebhookDelivery { event_type?: string; status?: string; response_code?: number; attempts?: number; created_at?: string }
 export interface BlutecLead { id: number; phone: string; name?: string; full_name?: string; first_name?: string; last_name?: string; status?: string }
 export interface Ivr { id: number; name: string; status: string; broadcast_status: string; max_concurrent_calls?: number; agent_connect_enabled?: boolean }
-export interface IvrStats { broadcast_status: string; dialing_now: number; total_leads: number; dialed: number; answered: number; pressed_1: number; remaining: number }
+/** Live broadcast numbers, in Blutec OBD's own terms (Queued · Dialing · Completed · Interested · Total leads). */
+export interface IvrStats { broadcast_status: string; total_leads: number; dialed: number; queued: number; dialing: number; completed: number; interested: number }
 export interface AgentConnect { id: number; lead_phone: string; agent_name: string; status: string; wait_seconds: number; talk_seconds: number; hangup_by?: string; recording?: boolean; created_at: string }
 
 export class DialerError extends Error { constructor(message: string, public code?: string, public status?: number) { super(message) } }
@@ -75,7 +76,7 @@ export const blutec = {
   webhookDeliveries: () => call<{ items?: WebhookDelivery[] } | WebhookDelivery[]>({ action: 'webhookDeliveries' }),
   campaignLeads: (id: number) => call<BlutecLead[]>({ action: 'campaignLeads', id }),
   ivrList: () => call<Ivr[]>({ action: 'ivrList' }),
-  ivrStats: (id: number) => call<IvrStats>({ action: 'ivrStats', id }),
+  ivrStats: (id: number) => call<unknown>({ action: 'ivrStats', id }).then(readIvrStats),
   ivrControl: (id: number, op: 'start' | 'pause' | 'resume' | 'stop') => call<unknown>({ action: 'ivrControl', id, op }),
   ivrConnects: (dateFrom?: string, dateTo?: string) => call<{ items: AgentConnect[] }>({ action: 'ivrConnects', dateFrom, dateTo }),
 }
@@ -83,3 +84,35 @@ export const blutec = {
 /** A disposition that means the client is a hot prospect (go straight to a CRM entry). */
 export const isHot = (disposition?: string) => !!disposition && /interest|hot|convert|sale|book|ready/i.test(disposition)
 export const FINAL_STATUSES = ['completed', 'failed', 'no_answer', 'busy', 'cancelled', 'rejected']
+
+/**
+ * Blutec's live broadcast stats, read whatever the exact field names (the docs say total_leads, dialed, answered,
+ * pressed_1, dialing_now, remaining; accounts can answer in camelCase or one level deeper). The raw answer is logged
+ * once per campaign in the console, to check what Blutec really sends.
+ */
+const logged = new Set<string>()
+export function readIvrStats(raw: unknown): IvrStats {
+  const fields = new Map<string, unknown>()
+  const norm = (k: string) => k.toLowerCase().replace(/[^a-z0-9]/g, '')
+  const walk = (o: unknown, depth: number) => {
+    if (!o || typeof o !== 'object' || Array.isArray(o)) return
+    for (const [k, v] of Object.entries(o)) { if (v && typeof v === 'object') { if (depth < 2) walk(v, depth + 1) } else if (!fields.has(norm(k))) fields.set(norm(k), v) }
+  }
+  walk(raw, 0)
+  const key = JSON.stringify(Object.keys((raw ?? {}) as object))
+  if (!logged.has(key)) { logged.add(key); console.info('[ivr stats] Blutec answered:', raw) }
+  const num = (...names: string[]) => { for (const n of names) { const v = Number(fields.get(n)); if (fields.has(n) && Number.isFinite(v)) return v } return 0 }
+  const text = (...names: string[]) => { for (const n of names) { const v = fields.get(n); if (typeof v === 'string' && v) return v } return '' }
+  // OBD answers queued / dialing / completed / interested; the API docs say remaining / dialing_now / answered / pressed_1
+  const total = num('totalleads', 'leadstotal', 'totalleadcount', 'leadcount', 'leads', 'total')
+  const queued = num('queued', 'queue', 'remaining', 'pending', 'left', 'remainingleads')
+  const dialed = num('dialed', 'dialled', 'totaldialed', 'attempted', 'called') || Math.max(0, total - queued)
+  return {
+    broadcast_status: text('broadcaststatus', 'status', 'state'),
+    total_leads: total, dialed, queued,
+    dialing: num('dialing', 'dialingnow', 'activecalls', 'inprogress', 'live', 'ringing'),
+    completed: num('completed', 'answered', 'connected', 'answeredcalls', 'pickedup'),
+    interested: num('interested', 'pressed1', 'pressedkey', 'keypressed', 'keypresses', 'dtmf1', 'pressed'),
+  }
+}
+
