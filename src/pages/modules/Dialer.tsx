@@ -7,7 +7,7 @@ import { useAuth, useMe } from '../../lib/auth'
 import { createLead, logCall, setLeadStatus, userName, visibleLeads } from '../../lib/actions'
 import { CALL_OUTCOMES, dispositionToStatus, FOLLOW_UP_LEAD, LEAD_STATUS, OPEN_LEAD } from '../../lib/workflow'
 import { addDays, fmtDate, fmtDateTime, fmtTime, inr, normPhone, today, ymd } from '../../lib/format'
-import { blutec, dialerKey, ivrKey, DialerError, FINAL_STATUSES, isHot, type AgentConnect, type BlutecStatus, type CallStatus, type Ivr, type IvrStats } from '../../lib/dialer'
+import { blutec, dialerKey, ivrKey, KEYLESS, DialerError, FINAL_STATUSES, isHot, type AgentConnect, type BlutecStatus, type CallStatus, type Ivr, type IvrStats } from '../../lib/dialer'
 import { rolesOf } from '../../lib/rbac'
 import { Badge, Button, Card, CardHeader, cx, EmptyState, Input, Modal, PageHeader, Table, Tabs, Td, Textarea, Th, useConfirm, useRun, useToast } from '../../components/ui'
 import { salesNumbers } from '../../lib/metrics'
@@ -85,11 +85,12 @@ function ConnectionPill({ bt, ivr }: { bt: ReturnType<typeof useBlutec>; ivr: bo
   const ok = ivr ? bt.status?.ivr : bt.status?.dialer
   return (
     <>
-      <button onClick={() => setOpen(true)} className={cx('flex h-10 items-center gap-2 rounded-xl border px-3 text-xs font-semibold', ok ? 'border-ok/30 bg-ok-soft text-ok' : 'border-warn/30 bg-warn-soft text-warn')}>
+      {/* signed in with Supabase there are no keys to enter: the pill only shows the status */}
+      <button onClick={() => { if (KEYLESS) bt.check(); else setOpen(true) }} title={KEYLESS ? 'Check again' : 'Dialer connection'} className={cx('flex h-10 items-center gap-2 rounded-xl border px-3 text-xs font-semibold', ok ? 'border-ok/30 bg-ok-soft text-ok' : 'border-warn/30 bg-warn-soft text-warn')}>
         {bt.loading ? <CircleDashed className="size-4 animate-spin" /> : ok ? <CircleCheck className="size-4" /> : <Settings2 className="size-4" />}
         {bt.loading ? 'Checking dialer…' : ivr ? (ok ? 'Blutec IVR connected' : 'IVR not connected') : ok ? 'Blutec connected' : 'Dialer not connected'}
       </button>
-      <Modal open={open} onClose={() => setOpen(false)} title="Blutec dialer connection" size="lg" footer={<><Button variant="outline" icon={RefreshCcw} onClick={bt.check}>Check again</Button><Button onClick={() => setOpen(false)}>Close</Button></>}>
+      <Modal open={open && !KEYLESS} onClose={() => setOpen(false)} title="Blutec dialer connection" size="lg" footer={<><Button variant="outline" icon={RefreshCcw} onClick={bt.check}>Check again</Button><Button onClick={() => setOpen(false)}>Close</Button></>}>
         <div className="space-y-3 text-sm">
           <p>Click-to-call: <b className={bt.status?.dialer ? 'text-ok' : 'text-warn'}>{bt.status?.dialer ? 'connected' : 'not set up'}</b> · DND check: <b className={bt.status?.dnc ? 'text-ok' : 'text-warn'}>{bt.status?.dnc ? 'on' : 'not set up'}</b> · IVR: <b className={bt.status?.ivr ? 'text-ok' : 'text-warn'}>{bt.status?.ivr ? 'connected' : 'not set up'}</b>{bt.error ? ` · ${bt.error}` : ''}</p>
           {!import.meta.env.DEV && <form className="grid items-end gap-2 sm:grid-cols-[1fr_1fr_auto]" onSubmit={(e) => { e.preventDefault(); dialerKey.set(key); ivrKey.set(ivrK); bt.check() }}>

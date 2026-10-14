@@ -6,7 +6,7 @@ import nodemailer from 'nodemailer'
 import crypto from 'node:crypto'
 import { checkClientEmail, renderClientEmail } from './supabase/functions/_shared/client-email.mjs'
 import { aiConfig, aiOverLimit, answerAi, checkAiRequest } from './server/ai.mjs'
-import { setPassword } from './server/users.mjs'
+import { crmUser, setPassword } from './server/users.mjs'
 import { incentiveReport, reportConfig } from './server/incentives.mjs'
 import { blutecEnv, handleBlutec } from './supabase/functions/_shared/blutec.ts'
 
@@ -447,6 +447,18 @@ const sameKey = (given, expected) => !!expected && crypto.timingSafeEqual(
   crypto.createHash('sha256').update(String(given)).digest(), crypto.createHash('sha256').update(expected).digest())
 
 async function handleBlutecRelay(req, res) {
+  // signed in with Supabase: the person's own sign-in is the check (IVR for Super Admin / IT); no access keys needed
+  const who = req.headers.authorization ? await crmUser(getEnv, req.headers.authorization).catch(() => null) : null
+  if (who) {
+    let body
+    try { body = await readJsonBody(req) } catch { return sendJson(res, 400, { success: false, message: 'Bad JSON' }) }
+    if (IVR_ACTIONS.includes(body.action) && !who.roles.some((r) => r === 'superadmin' || r === 'it')) return sendJson(res, 403, { success: false, message: 'IVR campaigns are for the Super Admin and IT.' })
+    // calls always ring the signed-in person's own agent phone
+    if (body.action === 'call') body.agentEmail = who.email
+    if (body.action === 'agent') body.email = who.email
+    const r = await handleBlutec(body, blutecEnv({ ...fileEnv, ...process.env }))
+    return sendJson(res, r.status, r.body)
+  }
   const dialerKey = getEnv('DIALER_ACCESS_KEY')
   if (!dialerKey) return sendJson(res, 503, { success: false, code: 'NOT_CONFIGURED', message: 'Set DIALER_ACCESS_KEY on the server (Render → Environment).' })
   const given = req.headers['x-dialer-key'] || ''

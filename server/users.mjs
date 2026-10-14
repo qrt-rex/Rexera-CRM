@@ -50,3 +50,21 @@ export async function setPassword(env, authorization, body) {
   }
   return reply(200, { success: true })
 }
+
+/**
+ * The CRM user behind a Supabase sign-in (Authorization: Bearer <access token>), or null. Lets the server check who is
+ * calling (dialer, IVR) without per-computer access keys once the CRM signs in with Supabase.
+ */
+export async function crmUser(env, authorization) {
+  const url = env('SUPABASE_URL') || env('VITE_SUPABASE_URL')
+  const secret = env('SUPABASE_SECRET_KEY') || ''
+  const token = String(authorization || '').replace(/^Bearer\s+/i, '')
+  if (!url || !secret.startsWith('sb_secret_') || !token) return null
+  const admin = createClient(url, secret, { auth: { persistSession: false, autoRefreshToken: false } })
+  const { data: { user } } = await admin.auth.getUser(token)
+  if (!user) return null
+  const { data: me } = await admin.from('app_users').select('id, email, role, active').eq('auth_user_id', user.id).maybeSingle()
+  if (!me?.active) return null
+  const { data: extra } = await admin.from('user_extra_roles').select('role').eq('user_id', me.id)
+  return { id: me.id, email: me.email, roles: [me.role, ...(extra ?? []).map((x) => x.role)] }
+}

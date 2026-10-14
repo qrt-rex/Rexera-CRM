@@ -88,12 +88,20 @@ async function signed(e: BlutecEnv, method: 'GET' | 'POST', path: string, query 
   return { status: res.status, body: await res.json().catch(() => ({ success: false, message: `Blutec answered ${res.status}` })) }
 }
 
+// a refused IVR sign-in is not retried for 15 minutes: retrying on every screen refresh locks the Blutec IVR login
+let ivrRefused: { message: string; at: number } | null = null
 async function ivrLogin(e: BlutecEnv) {
+  if (ivrRefused && Date.now() - ivrRefused.at < 15 * 60_000) throw new Error(ivrRefused.message)
   const res = await fetch(`${(e.ivrUrl || 'https://ivr.blutec.ai').replace(/\/$/, '')}/api/auth/login`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: e.ivrEmail, password: e.ivrPassword }),
   })
   const j = await res.json().catch(() => ({})) as { data?: { accessToken?: string }; message?: string }
-  if (!res.ok || !j.data?.accessToken) throw new Error(j.message || `IVR sign-in failed (${res.status})`)
+  if (!res.ok || !j.data?.accessToken) {
+    const message = `Blutec IVR refused the sign-in (BLUTEC_IVR_EMAIL / BLUTEC_IVR_PASSWORD on the server): ${j.message || res.status}. The CRM tries again in 15 minutes.`
+    ivrRefused = { message, at: Date.now() }
+    throw new Error(message)
+  }
+  ivrRefused = null
   ivrToken = { token: j.data.accessToken, at: Date.now() }
   return ivrToken.token
 }

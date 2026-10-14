@@ -1,3 +1,6 @@
+import { CLOUD } from './cloud'
+import { getSupabase } from './supabase'
+
 /**
  * Talks to the Blutec relay at /api/blutec — the local dev server (vite.config.ts) or, on the live site, server.mjs. Secrets live only on the relay; the browser never sees them.
  */
@@ -28,14 +31,21 @@ export const ivrKey = {
   set: (k: string) => { try { localStorage.setItem(IVR_KEY, k.trim()) } catch { /* ignore */ } },
 }
 
-function endpoint(): { url: string; headers: Record<string, string> } {
-  if (import.meta.env.DEV) return { url: '/api/blutec', headers: {} }
+/** Signed in with Supabase, the server checks the person's own sign-in (no access keys on each computer). */
+export const KEYLESS = CLOUD
+
+async function endpoint(): Promise<{ url: string; headers: Record<string, string> }> {
+  if (import.meta.env.DEV && !CLOUD) return { url: '/api/blutec', headers: {} }
+  if (CLOUD) {
+    const { data: { session } } = await (await getSupabase()).auth.getSession()
+    return { url: '/api/blutec', headers: { Authorization: `Bearer ${session?.access_token ?? ''}` } }
+  }
   // the live server (server.mjs) relays to Blutec with the BLUTEC_* settings from Render
   return { url: '/api/blutec', headers: { 'X-Dialer-Key': dialerKey.get(), 'X-Ivr-Key': ivrKey.get() } }
 }
 
 async function call<T>(body: Record<string, unknown>): Promise<T> {
-  const { url, headers } = endpoint()
+  const { url, headers } = await endpoint()
   let res: Response
   try { res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) }) }
   catch { throw new DialerError('Could not reach the dialer relay.', 'OFFLINE') }
