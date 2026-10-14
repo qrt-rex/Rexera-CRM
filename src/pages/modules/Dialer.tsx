@@ -7,7 +7,7 @@ import { useAuth, useMe } from '../../lib/auth'
 import { createLead, logCall, setLeadStatus, userName, visibleLeads } from '../../lib/actions'
 import { CALL_OUTCOMES, dispositionToStatus, FOLLOW_UP_LEAD, LEAD_STATUS, OPEN_LEAD } from '../../lib/workflow'
 import { addDays, fmtDate, fmtDateTime, fmtTime, inr, normPhone, today, ymd } from '../../lib/format'
-import { blutec, dialerKey, DialerError, FINAL_STATUSES, isHot, type AgentConnect, type BlutecStatus, type CallStatus, type Ivr, type IvrStats } from '../../lib/dialer'
+import { blutec, dialerKey, ivrKey, DialerError, FINAL_STATUSES, isHot, type AgentConnect, type BlutecStatus, type CallStatus, type Ivr, type IvrStats } from '../../lib/dialer'
 import { rolesOf } from '../../lib/rbac'
 import { Badge, Button, Card, CardHeader, cx, EmptyState, Input, Modal, PageHeader, Table, Tabs, Td, Textarea, Th, useConfirm, useRun, useToast } from '../../components/ui'
 import { salesNumbers } from '../../lib/metrics'
@@ -81,6 +81,7 @@ export default function Dialer() {
 function ConnectionPill({ bt, ivr }: { bt: ReturnType<typeof useBlutec>; ivr: boolean }) {
   const [open, setOpen] = useState(false)
   const [key, setKey] = useState(dialerKey.get)
+  const [ivrK, setIvrK] = useState(ivrKey.get)
   const ok = ivr ? bt.status?.ivr : bt.status?.dialer
   return (
     <>
@@ -91,8 +92,9 @@ function ConnectionPill({ bt, ivr }: { bt: ReturnType<typeof useBlutec>; ivr: bo
       <Modal open={open} onClose={() => setOpen(false)} title="Blutec dialer connection" size="lg" footer={<><Button variant="outline" icon={RefreshCcw} onClick={bt.check}>Check again</Button><Button onClick={() => setOpen(false)}>Close</Button></>}>
         <div className="space-y-3 text-sm">
           <p>Click-to-call: <b className={bt.status?.dialer ? 'text-ok' : 'text-warn'}>{bt.status?.dialer ? 'connected' : 'not set up'}</b> · DND check: <b className={bt.status?.dnc ? 'text-ok' : 'text-warn'}>{bt.status?.dnc ? 'on' : 'not set up'}</b> · IVR: <b className={bt.status?.ivr ? 'text-ok' : 'text-warn'}>{bt.status?.ivr ? 'connected' : 'not set up'}</b>{bt.error ? ` · ${bt.error}` : ''}</p>
-          {!import.meta.env.DEV && <form className="flex items-end gap-2" onSubmit={(e) => { e.preventDefault(); dialerKey.set(key); bt.check() }}>
-            <Input className="flex-1" label="Dialer access key (this computer)" type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} hint="From the Super Admin. Use the IVR key on the Super Admin's computer." />
+          {!import.meta.env.DEV && <form className="grid items-end gap-2 sm:grid-cols-[1fr_1fr_auto]" onSubmit={(e) => { e.preventDefault(); dialerKey.set(key); ivrKey.set(ivrK); bt.check() }}>
+            <Input label="Dialer access key (this computer)" type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} hint="DIALER_ACCESS_KEY — for calls" />
+            <Input label="IVR access key (Super Admin only)" type="password" autoComplete="off" value={ivrK} onChange={(e) => setIvrK(e.target.value)} hint="IVR_ACCESS_KEY — for IVR campaigns" />
             <Button type="submit">Save</Button>
           </form>}
           <p className="text-mute">Calls ring <b>your own phone</b> first (the number set for your agent in Blutec), then connect the client. Each CRM user's email must be added as an agent in Blutec.</p>

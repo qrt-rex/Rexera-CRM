@@ -450,12 +450,13 @@ async function handleBlutecRelay(req, res) {
   const dialerKey = getEnv('DIALER_ACCESS_KEY')
   if (!dialerKey) return sendJson(res, 503, { success: false, code: 'NOT_CONFIGURED', message: 'Set DIALER_ACCESS_KEY on the server (Render → Environment).' })
   const given = req.headers['x-dialer-key'] || ''
-  const ivrOk = sameKey(given, getEnv('IVR_ACCESS_KEY'))
+  // the IVR key may come in its own header (a computer with both keys) or as the only key
+  const ivrOk = sameKey(req.headers['x-ivr-key'] || '', getEnv('IVR_ACCESS_KEY')) || sameKey(given, getEnv('IVR_ACCESS_KEY'))
   if (!ivrOk && !sameKey(given, dialerKey)) return sendJson(res, 401, { success: false, code: 'NO_KEY', message: 'Enter the dialer access key on this computer (ask the Super Admin).' })
 
   let body
   try { body = await readJsonBody(req) } catch { return sendJson(res, 400, { success: false, message: 'Bad JSON' }) }
-  if (IVR_ACTIONS.includes(body.action) && !ivrOk) return sendJson(res, 403, { success: false, message: 'IVR campaigns need the IVR access key.' })
+  if (IVR_ACTIONS.includes(body.action) && !ivrOk) return sendJson(res, 403, { success: false, message: 'IVR campaigns need the IVR access key: open the connection button (top right of the Dialer) and enter it under “IVR access key”.' })
 
   const r = await handleBlutec(body, blutecEnv({ ...fileEnv, ...process.env }))
   sendJson(res, r.status, r.body)

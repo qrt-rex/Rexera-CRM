@@ -21,11 +21,17 @@ export const dialerKey = {
   get: () => { try { return localStorage.getItem(KEY) ?? '' } catch { return '' } },
   set: (k: string) => { try { localStorage.setItem(KEY, k.trim()) } catch { /* ignore */ } },
 }
+/** The IVR access key, kept apart from the dialer key so one computer (the Super Admin's) can run calls and IVR. */
+const IVR_KEY = 'rexera-ivr-key'
+export const ivrKey = {
+  get: () => { try { return localStorage.getItem(IVR_KEY) ?? '' } catch { return '' } },
+  set: (k: string) => { try { localStorage.setItem(IVR_KEY, k.trim()) } catch { /* ignore */ } },
+}
 
 function endpoint(): { url: string; headers: Record<string, string> } {
   if (import.meta.env.DEV) return { url: '/api/blutec', headers: {} }
   // the live server (server.mjs) relays to Blutec with the BLUTEC_* settings from Render
-  return { url: '/api/blutec', headers: { 'X-Dialer-Key': dialerKey.get() } }
+  return { url: '/api/blutec', headers: { 'X-Dialer-Key': dialerKey.get(), 'X-Ivr-Key': ivrKey.get() } }
 }
 
 async function call<T>(body: Record<string, unknown>): Promise<T> {
