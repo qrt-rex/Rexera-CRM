@@ -7,6 +7,7 @@ import crypto from 'node:crypto'
 import { checkClientEmail, renderClientEmail } from './supabase/functions/_shared/client-email.mjs'
 import { aiConfig, aiOverLimit, answerAi, checkAiRequest } from './server/ai.mjs'
 import { crmUser, setPassword } from './server/users.mjs'
+import { receive as receiveBlutecWebhook } from './server/blutecWebhook.mjs'
 import { incentiveReport, reportConfig } from './server/incentives.mjs'
 import { blutecEnv, handleBlutec } from './supabase/functions/_shared/blutec.ts'
 
@@ -136,6 +137,27 @@ function sendJson(res, statusCode, data) {
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   })
   res.end(JSON.stringify(data))
+}
+
+/** The body exactly as sent (webhook signatures are computed over these bytes). */
+function readRawBody(req, limit = 256_000) {
+  return new Promise((resolve, reject) => {
+    const parts = []
+    let size = 0
+    req.on('data', (c) => { size += c.length; if (size > limit) { req.destroy(); reject(new Error('Payload too large')) } else parts.push(c) })
+    req.on('end', () => resolve(Buffer.concat(parts).toString('utf8')))
+    req.on('error', reject)
+  })
+}
+
+/** Blutec webhooks (server/blutecWebhook.mjs): answer at once, store afterwards. */
+async function handleBlutecWebhook(req, res, kind) {
+  let raw
+  try { raw = await readRawBody(req) } catch { return sendJson(res, 413, { success: false, message: 'Payload too large' }) }
+  const { answer, work } = receiveBlutecWebhook(getEnv, kind, req.headers, raw)
+  sendJson(res, answer.status, answer.body)
+  if (answer.status !== 200) console.warn(`[blutec webhook ${kind}] refused: ${answer.body.message}`)
+  work?.catch((e) => console.error(`[blutec webhook ${kind}] ${e.message}`))
 }
 
 function readJsonBody(req) {
@@ -454,7 +476,7 @@ async function handleBlutecRelay(req, res) {
     try { body = await readJsonBody(req) } catch { return sendJson(res, 400, { success: false, message: 'Bad JSON' }) }
     if (IVR_ACTIONS.includes(body.action) && !who.roles.some((r) => r === 'superadmin' || r === 'it')) return sendJson(res, 403, { success: false, message: 'IVR campaigns are for the Super Admin and IT.' })
     // calls always ring the signed-in person's own agent phone
-    if (body.action === 'call') body.agentEmail = who.email
+    if (body.action === 'call') { body.agentEmail = who.email; body.userId = who.id }
     if (body.action === 'agent') body.email = who.email
     const r = await handleBlutec(body, blutecEnv({ ...fileEnv, ...process.env }))
     return sendJson(res, r.status, r.body)
@@ -547,6 +569,10 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === '/api/users/password' && req.method === 'POST') {
     return handleSetPassword(req, res).catch((err) => sendJson(res, 502, { success: false, message: err.message }))
+  }
+
+  if ((pathname === '/api/blutec/webhook/ivr' || pathname === '/api/blutec/webhook/calls') && req.method === 'POST') {
+    return handleBlutecWebhook(req, res, pathname.endsWith('/ivr') ? 'ivr' : 'calls')
   }
 
   if (pathname === '/api/blutec' && req.method === 'POST') {

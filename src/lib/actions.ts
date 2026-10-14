@@ -744,12 +744,16 @@ export function setLeadStatus(me: User, id: string, status: Lead['status'], note
   })
 }
 
-export function logCall(me: User, leadId: string, outcome: CallOutcome, note: string, followUp?: string, durationSec = 0) {
+/** `refId`: the Blutec call this was (click-to-call) — the call webhook files it under the same id, so both become one. */
+export function logCall(me: User, leadId: string, outcome: CallOutcome, note: string, followUp?: string, durationSec = 0, refId?: string) {
   need(me, 'dialer.use', 'leads.manage')
   mutate((d) => {
     const l = d.leads.find((x) => x.id === leadId)
     assert(l, 'Lead not found.')
-    l.calls.unshift({ id: uid('call-'), at: nowIso(), by: me.id, outcome, note, durationSec })
+    const id = refId ? `bt-${refId}` : uid('call-')
+    const filed = l.calls.find((c) => c.id === id)
+    if (filed) Object.assign(filed, { by: me.id, outcome, note: [note, filed.note].filter(Boolean).join(' · '), durationSec: durationSec || filed.durationSec })
+    else l.calls.unshift({ id, at: nowIso(), by: me.id, outcome, note, durationSec })
     l.status = CALL_OUTCOMES.find((o) => o.id === outcome)!.to
     if (followUp) l.followUp = followUp
     else if (!OPEN_LEAD.includes(l.status)) l.followUp = undefined

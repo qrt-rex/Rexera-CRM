@@ -10,6 +10,7 @@ import { addDays, fmtDate, fmtDateTime, fmtTime, inr, normPhone, today, ymd } fr
 import { blutec, dialerKey, ivrKey, KEYLESS, DialerError, FINAL_STATUSES, isHot, type AgentConnect, type BlutecStatus, type CallStatus, type Ivr, type IvrStats } from '../../lib/dialer'
 import { rolesOf } from '../../lib/rbac'
 import { Badge, Button, Card, CardHeader, cx, EmptyState, Input, Modal, PageHeader, Table, Tabs, Td, Textarea, Th, useConfirm, useRun, useToast } from '../../components/ui'
+import { BlutecWebhooks } from '../../components/BlutecWebhooks'
 import { salesNumbers } from '../../lib/metrics'
 import { MiniStat } from '../dashboards/widgets'
 import { CallWindow } from '../../components/CallWindow'
@@ -25,7 +26,7 @@ function useBlutec() {
   return { ...state, check }
 }
 
-export function CallLogger({ lead, seconds = 0, suggested, onDone }: { lead: Lead; seconds?: number; suggested?: CallOutcome; onDone?: (outcome: CallOutcome) => void }) {
+export function CallLogger({ lead, seconds = 0, suggested, refId, onDone }: { lead: Lead; seconds?: number; suggested?: CallOutcome; refId?: string; onDone?: (outcome: CallOutcome) => void }) {
   const me = useMe()
   const run = useRun()
   const [outcome, setOutcome] = useState<CallOutcome | null>(null)
@@ -36,7 +37,7 @@ export function CallLogger({ lead, seconds = 0, suggested, onDone }: { lead: Lea
   const needsFollow = !!outcome && FOLLOW_UP_LEAD.includes(outcome)
   const save = async () => {
     if (!outcome) return
-    const ok = await run(() => logCall(me, lead.id, outcome, note, needsFollow ? follow || ymd(addDays(new Date(), 1)) : undefined, seconds), 'Call logged')
+    const ok = await run(() => logCall(me, lead.id, outcome, note, needsFollow ? follow || ymd(addDays(new Date(), 1)) : undefined, seconds, refId), 'Call logged')
     if (ok) { const o = outcome; setOutcome(null); setNote(''); setFollow(''); onDone?.(o) }
   }
   return (
@@ -74,6 +75,7 @@ export default function Dialer() {
       {tab === 'calls' ? <CallsTab bt={bt} /> : tab === 'ivr' ? <IvrTab bt={bt} manage /> : (
         <Card><EmptyState icon={Phone} title="Dialer is for sales people" text="Calls are used by sales people and team leaders; IVR campaigns are run by the Super Admin." /></Card>
       )}
+      {tab === 'ivr' && <BlutecWebhooks />}
     </div>
   )
 }
@@ -175,7 +177,7 @@ function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
     retry.current = null
     if (!retried) { setLive(null); setCall({ leadId: l.id, startedAt: Date.now(), phone: false }); setWinHidden(false) }
     let r: { ref_id: string; status: string }
-    try { r = await blutec.clickToCall(me.email, l.phone, l.id, attempt) }
+    try { r = await blutec.clickToCall(me.email, l.phone, l.id, attempt, me.id) }
     catch (e) {
       const code = e instanceof DialerError ? e.code : undefined
       // all lines busy: try the same click once more after 15 s (same Idempotency-Key, so it can't dial twice)
@@ -268,7 +270,7 @@ function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
             {!(windowOpen && call?.leadId === current.id) && (
               <div className="mt-6 border-t border-line pt-5">
                 <h4 className="mb-3 font-bold">Outcome</h4>
-                <CallLogger lead={current} seconds={call?.leadId === current.id ? secs : 0} suggested={suggested} onDone={afterSave} />
+                <CallLogger lead={current} seconds={call?.leadId === current.id ? secs : 0} suggested={suggested} refId={call?.leadId === current.id ? live?.refId || undefined : undefined} onDone={afterSave} />
               </div>
             )}
           </Card>
@@ -291,7 +293,7 @@ function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
             {call?.phone && !ended && <Button className="mb-3 w-full" variant="danger" icon={PhoneOff} onClick={endPhoneCall}>End call</Button>}
             {!call?.phone && !ended && <p className="mb-3 text-xs text-mute">Answer your phone to connect the client. You can note the outcome now or when the call ends.</p>}
             <p className="mb-2 text-xs font-bold uppercase tracking-wide text-mute">Outcome</p>
-            <CallLogger lead={callLead} seconds={secs} suggested={suggested} onDone={afterSave} />
+            <CallLogger lead={callLead} seconds={secs} suggested={suggested} refId={live?.refId || undefined} onDone={afterSave} />
             <div className="mt-3 flex gap-2 border-t border-line pt-3">
               <Button size="sm" variant="ghost" icon={Ban} className="flex-1" onClick={() => markDnd(callLead)}>Do not call</Button>
               {can('bookings.create') && <Button size="sm" variant="soft" icon={Briefcase} className="flex-1" onClick={() => nav(`/bookings/new?lead=${callLead.id}`)}>Book</Button>}
