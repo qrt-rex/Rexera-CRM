@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, CalendarDays, ChevronRight, Clock, Eye, LogIn, LogOut, Pause, Play, Square, type LucideIcon } from 'lucide-react'
+import { ArrowRight, CalendarDays, ChevronRight, Clock, LogIn, LogOut, Pause, Play, Square, type LucideIcon } from 'lucide-react'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
 import { breakFor, breakLabel, breakLeftMs, breakMinutes, breakReview, breakUsedMs, breakWindow, clock, dayLockOn, endDay, inBreakWindow, remindBreak, onBreak, pauseDay, resumeDay, startDay, userName, workedMs } from '../../lib/actions'
@@ -36,8 +36,8 @@ export function Greeting({ subtitle, right }: { subtitle?: string; right?: React
   )
 }
 
-export function Tile({ to, onClick, icon: Icon, label, desc, tone = 'navy', badge, viewOnly, highlight, className }: {
-  to?: string; onClick?: () => void; icon: LucideIcon; label: string; desc?: string; tone?: Tone; badge?: number | string; viewOnly?: boolean; highlight?: boolean; className?: string
+export function Tile({ to, onClick, icon: Icon, label, desc, tone = 'navy', badge, highlight, className }: {
+  to?: string; onClick?: () => void; icon: LucideIcon; label: string; desc?: string; tone?: Tone; badge?: number | string; highlight?: boolean; className?: string
 }) {
   const inner = (
     <>
@@ -45,7 +45,6 @@ export function Tile({ to, onClick, icon: Icon, label, desc, tone = 'navy', badg
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-2">
           <span className="truncate text-[15px] font-bold">{label}</span>
-          {viewOnly && <span title="View only" className="inline-flex items-center gap-1 rounded-full bg-card2 px-1.5 py-0.5 text-[10px] font-semibold text-mute"><Eye className="size-3" />view</span>}
         </span>
         {desc && <span className="block truncate text-xs text-mute">{desc}</span>}
       </span>

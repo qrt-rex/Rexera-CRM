@@ -55,12 +55,12 @@ export function SalesDashboard({ lead }: { lead: boolean }) {
         <Tile to="/leads" icon={UserPlus} label="CRM Leads" desc="Your leads — add, call, update status" tone="navy" badge={n.toCall} />
         <Tile to="/dialer" icon={Phone} label="Dialer" desc="Call your queue, log outcomes" highlight />
         <Tile to="/documents" icon={FileText} label="Document Form" desc="Collect client documents" tone="blue" />
-        <Tile to="/content?tab=FLYER" icon={Images} label="Flyer & Post" desc="Latest marketing material" tone="orange" viewOnly={!lead} badge={newPosts || undefined} />
-        <Tile to="/schemes" icon={Sparkles} label="Schemes" desc="Government schemes & offers" tone="green" viewOnly />
+        <Tile to="/content?tab=FLYER" icon={Images} label="Flyer & Post" desc="Latest marketing material" tone="orange" badge={newPosts || undefined} />
+        <Tile to="/schemes" icon={Sparkles} label="Schemes" desc="Government schemes & offers" tone="green" />
         <Tile to="/billing" icon={IndianRupee} label="Invoice / Bill" desc="Proforma & my invoices" tone="amber" />
-        <Tile to="/content?tab=SALES_INFO" icon={Lightbulb} label="Sales Information" desc="Pitches, price list, objections" tone="violet" viewOnly={!lead} />
+        <Tile to="/content?tab=SALES_INFO" icon={Lightbulb} label="Sales Information" desc="Pitches, price list, objections" tone="violet" />
         <Tile to="/bookings/new" icon={Briefcase} label="CRM Entry" desc="Book a client with advance" tone="violet" />
-        <Tile to="/broadcasts" icon={Megaphone} label="Broadcast" desc="Company updates" tone="red" viewOnly={!lead} badge={unacked || undefined} />
+        <Tile to="/broadcasts" icon={Megaphone} label="Broadcast" desc="Company updates" tone="red" badge={unacked || undefined} />
         {lead ? (
           <>
             <Tile to="/team" icon={BarChart3} label="Sales team progress" desc="Calls, conversions, collections" tone="green" />

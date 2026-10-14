@@ -184,7 +184,7 @@ export default function Leads() {
                     </Td>
                     <Td>{l.followUp ? <span className={l.followUp < t ? 'font-semibold text-bad' : l.followUp === t ? 'font-semibold text-warn' : ''}>{fmtDate(l.followUp)}</span> : <span className="text-mute">—</span>}</Td>
                     <Td className="text-xs">
-                      {l.assignedTo ? <>{userName(db, l.assignedTo)}{last && last.by !== last.to && <span className="block text-[11px] text-mute">{last.kind === 'FORWARDED' ? 'forwarded' : 'from'} by {userName(db, last.by)}</span>}</> : <Badge tone="amber">Unassigned</Badge>}
+                      {l.assignedTo ? <>{userName(db, l.assignedTo)}{last && last.by !== last.to && <span className="block text-[11px] text-mute">{last.kind === 'FORWARDED' ? 'forwarded' : last.kind === 'REASSIGNED' ? 'reassigned' : 'assigned'} by {userName(db, last.by)}</span>}</> : <Badge tone="amber">Unassigned</Badge>}
                     </Td>
                     <Td className="text-right">
                       <Menu width="w-56" trigger={(o) => <Button size="sm" variant="outline" icon={ChevronDown} aria-expanded={o}>Update</Button>}>

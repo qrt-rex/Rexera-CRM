@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Copy, Download, Eye, FileDown, ImageDown, Images, Lightbulb, Megaphone, Pencil, Pin, Plus, Trash2 } from 'lucide-react'
+import { Copy, Download, FileDown, ImageDown, Images, Lightbulb, Megaphone, Pencil, Pin, Plus, Trash2 } from 'lucide-react'
 import type { Post } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
 import { deletePost, upsertPost, userName } from '../../lib/actions'
 import { ago } from '../../lib/format'
-import { Badge, Button, Card, cx, EmptyState, Input, Menu, MenuItem, Modal, PageHeader, Select, Tabs, Textarea, useConfirm, useRun, useToast, Checkbox } from '../../components/ui'
+import { Button, Card, cx, EmptyState, Input, Menu, MenuItem, Modal, PageHeader, Select, Tabs, Textarea, useConfirm, useRun, useToast, Checkbox } from '../../components/ui'
 import { downloadFlyerJpeg, downloadFlyerPdf } from '../../lib/flyer'
 import { Mark } from '../../components/Logo'
 
@@ -36,8 +36,8 @@ export default function Content() {
   return (
     <div>
       <PageHeader title="Flyers, Posts & Sales Info" icon={Images}
-        subtitle={manage ? 'Create material — sales teams are notified' : tab === 'SALES_INFO' ? 'Sales information is added by Team Leaders, Admin and the Operation team (view only)' : 'Flyers and posts are made by Admin and the Operation team (view only)'}
-        actions={<>{!manage && <Badge tone="gray"><Eye className="size-3" />View only</Badge>}{manage && <Button variant="accent" icon={Plus} onClick={() => setEdit({ kind: tab, title: '', body: '', theme: 'navy', pinned: false })}>New {tab === 'SALES_INFO' ? 'sales info' : tab.toLowerCase()}</Button>}</>} />
+        subtitle={manage ? 'Create material — sales teams are notified' : tab === 'SALES_INFO' ? 'Sales information is added by Team Leaders, Admin and the Operation team' : 'Flyers and posts are made by Admin and the Operation team'}
+        actions={<>{manage && <Button variant="accent" icon={Plus} onClick={() => setEdit({ kind: tab, title: '', body: '', theme: 'navy', pinned: false })}>New {tab === 'SALES_INFO' ? 'sales info' : tab.toLowerCase()}</Button>}</>} />
       <Tabs className="mb-5 w-fit" value={tab} onChange={(t) => setParams({ tab: t })} tabs={[
         { id: 'FLYER', label: 'Flyers', icon: Images, count: db.posts.filter((p) => p.kind === 'FLYER').length },
         { id: 'POST', label: 'Posts', icon: Megaphone, count: db.posts.filter((p) => p.kind === 'POST').length },

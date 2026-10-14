@@ -265,24 +265,39 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
 }
 
 // ------------------------------------------------------------------ Dropdown menu
+/** A dropdown. It opens on top of the page (not inside its card), so tables and cards never cut it off. */
 export function Menu({ trigger, children, align = 'right', width = 'w-64' }: { trigger: (open: boolean) => ReactNode; children: (close: () => void) => ReactNode; align?: 'left' | 'right'; width?: string }) {
-  const [open, setOpen] = useState(false)
+  const [at, setAt] = useState<{ top: number; left?: number; right?: number; up: boolean } | null>(null)
   const ref = useRef<HTMLDivElement>(null)
+  const menu = useRef<HTMLDivElement>(null)
+  const open = !!at
+  const toggle = () => {
+    if (at) { setAt(null); return }
+    const r = ref.current!.getBoundingClientRect()
+    // near the bottom of the window it opens upwards
+    const up = r.bottom > innerHeight - 260
+    setAt({ top: up ? r.top - 8 : r.bottom + 8, up, ...(align === 'right' ? { right: innerWidth - r.right } : { left: r.left }) })
+  }
   useEffect(() => {
     if (!open) return
-    const on = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false) }
-    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
+    const on = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node) && !menu.current?.contains(e.target as Node)) setAt(null) }
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setAt(null)
+    const shut = () => setAt(null)
     document.addEventListener('mousedown', on)
     document.addEventListener('keydown', esc)
-    return () => { document.removeEventListener('mousedown', on); document.removeEventListener('keydown', esc) }
+    addEventListener('resize', shut)
+    addEventListener('scroll', shut, true)
+    return () => { document.removeEventListener('mousedown', on); document.removeEventListener('keydown', esc); removeEventListener('resize', shut); removeEventListener('scroll', shut, true) }
   }, [open])
   return (
     <div ref={ref} className="relative">
-      <div onClick={() => setOpen((o) => !o)}>{trigger(open)}</div>
-      {open && (
-        <div role="menu" className={cx('anim-pop absolute top-full z-50 mt-2 overflow-hidden rounded-2xl border border-line bg-card shadow-pop', width, align === 'right' ? 'right-0' : 'left-0')}>
-          {children(() => setOpen(false))}
-        </div>
+      <div onClick={toggle}>{trigger(open)}</div>
+      {at && createPortal(
+        <div ref={menu} role="menu" style={{ position: 'fixed', top: at.top, left: at.left, right: at.right, transform: at.up ? 'translateY(-100%)' : undefined }}
+          className={cx('anim-pop z-[80] overflow-hidden rounded-2xl border border-line bg-card text-left shadow-pop', width)}>
+          {children(() => setAt(null))}
+        </div>,
+        document.body,
       )}
     </div>
   )

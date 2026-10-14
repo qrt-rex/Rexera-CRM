@@ -46,7 +46,7 @@ export function waitingFor(db: DB, me: User) {
 }
 
 export function salesNumbers(db: DB, me: User) {
-  const mine = visibleLeads(db, me).filter((l) => l.assignedTo === me.id || (!l.assignedTo && l.createdBy === me.id))
+  const mine = visibleLeads(db, me).filter((l) => l.assignedTo === me.id)
   const t = today()
   return {
     toCall: mine.filter((l) => OPEN_LEAD.includes(l.status)).length,

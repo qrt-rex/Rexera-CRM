@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CheckCheck, Eye, Megaphone, Send } from 'lucide-react'
+import { CheckCheck, Megaphone, Send } from 'lucide-react'
 import type { Role } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
@@ -22,7 +22,7 @@ export default function Broadcasts() {
   return (
     <div>
       <PageHeader title="Broadcasts" subtitle="Company updates. Acknowledge to let the sender know you've read it." icon={Megaphone}
-        actions={<>{!manage && <Badge tone="gray"><Eye className="size-3" />View only</Badge>}{manage && <Button variant="accent" icon={Send} onClick={() => setOpen(true)}>New update</Button>}</>} />
+        actions={<>{manage && <Button variant="accent" icon={Send} onClick={() => setOpen(true)}>New update</Button>}</>} />
       {!list.length ? <Card><EmptyState icon={Megaphone} title="No broadcasts" /></Card> : (
         <div className="space-y-4">
           {list.map((b) => {

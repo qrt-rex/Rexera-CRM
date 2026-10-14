@@ -117,7 +117,7 @@ export default function Employees() {
           {(['name', 'username', 'email', 'department', 'designation'] as const).map((k) => (
             <Input key={k} label={k[0]!.toUpperCase() + k.slice(1)} required={['name', 'username', 'email'].includes(k)} disabled={!!form.user && k === 'username'} value={form.data[k] ?? ''} onChange={(e) => setForm({ ...form, data: { ...form.data, [k]: e.target.value } })} />
           ))}
-          <PhoneInput label="Phone" value={form.data.phone ?? ''} onChange={(v) => setForm({ ...form, data: { ...form.data, phone: v } })} />
+          <PhoneInput label="Mobile" required hint="The dialer rings this number for their calls" value={form.data.phone ?? ''} onChange={(v) => setForm({ ...form, data: { ...form.data, phone: v } })} />
           {!form.user && <Select label="Role" value={form.data.role} onChange={(e) => setForm({ ...form, data: { ...form.data, role: e.target.value as Role } })}>{ROLES.filter((r) => r.id !== 'superadmin' || me.role === 'superadmin').map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}</Select>}
           {form.data.role === 'sales' && <Select label="Team leader" value={form.data.teamLeadId ?? ''} onChange={(e) => setForm({ ...form, data: { ...form.data, teamLeadId: e.target.value || undefined } })}><option value="">—</option>{tls.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</Select>}
           <Input label="Monthly salary (₹)" type="number" value={form.data.salary ?? ''} onChange={(e) => setForm({ ...form, data: { ...form.data, salary: e.target.value ? Number(e.target.value) : undefined } })} />

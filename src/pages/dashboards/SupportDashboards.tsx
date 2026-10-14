@@ -70,8 +70,8 @@ export function SupportDashboard() {
         <Tile to="/bookings" icon={Briefcase} label="Client files" desc="Status, payments, documents (view)" tone="violet" />
         <Tile to="/documents" icon={FileText} label="Document forms" desc="Upload what clients send" tone="blue" badge={missingKyc.length} />
         {MESSAGES_ENABLED && <Tile to="/messages" icon={MessageSquare} label="Messages" desc="Team chat and shared documents" tone="green" />}
-        <Tile to="/schemes" icon={Sparkles} label="Schemes" tone="green" viewOnly />
-        <Tile to="/broadcasts" icon={Megaphone} label="Broadcasts" tone="red" viewOnly />
+        <Tile to="/schemes" icon={Sparkles} label="Schemes" tone="green" />
+        <Tile to="/broadcasts" icon={Megaphone} label="Broadcasts" tone="red" />
         <Tile to="/leave?new=1" icon={CalendarCheck2} label="Request my leave" tone="violet" />
       </TileGrid>
 

@@ -566,7 +566,8 @@ export function visibleLeads(d: DB, me: User): Lead[] {
   if (p.has('leads.manage')) return d.leads
   const team = new Set(d.users.filter((u) => u.teamLeadId === me.id).map((u) => u.id))
   return d.leads.filter((l) =>
-    l.assignedTo === me.id || (!l.assignedTo && l.createdBy === me.id) ||
+    // a sales person sees only the leads given to them (by the Super Admin or a colleague)
+    l.assignedTo === me.id ||
     (p.has('leads.assign') && (team.has(l.assignedTo ?? '') || !l.assignedTo)))
 }
 
@@ -1710,7 +1711,8 @@ export async function createUser(me: User, i: UserInput, password: string, resum
   need(me, 'access.manage', 'employees.manage')
   assert(i.name.trim() && i.username.trim(), 'Name and username are required.')
   assert(isEmail(i.email), 'Enter a valid email.')
-  assert(!i.phone || isPhone(i.phone), 'Enter a valid 10-digit phone.')
+  // the dialer rings this number (Blutec agent phone), so every employee needs one
+  assert(isPhone(i.phone), 'Enter a valid 10-digit mobile number — the dialer calls it.')
   assert(i.role !== 'superadmin' || isSA(me), 'Only a Super Admin can create a Super Admin.')
   assert(PASSWORD_RULE.test(password), `Password: ${PASSWORD_HINT}`)
   const d = getDb()
@@ -1734,6 +1736,7 @@ export function updateUser(me: User, id: string, patch: Partial<Pick<User, 'name
   mutate((d) => {
     const u = d.users.find((x) => x.id === id)
     assert(u, 'User not found.')
+    if ('phone' in patch) { patch.phone = normPhone(patch.phone ?? ''); assert(isPhone(patch.phone), 'Enter a valid 10-digit mobile number — the dialer calls it.') }
     checkBranches(d, patch)
     const accessChange = ['role', 'extraRoles', 'grants', 'denies', 'active'].some((k) => k in patch)
     const touchesSA = rolesOf(u).includes('superadmin') || patch.role === 'superadmin' || !!patch.extraRoles?.includes('superadmin')
