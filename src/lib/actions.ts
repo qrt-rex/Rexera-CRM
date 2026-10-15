@@ -1698,7 +1698,7 @@ export function markThreadRead(me: User, other: string) {
 }
 
 // ============================================================ users & access
-export type UserInput = Pick<User, 'name' | 'username' | 'email' | 'phone' | 'role' | 'department' | 'designation'> & { teamLeadId?: string; salary?: number; joinedOn?: string; branchId?: string; branchIds?: string[] }
+export type UserInput = Pick<User, 'name' | 'username' | 'email' | 'phone' | 'role' | 'department' | 'designation'> & { teamLeadId?: string; salary?: number; target?: number; joinedOn?: string; branchId?: string; branchIds?: string[] }
 /** A branch id must be one of the company's branches (Access → Settings). */
 function checkBranches(d: DB, i: { branchId?: string; branchIds?: string[] }) {
   const ids = new Set((d.settings.branches ?? []).map((b) => b.id))
@@ -1754,6 +1754,24 @@ export function updateUser(me: User, id: string, patch: Partial<Pick<User, 'name
     }
     Object.assign(u, patch)
     audit(d, me.id, accessChange ? 'ACCESS_CHANGE' : 'USER_EDIT', u.name)
+  })
+}
+
+/** Monthly sales target: HR / Super Admin / IT for anyone; a Team Leader for their own team; a Branch Director for the people in their branches. */
+export function canSetTarget(d: DB, me: User, u: User) {
+  if (has(me, 'employees.manage', 'access.manage')) return true
+  if (u.id === me.id) return false
+  const r = rolesOf(me)
+  return (r.includes('teamlead') && u.teamLeadId === me.id) || (r.includes('branchdirector') && !!u.branchId && directorBranches(d, me).includes(u.branchId))
+}
+export function setTarget(me: User, id: string, amount: number | undefined) {
+  assert(amount === undefined || (Number.isFinite(amount) && amount >= 0), 'Enter a target of 0 or more.')
+  mutate((d) => {
+    const u = d.users.find((x) => x.id === id)
+    assert(u, 'User not found.')
+    assert(canSetTarget(d, me, u), "You can only set targets for your own team.")
+    u.target = amount === undefined ? undefined : Math.round(amount)
+    audit(d, me.id, 'USER_EDIT', `${u.name}: monthly target ${amount === undefined ? 'cleared' : amount}`)
   })
 }
 

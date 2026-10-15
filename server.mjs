@@ -465,7 +465,7 @@ function serveStaticFile(req, res, pathname) {
 // ponytail: shared keys, per-user checks once CRM sign-in moves to Supabase Auth
 // -------------------------------------------------------------
 // IVR campaigns and the dialer webhook setup: Super Admin / IT (or the IVR access key until the Supabase switch)
-const IVR_ACTIONS = ['ivrList', 'ivrStats', 'ivrControl', 'ivrConnects', 'webhookGet', 'webhookConnect', 'webhookTest', 'webhookDeliveries']
+const IVR_ACTIONS = ['ivrList', 'ivrStats', 'ivrControl', 'ivrConnects', 'ivrCalls']
 const sameKey = (given, expected) => !!expected && crypto.timingSafeEqual(
   crypto.createHash('sha256').update(String(given)).digest(), crypto.createHash('sha256').update(expected).digest())
 

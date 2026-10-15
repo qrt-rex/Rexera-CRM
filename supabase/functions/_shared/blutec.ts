@@ -28,12 +28,12 @@ export type BlutecRequest =
   | { action: 'dncAdd'; phone: string; reason?: string }
   | { action: 'callStatus'; refId: string }
   | { action: 'campaigns' }
-  | { action: 'webhookGet' } | { action: 'webhookConnect'; url: string } | { action: 'webhookTest' } | { action: 'webhookDeliveries' }
   | { action: 'campaignLeads'; id: number }
   | { action: 'ivrList' }
   | { action: 'ivrStats'; id: number }
   | { action: 'ivrControl'; id: number; op: 'start' | 'pause' | 'resume' | 'stop' }
   | { action: 'ivrConnects'; dateFrom?: string; dateTo?: string; phone?: string }
+  | { action: 'ivrCalls'; id: number; page?: number; limit?: number }
 export interface BlutecResult { status: number; body: unknown }
 
 const enc = new TextEncoder()
@@ -170,18 +170,6 @@ export async function handleBlutec(req: BlutecRequest, e: BlutecEnv): Promise<Bl
         if (p.length < 10 || p.length > 15) return fail(422, 'The number must have 10–15 digits.', 'VALIDATION_ERROR')
         return await dialerApi(e, 'POST', '/api/dnc', { phone: p, reason: String(req.reason ?? 'Customer asked not to be called').slice(0, 200), source: 'rexera-crm' })
       }
-      // ---- dialer call webhook (Super Admin): set up through the API with the long-lived token — no Blutec screen needed
-      case 'webhookGet':
-      case 'webhookConnect':
-      case 'webhookTest':
-      case 'webhookDeliveries': {
-        if (!dncReady(e)) return fail(503, 'The webhook needs the Blutec API token (BLUTEC_TOKEN).', 'NOT_CONFIGURED')
-        if (req.action === 'webhookGet') return await dialerApi(e, 'GET', '/api/webhooks')
-        if (req.action === 'webhookTest') return await dialerApi(e, 'POST', '/api/webhooks/test')
-        if (req.action === 'webhookDeliveries') return await dialerApi(e, 'GET', '/api/webhooks/deliveries')
-        if (!/^https:\/\/[^\s]+\/api\/blutec\/webhook\/calls$/.test(req.url)) return fail(422, 'The webhook address must be this CRM’s https …/api/blutec/webhook/calls.', 'VALIDATION_ERROR')
-        return await dialerApi(e, 'PUT', '/api/webhooks', { url: req.url, enabled: true, events: ['call.initiated', 'call.completed'] })
-      }
       case 'campaigns': {
         if (!dncReady(e)) return fail(503, 'Blutec campaigns need the Blutec API token (BLUTEC_TOKEN).', 'NOT_CONFIGURED')
         const r = await dialerApi(e, 'GET', '/api/campaigns?limit=100')
@@ -210,6 +198,11 @@ export async function handleBlutec(req: BlutecRequest, e: BlutecEnv): Promise<Bl
         if (!ivrReady(e)) return fail(503, 'IVR is not configured.', 'NOT_CONFIGURED')
         if (!['start', 'pause', 'resume', 'stop'].includes(req.op)) return fail(422, 'Unknown broadcast action.', 'VALIDATION_ERROR')
         return await ivr(e, 'POST', `/api/ivr/${Number(req.id)}/broadcast/${req.op}`)
+      case 'ivrCalls': {
+        if (!ivrReady(e)) return fail(503, 'IVR is not configured.', 'NOT_CONFIGURED')
+        const q = new URLSearchParams({ page: String(Math.max(1, Number(req.page) || 1)), limit: String(Math.min(500, Math.max(1, Number(req.limit) || 100))) })
+        return await ivr(e, 'GET', `/api/ivr/${Number(req.id)}/broadcast/calls?${q}`)
+      }
       case 'ivrConnects': {
         if (!ivrReady(e)) return fail(503, 'IVR is not configured.', 'NOT_CONFIGURED')
         const q = new URLSearchParams()

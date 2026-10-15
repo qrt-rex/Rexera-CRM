@@ -7,10 +7,9 @@ import { useAuth, useMe } from '../../lib/auth'
 import { createLead, logCall, setLeadStatus, userName, visibleLeads } from '../../lib/actions'
 import { CALL_OUTCOMES, dispositionToStatus, FOLLOW_UP_LEAD, LEAD_STATUS, OPEN_LEAD } from '../../lib/workflow'
 import { addDays, fmtDate, fmtDateTime, fmtTime, inr, normPhone, today, ymd } from '../../lib/format'
-import { blutec, dialerKey, ivrKey, KEYLESS, DialerError, FINAL_STATUSES, isHot, type AgentConnect, type BlutecStatus, type CallStatus, type Ivr, type IvrStats } from '../../lib/dialer'
+import { blutec, dialerKey, ivrKey, KEYLESS, DialerError, FINAL_STATUSES, isHot, type AgentConnect, type BlutecStatus, type CallStatus, type Ivr, type IvrCall, type IvrStats } from '../../lib/dialer'
 import { rolesOf } from '../../lib/rbac'
 import { Badge, Button, Card, CardHeader, cx, EmptyState, Input, Modal, PageHeader, Table, Tabs, Td, Textarea, Th, useConfirm, useRun, useToast } from '../../components/ui'
-import { BlutecWebhooks } from '../../components/BlutecWebhooks'
 import { DialerCampaigns } from '../../components/DialerCampaigns'
 import { salesNumbers } from '../../lib/metrics'
 import { MiniStat } from '../dashboards/widgets'
@@ -67,7 +66,7 @@ export default function Dialer() {
   const bt = useBlutec()
   return (
     <div>
-      <PageHeader title="Dialer" icon={Phone}
+      <PageHeader title={tab === 'ivr' && !showCalls ? 'IVR' : 'Dialer'} icon={tab === 'ivr' ? Radio : Phone}
         subtitle={tab === 'ivr' ? 'IVR campaigns through Blutec: live stats and hot prospects' : 'Click-to-call through Blutec — follow-ups due come first, then new leads'}
         actions={tab && <>
           <ConnectionPill bt={bt} ivr={tab === 'ivr'} />
@@ -76,7 +75,7 @@ export default function Dialer() {
       {tab === 'calls' ? <CallsTab bt={bt} /> : tab === 'ivr' ? <IvrTab bt={bt} manage /> : (
         <Card><EmptyState icon={Phone} title="Dialer is for sales people" text="Calls are used by sales people and team leaders; IVR campaigns are run by the Super Admin." /></Card>
       )}
-      {tab === 'ivr' && <><DialerCampaigns /><BlutecWebhooks /></>}
+      {tab === 'ivr' && <DialerCampaigns />}
     </div>
   )
 }
@@ -341,8 +340,10 @@ function IvrTab({ bt, manage }: { bt: ReturnType<typeof useBlutec>; manage: bool
 
   const load = useCallback(async () => {
     setError('')
-    try { const l = await blutec.ivrList(); setIvrs(l); setSel((s) => s ?? l[0]?.id ?? null) } catch (e) { setError((e as Error).message) }
-    try { setConnects((await blutec.ivrConnects(from, today())).items) } catch { setConnects([]) }
+    await Promise.all([
+      blutec.ivrList().then((l) => { setIvrs(l); setSel((s) => s ?? l[0]?.id ?? null) }, (e: Error) => setError(e.message)),
+      blutec.ivrConnects(from, today()).then((r) => setConnects(r?.items ?? []), () => setConnects([])),
+    ])
   }, [from])
   useEffect(() => { if (ready) load() }, [ready, load])
   useEffect(() => {
@@ -361,16 +362,18 @@ function IvrTab({ bt, manage }: { bt: ReturnType<typeof useBlutec>; manage: bool
     if (await run(() => blutec.ivrControl(ivr.id, op), `Broadcast ${op === 'stop' ? 'stopped' : op + 'ed'}`)) load()
   }
   const leadFor = (phone: string) => db.leads.find((l) => l.phone === normPhone(phone))
-  const toLead = async (c: AgentConnect, book: boolean) => {
-    let lead = leadFor(c.lead_phone)
+  const toLead = async (phone: string, notes: string, book: boolean) => {
+    let lead = leadFor(phone)
     if (!lead) {
-      const ok = await run(() => createLead(me, { name: `IVR prospect ${normPhone(c.lead_phone).slice(-4)}`, company: '', phone: normPhone(c.lead_phone), email: '', city: '', state: 'Gujarat', service: '', source: 'IVR campaign', notes: `Pressed the IVR key on ${fmtDateTime(c.created_at)} · talked ${Math.round(c.talk_seconds / 60 * 10) / 10} min with ${c.agent_name}`, assignedTo: me.id }), 'Lead added')
+      const ok = await run(() => createLead(me, { name: `IVR prospect ${normPhone(phone).slice(-4)}`, company: '', phone: normPhone(phone), email: '', city: '', state: 'Gujarat', service: '', source: 'IVR campaign', notes, assignedTo: me.id }), 'Lead added')
       if (!ok) return
-      lead = leadFor(c.lead_phone)
+      lead = leadFor(phone)
     }
     if (lead && book) nav(`/bookings/new?lead=${lead.id}`)
     else if (lead) nav(`/leads?open=${lead.id}`)
   }
+
+  const connectNote = (c: AgentConnect) => `Pressed the IVR key on ${fmtDateTime(c.created_at)} · talked ${Math.round(c.talk_seconds / 60 * 10) / 10} min with ${c.agent_name}`
 
   if (!ready) return <Card><EmptyState icon={Radio} title="IVR is not connected" text="Ask IT to add the Blutec IVR API account (see “IVR not connected” at the top). Then campaigns, live stats and hot prospects show here." /></Card>
   const cur = ivrs?.find((x) => x.id === sel)
@@ -415,6 +418,7 @@ function IvrTab({ bt, manage }: { bt: ReturnType<typeof useBlutec>; manage: bool
           {!manage && <p className="border-t border-line px-5 py-2 text-xs text-mute">Starting and stopping broadcasts is for team leaders and admins.</p>}
         </Card>
       </div>
+      {cur && <CampaignCalls ivr={cur} leadFor={leadFor} toLead={toLead} />}
       <Card className="overflow-hidden">
         <CardHeader title="Hot prospects from IVR" subtitle="People who pressed the key and were connected to an agent" icon={Flame}
           action={<span className="flex items-end gap-2"><Input label="Since" type="date" value={from} max={today()} onChange={(e) => setFrom(e.target.value)} /><Button size="sm" variant="ghost" icon={RefreshCcw} aria-label="Refresh" onClick={load} /></span>} />
@@ -432,8 +436,8 @@ function IvrTab({ bt, manage }: { bt: ReturnType<typeof useBlutec>; manage: bool
                     <Td className="text-right tabular-nums">{Math.round(c.talk_seconds / 60 * 10) / 10} min</Td>
                     <Td><Badge tone={c.status === 'connected' ? 'green' : 'gray'}>{c.status}</Badge></Td>
                     <Td className="text-right"><span className="inline-flex gap-1">
-                      <Button size="sm" variant="ghost" icon={UserPlus} onClick={() => toLead(c, false)}>{lead ? 'Open lead' : 'Add lead'}</Button>
-                      {can('bookings.create') && <Button size="sm" variant="soft" icon={Briefcase} onClick={() => toLead(c, true)}>CRM entry</Button>}
+                      <Button size="sm" variant="ghost" icon={UserPlus} onClick={() => toLead(c.lead_phone, connectNote(c), false)}>{lead ? 'Open lead' : 'Add lead'}</Button>
+                      {can('bookings.create') && <Button size="sm" variant="soft" icon={Briefcase} onClick={() => toLead(c.lead_phone, connectNote(c), true)}>CRM entry</Button>}
                     </span></Td>
                   </tr>
                 )
@@ -444,5 +448,57 @@ function IvrTab({ bt, manage }: { bt: ReturnType<typeof useBlutec>; manage: bool
       </Card>
       {confirmNode}
     </div>
+  )
+}
+
+/** The numbers one IVR broadcast called, page by page (Blutec's call records): who answered and who pressed a key. */
+function CampaignCalls({ ivr, leadFor, toLead }: { ivr: Ivr; leadFor: (phone: string) => { name: string; status: keyof typeof LEAD_STATUS } | undefined; toLead: (phone: string, notes: string, book: boolean) => Promise<void> }) {
+  const LIMIT = 200
+  const [page, setPage] = useState(1)
+  const [pressedOnly, setPressedOnly] = useState(true)
+  const [res, setRes] = useState<{ items: IvrCall[]; total: number; error?: string } | null>(null)
+  useEffect(() => { setPage(1) }, [ivr.id])
+  useEffect(() => {
+    let stop = false
+    setRes(null)
+    blutec.ivrCalls(ivr.id, page, LIMIT).then(
+      (r) => !stop && setRes({ items: r?.items ?? [], total: r?.pagination?.total ?? 0 }),
+      (e: Error) => !stop && setRes({ items: [], total: 0, error: e.message }))
+    return () => { stop = true }
+  }, [ivr.id, page])
+  // ponytail: filters the page Blutec sent (no documented key filter), so "pressed a key" shows what is on this page
+  const rows = (res?.items ?? []).filter((c) => !pressedOnly || (c.digit_pressed != null && c.digit_pressed !== ''))
+  const pages = Math.max(1, Math.ceil((res?.total ?? 0) / LIMIT))
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader title={`Leads called · ${ivr.name}`} subtitle={res ? `${(res.total || 0).toLocaleString('en-IN')} calls in this broadcast · page ${page} of ${pages}` : 'Loading…'} icon={PhoneCall}
+        action={<span className="flex flex-wrap items-center gap-2">
+          <Tabs value={pressedOnly ? 'pressed' : 'all'} onChange={(t) => setPressedOnly(t === 'pressed')} tabs={[{ id: 'pressed', label: 'Pressed a key' }, { id: 'all', label: 'All calls' }]} />
+          <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
+          <Button size="sm" variant="outline" disabled={page >= pages} onClick={() => setPage((p) => p + 1)}>Next</Button>
+        </span>} />
+      {!res ? <p className="p-6 text-sm text-mute">Loading…</p>
+        : res.error ? <p className="p-4 text-sm text-bad">{res.error}</p>
+          : !rows.length ? <EmptyState icon={PhoneCall} title={pressedOnly ? 'Nobody on this page pressed a key' : 'No calls yet'} text={pressedOnly && res.items.length ? 'Try the next page, or switch to All calls.' : undefined} /> : (
+            <Table>
+              <thead><tr><Th>Phone</Th><Th>When</Th><Th>Answer</Th><Th>Key</Th><Th className="text-right">Duration</Th><Th className="text-right">Lead</Th></tr></thead>
+              <tbody>
+                {rows.map((c) => {
+                  const lead = leadFor(c.phone)
+                  return (
+                    <tr key={c.id}>
+                      <Td className="font-mono">{normPhone(c.phone)}{lead && <span className="block font-sans text-xs text-mute">{lead.name} · {LEAD_STATUS[lead.status].label}</span>}</Td>
+                      <Td className="text-xs">{c.created_at ? fmtDateTime(c.created_at) : '—'}</Td>
+                      <Td><Badge tone={c.state === 'answered' ? 'green' : 'gray'}>{c.state ?? '—'}</Badge></Td>
+                      <Td>{c.digit_pressed ? <Badge tone="amber">{c.digit_pressed}</Badge> : <span className="text-mute">—</span>}</Td>
+                      <Td className="text-right tabular-nums">{c.duration_seconds ?? 0}s</Td>
+                      <Td className="text-right"><Button size="sm" variant="ghost" icon={UserPlus} onClick={() => toLead(c.phone, `IVR “${ivr.name}”: ${c.state ?? 'called'}${c.digit_pressed ? `, pressed ${c.digit_pressed}` : ''}${c.created_at ? ` on ${fmtDateTime(c.created_at)}` : ''}`, false)}>{lead ? 'Open lead' : 'Add lead'}</Button></Td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </Table>
+          )}
+    </Card>
   )
 }

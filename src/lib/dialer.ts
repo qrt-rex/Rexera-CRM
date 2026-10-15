@@ -11,12 +11,11 @@ export interface CallStatus {
   hangup_cause?: string; disposition?: string; recording_status?: string
 }
 export interface BlutecCampaign { id: number; name: string; status: string; total_leads?: number; fresh_leads?: number }
-export interface WebhookConfig { url?: string; enabled?: boolean; events?: string[] }
-export interface WebhookDelivery { event_type?: string; status?: string; response_code?: number; attempts?: number; created_at?: string }
 export interface BlutecLead { id: number; phone: string; name?: string; full_name?: string; first_name?: string; last_name?: string; status?: string }
 export interface Ivr { id: number; name: string; status: string; broadcast_status: string; max_concurrent_calls?: number; agent_connect_enabled?: boolean }
 /** Live broadcast numbers, in Blutec OBD's own terms (Queued · Dialing · Completed · Interested · Total leads). */
 export interface IvrStats { broadcast_status: string; total_leads: number; dialed: number; queued: number; dialing: number; completed: number; interested: number }
+export interface IvrCall { id: number; phone: string; state?: string; digit_pressed?: string | null; duration_seconds?: number; cli?: string; created_at?: string }
 export interface AgentConnect { id: number; lead_phone: string; agent_name: string; status: string; wait_seconds: number; talk_seconds: number; hangup_by?: string; recording?: boolean; created_at: string }
 
 export class DialerError extends Error { constructor(message: string, public code?: string, public status?: number) { super(message) } }
@@ -69,15 +68,12 @@ export const blutec = {
   dncAdd: (phone: string, reason: string) => call<unknown>({ action: 'dncAdd', phone, reason }),
   callStatus: (refId: string) => call<CallStatus>({ action: 'callStatus', refId }),
   campaigns: () => call<BlutecCampaign[]>({ action: 'campaigns' }),
-  /** Dialer call webhook (Super Admin): set up through Blutec's API with the server's long-lived token. */
-  webhookGet: () => call<WebhookConfig | null>({ action: 'webhookGet' }),
-  webhookConnect: (url: string) => call<unknown>({ action: 'webhookConnect', url }),
-  webhookTest: () => call<unknown>({ action: 'webhookTest' }),
-  webhookDeliveries: () => call<{ items?: WebhookDelivery[] } | WebhookDelivery[]>({ action: 'webhookDeliveries' }),
   campaignLeads: (id: number) => call<BlutecLead[]>({ action: 'campaignLeads', id }),
   ivrList: () => call<Ivr[]>({ action: 'ivrList' }),
   ivrStats: (id: number) => call<unknown>({ action: 'ivrStats', id }).then(readIvrStats),
   ivrControl: (id: number, op: 'start' | 'pause' | 'resume' | 'stop') => call<unknown>({ action: 'ivrControl', id, op }),
+  /** One page of an IVR broadcast's calls (per number: answered or not, key pressed). */
+  ivrCalls: (id: number, page: number, limit: number) => call<{ items?: IvrCall[]; pagination?: { page: number; limit: number; total: number } }>({ action: 'ivrCalls', id, page, limit }),
   ivrConnects: (dateFrom?: string, dateTo?: string) => call<{ items: AgentConnect[] }>({ action: 'ivrConnects', dateFrom, dateTo }),
 }
 
@@ -102,6 +98,8 @@ export function readIvrStats(raw: unknown): IvrStats {
   const key = JSON.stringify(Object.keys((raw ?? {}) as object))
   if (!logged.has(key)) { logged.add(key); console.info('[ivr stats] Blutec answered:', raw) }
   const num = (...names: string[]) => { for (const n of names) { const v = Number(fields.get(n)); if (fields.has(n) && Number.isFinite(v)) return v } return 0 }
+  // any count whose name mentions the word (e.g. interested_count, total_interested), when no exact name matched
+  const like = (word: string) => { for (const [k, v] of fields) if (k.includes(word) && Number.isFinite(Number(v)) && typeof v !== 'boolean') return Number(v); return 0 }
   const text = (...names: string[]) => { for (const n of names) { const v = fields.get(n); if (typeof v === 'string' && v) return v } return '' }
   // OBD answers queued / dialing / completed / interested; the API docs say remaining / dialing_now / answered / pressed_1
   const total = num('totalleads', 'leadstotal', 'totalleadcount', 'leadcount', 'leads', 'total')
@@ -112,7 +110,7 @@ export function readIvrStats(raw: unknown): IvrStats {
     total_leads: total, dialed, queued,
     dialing: num('dialing', 'dialingnow', 'activecalls', 'inprogress', 'live', 'ringing'),
     completed: num('completed', 'answered', 'connected', 'answeredcalls', 'pickedup'),
-    interested: num('interested', 'pressed1', 'pressedkey', 'keypressed', 'keypresses', 'dtmf1', 'pressed'),
+    interested: num('interested', 'pressed1', 'pressedkey', 'keypressed', 'keypresses', 'dtmf1', 'pressed') || like('interest'),
   }
 }
 
