@@ -462,12 +462,12 @@ function CampaignCalls({ ivr, leadFor, toLead }: { ivr: Ivr; leadFor: (phone: st
     let stop = false
     setRes(null)
     blutec.ivrCalls(ivr.id, page, LIMIT).then(
-      (r) => !stop && setRes({ items: r?.items ?? [], total: r?.pagination?.total ?? 0 }),
+      (r) => !stop && setRes(r),
       (e: Error) => !stop && setRes({ items: [], total: 0, error: e.message }))
     return () => { stop = true }
   }, [ivr.id, page])
   // ponytail: filters the page Blutec sent (no documented key filter), so "pressed a key" shows what is on this page
-  const rows = (res?.items ?? []).filter((c) => !pressedOnly || (c.digit_pressed != null && c.digit_pressed !== ''))
+  const rows = (res?.items ?? []).filter((c) => !pressedOnly || !!c.key || /interest/i.test(c.disposition))
   const pages = Math.max(1, Math.ceil((res?.total ?? 0) / LIMIT))
   return (
     <Card className="overflow-hidden">
@@ -481,18 +481,18 @@ function CampaignCalls({ ivr, leadFor, toLead }: { ivr: Ivr; leadFor: (phone: st
         : res.error ? <p className="p-4 text-sm text-bad">{res.error}</p>
           : !rows.length ? <EmptyState icon={PhoneCall} title={pressedOnly ? 'Nobody on this page pressed a key' : 'No calls yet'} text={pressedOnly && res.items.length ? 'Try the next page, or switch to All calls.' : undefined} /> : (
             <Table>
-              <thead><tr><Th>Phone</Th><Th>When</Th><Th>Answer</Th><Th>Key</Th><Th className="text-right">Duration</Th><Th className="text-right">Lead</Th></tr></thead>
+              <thead><tr><Th>Phone</Th><Th>When</Th><Th>State</Th><Th>Disposition</Th><Th className="text-right">Duration</Th><Th className="text-right">Lead</Th></tr></thead>
               <tbody>
                 {rows.map((c) => {
                   const lead = leadFor(c.phone)
                   return (
                     <tr key={c.id}>
-                      <Td className="font-mono">{normPhone(c.phone)}{lead && <span className="block font-sans text-xs text-mute">{lead.name} · {LEAD_STATUS[lead.status].label}</span>}</Td>
-                      <Td className="text-xs">{c.created_at ? fmtDateTime(c.created_at) : '—'}</Td>
-                      <Td><Badge tone={c.state === 'answered' ? 'green' : 'gray'}>{c.state ?? '—'}</Badge></Td>
-                      <Td>{c.digit_pressed ? <Badge tone="amber">{c.digit_pressed}</Badge> : <span className="text-mute">—</span>}</Td>
-                      <Td className="text-right tabular-nums">{c.duration_seconds ?? 0}s</Td>
-                      <Td className="text-right"><Button size="sm" variant="ghost" icon={UserPlus} onClick={() => toLead(c.phone, `IVR “${ivr.name}”: ${c.state ?? 'called'}${c.digit_pressed ? `, pressed ${c.digit_pressed}` : ''}${c.created_at ? ` on ${fmtDateTime(c.created_at)}` : ''}`, false)}>{lead ? 'Open lead' : 'Add lead'}</Button></Td>
+                      <Td className="font-mono">{normPhone(c.phone) || c.phone}<span className="block font-sans text-xs text-mute">{lead ? `${lead.name} · ${LEAD_STATUS[lead.status].label}` : c.name}</span></Td>
+                      <Td className="text-xs">{c.at ? fmtDateTime(c.at) : '—'}</Td>
+                      <Td><Badge tone={/answer|complet/i.test(c.state) ? 'green' : 'gray'}>{c.state || '—'}</Badge></Td>
+                      <Td>{c.key || c.disposition ? <span className="flex items-center gap-1.5">{c.key && <Badge tone="gray">{c.key}</Badge>}{c.disposition && <Badge tone={/interest/i.test(c.disposition) ? 'amber' : 'gray'}>{c.disposition}</Badge>}</span> : <span className="text-mute">—</span>}</Td>
+                      <Td className="text-right tabular-nums">{c.duration}s</Td>
+                      <Td className="text-right"><Button size="sm" variant="ghost" icon={UserPlus} disabled={!c.phone} onClick={() => toLead(c.phone, `IVR “${ivr.name}”: ${[c.state, c.disposition || (c.key && `pressed ${c.key}`)].filter(Boolean).join(', ') || 'called'}${c.name ? ` · ${c.name}` : ''}${c.at ? ` on ${fmtDateTime(c.at)}` : ''}`, false)}>{lead ? 'Open lead' : 'Add lead'}</Button></Td>
                     </tr>
                   )
                 })}

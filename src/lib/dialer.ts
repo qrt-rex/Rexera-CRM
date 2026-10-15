@@ -15,7 +15,8 @@ export interface BlutecLead { id: number; phone: string; name?: string; full_nam
 export interface Ivr { id: number; name: string; status: string; broadcast_status: string; max_concurrent_calls?: number; agent_connect_enabled?: boolean }
 /** Live broadcast numbers, in Blutec OBD's own terms (Queued · Dialing · Completed · Interested · Total leads). */
 export interface IvrStats { broadcast_status: string; total_leads: number; dialed: number; queued: number; dialing: number; completed: number; interested: number }
-export interface IvrCall { id: number; phone: string; state?: string; digit_pressed?: string | null; duration_seconds?: number; cli?: string; created_at?: string }
+/** One broadcast call, whatever Blutec names the fields (key = digit pressed, disposition = its name, e.g. INTERESTED). */
+export interface IvrCall { id: string; phone: string; name: string; state: string; key: string; disposition: string; duration: number; at: string }
 export interface AgentConnect { id: number; lead_phone: string; agent_name: string; status: string; wait_seconds: number; talk_seconds: number; hangup_by?: string; recording?: boolean; created_at: string }
 
 export class DialerError extends Error { constructor(message: string, public code?: string, public status?: number) { super(message) } }
@@ -73,7 +74,7 @@ export const blutec = {
   ivrStats: (id: number) => call<unknown>({ action: 'ivrStats', id }).then(readIvrStats),
   ivrControl: (id: number, op: 'start' | 'pause' | 'resume' | 'stop') => call<unknown>({ action: 'ivrControl', id, op }),
   /** One page of an IVR broadcast's calls (per number: answered or not, key pressed). */
-  ivrCalls: (id: number, page: number, limit: number) => call<{ items?: IvrCall[]; pagination?: { page: number; limit: number; total: number } }>({ action: 'ivrCalls', id, page, limit }),
+  ivrCalls: (id: number, page: number, limit: number) => call<unknown>({ action: 'ivrCalls', id, page, limit }).then(readIvrCalls),
   ivrConnects: (dateFrom?: string, dateTo?: string) => call<{ items: AgentConnect[] }>({ action: 'ivrConnects', dateFrom, dateTo }),
 }
 
@@ -90,9 +91,21 @@ const logged = new Set<string>()
 export function readIvrStats(raw: unknown): IvrStats {
   const fields = new Map<string, unknown>()
   const norm = (k: string) => k.toLowerCase().replace(/[^a-z0-9]/g, '')
+  // lists like dispositions: [{ name: 'INTERESTED', count: 2 }] become fields too (interested → 2)
+  const countRow = (x: unknown) => {
+    if (!x || typeof x !== 'object') return
+    const r = x as Record<string, unknown>
+    const label = [r.name, r.label, r.disposition, r.outcome, r.key, r.state, r.status].find((v) => typeof v === 'string' && v)
+    const n = [r.count, r.total, r.value, r.calls, r.leads].map(Number).find((v) => Number.isFinite(v))
+    if (typeof label === 'string' && n !== undefined && !fields.has(norm(label))) fields.set(norm(label), n)
+  }
   const walk = (o: unknown, depth: number) => {
     if (!o || typeof o !== 'object' || Array.isArray(o)) return
-    for (const [k, v] of Object.entries(o)) { if (v && typeof v === 'object') { if (depth < 2) walk(v, depth + 1) } else if (!fields.has(norm(k))) fields.set(norm(k), v) }
+    for (const [k, v] of Object.entries(o)) {
+      if (Array.isArray(v)) { for (const x of v) countRow(x) }
+      else if (v && typeof v === 'object') { if (depth < 2) walk(v, depth + 1) }
+      else if (!fields.has(norm(k))) fields.set(norm(k), v)
+    }
   }
   walk(raw, 0)
   const key = JSON.stringify(Object.keys((raw ?? {}) as object))
@@ -110,7 +123,47 @@ export function readIvrStats(raw: unknown): IvrStats {
     total_leads: total, dialed, queued,
     dialing: num('dialing', 'dialingnow', 'activecalls', 'inprogress', 'live', 'ringing'),
     completed: num('completed', 'answered', 'connected', 'answeredcalls', 'pickedup'),
-    interested: num('interested', 'pressed1', 'pressedkey', 'keypressed', 'keypresses', 'dtmf1', 'pressed') || like('interest'),
+    interested: num('interested', 'interestedleads', 'pressed1', 'pressedkey', 'keypressed', 'keypresses', 'dtmf1', 'pressed', 'starred', 'stars', 'hot', 'hotleads') || like('interest') || like('star'),
   }
 }
 
+
+/** Blutec's broadcast call records, read from wherever the list is in the answer (data.items, data.calls, data …). */
+const loggedCalls = new Set<string>()
+export function readIvrCalls(raw: unknown): { items: IvrCall[]; total: number } {
+  let list: Record<string, unknown>[] = [], total = 0
+  const find = (o: unknown, depth: number) => {
+    if (!o || typeof o !== 'object') return
+    if (Array.isArray(o)) { if (!list.length && o.some((x) => x && typeof x === 'object')) list = o as Record<string, unknown>[]; return }
+    const r = o as Record<string, unknown>
+    for (const k of ['total', 'count', 'total_count', 'totalCount', 'total_records']) if (!total && r[k] != null && Number.isFinite(Number(r[k]))) total = Number(r[k])
+    for (const v of Object.values(r)) if (Array.isArray(v)) find(v, depth)
+    if (depth < 3) for (const v of Object.values(r)) if (v && typeof v === 'object' && !Array.isArray(v)) find(v, depth + 1)
+  }
+  find(raw, 0)
+  const key = JSON.stringify([Object.keys((raw ?? {}) as object), Object.keys(list[0] ?? {})])
+  if (!loggedCalls.has(key)) { loggedCalls.add(key); console.info('[ivr calls] Blutec answered:', raw) }
+  const str = (r: Record<string, unknown>, ...names: string[]) => {
+    for (const n of names) {
+      const v = r[n]
+      if (typeof v === 'string' || typeof v === 'number') { if (String(v) !== '') return String(v) }
+      else if (v && typeof v === 'object') { const o = v as Record<string, unknown>; const t = o.name ?? o.label; if (typeof t === 'string' && t) return t }
+    }
+    return ''
+  }
+  const items = list.map((r, i) => {
+    const lead = (r.lead && typeof r.lead === 'object' ? r.lead : {}) as Record<string, unknown>
+    const custom = (lead.custom_data && typeof lead.custom_data === 'object' ? lead.custom_data : {}) as Record<string, unknown>
+    return {
+      id: str(r, 'id', 'call_id', 'uuid') || String(i),
+      phone: str(r, 'phone', 'lead_phone', 'number', 'mobile', 'destination', 'destination_number', 'msisdn') || str(lead, 'phone', 'number'),
+      name: str(r, 'name', 'lead_name', 'company', 'company_name') || str(custom, 'name', 'company') || str(lead, 'name'),
+      state: str(r, 'state', 'status', 'call_state', 'outcome'),
+      key: str(r, 'digit_pressed', 'digit', 'keypress', 'key_pressed', 'dtmf', 'pressed_key', 'disposition_digit'),
+      disposition: str(r, 'disposition', 'disposition_name', 'disposition_label', 'dispo'),
+      duration: Number(r.duration_seconds ?? r.duration ?? r.billsec ?? r.talk_seconds ?? 0) || 0,
+      at: str(r, 'created_at', 'called_at', 'last_called_at', 'updated_at', 'start_time', 'date'),
+    }
+  })
+  return { items, total: total || items.length }
+}
