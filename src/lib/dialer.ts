@@ -71,6 +71,8 @@ export const blutec = {
   campaigns: () => call<BlutecCampaign[]>({ action: 'campaigns' }),
   campaignLeads: (id: number) => call<BlutecLead[]>({ action: 'campaignLeads', id }),
   ivrList: () => call<Ivr[]>({ action: 'ivrList' }),
+  /** The campaign's key rules as digit → disposition name (1 → INTERESTED), how Blutec labels its call log. */
+  ivrDispositions: (id: number) => call<unknown>({ action: 'ivrGet', id }).then(readKeyRules),
   ivrStats: (id: number) => call<unknown>({ action: 'ivrStats', id }).then(readIvrStats),
   ivrControl: (id: number, op: 'start' | 'pause' | 'resume' | 'stop') => call<unknown>({ action: 'ivrControl', id, op }),
   /** One page of an IVR broadcast's calls (per number: answered or not, key pressed). */
@@ -166,4 +168,17 @@ export function readIvrCalls(raw: unknown): { items: IvrCall[]; total: number } 
     }
   })
   return { items, total: total || items.length }
+}
+
+export function readKeyRules(raw: unknown): Record<string, string> {
+  const r = (raw ?? {}) as Record<string, unknown>
+  const rules = [r.key_rules, r.keyRules, r.keys, r.key_mappings, r.dtmf_rules].find(Array.isArray) as Record<string, unknown>[] | undefined
+  const out: Record<string, string> = {}
+  for (const k of rules ?? []) {
+    const digit = k.digit ?? k.key ?? k.dtmf
+    const d = k.disposition as Record<string, unknown> | string | undefined
+    const name = (typeof d === 'object' && d ? d.name : d) ?? k.label ?? k.name ?? k.action
+    if (digit != null && typeof name === 'string' && name) out[String(digit)] = name.replace(/_/g, ' ').toUpperCase()
+  }
+  return out
 }

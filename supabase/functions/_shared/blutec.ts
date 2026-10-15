@@ -31,6 +31,7 @@ export type BlutecRequest =
   | { action: 'campaignLeads'; id: number }
   | { action: 'ivrList' }
   | { action: 'ivrStats'; id: number }
+  | { action: 'ivrGet'; id: number }
   | { action: 'ivrControl'; id: number; op: 'start' | 'pause' | 'resume' | 'stop' }
   | { action: 'ivrConnects'; dateFrom?: string; dateTo?: string; phone?: string }
   | { action: 'ivrCalls'; id: number; page?: number; limit?: number }
@@ -191,6 +192,9 @@ export async function handleBlutec(req: BlutecRequest, e: BlutecEnv): Promise<Bl
       case 'ivrList':
         if (!ivrReady(e)) return fail(503, 'IVR is not configured.', 'NOT_CONFIGURED')
         return await ivr(e, 'GET', '/api/ivr')
+      case 'ivrGet':
+        if (!ivrReady(e)) return fail(503, 'IVR is not configured.', 'NOT_CONFIGURED')
+        return await ivr(e, 'GET', `/api/ivr/${Number(req.id)}`)
       case 'ivrStats':
         if (!ivrReady(e)) return fail(503, 'IVR is not configured.', 'NOT_CONFIGURED')
         return await ivr(e, 'GET', `/api/ivr/${Number(req.id)}/broadcast/stats`)

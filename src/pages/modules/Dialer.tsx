@@ -456,6 +456,9 @@ function CampaignCalls({ ivr, leadFor, toLead }: { ivr: Ivr; leadFor: (phone: st
   const LIMIT = 200
   const [page, setPage] = useState(1)
   const [pressedOnly, setPressedOnly] = useState(true)
+  const [rules, setRules] = useState<Record<string, string>>({})
+  useEffect(() => { setRules({}); blutec.ivrDispositions(ivr.id).then(setRules, () => {}) }, [ivr.id])
+  const dispo = (c: IvrCall) => c.disposition || rules[c.key] || ''
   const [res, setRes] = useState<{ items: IvrCall[]; total: number; error?: string } | null>(null)
   useEffect(() => { setPage(1) }, [ivr.id])
   useEffect(() => {
@@ -467,19 +470,19 @@ function CampaignCalls({ ivr, leadFor, toLead }: { ivr: Ivr; leadFor: (phone: st
     return () => { stop = true }
   }, [ivr.id, page])
   // ponytail: filters the page Blutec sent (no documented key filter), so "pressed a key" shows what is on this page
-  const rows = (res?.items ?? []).filter((c) => !pressedOnly || !!c.key || /interest/i.test(c.disposition))
+  const rows = (res?.items ?? []).filter((c) => !pressedOnly || !!dispo(c))
   const pages = Math.max(1, Math.ceil((res?.total ?? 0) / LIMIT))
   return (
     <Card className="overflow-hidden">
       <CardHeader title={`Leads called · ${ivr.name}`} subtitle={res ? `${(res.total || 0).toLocaleString('en-IN')} calls in this broadcast · page ${page} of ${pages}` : 'Loading…'} icon={PhoneCall}
         action={<span className="flex flex-wrap items-center gap-2">
-          <Tabs value={pressedOnly ? 'pressed' : 'all'} onChange={(t) => setPressedOnly(t === 'pressed')} tabs={[{ id: 'pressed', label: 'Pressed a key' }, { id: 'all', label: 'All calls' }]} />
+          <Tabs value={pressedOnly ? 'pressed' : 'all'} onChange={(t) => setPressedOnly(t === 'pressed')} tabs={[{ id: 'pressed', label: 'With disposition' }, { id: 'all', label: 'All calls' }]} />
           <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
           <Button size="sm" variant="outline" disabled={page >= pages} onClick={() => setPage((p) => p + 1)}>Next</Button>
         </span>} />
       {!res ? <p className="p-6 text-sm text-mute">Loading…</p>
         : res.error ? <p className="p-4 text-sm text-bad">{res.error}</p>
-          : !rows.length ? <EmptyState icon={PhoneCall} title={pressedOnly ? 'Nobody on this page pressed a key' : 'No calls yet'} text={pressedOnly && res.items.length ? 'Try the next page, or switch to All calls.' : undefined} /> : (
+          : !rows.length ? <EmptyState icon={PhoneCall} title={pressedOnly ? 'No dispositions on this page' : 'No calls yet'} text={pressedOnly && res.items.length ? 'Try the next page, or switch to All calls.' : undefined} /> : (
             <Table>
               <thead><tr><Th>Phone</Th><Th>When</Th><Th>State</Th><Th>Disposition</Th><Th className="text-right">Duration</Th><Th className="text-right">Lead</Th></tr></thead>
               <tbody>
@@ -490,9 +493,9 @@ function CampaignCalls({ ivr, leadFor, toLead }: { ivr: Ivr; leadFor: (phone: st
                       <Td className="font-mono">{normPhone(c.phone) || c.phone}<span className="block font-sans text-xs text-mute">{lead ? `${lead.name} · ${LEAD_STATUS[lead.status].label}` : c.name}</span></Td>
                       <Td className="text-xs">{c.at ? fmtDateTime(c.at) : '—'}</Td>
                       <Td><Badge tone={/answer|complet/i.test(c.state) ? 'green' : 'gray'}>{c.state || '—'}</Badge></Td>
-                      <Td>{c.key || c.disposition ? <span className="flex items-center gap-1.5">{c.key && <Badge tone="gray">{c.key}</Badge>}{c.disposition && <Badge tone={/interest/i.test(c.disposition) ? 'amber' : 'gray'}>{c.disposition}</Badge>}</span> : <span className="text-mute">—</span>}</Td>
+                      <Td>{dispo(c) ? <Badge tone={/interest/i.test(dispo(c)) ? 'amber' : 'gray'}>{c.key ? `${c.key} · ` : ''}{dispo(c)}</Badge> : <span className="text-mute">—</span>}</Td>
                       <Td className="text-right tabular-nums">{c.duration}s</Td>
-                      <Td className="text-right"><Button size="sm" variant="ghost" icon={UserPlus} disabled={!c.phone} onClick={() => toLead(c.phone, `IVR “${ivr.name}”: ${[c.state, c.disposition || (c.key && `pressed ${c.key}`)].filter(Boolean).join(', ') || 'called'}${c.name ? ` · ${c.name}` : ''}${c.at ? ` on ${fmtDateTime(c.at)}` : ''}`, false)}>{lead ? 'Open lead' : 'Add lead'}</Button></Td>
+                      <Td className="text-right"><Button size="sm" variant="ghost" icon={UserPlus} disabled={!c.phone} onClick={() => toLead(c.phone, `IVR “${ivr.name}”: ${[c.state, dispo(c) || (c.key && `pressed ${c.key}`)].filter(Boolean).join(', ') || 'called'}${c.name ? ` · ${c.name}` : ''}${c.at ? ` on ${fmtDateTime(c.at)}` : ''}`, false)}>{lead ? 'Open lead' : 'Add lead'}</Button></Td>
                     </tr>
                   )
                 })}
