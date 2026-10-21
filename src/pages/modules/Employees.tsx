@@ -45,7 +45,7 @@ export default function Employees() {
       if (pwError) return
     }
     const ok = form.user
-      ? await run(() => updateUser(me, form.user!.id, { name: d.name, email: d.email, phone: d.phone, department: d.department, designation: d.designation, teamLeadId: d.teamLeadId, salary: d.salary, branchId: d.branchId, ...(form.user!.role === 'branchdirector' ? { branchIds: d.branchIds ?? [] } : {}) }), 'Employee updated')
+      ? await run(() => updateUser(me, form.user!.id, { name: d.name, email: d.email, phone: d.phone, department: d.department, designation: d.designation, teamLeadId: d.teamLeadId, salary: d.salary, target: d.target, branchId: d.branchId, ...(form.user!.role === 'branchdirector' ? { branchIds: d.branchIds ?? [] } : {}) }), 'Employee updated')
       : await run(() => createUser(me, d, pw.password, resume), `Account created for ${d.name} — share the password with them privately`)
     if (ok) closeForm()
   }
@@ -84,7 +84,7 @@ export default function Employees() {
       </div>
 
       <Drawer open={!!open} onClose={() => setParams({})} title={open?.name} subtitle={open && `${open.designation} · ${open.department}`}
-        footer={open && manage && <Button icon={Pencil} onClick={() => setForm({ open: true, user: open, data: { name: open.name, username: open.username, email: open.email, phone: open.phone, role: open.role, department: open.department, designation: open.designation, teamLeadId: open.teamLeadId, salary: open.salary, branchId: open.branchId, branchIds: open.branchIds } })}>Edit</Button>}>
+        footer={open && manage && <Button icon={Pencil} onClick={() => setForm({ open: true, user: open, data: { name: open.name, username: open.username, email: open.email, phone: open.phone, role: open.role, department: open.department, designation: open.designation, teamLeadId: open.teamLeadId, salary: open.salary, target: open.target, branchId: open.branchId, branchIds: open.branchIds } })}>Edit</Button>}>
         {open && (
           <div className="space-y-5">
             <div className="flex items-center gap-4"><Avatar name={open.name} photo={open.photo} size={72} /><div><Badge tone="navy">{roleLabel(open.role)}</Badge>{!open.active && <Badge tone="red" className="ml-1">Inactive</Badge>}<p className="mt-1 text-sm text-mute">Joined {fmtDate(open.joinedOn)}</p></div></div>
@@ -121,6 +121,7 @@ export default function Employees() {
           {!form.user && <Select label="Role" value={form.data.role} onChange={(e) => setForm({ ...form, data: { ...form.data, role: e.target.value as Role } })}>{ROLES.filter((r) => r.id !== 'superadmin' || me.role === 'superadmin').map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}</Select>}
           {form.data.role === 'sales' && <Select label="Team leader" value={form.data.teamLeadId ?? ''} onChange={(e) => setForm({ ...form, data: { ...form.data, teamLeadId: e.target.value || undefined } })}><option value="">—</option>{tls.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</Select>}
           <Input label="Monthly salary (₹)" type="number" value={form.data.salary ?? ''} onChange={(e) => setForm({ ...form, data: { ...form.data, salary: e.target.value ? Number(e.target.value) : undefined } })} />
+          {(form.data.role === 'sales' || form.data.role === 'teamlead') && <Input label="Monthly sales target (₹)" type="number" min={0} value={form.data.target ?? ''} onChange={(e) => setForm({ ...form, data: { ...form.data, target: e.target.value ? Number(e.target.value) : undefined } })} />}
           <Select label="Branch" value={form.data.branchId ?? ''} onChange={(e) => setForm({ ...form, data: { ...form.data, branchId: e.target.value || undefined } })} hint={branchList(db).length ? 'Used for branch-wise reports' : 'Add branches in Access Management → Settings'}>
             <option value="">— No branch —</option>{branchList(db).map((b) => <option key={b.id} value={b.id}>{b.code ? `${b.code} · ${b.name}` : b.name}</option>)}
           </Select>

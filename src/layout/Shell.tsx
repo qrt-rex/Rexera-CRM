@@ -5,12 +5,13 @@ import {
   HelpCircle, SlidersHorizontal, Users, CalendarCheck2, TrendingUp, GraduationCap, FileText, Inbox, PartyPopper, BarChart3,
   Wallet, Receipt, Landmark, Trophy, Briefcase, Wrench, MailPlus, ClipboardList, FilePen, Coffee, Package,
 } from 'lucide-react'
-import type { Perm } from '../lib/types'
+import type { Perm, User } from '../lib/types'
 import { Rexy } from '../components/hr/Mascots'
 import { useDb } from '../lib/store'
 import { applyTheme, getTheme, useAuth, useMe, type Theme } from '../lib/auth'
-import { MESSAGES_ENABLED, MODULES, canSee } from '../lib/modules'
+import { MESSAGES_ENABLED, MODULES, canSee, moduleLabel } from '../lib/modules'
 import { isMaster, ROLES, roleLabel } from '../lib/rbac'
+import { CLOUD } from '../lib/cloud'
 import { markRead, overdueLeadsOf, runBreakMonitor, runComboReminders, runTaskReminders, unseenLeadsOf } from '../lib/actions'
 import { runScheduledAutomations } from '../lib/email'
 import { ago, today } from '../lib/format'
@@ -31,13 +32,14 @@ export function useUnread() {
   }), [db.notices, db.messages, db.emails, me.id])
 }
 
-function pageTitle(path: string, role: string) {
+function pageTitle(path: string, me: User) {
+  const role = me.role
   const dash = path.match(/^\/dashboard\/(\w+)/)
   if (dash) return `${roleLabel(dash[1] as never)} Dashboard`
   if (path.startsWith('/bookings/new')) return 'New CRM Entry'
   if (/^\/bookings\/.+/.test(path)) return 'CRM Entry'
   const m = [...MODULES].sort((a, b) => b.path.length - a.path.length).find((x) => path.startsWith(x.path.split('?')[0]!))
-  return m?.label ?? `${roleLabel(role as never)} Dashboard`
+  return m ? moduleLabel(m, me) : `${roleLabel(role as never)} Dashboard`
 }
 
 export function Shell() {
@@ -51,13 +53,18 @@ export function Shell() {
   const [theme, setTheme] = useState<Theme>(getTheme)
 
   useEffect(() => { setMobileNav(false); window.scrollTo(0, 0) }, [loc.pathname])
+  // Company-wide jobs (scheduled emails, task / combo reminders, lunch-break monitoring) change other people's records.
+  // With Supabase only Super Admin / IT may do that, so only their browsers run them (in browser mode: everyone's).
+  // ponytail: needs a Super Admin / IT browser open; a scheduled server job if they must run with nobody signed in
+  const companyJobs = !CLOUD || isMaster(me)
   // scheduled email automations (daily reminders, monthly summaries) run while anyone has the app open
   useEffect(() => {
+    if (!companyJobs) return
     const tick = () => { try { runScheduledAutomations(); runTaskReminders(); runComboReminders() } catch { /* never block the app */ } }
     tick()
     const t = setInterval(tick, 5 * 60000)
     return () => clearInterval(t)
-  }, [])
+  }, [companyJobs])
   // a new day starts at midnight even when the CRM was left open: redraw every page so dates, "today" and the
   // login / logout card move to the new day (checked every 30 s; nothing re-renders while the day is the same)
   const [, setDay] = useState(today)
@@ -69,11 +76,12 @@ export function Shell() {
   }, [])
   // lunch break: reminder at the start, late warning a couple of minutes after the end — needs to be on time
   useEffect(() => {
+    if (!companyJobs) return
     const tick = () => { try { runBreakMonitor() } catch { /* never block the app */ } }
     tick()
     const t = setInterval(tick, 30000)
     return () => clearInterval(t)
-  }, [])
+  }, [companyJobs])
   useEffect(() => {
     const on = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setPalette(true) } }
     window.addEventListener('keydown', on)
@@ -82,7 +90,7 @@ export function Shell() {
   const maintenance = useDb().settings.maintenance
   const hrMode = me.role === 'hr' || loc.pathname.startsWith('/dashboard/hr') || HR_PATHS.some((p) => loc.pathname.startsWith(p))
   const [help, setHelp] = useState(false)
-  const title = pageTitle(loc.pathname, me.role)
+  const title = pageTitle(loc.pathname, me)
   useEffect(() => { document.title = `${title} · Rexera CRM` }, [title])
 
   const cycleTheme = () => {
@@ -236,7 +244,7 @@ function Sidebar() {
           <SideGroup key={g} label={g} open={openGroups[g] ?? true} onToggle={() => toggle(g)}>
             {visible.filter((m) => m.group === g).map((m) => (
               <NavLink key={m.key} to={m.path} className={() => cx(item, 'py-1.5 text-[13px]', loc.pathname.startsWith(m.path) ? active : idle)}>
-                <m.icon className="size-4 opacity-80" /><span className="flex-1">{m.label}</span>
+                <m.icon className="size-4 opacity-80" /><span className="flex-1">{moduleLabel(m, me)}</span>
                 {m.key === 'leads' && <LeadsBadge />}
               </NavLink>
             ))}

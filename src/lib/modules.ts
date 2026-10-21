@@ -3,7 +3,7 @@ import {
   KeyRound, Megaphone, MessagesSquare, Phone, Settings, ShieldCheck, Sparkles, UserCheck, UserCog, UserPlus, Users, UsersRound,
   CalendarCheck2, Network, ScrollText, Wallet, Receipt, Landmark, Trophy, SlidersHorizontal, Gauge, KeySquare, DatabaseBackup, DatabaseZap, MailPlus, ClipboardList, FilePen, Inbox, type LucideIcon,
 } from 'lucide-react'
-import type { Perm } from './types'
+import type { Perm, User } from './types'
 import type { Tone } from './workflow'
 
 export interface ModuleDef {
@@ -69,3 +69,7 @@ export const moduleByKey = (k: string) => MODULES.find((m) => m.key === k)!
 /** Messages is switched off for now (the code stays); set to true to bring the module back everywhere. */
 export const MESSAGES_ENABLED = false
 export const canSee = (m: ModuleDef, has: (...p: Perm[]) => boolean) => (m.key !== 'messages' || MESSAGES_ENABLED) && (!m.perms.length || has(...m.perms))
+
+/** The Super Admin only runs IVR campaigns there (calls are for sales people), so for them the Dialer is called IVR. */
+export const moduleLabel = (m: { key: string; label: string }, me: User) =>
+  m.key === 'dialer' && [me.role, ...me.extraRoles].includes('superadmin') && ![me.role, ...me.extraRoles].some((r) => r === 'sales' || r === 'teamlead') ? 'IVR' : m.label

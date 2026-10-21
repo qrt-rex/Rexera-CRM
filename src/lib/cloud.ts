@@ -113,12 +113,13 @@ export async function loadCloud(): Promise<DB> {
   // the saved session is enough here: the database checks its token on every request
   const { data: { session } } = await s.auth.getSession()
   const user = session?.user
-  meId = null
   if (user) {
+    // who is signed in stays known while the data reloads (a gap here signed people out)
     const { data } = await s.from('app_users').select('id').eq('auth_user_id', user.id).maybeSingle()
     meId = (data?.id as string | undefined) ?? null
     await loadTables(ALL_TABLES.map(([t]) => t))
   } else {
+    meId = null
     // signed out: only the public job application forms are readable
     cache = {}
     await loadTables(['candidate_forms'])

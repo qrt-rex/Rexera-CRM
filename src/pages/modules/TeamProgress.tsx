@@ -3,15 +3,17 @@ import { BarChart3, Download, Trophy } from 'lucide-react'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
 import { collections, dayStatus } from '../../lib/metrics'
+import { canSetTarget, setTarget } from '../../lib/actions'
 import { rolesOf } from '../../lib/rbac'
 import { addDays, downloadCsv, inr, inrShort, today, ymd } from '../../lib/format'
-import { Avatar, Badge, Button, Card, CardHeader, Input, PageHeader, Progress, Table, Td, Th } from '../../components/ui'
+import { Avatar, Badge, Button, Card, CardHeader, Input, PageHeader, Progress, Table, Td, Th, useRun } from '../../components/ui'
 import { HBars } from '../../components/charts'
 
 export default function TeamProgress() {
   const db = useDb()
   const me = useMe()
   const { can } = useAuth()
+  const run = useRun()
   const [from, setFrom] = useState(ymd(addDays(new Date(), -29)))
   const [to, setTo] = useState(today())
   const team = db.users.filter((u) => u.active && rolesOf(u).some((r) => r === 'sales' || r === 'teamlead') && (can('reports.view') && me.role !== 'teamlead' ? true : u.teamLeadId === me.id || u.id === me.id))
@@ -35,7 +37,7 @@ export default function TeamProgress() {
       <div className="grid gap-6 xl:grid-cols-[1fr_340px]">
         <Card className="overflow-hidden">
           <Table>
-            <thead><tr><Th>#</Th><Th>Person</Th><Th className="text-right">Calls</Th><Th className="text-right">Talk</Th><Th className="text-right">Interested</Th><Th className="text-right">Converted</Th><Th className="text-right">CRM entries</Th><Th className="w-48">Collected vs target</Th></tr></thead>
+            <thead><tr><Th>#</Th><Th>Person</Th><Th className="text-right">Calls</Th><Th className="text-right">Talk</Th><Th className="text-right">Interested</Th><Th className="text-right">Converted</Th><Th className="text-right">CRM entries</Th><Th className="w-40 text-right">Monthly target</Th><Th className="w-48">Collected vs target</Th></tr></thead>
             <tbody>
               {rows.map((r, i) => (
                 <tr key={r.u.id}>
@@ -43,6 +45,11 @@ export default function TeamProgress() {
                   <Td><span className="flex items-center gap-2"><Avatar name={r.u.name} photo={r.u.photo} size={30} /><span><span className="block text-sm font-semibold">{r.u.name}</span><Badge tone={dayStatus(db, r.u.id) === 'WORKING' ? 'green' : 'gray'}>{dayStatus(db, r.u.id).replace('_', ' ').toLowerCase()}</Badge></span></span></Td>
                   <Td className="text-right tabular-nums">{r.calls}</Td><Td className="text-right tabular-nums text-mute">{r.talk}m</Td>
                   <Td className="text-right tabular-nums">{r.interested}</Td><Td className="text-right tabular-nums">{r.converted}</Td><Td className="text-right tabular-nums">{r.bookings}</Td>
+                  <Td className="text-right">{canSetTarget(db, me, r.u)
+                    ? <Input key={`${r.u.id}-${r.u.target ?? ''}`} type="number" min={0} step={10000} className="ml-auto w-32" aria-label={`Monthly target for ${r.u.name}`} placeholder="300000" defaultValue={r.u.target ?? ''}
+                        onBlur={(e) => { const v = e.target.value.trim(), n = v ? Number(v) : undefined; if (n !== r.u.target) void run(() => setTarget(me, r.u.id, n), `Target saved for ${r.u.name}`) }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }} />
+                    : <span className="tabular-nums text-mute">{inr(r.target)}</span>}</Td>
                   <Td><p className="mb-1 flex justify-between text-xs"><b>{inr(r.coll)}</b><span className="text-mute">{r.pct}%</span></p><Progress value={r.pct} tone={r.pct >= 100 ? 'green' : 'orange'} /></Td>
                 </tr>
               ))}

@@ -23,7 +23,7 @@ export interface BlutecEnv {
 export type BlutecRequest =
   | { action: 'status' }
   | { action: 'agent'; email: string }
-  | { action: 'call'; agentEmail: string; phone: string; leadId?: string; attempt?: string }
+  | { action: 'call'; agentEmail: string; phone: string; leadId?: string; attempt?: string; userId?: string }
   | { action: 'dncCheck'; phone: string }
   | { action: 'dncAdd'; phone: string; reason?: string }
   | { action: 'callStatus'; refId: string }
@@ -31,8 +31,10 @@ export type BlutecRequest =
   | { action: 'campaignLeads'; id: number }
   | { action: 'ivrList' }
   | { action: 'ivrStats'; id: number }
+  | { action: 'ivrGet'; id: number }
   | { action: 'ivrControl'; id: number; op: 'start' | 'pause' | 'resume' | 'stop' }
   | { action: 'ivrConnects'; dateFrom?: string; dateTo?: string; phone?: string }
+  | { action: 'ivrCalls'; id: number; page?: number; limit?: number }
 export interface BlutecResult { status: number; body: unknown }
 
 const enc = new TextEncoder()
@@ -53,7 +55,7 @@ const dncReady = (e: BlutecEnv) => !!e.token
 const toE164ish = (phone: string) => { const p = String(phone).replace(/\D/g, ''); return p.length === 10 ? `91${p}` : p }
 
 /** Dialer API with the long-lived token (DND list). */
-async function dialerApi(e: BlutecEnv, method: 'GET' | 'POST', path: string, body?: unknown) {
+async function dialerApi(e: BlutecEnv, method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown) {
   const res = await fetch(`${(e.dialerUrl || 'https://dialer.blutec.ai').replace(/\/$/, '')}${path}`, {
     method, headers: { Authorization: `Bearer ${e.token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined,
   })
@@ -63,6 +65,16 @@ async function dialerApi(e: BlutecEnv, method: 'GET' | 'POST', path: string, bod
 const rows = (body: unknown, key: string): unknown[] => {
   const d = (body as { data?: unknown })?.data
   return Array.isArray(d) ? d : Array.isArray((d as Record<string, unknown>)?.[key]) ? (d as Record<string, unknown[]>)[key] : []
+}
+/** The dialer webhook's signing secret, read from Blutec with the long-lived token (null when it can't be read). */
+export async function revealWebhookSecret(e: BlutecEnv): Promise<string | null> {
+  if (!dncReady(e)) return null
+  const r = await dialerApi(e, 'POST', '/api/webhooks/reveal-secret').catch(() => null)
+  const b = r?.status === 200 ? (r.body as { data?: unknown; secret?: unknown }) : null
+  const d = b?.data as Record<string, unknown> | string | undefined
+  // Blutec doesn't document the field name: the secret is the first string among the usual ones
+  const v = typeof d === 'string' ? d : d?.secret ?? d?.signing_secret ?? d?.webhook_secret ?? b?.secret
+  return typeof v === 'string' && v.length >= 8 ? v : null
 }
 async function isDnc(e: BlutecEnv, phone: string) {
   const r = await dialerApi(e, 'GET', `/api/dnc/check?phone=${encodeURIComponent(toE164ish(phone))}`)
@@ -144,7 +156,7 @@ export async function handleBlutec(req: BlutecRequest, e: BlutecEnv): Promise<Bl
         // numbers on the company's Do-Not-Disturb list are never dialled (a failed check doesn't block the call)
         if (dncReady(e) && await isDnc(e, destination).catch(() => false)) return fail(409, 'This number is on the Do-Not-Disturb list — it can’t be called.', 'DND')
         const uuid = await agentUuid(e, req.agentEmail)
-        return await signed(e, 'POST', '/api/v1/click-to-call', '', { agent_uuid: uuid, destination_number: destination, caller_id: e.callerId || undefined, ring_timeout: 30, custom_identifier: req.leadId ? { crm_lead_id: req.leadId } : undefined },
+        return await signed(e, 'POST', '/api/v1/click-to-call', '', { agent_uuid: uuid, destination_number: destination, caller_id: e.callerId || undefined, ring_timeout: 30, custom_identifier: req.leadId ? { crm_lead_id: req.leadId, ...(req.userId ? { crm_user_id: req.userId } : {}) } : undefined },
           req.attempt ? `crm-${req.leadId ?? phone}-${req.attempt}` : undefined)
       }
       case 'dncCheck': {
@@ -180,6 +192,9 @@ export async function handleBlutec(req: BlutecRequest, e: BlutecEnv): Promise<Bl
       case 'ivrList':
         if (!ivrReady(e)) return fail(503, 'IVR is not configured.', 'NOT_CONFIGURED')
         return await ivr(e, 'GET', '/api/ivr')
+      case 'ivrGet':
+        if (!ivrReady(e)) return fail(503, 'IVR is not configured.', 'NOT_CONFIGURED')
+        return await ivr(e, 'GET', `/api/ivr/${Number(req.id)}`)
       case 'ivrStats':
         if (!ivrReady(e)) return fail(503, 'IVR is not configured.', 'NOT_CONFIGURED')
         return await ivr(e, 'GET', `/api/ivr/${Number(req.id)}/broadcast/stats`)
@@ -187,6 +202,11 @@ export async function handleBlutec(req: BlutecRequest, e: BlutecEnv): Promise<Bl
         if (!ivrReady(e)) return fail(503, 'IVR is not configured.', 'NOT_CONFIGURED')
         if (!['start', 'pause', 'resume', 'stop'].includes(req.op)) return fail(422, 'Unknown broadcast action.', 'VALIDATION_ERROR')
         return await ivr(e, 'POST', `/api/ivr/${Number(req.id)}/broadcast/${req.op}`)
+      case 'ivrCalls': {
+        if (!ivrReady(e)) return fail(503, 'IVR is not configured.', 'NOT_CONFIGURED')
+        const q = new URLSearchParams({ page: String(Math.max(1, Number(req.page) || 1)), limit: String(Math.min(500, Math.max(1, Number(req.limit) || 100))) })
+        return await ivr(e, 'GET', `/api/ivr/${Number(req.id)}/broadcast/calls?${q}`)
+      }
       case 'ivrConnects': {
         if (!ivrReady(e)) return fail(503, 'IVR is not configured.', 'NOT_CONFIGURED')
         const q = new URLSearchParams()

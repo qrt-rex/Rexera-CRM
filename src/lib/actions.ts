@@ -744,12 +744,16 @@ export function setLeadStatus(me: User, id: string, status: Lead['status'], note
   })
 }
 
-export function logCall(me: User, leadId: string, outcome: CallOutcome, note: string, followUp?: string, durationSec = 0) {
+/** `refId`: the Blutec call this was (click-to-call) — the call webhook files it under the same id, so both become one. */
+export function logCall(me: User, leadId: string, outcome: CallOutcome, note: string, followUp?: string, durationSec = 0, refId?: string) {
   need(me, 'dialer.use', 'leads.manage')
   mutate((d) => {
     const l = d.leads.find((x) => x.id === leadId)
     assert(l, 'Lead not found.')
-    l.calls.unshift({ id: uid('call-'), at: nowIso(), by: me.id, outcome, note, durationSec })
+    const id = refId ? `bt-${refId}` : uid('call-')
+    const filed = l.calls.find((c) => c.id === id)
+    if (filed) Object.assign(filed, { by: me.id, outcome, note: [note, filed.note].filter(Boolean).join(' · '), durationSec: durationSec || filed.durationSec })
+    else l.calls.unshift({ id, at: nowIso(), by: me.id, outcome, note, durationSec })
     l.status = CALL_OUTCOMES.find((o) => o.id === outcome)!.to
     if (followUp) l.followUp = followUp
     else if (!OPEN_LEAD.includes(l.status)) l.followUp = undefined
@@ -1694,7 +1698,7 @@ export function markThreadRead(me: User, other: string) {
 }
 
 // ============================================================ users & access
-export type UserInput = Pick<User, 'name' | 'username' | 'email' | 'phone' | 'role' | 'department' | 'designation'> & { teamLeadId?: string; salary?: number; joinedOn?: string; branchId?: string; branchIds?: string[] }
+export type UserInput = Pick<User, 'name' | 'username' | 'email' | 'phone' | 'role' | 'department' | 'designation'> & { teamLeadId?: string; salary?: number; target?: number; joinedOn?: string; branchId?: string; branchIds?: string[] }
 /** A branch id must be one of the company's branches (Access → Settings). */
 function checkBranches(d: DB, i: { branchId?: string; branchIds?: string[] }) {
   const ids = new Set((d.settings.branches ?? []).map((b) => b.id))
@@ -1750,6 +1754,24 @@ export function updateUser(me: User, id: string, patch: Partial<Pick<User, 'name
     }
     Object.assign(u, patch)
     audit(d, me.id, accessChange ? 'ACCESS_CHANGE' : 'USER_EDIT', u.name)
+  })
+}
+
+/** Monthly sales target: HR / Super Admin / IT for anyone; a Team Leader for their own team; a Branch Director for the people in their branches. */
+export function canSetTarget(d: DB, me: User, u: User) {
+  if (has(me, 'employees.manage', 'access.manage')) return true
+  if (u.id === me.id) return false
+  const r = rolesOf(me)
+  return (r.includes('teamlead') && u.teamLeadId === me.id) || (r.includes('branchdirector') && !!u.branchId && directorBranches(d, me).includes(u.branchId))
+}
+export function setTarget(me: User, id: string, amount: number | undefined) {
+  assert(amount === undefined || (Number.isFinite(amount) && amount >= 0), 'Enter a target of 0 or more.')
+  mutate((d) => {
+    const u = d.users.find((x) => x.id === id)
+    assert(u, 'User not found.')
+    assert(canSetTarget(d, me, u), "You can only set targets for your own team.")
+    u.target = amount === undefined ? undefined : Math.round(amount)
+    audit(d, me.id, 'USER_EDIT', `${u.name}: monthly target ${amount === undefined ? 'cleared' : amount}`)
   })
 }
 
