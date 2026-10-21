@@ -615,8 +615,13 @@ const server = http.createServer(async (req, res) => {
     return handleSetPassword(req, res).catch((err) => sendJson(res, 502, { success: false, message: err.message }))
   }
 
-  if ((pathname === '/api/blutec/webhook/ivr' || pathname === '/api/blutec/webhook/calls') && req.method === 'POST') {
-    return handleBlutecWebhook(req, res, pathname.endsWith('/ivr') ? 'ivr' : 'calls')
+  // the dialer call webhook was removed: Blutec may still send to it, so say "received" (stops its retries) and drop it
+  if (pathname === '/api/blutec/webhook/calls' && req.method === 'POST') {
+    req.resume()
+    return sendJson(res, 200, { success: true, ignored: true })
+  }
+  if (pathname === '/api/blutec/webhook/ivr' && req.method === 'POST') {
+    return handleBlutecWebhook(req, res, 'ivr')
   }
 
   // public client forms (no sign-in): read the form / send the answers

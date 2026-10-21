@@ -1691,8 +1691,16 @@ do $$ begin
   end if;
 end $$;
 
--- ##################################################################### 20261022000000_workflow_automation.sql
+-- ##################################################################### 20261021010000_payments_accounts_only.sql
+-- =====================================================================================================================
+-- Rexera CRM · Part payments 2, 3, 4 … are added only by Accounts (a CRM entry is made with part 1, the advance).
+-- Safe to run more than once.
+-- =====================================================================================================================
+drop policy if exists b_payments_later_parts on booking_payments;
+create policy b_payments_later_parts on booking_payments as restrictive for insert to authenticated
+  with check (part = 1 or app.has_perm('bookings.accounts'));
 
+-- ##################################################################### 20261022000000_workflow_automation.sql
 -- =====================================================================================================
 -- Rexera CRM · workflow automation (Legal → Operations → Admin). Safe to run more than once.
 --  * CRM entries: "Changes required" status; client welcome message, 15-day follow-up and Admin checklist state.
@@ -1850,7 +1858,6 @@ do $$ declare t text; begin
 end $$;
 
 -- ##################################################################### 20261023000000_invoice_shares.sql
-
 -- =====================================================================================================
 -- Rexera CRM · invoices sent to clients (email with the PDF attached, WhatsApp document via Interakt). Safe to run more than once.
 --  * invoice_shares: one row per send, written only by the live server (secret key) with the provider's answer.

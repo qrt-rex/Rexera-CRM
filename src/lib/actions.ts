@@ -1000,7 +1000,7 @@ function checkBooking(d: DB, i: BookingInput, isNew: boolean) {
   assert(i.mode === 'Refundable' || i.mode === 'Non-Refundable', 'Pick the mode.')
   assert(i.bookingDate, 'Booking date is required.')
   if (isNew) {
-    assert(i.payments.length >= 1, 'Payment part 1 (the advance) is required.')
+    assert(i.payments.length === 1, 'Enter payment part 1 (the advance) only — later parts are added by Accounts.')
     i.payments.forEach((p, k) => {
       assert(p.amount > 0, `Enter the amount of payment part ${k + 1}.`)
       assert(p.date, `Enter the date of payment part ${k + 1}.`)
@@ -1047,7 +1047,8 @@ export function createBooking(me: User, i: BookingInput) {
       // total quoted = the advance (payment part 1, before GST) — not the sum of the scheme prices
       totalQuoted: round2(i.payments[0]!.amount), gstRate, deduction: Math.max(...svcs.map((x) => x.s.deduction)),
       paymentContact: normPhone(i.paymentContact), paymentEmail: i.paymentEmail.trim().toLowerCase() || undefined,
-      bookingDate: i.bookingDate, closedBy: i.closedBy, remarks: i.remarks.trim(),
+      // the person making the entry closed the lead (not picked from a list)
+      bookingDate: i.bookingDate, closedBy: me.id, remarks: i.remarks.trim(),
       payments,
       createdBy: me.id, teamLeadId: tl, status: 'PENDING_ACCOUNTS',
       approvals: [{ id: uid('ap-'), level: isTL ? 'Team Leader' : 'Sales', action: 'SUBMITTED', by: me.id, at, remark: 'Sent straight to Accounts' }],
@@ -1681,7 +1682,7 @@ export function addPayment(me: User, id: string, p: { amount: number; date: stri
   mutate((d) => {
     const b = findB(d, id)
     const pr = effectivePerms(d, me)
-    assert(b.createdBy === me.id || b.teamLeadId === me.id || pr.has('bookings.accounts'), 'Only the sales owner or accounts can add payments.')
+    assert(pr.has('bookings.accounts'), 'Only Accounts adds part payments.')
     assert(p.amount > 0, 'Amount must be more than 0.')
     assert(p.date && p.date <= today(), 'Enter the date the money was received (not in the future).')
     assert(p.proofName || p.proof, 'Attach the payment proof.')
