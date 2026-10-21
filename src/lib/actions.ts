@@ -1,10 +1,11 @@
 import type {
-  Booking, BookingStatus, BDoc, Branch, BreakPolicy, CallOutcome, ClientEmailLog, Shift, CandidateApplication, CandidateForm, DaySession, DB, EventItem, FileRef, Invoice, InvoiceItem, Lead, LeaveType, Perm, Post, Role, Scheme, User,
+  Booking, BookingStatus, BookingType, BDoc, Service, Branch, BreakPolicy, CallOutcome, ClientEmailLog, Shift, CandidateApplication, CandidateForm, DaySession, DB, EventItem, FileRef, Invoice, InvoiceItem, Lead, LeaveType, Perm, Post, Role, Scheme, User,
 } from './types'
 import { effectivePerms, isMaster, MASTER_ROLES, rolesOf, roleLabel } from './rbac'
 import { clearCloudDb, getDb, mutate, reloadFromCloud, saved } from './store'
 import { CLOUD, cloudSetOwnPassword, cloudSetPassword, cloudSignIn, cloudSignOut, cloudUserId } from './cloud'
 import { bookingBranch, directorBranches, isBranchScoped, leadBranch, NO_BRANCH } from './branches'
+import { BOOKING_TYPES, COMBO_PACKAGES, comboCap, comboMonths, isFundingService } from './catalog'
 import { hashPassword } from './crypto'
 import { CALL_OUTCOMES, FINAL_STAGE, hasLegalDoc, LEAD_STATUS, OPEN_LEAD, STAGE_OUTCOMES, STAGES, stageLabel } from './workflow'
 import { fireAutomation } from './email'
@@ -607,6 +608,75 @@ function assertNoOverdue(d: DB, u: User) {
   assert(!n, `${u.name} has ${n} lead(s) still on “New” from before today — they get new leads once those are updated.`)
 }
 
+/** Where a lead notification takes someone: the CRM Leads page is the Super Admin's; everyone else works leads in the Dialer. */
+const leadLink = (d: DB, userId: string) => { const u = d.users.find((x) => x.id === userId); return u && effectivePerms(d, u).has('leads.admin') ? '/leads' : '/dialer' }
+
+// ------------------------------------------------------------ automatic lead assignment (round robin)
+/** People leads can be handed to: active sales people and team leaders. */
+export const leadTakers = (d: DB) => d.users.filter((u) => u.active && rolesOf(u).some((r) => r === 'sales' || r === 'teamlead'))
+/**
+ * Round robin over `userIds`, starting at `start`: the k-th lead goes to the k-th person in turn, and after the last
+ * person it goes back to the first (300 leads, 15 people = 20 each; 7 leads, 3 people = 3 / 2 / 2). People who can't
+ * take leads now (inactive, or with "New" leads overdue) are skipped. Returns who gets each lead and the next position.
+ */
+export function roundRobin(d: DB, userIds: string[], start: number, count: number) {
+  const takers = new Set(leadTakers(d).map((u) => u.id))
+  const order = userIds.map((id, i) => ({ id, i })).filter((x) => takers.has(x.id) && !overdueLeadsOf(d, x.id).length)
+  if (!order.length || !count) return { to: [] as string[], next: start, skipped: userIds.filter((id) => !order.some((x) => x.id === id)) }
+  const n = userIds.length
+  // begin with the first eligible person at or after `start`
+  let k = order.findIndex((x) => x.i >= ((start % n) + n) % n)
+  if (k < 0) k = 0
+  const to: string[] = []
+  for (let j = 0; j < count; j++) to.push(order[(k + j) % order.length]!.id)
+  const last = order[(k + count - 1) % order.length]!
+  return { to, next: (last.i + 1) % n, skipped: userIds.filter((id) => !order.some((x) => x.id === id)) }
+}
+/** Super Admin: switch automatic assignment on / off and choose who takes part (in this order). */
+export function saveLeadAssign(me: User, on: boolean, userIds: string[]) {
+  need(me, 'leads.admin')
+  const ids = [...new Set(userIds)]
+  assert(!on || ids.length, 'Pick at least one person to share the leads.')
+  mutate((d) => {
+    const old = d.settings.leadAssign
+    d.settings.leadAssign = { on, userIds: ids, next: old && ids.length ? Math.min(old.next, ids.length - 1) : 0 }
+    audit(d, me.id, 'LEAD_AUTO_ASSIGN', `${on ? 'On' : 'Off'} · ${ids.length} people`)
+  })
+}
+/** Hands leads out in turn (inside a mutate). Notifies each person once. Returns how many each got. */
+function shareLeads(d: DB, me: User, leads: Lead[], userIds: string[], note: string, strict = true) {
+  const rr = d.settings.leadAssign
+  const start = rr && rr.userIds.join() === userIds.join() ? rr.next : 0
+  const { to, next, skipped } = roundRobin(d, userIds, start, leads.length)
+  // automatic assignment never blocks adding leads: with nobody free they wait in Unassigned
+  if (!to.length && !strict) return { got: new Map<string, number>(), skipped }
+  assert(to.length,skipped.length ? `Nobody can take leads now — ${skipped.map((id) => userName(d, id)).join(', ')} ${skipped.length === 1 ? 'has' : 'have'} “New” leads from before today (or ${skipped.length === 1 ? 'is' : 'are'} inactive).` : 'Pick who shares the leads.')
+  const got = new Map<string, number>()
+  leads.forEach((l, k) => {
+    const id = to[k]!
+    const re = !!l.assignedTo
+    handOver(l, id, me.id, re ? 'REASSIGNED' : 'ASSIGNED', note)
+    leadEvent(l, me.id, `${re ? 'Reassigned' : 'Assigned'} to ${userName(d, id)} (round robin)`, note)
+    got.set(id, (got.get(id) ?? 0) + 1)
+  })
+  for (const [id, n] of got) notify(d, [id], `${n} new lead${n === 1 ? '' : 's'} assigned to you`, `by ${me.name}`, leadLink(d, id), 'action')
+  if (rr && rr.userIds.join() === userIds.join()) rr.next = next
+  return { got, skipped }
+}
+/** Super Admin: share these leads equally among people (round robin; the remainder goes from the first person on). */
+export function distributeLeads(me: User, ids: string[], userIds?: string[]) {
+  need(me, 'leads.admin')
+  return mutate((d) => {
+    const people = userIds?.length ? userIds : d.settings.leadAssign?.userIds ?? []
+    assert(people.length, 'Pick who shares the leads (Auto-assign → people).')
+    const leads = d.leads.filter((l) => ids.includes(l.id) && OPEN_LEAD.includes(l.status))
+    assert(leads.length, 'Pick open leads to share.')
+    const { got, skipped } = shareLeads(d, me, leads, people, 'Shared equally')
+    audit(d, me.id, 'LEAD_DISTRIBUTE', `${leads.length} lead(s) among ${got.size} people`)
+    return { shared: leads.length, people: got.size, skipped: skipped.map((id) => userName(d, id)) }
+  })
+}
+
 export function createLead(me: User, i: LeadInput) {
   need(me, 'leads.own', 'leads.manage')
   checkLead(i)
@@ -615,16 +685,21 @@ export function createLead(me: User, i: LeadInput) {
     const dup = d.leads.find((l) => l.phone === phone)
     assert(!dup, `A lead with this number already exists (${dup?.code}).`)
     const canAssign = has(me, 'leads.assign', 'leads.manage')
-    const to = canAssign && i.assignedTo ? i.assignedTo : me.id
+    const admin = has(me, 'leads.admin')
+    // the Super Admin's leads without an owner go round robin when auto-assign is on (else they wait in Unassigned)
+    const auto = admin && !i.assignedTo && d.settings.leadAssign?.on && d.settings.leadAssign.userIds.length
+    const to = canAssign && i.assignedTo ? i.assignedTo : admin ? undefined : me.id
     const { assignedTo: _ignored, ...fields } = i
     const lead: Lead = {
       ...fields, id: uid('lead-'), code: `LD-${d.counters.lead++}`, phone, price: i.price == null ? undefined : round2(i.price),
       status: 'NEW', createdBy: me.id, createdAt: nowIso(), calls: [],
     }
-    handOver(lead, to, me.id, 'ASSIGNED')
     leadEvent(lead, me.id, 'Lead created')
     d.leads.unshift(lead)
-    if (to !== me.id) notify(d, [to], 'New lead assigned to you', `${lead.name} · ${lead.service}`, '/leads', 'action')
+    if (to) {
+      handOver(lead, to, me.id, 'ASSIGNED')
+      if (to !== me.id) notify(d, [to], 'New lead assigned to you', `${lead.name} · ${lead.service}`, leadLink(d, to), 'action')
+    } else if (auto) shareLeads(d, me, [lead], d.settings.leadAssign!.userIds, 'Auto-assigned', false)
     audit(d, me.id, 'LEAD_CREATE', `${lead.code} ${lead.name}`)
     return lead.id
   })
@@ -652,7 +727,7 @@ export function updateLead(me: User, id: string, patch: Partial<LeadInput & { st
       const re = !!l.assignedTo
       handOver(l, to, me.id, re ? 'REASSIGNED' : 'ASSIGNED')
       leadEvent(l, me.id, `${re ? 'Reassigned' : 'Assigned'} to ${target.name}`)
-      notify(d, [to], 'New lead assigned to you', `${l.name} · by ${me.name}`, '/leads', 'action')
+      notify(d, [to], 'New lead assigned to you', `${l.name} · by ${me.name}`, leadLink(d, to), 'action')
     }
   })
 }
@@ -697,7 +772,7 @@ export function assignLeads(me: User, ids: string[], userId: string, note = '') 
       leadEvent(l, me.id, `${re ? 'Reassigned' : 'Assigned'} to ${target.name}`, note)
       n++
     }
-    if (n) notify(d, [userId], `${n} lead(s) assigned to you`, `by ${me.name}`, '/leads', 'action')
+    if (n) notify(d, [userId], `${n} lead(s) assigned to you`, `by ${me.name}`, leadLink(d, userId), 'action')
     audit(d, me.id, 'LEAD_ASSIGN', `${n} lead(s) → ${target.name}`)
   })
 }
@@ -714,7 +789,7 @@ export function forwardLead(me: User, id: string, toId: string, note: string) {
     assertNoOverdue(d, to)
     handOver(l, to.id, me.id, 'FORWARDED', note)
     leadEvent(l, me.id, `Forwarded to ${to.name}`, note)
-    notify(d, [to.id], `${me.name} forwarded a lead to you`, `${l.name} — ${note.trim()}`, '/leads', 'action')
+    notify(d, [to.id], `${me.name} forwarded a lead to you`, `${l.name} — ${note.trim()}`, leadLink(d, to.id), 'action')
   })
 }
 
@@ -773,6 +848,7 @@ export function importLeadBatch(me: User, file: { name: string; size: number; to
   return mutate((d) => {
     const phones = new Set(d.leads.map((l) => l.phone))
     const up = { id: uid('lup-'), fileName: file.name, size: file.size, totalRows: file.totalRows, imported: 0, by: me.id, at: nowIso() }
+    const fresh: Lead[] = []
     for (const r of rows) {
       if (!isPhone(r.phone) || phones.has(r.phone)) continue // checked already; a lead added meanwhile wins
       phones.add(r.phone)
@@ -782,9 +858,12 @@ export function importLeadBatch(me: User, file: { name: string; size: number; to
       }
       leadEvent(lead, me.id, 'Uploaded', file.name)
       d.leads.unshift(lead)
+      fresh.push(lead)
       up.imported++
     }
     ;(d.leadUploads ??= []).unshift(up)
+    // auto-assign on: the new batch is shared out in turn straight away
+    if (d.settings.leadAssign?.on && d.settings.leadAssign.userIds.length && fresh.length) shareLeads(d, me, fresh, d.settings.leadAssign.userIds, `Upload: ${file.name}`, false)
     audit(d, me.id, 'LEAD_UPLOAD', `${file.name}: ${up.imported} of ${file.totalRows} row(s)`)
     return up.imported
   })
@@ -816,9 +895,45 @@ export function visibleBookings(d: DB, me: User): Booking[] {
   return d.bookings.filter((b) => b.createdBy === me.id || (p.has('bookings.team') && (b.teamLeadId === me.id || team.has(b.createdBy))))
 }
 
-/** Services whose price must be split out per service (certification, website, logo, trade-related). */
-export const needsPriceSplit = (s: { name: string; category?: string }) =>
-  /certif|registration|iso\b|website|web\s|logo|trade|trademark|\biec\b|import|export|fssai|udyam|gem\b/i.test(`${s.name} ${s.category ?? ''}`)
+/**
+ * Price bifurcation is compulsory for every service except funding ones (loans, certificates, company and digital
+ * services each need their price); among funding services one price is enough and the others may be 0.
+ */
+export const needsPriceSplit = (s: { name: string; category?: string }) => !isFundingService(s)
+
+/**
+ * The services list (Super Admin / IT, Admin, Operation team — the same people who manage schemes): name, category,
+ * GST, and a price for each booking type (Single, Multiple, Combo 3 / 6 / 9 / 12 months; blank = the Single price).
+ */
+export function saveService(me: User, s: Omit<Service, 'id'>, id?: string) {
+  need(me, 'schemes.manage')
+  assert(s.name.trim().length >= 2, 'Enter the service name.')
+  assert(s.category.trim(), 'Pick or type a category.')
+  assert(Number.isFinite(s.price) && s.price >= 0, 'The single-booking price must be 0 or more.')
+  assert(s.gstRate >= 0 && s.gstRate <= 28, 'GST must be between 0 and 28%.')
+  const prices = Object.fromEntries(Object.entries(s.prices ?? {}).filter(([, v]) => v != null && Number.isFinite(v)).map(([k, v]) => [k, round2(v as number)]))
+  assert(Object.values(prices).every((v) => v >= 0), 'Prices must be 0 or more.')
+  return mutate((d) => {
+    const name = s.name.trim()
+    assert(!d.services.some((x) => x.id !== id && x.name.toLowerCase() === name.toLowerCase()), 'A service with this name already exists.')
+    const base = { name, category: s.category.trim(), price: round2(s.price), gstRate: s.gstRate, deduction: round2(s.deduction || 0), active: s.active, prices: Object.keys(prices).length ? prices : undefined }
+    if (id) {
+      const x = d.services.find((y) => y.id === id)
+      assert(x, 'Service not found.')
+      Object.assign(x, base)
+      if (!base.prices) delete x.prices
+      audit(d, me.id, 'SERVICE_EDIT', name)
+      return id
+    }
+    const nid = uid('svc-')
+    d.services.push({ id: nid, ...base })
+    audit(d, me.id, 'SERVICE_ADD', name)
+    return nid
+  })
+}
+
+/** Payment modes for money received (CRM entries, balance payments, invoices). */
+export const PAYMENT_MODES = ['UPI', 'NEFT', 'RTGS', 'IMPS', 'Razorpay', 'Cheque', 'Card', 'Cash'] as const
 
 export type PaymentPartInput = { amount: number; date: string; mode: string; proof?: FileRef }
 export type BookingInput = {
@@ -826,8 +941,9 @@ export type BookingInput = {
   contactPerson: string; mobile: string; email: string; pan: string; gstin: string
   paymentContact: string; paymentEmail: string
   services: { serviceId: string; price: number }[]
-  combo?: 3 | 6 | 12
-  totalQuoted: number; mode: Booking['mode']
+  /** Single / Multiple / Combo 3, 6, 9 or 12 months */
+  bookingType: BookingType
+  mode: Booking['mode']
   bookingDate: string
   payments: PaymentPartInput[]
   closedBy: string
@@ -861,24 +977,32 @@ function checkBooking(d: DB, i: BookingInput, isNew: boolean) {
   assert(isPan(i.pan), 'Company PAN is required (format ABCDE1234F).')
   assert(!i.gstin || isGstin(i.gstin), 'GSTIN must be 15 characters (e.g. 24ABCDE1234F1Z5).')
   assert(i.services.length >= 1, 'Pick at least one service.')
-  if (i.combo) assert(i.services.length >= 3, 'A combo booking needs at least 3 services.')
+  assert(BOOKING_TYPES.some((t) => t.id === i.bookingType), 'Pick the booking type.')
+  if (i.bookingType === 'SINGLE') assert(i.services.length === 1, 'A single booking has one service — pick “Multiple booking” for more.')
+  if (i.bookingType === 'MULTIPLE') assert(i.services.length >= 2, 'A multiple booking needs at least 2 services.')
   assert(new Set(i.services.map((s) => s.serviceId)).size === i.services.length, 'A service is listed twice.')
   const svcs = i.services.map((x) => { const s = d.services.find((y) => y.id === x.serviceId); assert(s, 'Pick each service from the list.'); return { s, price: round2(x.price || 0) } })
-  for (const { s, price } of svcs) assert(!needsPriceSplit(s) || price > 0, `Enter the price for ${s.name} (price bifurcation is required for certification, website, logo and trade services).`)
-  assert(i.totalQuoted > 0, 'Total quoted is required.')
-  const priced = round2(svcs.reduce((t, x) => t + x.price, 0))
-  if (svcs.every((x) => x.price > 0)) assert(Math.abs(priced - i.totalQuoted) < 0.01, `The service prices add up to ${priced} — they must equal the total quoted (${round2(i.totalQuoted)}).`)
-  else assert(priced <= i.totalQuoted, 'Service prices are more than the total quoted.')
+  assert(svcs.every((x) => x.price >= 0), 'A service price cannot be negative.')
+  // price bifurcation: compulsory for loans, certificates and every non-funding service; funding needs one price
+  for (const { s, price } of svcs) assert(!needsPriceSplit(s) || price > 0, `Enter the price for ${s.name} — price bifurcation is compulsory for loans, certificates and other non-funding services.`)
+  const funding = svcs.filter((x) => isFundingService(x.s))
+  if (funding.length) assert(funding.some((x) => x.price > 0), 'Enter the price of at least one funding service (the other funding services can be 0).')
+  const months = comboMonths(i.bookingType)
+  if (months) {
+    const p = COMBO_PACKAGES[months]
+    assert(svcs.length <= comboCap(p), `${p.name} allows up to ${comboCap(p)} applications (${p.maxApps} at the start + ${p.extraPerMonth} a month).`)
+    const value = round2(svcs.reduce((t, x) => t + x.price, 0))
+    assert(value >= p.minPrice, `${p.name} (${months} months) has a minimum package price of ₹${p.minPrice.toLocaleString('en-IN')} — the services add up to ₹${value.toLocaleString('en-IN')}.`)
+  }
   assert(i.mode === 'Refundable' || i.mode === 'Non-Refundable', 'Pick the mode.')
   assert(i.bookingDate, 'Booking date is required.')
   if (isNew) {
-    assert(i.payments.length >= 1, 'Payment part 1 is required.')
+    assert(i.payments.length >= 1, 'Payment part 1 (the advance) is required.')
     i.payments.forEach((p, k) => {
       assert(p.amount > 0, `Enter the amount of payment part ${k + 1}.`)
       assert(p.date, `Enter the date of payment part ${k + 1}.`)
     })
     assert(i.payments[0]!.proof, 'Attach the proof of receiving payment part 1.')
-    assert(round2(i.payments.reduce((t, p) => t + p.amount, 0)) <= round2(i.totalQuoted), 'Payments cannot be more than the total quoted.')
   }
   assert(i.closedBy, 'Pick who closed the lead.')
   assert(i.successFee.value >= 0 && (i.successFee.type === 'AMOUNT' || i.successFee.value <= 100), 'Success fee must be 0 or more (a percentage up to 100). Enter 0 if the client did not agree.')
@@ -889,6 +1013,10 @@ function checkBooking(d: DB, i: BookingInput, isNew: boolean) {
 const comboDeadline = (from: string, months: number) => { const x = new Date(from + 'T00:00:00'); x.setMonth(x.getMonth() + months); return ymd(x) }
 const serviceTitle = (names: string[], combo?: number) => (combo ? `Combo ${combo === 12 ? '1 year' : `${combo} months`}: ` : '') + names.join(' + ')
 
+/**
+ * A new CRM entry goes straight to Accounts (no Team Leader approval step). The total quoted is the advance taken
+ * from the client (payment part 1); later parts are added as balance payments and count in the month they were paid.
+ */
 export function createBooking(me: User, i: BookingInput) {
   need(me, 'bookings.create')
   const svcs = checkBooking(getDb(), i, true)
@@ -896,8 +1024,9 @@ export function createBooking(me: User, i: BookingInput) {
     const first = svcs[0]!.s
     const gstRate = Math.max(...svcs.map((x) => x.s.gstRate))
     const isTL = rolesOf(me).includes('teamlead')
+    // the team leader is kept for reports and their dashboard; they no longer approve the entry
     const tl = isTL ? me.id : i.teamLeadId || me.teamLeadId
-    assert(tl, 'Pick the team leader this client goes to.')
+    const months = comboMonths(i.bookingType)
     const at = nowIso()
     const payments = i.payments.map((p, k) => {
       const amount = round2(p.amount), gst = round2((amount * gstRate) / 100)
@@ -907,29 +1036,31 @@ export function createBooking(me: User, i: BookingInput) {
       id: uid('bk-'), bookingId: `RX-${new Date().getFullYear()}-${String(d.counters.booking++).padStart(6, '0')}`,
       companyName: i.companyName.trim(), address: i.companyAddress.trim(), contactPerson: i.contactPerson.trim(), mobile: normPhone(i.mobile), email: i.email.trim().toLowerCase(),
       pan: i.pan.toUpperCase(), gstin: i.gstin.toUpperCase(), city: i.city.trim(), state: i.state, industry: i.industry.trim(),
-      serviceId: first.id, serviceName: serviceTitle(svcs.map((x) => x.s.name), i.combo),
+      serviceId: first.id, serviceName: serviceTitle(svcs.map((x) => x.s.name), months),
       services: svcs.map((x) => ({ serviceId: x.s.id, name: x.s.name, price: x.price })),
-      ...(i.combo ? { combo: { months: i.combo, startedOn: i.bookingDate, deadline: comboDeadline(i.bookingDate, i.combo) } } : {}),
+      bookingType: i.bookingType,
+      ...(months ? { combo: { months, startedOn: i.bookingDate, deadline: comboDeadline(i.bookingDate, months) } } : {}),
       mode: i.mode, successFeePct: i.successFee.type === 'PCT' ? i.successFee.value : 0, successFee: { ...i.successFee },
-      totalQuoted: round2(i.totalQuoted), gstRate, deduction: Math.max(...svcs.map((x) => x.s.deduction)),
+      // total quoted = the advance (payment part 1, before GST) — not the sum of the scheme prices
+      totalQuoted: round2(i.payments[0]!.amount), gstRate, deduction: Math.max(...svcs.map((x) => x.s.deduction)),
       paymentContact: normPhone(i.paymentContact), paymentEmail: i.paymentEmail.trim().toLowerCase() || undefined,
       bookingDate: i.bookingDate, closedBy: i.closedBy, remarks: i.remarks.trim(),
       payments,
-      createdBy: me.id, teamLeadId: tl, status: isTL ? 'PENDING_ACCOUNTS' : 'PENDING_TL',
-      approvals: isTL ? [{ id: uid('ap-'), level: 'Team Leader', action: 'APPROVED', by: me.id, at, remark: 'Submitted by team leader' }] : [],
+      createdBy: me.id, teamLeadId: tl, status: 'PENDING_ACCOUNTS',
+      approvals: [{ id: uid('ap-'), level: isTL ? 'Team Leader' : 'Sales', action: 'SUBMITTED', by: me.id, at, remark: 'Sent straight to Accounts' }],
       stage: 1, maxStage: 1, stageHistory: [],
       comments: [
         { id: uid('c-'), by: me.id, at, text: i.remarks.trim(), kind: 'Remarks' },
         ...(i.note?.trim() ? [{ id: uid('c-'), by: me.id, at, text: i.note.trim(), kind: 'Note for approvers' }] : []),
       ],
       documents: (i.documents ?? []).map((x) => ({ id: uid('doc-'), name: x.file.name, category: x.category, size: x.file.size, at, by: me.id, status: 'PENDING' as const, file: x.file })),
-      tasks: [], priority: i.priority, deadline: i.combo ? comboDeadline(i.bookingDate, i.combo) : ymd(addDays(new Date(), 30)), leadId: i.leadId,
+      tasks: [], priority: i.priority, deadline: months ? comboDeadline(i.bookingDate, months) : ymd(addDays(new Date(), 30)), leadId: i.leadId,
       createdAt: at, updatedAt: at,
     }
     d.bookings.unshift(b)
     if (i.leadId) { const l = d.leads.find((x) => x.id === i.leadId); if (l) l.status = 'CONVERTED' }
-    if (isTL) notify(d, usersWithRole(d, 'accounts').map((u) => u.id), 'New file for accounts', `${b.bookingId} · ${b.companyName}`, `/bookings/${b.id}`, 'action')
-    else notify(d, [tl], 'CRM entry waiting for you', `${b.bookingId} · ${b.companyName} by ${me.name}`, `/bookings/${b.id}`, 'action')
+    notify(d, usersWithRole(d, 'accounts').map((u) => u.id), 'New file for accounts', `${b.bookingId} · ${b.companyName} by ${me.name}`, `/bookings/${b.id}`, 'action')
+    if (tl && tl !== me.id) notify(d, [tl], 'Your team booked a client', `${b.bookingId} · ${b.companyName} by ${me.name} — sent to Accounts`, `/bookings/${b.id}`, 'info')
     audit(d, me.id, 'BOOKING_CREATE', `${b.bookingId} ${b.companyName} · ${b.serviceName}`)
     return b.id
   })
@@ -946,12 +1077,32 @@ export function addComboService(me: User, id: string, serviceId: string, price: 
     assert(s, 'Pick a service.')
     assert(!b.services?.some((x) => x.serviceId === serviceId), 'That service is already on this booking.')
     assert(!needsPriceSplit(s) || price > 0, `Enter the price for ${s.name}.`)
-    b.services = [...(b.services ?? []), { serviceId: s.id, name: s.name, price: round2(price || 0) }]
-    b.totalQuoted = round2(b.totalQuoted + (price || 0))
-    b.serviceName = serviceTitle(b.services.map((x) => x.name), b.combo.months)
+    const pkg = COMBO_PACKAGES[b.combo.months]
+    assert((b.services ?? []).filter((x) => !x.complimentary).length < comboCap(pkg), `${pkg.name} allows up to ${comboCap(pkg)} applications — this combo has them all.`)
+    b.services = [...(b.services ?? []), { serviceId: s.id, name: s.name, price: round2(price || 0), addedBy: me.id, addedAt: nowIso() }]
+    b.serviceName = serviceTitle(b.services.filter((x) => !x.complimentary).map((x) => x.name), b.combo.months)
     b.updatedAt = nowIso()
     notify(d, usersWithRole(d, 'accounts').map((u) => u.id), 'Service added to a combo booking', `${b.bookingId} · ${s.name}${price ? ` · ₹${price}` : ''}`, `/bookings/${b.id}`, 'info')
     audit(d, me.id, 'COMBO_ADD', `${b.bookingId}: ${s.name} ₹${price || 0}`)
+  })
+}
+
+/** The Operation team gives a client a complimentary (free) service on their file. It never changes the money. */
+export function addComplimentaryService(me: User, id: string, serviceId: string, note: string) {
+  need(me, 'bookings.process')
+  mutate((d) => {
+    const b = findB(d, id)
+    assert(!['REJECTED'].includes(b.status), 'This file was rejected.')
+    const s = d.services.find((x) => x.id === serviceId)
+    assert(s, 'Pick a service.')
+    assert(!b.services?.some((x) => x.serviceId === serviceId), 'That service is already on this file.')
+    assert(note.trim().length >= 3, 'Say why it is given (e.g. “promised at booking”).')
+    const at = nowIso()
+    b.services = [...(b.services ?? [{ serviceId: b.serviceId, name: b.serviceName, price: b.totalQuoted }]), { serviceId: s.id, name: s.name, price: 0, complimentary: true, addedBy: me.id, addedAt: at }]
+    b.comments.push({ id: uid('c-'), by: me.id, at, text: `Complimentary service: ${s.name} — ${note.trim()}`, kind: 'Operations' })
+    b.updatedAt = at
+    notify(d, [b.createdBy, ...usersWithRole(d, 'accounts').map((u) => u.id)].filter((x) => x !== me.id), 'Complimentary service added', `${b.bookingId} · ${s.name} (free)`, `/bookings/${b.id}`, 'info')
+    audit(d, me.id, 'COMPLIMENTARY_ADD', `${b.bookingId}: ${s.name}`)
   })
 }
 
@@ -1217,16 +1368,31 @@ export function setMaxStage(me: User, id: string, max: number) {
   })
 }
 
-export function addPayment(me: User, id: string, p: { amount: number; date: string; mode: string; proofName: string; proof?: FileRef }) {
+/** TDS the client kept back: 1–15 % of the amount before GST. */
+const tdsOf = (amount: number, pct: number) => {
+  assert(pct >= 1 && pct <= 15, 'TDS must be between 1% and 15%.')
+  return { pct: round2(pct), amount: round2((amount * pct) / 100) }
+}
+
+/**
+ * Part payment 2, 3, 4 … on a CRM entry (sales owner or Accounts). Each part keeps its own date, so it counts in the
+ * scorecard and collections of the month it was paid in. Accounts can mark that the client deducted TDS.
+ */
+export function addPayment(me: User, id: string, p: { amount: number; date: string; mode: string; proofName: string; proof?: FileRef; tdsPct?: number }) {
   mutate((d) => {
     const b = findB(d, id)
     const pr = effectivePerms(d, me)
     assert(b.createdBy === me.id || b.teamLeadId === me.id || pr.has('bookings.accounts'), 'Only the sales owner or accounts can add payments.')
     assert(p.amount > 0, 'Amount must be more than 0.')
+    assert(p.date && p.date <= today(), 'Enter the date the money was received (not in the future).')
     assert(p.proofName || p.proof, 'Attach the payment proof.')
+    assert(p.tdsPct == null || pr.has('bookings.accounts'), 'Only Accounts records TDS.')
     const amount = round2(p.amount)
     const gst = round2((amount * b.gstRate) / 100)
-    b.payments.push({ id: uid('pay-'), part: b.payments.length + 1, amount, gst, total: round2(amount + gst), date: p.date, mode: p.mode, proofName: p.proof?.name ?? p.proofName, proof: p.proof, recordedBy: me.id, verified: pr.has('bookings.accounts') })
+    b.payments.push({
+      id: uid('pay-'), part: b.payments.length + 1, amount, gst, total: round2(amount + gst), date: p.date, mode: p.mode, proofName: p.proof?.name ?? p.proofName, proof: p.proof,
+      recordedBy: me.id, verified: pr.has('bookings.accounts'), ...(p.tdsPct != null ? { tds: tdsOf(amount, p.tdsPct) } : {}),
+    })
     b.updatedAt = nowIso()
     if (!pr.has('bookings.accounts')) notify(d, usersWithRole(d, 'accounts').map((u) => u.id), 'Balance payment to verify', `${b.bookingId} · ₹${amount}`, `/bookings/${b.id}`, 'action')
     audit(d, me.id, 'PAYMENT_ADD', `${b.bookingId} part ${b.payments.length} ₹${amount}`)
@@ -1242,6 +1408,82 @@ export function verifyPayment(me: User, id: string, payId: string, ok: boolean) 
     if (ok) p.verified = true
     else b.payments = b.payments.filter((x) => x.id !== payId)
     audit(d, me.id, ok ? 'PAYMENT_VERIFY' : 'PAYMENT_REMOVE', `${b.bookingId} part ${p.part}`)
+  })
+}
+
+/** Accounts: the client paid this part after deducting TDS (pct 1–15), or not (null). */
+export function setPaymentTds(me: User, id: string, payId: string, pct: number | null) {
+  need(me, 'bookings.accounts')
+  mutate((d) => {
+    const b = findB(d, id)
+    const p = b.payments.find((x) => x.id === payId)
+    assert(p, 'Payment not found.')
+    if (pct == null) delete p.tds
+    else p.tds = tdsOf(p.amount, pct)
+    b.updatedAt = nowIso()
+    audit(d, me.id, 'PAYMENT_TDS', `${b.bookingId} part ${p.part}: ${pct == null ? 'no TDS' : `TDS ${pct}%`}`)
+  })
+}
+
+/** Accounts: commission to the CA / DSA who brought the client — optional, 5–30 % (null removes it). */
+export function setCommission(me: User, id: string, c: { to: 'CA' | 'DSA'; name: string; pct: number } | null) {
+  need(me, 'bookings.accounts')
+  mutate((d) => {
+    const b = findB(d, id)
+    if (!c) { delete b.commission; audit(d, me.id, 'COMMISSION', `${b.bookingId}: removed`); return }
+    assert(c.to === 'CA' || c.to === 'DSA', 'Pick CA or DSA.')
+    assert(c.name.trim().length >= 2, 'Enter the CA / DSA name.')
+    assert(c.pct >= 5 && c.pct <= 30, 'Commission must be between 5% and 30%.')
+    const base = round2(b.payments.reduce((t, p) => t + p.amount, 0))
+    b.commission = { to: c.to, name: c.name.trim(), pct: round2(c.pct), amount: round2((base * c.pct) / 100), by: me.id, at: nowIso() }
+    b.updatedAt = nowIso()
+    audit(d, me.id, 'COMMISSION', `${b.bookingId}: ${c.to} ${c.name.trim()} ${c.pct}%`)
+  })
+}
+/** Commission on what was collected so far (before GST) — it grows as balance payments come in. */
+export const commissionNow = (b: Booking) => (b.commission ? round2((b.payments.reduce((t, p) => t + p.amount, 0) * b.commission.pct) / 100) : 0)
+
+// ------------------------------------------------------------ refunds (Accounts only)
+/** Accounts records money to be paid back to a client (pending until it is actually refunded). */
+export function addRefund(me: User, id: string, r: { amount: number; date: string; reason: string }) {
+  need(me, 'refunds.manage')
+  mutate((d) => {
+    const b = findB(d, id)
+    assert(r.amount > 0, 'Enter the refund amount.')
+    assert(r.date, 'Enter the date.')
+    assert(r.reason.trim().length >= 3, 'Enter the reason for the refund.')
+    const collected = round2(b.payments.reduce((t, p) => t + p.total, 0))
+    const already = round2((b.refunds ?? []).reduce((t, x) => t + x.amount, 0))
+    assert(round2(already + r.amount) <= collected, `Refunds cannot be more than what the client paid (₹${collected}; ₹${already} already refunded or pending).`)
+    ;(b.refunds ??= []).push({ id: uid('rf-'), amount: round2(r.amount), date: r.date, reason: r.reason.trim(), status: 'PENDING', by: me.id, at: nowIso() })
+    b.updatedAt = nowIso()
+    audit(d, me.id, 'REFUND_ADD', `${b.bookingId} ₹${round2(r.amount)}`)
+  })
+}
+/** Accounts marks a refund as paid back (date, mode, UTR / cheque no.), or back to pending. */
+export function setRefundStatus(me: User, id: string, refundId: string, done: { refundedOn: string; mode: string; ref: string } | null) {
+  need(me, 'refunds.manage')
+  mutate((d) => {
+    const b = findB(d, id)
+    const r = b.refunds?.find((x) => x.id === refundId)
+    assert(r, 'Refund not found.')
+    if (done) {
+      assert(done.refundedOn && done.refundedOn <= today(), 'Enter the date it was refunded (not in the future).')
+      Object.assign(r, { status: 'REFUNDED', refundedOn: done.refundedOn, mode: done.mode, ref: done.ref.trim() || undefined })
+    } else Object.assign(r, { status: 'PENDING', refundedOn: undefined, mode: undefined, ref: undefined })
+    b.updatedAt = nowIso()
+    audit(d, me.id, 'REFUND_STATUS', `${b.bookingId} ₹${r.amount}: ${r.status}`)
+  })
+}
+export function deleteRefund(me: User, id: string, refundId: string) {
+  need(me, 'refunds.manage')
+  mutate((d) => {
+    const b = findB(d, id)
+    const r = b.refunds?.find((x) => x.id === refundId)
+    assert(r, 'Refund not found.')
+    assert(r.status === 'PENDING', 'A refund already paid back can’t be deleted — mark it pending first.')
+    b.refunds = b.refunds!.filter((x) => x.id !== refundId)
+    audit(d, me.id, 'REFUND_DELETE', `${b.bookingId} ₹${r.amount}`)
   })
 }
 
@@ -1421,8 +1663,13 @@ export function visibleInvoices(d: DB, me: User) {
   return d.invoices.filter((i) => i.salesPerson === me.id || i.createdBy === me.id)
 }
 
+/** The only service text on a proforma invoice. */
+export const PROFORMA_SERVICE = 'Consultancy services'
+
 export function createInvoice(me: User, i: { type: Invoice['type']; client: string; gstin: string; state: string; items: InvoiceItem[]; bookingId?: string; salesPerson?: string; due: string; clientAddress?: string; clientPan?: string; branchId?: string }) {
   need(me, 'billing.create', 'billing.manage')
+  // a proforma invoice always reads "Consultancy services" — the line can't be renamed
+  if (i.type === 'PROFORMA') i = { ...i, items: i.items.map((x) => ({ ...x, desc: PROFORMA_SERVICE, sac: x.sac || '998311' })) }
   assert(i.client.trim(), 'Client name is required.')
   assert(!i.gstin || isGstin(i.gstin), 'GSTIN format is invalid.')
   assert(i.items.length && i.items.every((x) => x.desc && x.qty > 0 && x.rate >= 0), 'Each line needs a description, quantity and rate.')
@@ -1449,10 +1696,14 @@ export function invoiceFromBooking(me: User, bookingId: string, type: Invoice['t
     type, client: b.companyName, gstin: b.gstin, state: b.state, bookingId: b.id, salesPerson: b.createdBy,
     clientAddress: [b.address, b.city, b.state].filter(Boolean).join(', '), clientPan: b.pan,
     due: ymd(addDays(new Date(), 15)),
-    // one line per service when the entry has a price bifurcation, else one line for the whole quote
-    items: b.services?.length && b.services.every((s) => s.price > 0)
-      ? b.services.map((s) => ({ desc: s.name, sac: '998311', qty: 1, rate: s.price, gstRate: b.gstRate }))
-      : [{ desc: b.serviceName, sac: '998311', qty: 1, rate: b.totalQuoted, gstRate: b.gstRate }],
+    // the invoice is for the total quoted (the advance): one line per service only when their prices add up to it
+    items: (() => {
+      const paid = (b.services ?? []).filter((s) => !s.complimentary && s.price > 0)
+      const sum = round2(paid.reduce((t, s) => t + s.price, 0))
+      return paid.length && paid.length === (b.services ?? []).filter((s) => !s.complimentary).length && Math.abs(sum - b.totalQuoted) < 0.01
+        ? paid.map((s) => ({ desc: s.name, sac: '998311', qty: 1, rate: s.price, gstRate: b.gstRate }))
+        : [{ desc: b.serviceName, sac: '998311', qty: 1, rate: b.totalQuoted, gstRate: b.gstRate }]
+    })(),
   })
 }
 
@@ -1754,6 +2005,44 @@ export function updateUser(me: User, id: string, patch: Partial<Pick<User, 'name
     }
     Object.assign(u, patch)
     audit(d, me.id, accessChange ? 'ACCESS_CHANGE' : 'USER_EDIT', u.name)
+  })
+}
+
+/**
+ * HR removes an employee who left: they can no longer sign in, their last day is recorded and their open leads go back
+ * to Unassigned. Nothing is deleted (attendance, payroll, client files stay); Restore brings them back.
+ */
+export function removeEmployee(me: User, id: string, lastDay: string, reason: string) {
+  need(me, 'employees.manage', 'access.manage')
+  return mutate((d) => {
+    const u = d.users.find((x) => x.id === id)
+    assert(u, 'Employee not found.')
+    assert(u.active, `${u.name} is already removed.`)
+    assert(u.id !== me.id, "You can't remove yourself.")
+    assert(!rolesOf(u).some((r) => MASTER_ROLES.includes(r)) || isSA(me), 'Only a Super Admin can remove a Super Admin or IT account.')
+    assert(u.role !== 'superadmin' || d.users.some((x) => x.role === 'superadmin' && x.active && x.id !== u.id), 'At least one active Super Admin must remain.')
+    assert(lastDay, 'Enter their last working day.')
+    assert(reason.trim().length >= 3, 'Enter the reason (e.g. resigned, contract ended).')
+    u.active = false
+    u.exitOn = lastDay
+    // their open leads go back for someone else to call
+    let freed = 0
+    for (const l of d.leads) if (l.assignedTo === u.id && OPEN_LEAD.includes(l.status)) { l.assignedTo = undefined; l.assignedAt = undefined; leadEvent(l, me.id, `Back to Unassigned — ${u.name} left`); freed++ }
+    // nobody keeps them as team leader
+    for (const x of d.users) if (x.teamLeadId === u.id) x.teamLeadId = undefined
+    audit(d, me.id, 'EMPLOYEE_REMOVE', `${u.name} · last day ${lastDay} · ${reason.trim()}${freed ? ` · ${freed} lead(s) unassigned` : ''}`)
+    return freed
+  })
+}
+export function restoreEmployee(me: User, id: string) {
+  need(me, 'employees.manage', 'access.manage')
+  mutate((d) => {
+    const u = d.users.find((x) => x.id === id)
+    assert(u && !u.active, 'Employee not found or already active.')
+    assert(!rolesOf(u).some((r) => MASTER_ROLES.includes(r)) || isSA(me), 'Only a Super Admin can restore a Super Admin or IT account.')
+    u.active = true
+    u.exitOn = undefined
+    audit(d, me.id, 'EMPLOYEE_RESTORE', u.name)
   })
 }
 

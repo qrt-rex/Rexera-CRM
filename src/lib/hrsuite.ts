@@ -129,7 +129,7 @@ export function upgradeDb(d: DB): DB {
   }
   if (!d.upgrades.includes('branch-dashboards-1')) {
     // short codes for the three company branches (editable in Access → Settings)
-    const codes: Record<string, string> = { 'br-amd-a': 'AMD-A', 'br-amd-y': 'AMD-Y', 'br-vdr': 'VDR' }
+    const codes: Record<string, string> = { 'br-amd-a': 'AMD-A', 'br-amd-y': 'AMD-Y', 'br-vdr': 'BRD' }
     for (const b of d.settings.branches ?? []) if (!b.code && codes[b.id]) b.code = codes[b.id]
     // one sample Branch Director per branch (shared demo password), each tied to their own branch
     const demo: [string, string, string, string, string][] = [
@@ -151,6 +151,12 @@ export function upgradeDb(d: DB): DB {
       })
     }
     d.upgrades.push('branch-dashboards-1')
+  }
+  if (!d.upgrades.includes('crm-requests-1')) {
+    // Accounts keeps refund entries; Vadodara is called BRD (Baroda) in the company
+    d.rolePerms.accounts = [...new Set([...(d.rolePerms.accounts ?? []), 'refunds.manage' as Perm])]
+    for (const b of d.settings.branches ?? []) if (b.id === 'br-vdr' && (!b.code || b.code === 'VDR')) b.code = 'BRD'
+    d.upgrades.push('crm-requests-1')
   }
   d.assets ??= []
   d.stock ??= []

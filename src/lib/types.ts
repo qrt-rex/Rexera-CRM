@@ -1,12 +1,12 @@
 export type Role = 'superadmin' | 'admin' | 'accounts' | 'legal' | 'operations' | 'teamlead' | 'sales' | 'hr' | 'it' | 'support' | 'branchdirector'
 
 export type Perm =
-  | 'leads.own' | 'leads.manage' | 'leads.assign' | 'dialer.use'
+  | 'leads.own' | 'leads.manage' | 'leads.assign' | 'leads.admin' | 'dialer.use'
   | 'bookings.create' | 'bookings.own' | 'bookings.team' | 'bookings.all'
   | 'bookings.approve_tl' | 'bookings.accounts' | 'bookings.legal' | 'bookings.process' | 'bookings.admin'
   | 'content.view' | 'content.manage' | 'salesinfo.manage' | 'schemes.view' | 'schemes.manage'
   | 'broadcasts.view' | 'broadcasts.manage'
-  | 'billing.own' | 'billing.create' | 'billing.manage'
+  | 'billing.own' | 'billing.create' | 'billing.manage' | 'refunds.manage'
   | 'team.progress' | 'team.assign'
   | 'attendance.all' | 'leave.approve'
   | 'employees.view' | 'employees.manage'
@@ -32,6 +32,8 @@ export interface User {
   department: string
   designation: string
   joinedOn: string
+  /** last working day (set when HR removes the employee) */
+  exitOn?: string
   active: boolean
   passHash: string
   photo?: string
@@ -135,6 +137,26 @@ export interface Payment {
   dateUnknown?: boolean
   /** attachment proving the payment was received */
   proof?: FileRef
+  /** the client paid after deducting TDS (1–15 %, 10 % by default): `amount` is the TDS kept back on this payment */
+  tds?: { pct: number; amount: number }
+}
+
+/** How a CRM entry is booked: one service, several services, or a combo package (3 / 6 / 9 / 12 months). */
+export type BookingType = 'SINGLE' | 'MULTIPLE' | 'COMBO3' | 'COMBO6' | 'COMBO9' | 'COMBO12'
+/** Money paid back to a client (Accounts only). */
+export interface Refund {
+  id: string
+  amount: number
+  /** the day the refund was asked for / agreed */
+  date: string
+  reason: string
+  status: 'PENDING' | 'REFUNDED'
+  refundedOn?: string
+  mode?: string
+  /** UTR / cheque no. */
+  ref?: string
+  by: string
+  at: string
 }
 
 export interface Approval { id: string; level: string; action: string; by: string; at: string; remark: string }
@@ -205,9 +227,15 @@ export interface Booking {
   /** why stage 8 is Rejected / Re-submission / Hold */
   stageReason?: string
   /** every service on the entry with its price (bifurcation); serviceId / serviceName mirror the first / all names */
-  services?: { serviceId: string; name: string; price: number }[]
-  /** combo booking: services can be added until the deadline (3, 6 or 12 months from the booking date) */
-  combo?: { months: 3 | 6 | 12; startedOn: string; deadline: string; deadlineNotified?: boolean }
+  services?: BookingService[]
+  /** combo booking: services can be added until the deadline (3, 6, 9 or 12 months from the booking date) */
+  combo?: { months: 3 | 6 | 9 | 12; startedOn: string; deadline: string; deadlineNotified?: boolean }
+  /** Single / Multiple / Combo (older entries: worked out from the services and combo) */
+  bookingType?: BookingType
+  /** commission to the CA / DSA who brought the client (Accounts, optional): 5–30 % */
+  commission?: { to: 'CA' | 'DSA'; name: string; pct: number; amount: number; by: string; at: string }
+  /** money paid back to the client (Accounts only) */
+  refunds?: Refund[]
   paymentContact?: string
   paymentEmail?: string
   /** booking date entered by sales (createdAt keeps the exact date and time of entry) */
@@ -230,7 +258,13 @@ export interface ClientEmailLog {
   error?: string
 }
 
-export interface Service { id: string; name: string; category: string; price: number; gstRate: number; deduction: number; active: boolean }
+/** A service on a CRM entry; `complimentary` ones are given free by the Operation team. */
+export interface BookingService { serviceId: string; name: string; price: number; complimentary?: boolean; addedBy?: string; addedAt?: string }
+export interface Service {
+  id: string; name: string; category: string; price: number; gstRate: number; deduction: number; active: boolean
+  /** price by booking type (Single uses `price`); blank = same as Single */
+  prices?: Partial<Record<BookingType, number>>
+}
 
 export interface InvoiceItem { desc: string; sac: string; qty: number; rate: number; gstRate: number }
 export interface Invoice {
@@ -380,7 +414,11 @@ export interface Settings {
   dayLock?: boolean
   branches?: Branch[]
   breakPolicy?: BreakPolicy
+  /** automatic lead assignment (round robin): new website / CSV / manual leads go to these people in turn */
+  leadAssign?: LeadAssign
 }
+/** Round robin: `next` is the position in `userIds` that gets the next lead (wraps back to the first person). */
+export interface LeadAssign { on: boolean; userIds: string[]; next: number }
 
 export type ApiScope = 'leads:read' | 'leads:write' | 'bookings:read' | 'billing:read' | 'reports:read' | 'webhooks:send'
 export interface ApiKey {
@@ -446,6 +484,10 @@ export interface PayRow {
   incentive: number
   /** net salary (for runs saved before the salary-structure change, this still includes the incentive) */
   net: number
+  /** salary paid to this person (date, UTR / cheque no., who marked it) — Salary Paid / Not Paid */
+  paidOn?: string
+  paidRef?: string
+  paidBy?: string
 }
 export type PayrollStatus = 'CALCULATED' | 'APPROVED' | 'FINALIZED' | 'PAID'
 export interface PayrollRun {
@@ -541,6 +583,8 @@ export interface Expense {
   vendor?: string
   paidVia: 'CASH' | 'UPI' | 'BANK' | 'CARD' | 'CHEQUE'
   paidBy?: string
+  /** branch the expense belongs to (AMD-A, AMD-Y, BRD …); none = all branches / head office */
+  branchId?: string
   bill?: FileRef
   by: string
   createdAt: string

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { AlertTriangle, Briefcase, ChevronDown, Download, Forward, Pencil, Plus, Trash2, Upload, UserPlus, Users } from 'lucide-react'
+import { AlertTriangle, Briefcase, ChevronDown, Download, Forward, Globe, Pencil, Plus, Shuffle, Trash2, Upload, UserPlus, Users } from 'lucide-react'
 import type { Lead, LeadStatus } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
@@ -15,6 +15,7 @@ import {
 } from '../../components/ui'
 import { LeadFormModal } from '../../components/LeadForm'
 import { LeadUploadHistory, LeadUploadModal } from '../../components/LeadUpload'
+import { AutoAssignModal, ShareLeadsModal, WebsiteFormModal } from '../../components/LeadSharing'
 import { CallLogger } from './Dialer'
 
 type View = 'open' | 'due' | 'new' | 'pending' | 'unassigned' | 'CONVERTED' | 'closed' | 'all' | 'uploads'
@@ -23,6 +24,8 @@ const STATUS_CLS: Record<string, string> = {
   violet: 'border-violet-300 bg-violet-500/10 text-violet-700 dark:text-violet-300', red: 'border-bad/30 bg-bad-soft text-bad', green: 'border-ok/30 bg-ok-soft text-ok',
   cyan: 'border-cyan-300 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300', orange: 'border-orange-300 bg-orange-500/10 text-orange-700 dark:text-orange-300',
 }
+/** Where a lead came from, grouped: website form, CSV / Excel upload, IVR, or the source picked when added by hand. */
+const sourceKind = (s: string) => (/^website/i.test(s) ? 'Website (rexera.co.in)' : /^uploaded/i.test(s) ? 'CSV / Excel upload' : /ivr/i.test(s) ? 'IVR' : s.trim() || 'Added by hand')
 /** These ask for something before saving: a follow-up date, a reason, or the deal value. */
 const needsDetails = (s: LeadStatus) => FOLLOW_UP_LEAD.includes(s) || s === 'NOT_INTERESTED' || s === 'CONVERTED'
 /** "Assigned by A → B, forwarded by B → C" */
@@ -46,6 +49,10 @@ export default function Leads() {
   const [form, setForm] = useState<{ open: boolean; lead?: Lead }>({ open: false })
   const [assign, setAssign] = useState({ open: false, to: '', note: '' })
   const [upload, setUpload] = useState(false)
+  const [autoOpen, setAutoOpen] = useState(false)
+  const [webOpen, setWebOpen] = useState(false)
+  const [share, setShare] = useState<string[]>([])
+  const [source, setSource] = useState('')
   const [status, setStatus] = useState<{ lead: Lead; status: LeadStatus; note: string; followUp: string; value: string } | null>(null)
   const [fwd, setFwd] = useState<{ lead: Lead; to: string; note: string } | null>(null)
   // leads given to me that I hadn't opened: shown as "New" this visit, then marked seen
@@ -79,10 +86,13 @@ export default function Leads() {
       if (view === 'CONVERTED' && l.status !== 'CONVERTED') return false
       if (view === 'closed' && !CLOSED_LEAD.includes(l.status)) return false
       if (disp && l.status !== disp) return false
+      if (source && sourceKind(l.source) !== source) return false
       if (owner && (l.assignedTo ?? '') !== (owner === 'none' ? '' : owner)) return false
       return !s || [l.name, l.company, l.phone, l.code, l.city, l.service, l.email, l.altPhone ?? ''].some((x) => x.toLowerCase().includes(s))
     }).sort((a, b) => Number(isOverdueLead(b)) - Number(isOverdueLead(a)) || (a.followUp ?? '9').localeCompare(b.followUp ?? '9') || b.createdAt.localeCompare(a.createdAt))
-  }, [all, q, view, owner, disp, t, unseen])
+  }, [all, q, view, owner, disp, source, t, unseen])
+  const sources = useMemo(() => [...new Set(all.map((l) => sourceKind(l.source)))].sort(), [all])
+  const auto = db.settings.leadAssign
 
   const owners = db.users.filter((u) => u.active && rolesOf(u).some((r) => r === 'sales' || r === 'teamlead') && (can('leads.manage') || u.teamLeadId === me.id || u.id === me.id))
   const colleagues = db.users.filter((u) => u.active && u.id !== me.id && rolesOf(u).some((r) => r === 'sales' || r === 'teamlead'))
@@ -107,6 +117,8 @@ export default function Leads() {
     <div>
       <PageHeader title="CRM Leads" subtitle={can('leads.manage') ? 'All leads across the company' : assigner ? 'Your leads and your team’s' : 'Leads assigned to you'} icon={UserPlus}
         actions={<>
+          {can('leads.admin') && <Button variant="outline" icon={Globe} onClick={() => setWebOpen(true)}>Website form</Button>}
+          {can('leads.admin') && <Button variant={auto?.on ? 'soft' : 'outline'} icon={Shuffle} onClick={() => setAutoOpen(true)}>Auto-assign · {auto?.on ? `on (${auto.userIds.length})` : 'off'}</Button>}
           {sa && <Button variant="outline" icon={Upload} onClick={() => setUpload(true)}>Upload leads</Button>}
           <Button variant="outline" icon={Download} onClick={() => downloadCsv(`leads-${t}.csv`, list.map((l) => ({
             code: l.code, name: l.name, company: l.company, phone: l.phone, alternate_phone: l.altPhone ?? '', email: l.email, city: l.city, state: l.state, location: l.location ?? '',
@@ -138,11 +150,19 @@ export default function Leads() {
             <select value={disp} onChange={(e) => setDisp(e.target.value as LeadStatus | '')} className="h-10 rounded-xl border border-line bg-card px-3 text-sm" aria-label="Filter by disposition">
               <option value="">All dispositions</option>{(Object.keys(LEAD_STATUS) as LeadStatus[]).map((s) => <option key={s} value={s}>{LEAD_STATUS[s].label}</option>)}
             </select>
+            {can('leads.admin') && sources.length > 1 && (
+              <select value={source} onChange={(e) => setSource(e.target.value)} className="h-10 rounded-xl border border-line bg-card px-3 text-sm" aria-label="Filter by source">
+                <option value="">All sources</option>{sources.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            )}
             {assigner && (
               <select value={owner} onChange={(e) => setOwner(e.target.value)} className="h-10 rounded-xl border border-line bg-card px-3 text-sm" aria-label="Filter by owner">
                 <option value="">Everyone</option><option value="none">Unassigned</option>
                 {owners.map((u) => <option key={u.id} value={u.id}>{u.name}{overdueLeadsOf(db, u.id).length ? ` · ${overdueLeadsOf(db, u.id).length} overdue` : ''}</option>)}
               </select>
+            )}
+            {can('leads.admin') && view === 'unassigned' && counts.unassigned > 0 && (
+              <Button size="sm" variant="soft" icon={Shuffle} onClick={() => setShare(all.filter((l) => !l.assignedTo && OPEN_LEAD.includes(l.status)).map((l) => l.id))}>Share all {counts.unassigned} equally</Button>
             )}
             {can('leads.manage') && view === 'unassigned' && counts.unassigned > 0 && (
               <Button size="sm" variant="ghost" icon={Trash2} className="text-bad" onClick={async () => { if (await confirm('Delete all unassigned leads?', `${counts.unassigned} lead(s) nobody has been given are deleted, with their history.`, true)) run(() => deleteUnassignedLeads(me), 'Unassigned leads deleted') }}>Delete all unassigned</Button>
@@ -153,6 +173,7 @@ export default function Leads() {
           <div className="flex flex-wrap items-center gap-2 border-b border-line bg-brand-soft/50 px-4 py-2 text-sm">
             <b>{sel.length} selected</b>
             {assigner && <Button size="sm" variant="soft" icon={Users} onClick={() => setAssign({ open: true, to: '', note: '' })}>Assign</Button>}
+            {can('leads.admin') && <Button size="sm" variant="soft" icon={Shuffle} onClick={() => setShare(sel)}>Share equally</Button>}
             {can('leads.manage') && <Button size="sm" variant="ghost" icon={Trash2} className="text-bad" onClick={async () => { if (await confirm('Delete leads?', `${sel.length} lead(s) and their call history will be removed.`, true)) { run(() => deleteLeads(me, sel), 'Deleted'); setSel([]) } }}>Delete</Button>}
             <button className="ml-auto text-xs text-mute hover:underline" onClick={() => setSel([])}>Clear</button>
           </div>
@@ -175,7 +196,7 @@ export default function Leads() {
                         <span className="block text-xs text-mute">{l.company || '—'} · <span className="font-mono">{l.phone}</span></span>
                       </button>
                     </Td>
-                    <Td><span className="block max-w-48 truncate">{l.service || l.requirement || '—'}</span><span className="text-xs text-mute">{l.price != null ? inr(l.price) : 'No price'} · {l.source}</span></Td>
+                    <Td><span className="block max-w-48 truncate">{l.service || l.requirement || '—'}</span><span className="flex items-center gap-1 text-xs text-mute">{l.price != null ? inr(l.price) : 'No price'} · {/^website/i.test(l.source) && <Globe className="size-3 text-info" />}{l.source}</span></Td>
                     <Td>
                       <select value={l.status} aria-label={`Disposition of ${l.name}`} onChange={(e) => pickStatus(l, e.target.value as LeadStatus)}
                         className={`h-8 rounded-lg border px-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand/20 ${STATUS_CLS[LEAD_STATUS[l.status].tone] ?? 'border-line bg-card'}`}>
@@ -206,6 +227,9 @@ export default function Leads() {
 
       <LeadFormModal open={form.open} lead={form.lead} onClose={() => setForm({ open: false })} />
       {sa && <LeadUploadModal open={upload} onClose={() => { setUpload(false); setView('unassigned') }} />}
+      {autoOpen && <AutoAssignModal open onClose={() => setAutoOpen(false)} />}
+      <WebsiteFormModal open={webOpen} onClose={() => setWebOpen(false)} />
+      {share.length > 0 && <ShareLeadsModal ids={share} onClose={() => setShare([])} onDone={() => setSel([])} />}
 
       <Modal open={assign.open} onClose={() => setAssign({ ...assign, open: false })} title={`Assign ${sel.length} lead(s)`} size="sm"
         footer={<><Button variant="outline" onClick={() => setAssign({ ...assign, open: false })}>Cancel</Button><Button disabled={!assign.to} onClick={async () => { if (await run(() => assignLeads(me, sel, assign.to, assign.note), 'Leads assigned')) { setAssign({ open: false, to: '', note: '' }); setSel([]) } }}>Assign</Button></>}>

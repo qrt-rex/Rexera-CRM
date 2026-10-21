@@ -10,7 +10,7 @@
     "typecheck": "tsc -b",
     "db:migrate": "node supabase/migrate-from-backup.mjs",
     "db:password": "node supabase/set-password.mjs",
-    "db:check": "node server/blutecWebhook.test.mjs && node src/lib/leadUpload.test.mjs && node supabase/cloud-sync.test.mjs && node supabase/backup-mapping.test.mjs",
+    "db:check": "node server/blutecWebhook.test.mjs && node server/websiteLeads.test.mjs && node src/lib/leadUpload.test.mjs && node supabase/cloud-sync.test.mjs && node supabase/backup-mapping.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

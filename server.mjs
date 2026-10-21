@@ -8,6 +8,7 @@ import { checkClientEmail, renderClientEmail } from './supabase/functions/_share
 import { aiConfig, aiOverLimit, answerAi, checkAiRequest } from './server/ai.mjs'
 import { crmUser, setPassword } from './server/users.mjs'
 import { receive as receiveBlutecWebhook } from './server/blutecWebhook.mjs'
+import { receiveWebsiteLead } from './server/websiteLeads.mjs'
 import { incentiveReport, reportConfig } from './server/incentives.mjs'
 import { blutecEnv, handleBlutec } from './supabase/functions/_shared/blutec.ts'
 
@@ -158,6 +159,22 @@ async function handleBlutecWebhook(req, res, kind) {
   sendJson(res, answer.status, answer.body)
   if (answer.status !== 200) console.warn(`[blutec webhook ${kind}] refused: ${answer.body.message}`)
   work?.catch((e) => console.error(`[blutec webhook ${kind}] ${e.message}`))
+}
+
+/** Website enquiry form → CRM lead (server/websiteLeads.mjs). A plain HTML form with a thank-you URL is redirected there. */
+async function handleWebsiteLead(req, res) {
+  let raw
+  try { raw = await readRawBody(req, 64_000) } catch { return sendJson(res, 413, { success: false, message: 'Payload too large' }) }
+  const ip = String(req.headers['x-forwarded-for'] ?? req.socket.remoteAddress ?? '').split(',')[0].trim()
+  try {
+    const r = await receiveWebsiteLead(getEnv, { contentType: req.headers['content-type'], raw, ip, headerKey: req.headers['x-website-key'] })
+    if (r.status !== 200) console.warn(`[website lead] ${r.status}: ${r.body.message}`)
+    if (r.redirect && r.status === 200) { res.writeHead(303, { Location: r.redirect, 'Access-Control-Allow-Origin': '*' }); return res.end() }
+    sendJson(res, r.status, r.body)
+  } catch (e) {
+    console.error(`[website lead] ${e.message}`)
+    sendJson(res, 502, { success: false, message: 'Sorry, the enquiry could not be saved — please call us.' })
+  }
 }
 
 function readJsonBody(req) {
@@ -530,7 +547,7 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Website-Key',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     })
     res.end()
@@ -574,6 +591,10 @@ const server = http.createServer(async (req, res) => {
 
   if ((pathname === '/api/blutec/webhook/ivr' || pathname === '/api/blutec/webhook/calls') && req.method === 'POST') {
     return handleBlutecWebhook(req, res, pathname.endsWith('/ivr') ? 'ivr' : 'calls')
+  }
+
+  if (pathname === '/api/website-lead' && req.method === 'POST') {
+    return handleWebsiteLead(req, res)
   }
 
   if (pathname === '/api/blutec' && req.method === 'POST') {

@@ -25,6 +25,9 @@ const Schemes = lazy(() => import('./pages/modules/Schemes'))
 const Content = lazy(() => import('./pages/modules/Content'))
 const Broadcasts = lazy(() => import('./pages/modules/Broadcasts'))
 const Billing = lazy(() => import('./pages/modules/Billing'))
+const Refunds = lazy(() => import('./pages/modules/Refunds'))
+const Services = lazy(() => import('./pages/modules/Services'))
+const SalaryStatus = lazy(() => import('./pages/hr/SalaryStatus'))
 const InvoiceView = lazy(() => import('./pages/modules/InvoiceView'))
 const Attendance = lazy(() => import('./pages/modules/Attendance'))
 const Leave = lazy(() => import('./pages/modules/Leave'))
@@ -152,6 +155,9 @@ export default function App() {
               <Route path="/content" element={<Guard m="content"><S><Content /></S></Guard>} />
               <Route path="/broadcasts" element={<Guard m="broadcasts"><S><Broadcasts /></S></Guard>} />
               <Route path="/billing" element={<Guard m="billing"><S><Billing /></S></Guard>} />
+              <Route path="/refunds" element={<Guard m="refunds"><S><Refunds /></S></Guard>} />
+              <Route path="/services" element={<Guard m="services"><S><Services /></S></Guard>} />
+              <Route path="/salary-status" element={<Guard m="salary-status"><S><SalaryStatus /></S></Guard>} />
               <Route path="/billing/:id" element={<Guard m="billing"><S><InvoiceView /></S></Guard>} />
               <Route path="/attendance" element={<S><Attendance /></S>} />
               <Route path="/leave" element={<S><Leave /></S>} />

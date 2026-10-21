@@ -173,7 +173,7 @@ export function deleteStockItem(me: User, id: string) {
 export const lowStock = (s: StockItem) => s.qty <= s.minQty
 
 // ------------------------------------------------------------------ expenses
-export type ExpenseInput = Pick<Expense, 'date' | 'category' | 'description' | 'amount' | 'gst' | 'paidVia'> & Partial<Pick<Expense, 'vendor' | 'paidBy' | 'bill'>>
+export type ExpenseInput = Pick<Expense, 'date' | 'category' | 'description' | 'amount' | 'gst' | 'paidVia'> & Partial<Pick<Expense, 'vendor' | 'paidBy' | 'bill' | 'branchId'>>
 
 export function saveExpense(me: User, i: ExpenseInput, id?: string) {
   need(me)
@@ -184,7 +184,9 @@ export function saveExpense(me: User, i: ExpenseInput, id?: string) {
   assert(Number.isFinite(i.gst) && i.gst >= 0 && i.gst <= i.amount, 'GST must be between 0 and the amount.')
   return mutate((d) => {
     d.expenses ??= []
-    const base = { date: i.date, category: i.category, description: i.description.trim(), amount: round2(i.amount), gst: round2(i.gst), paidVia: i.paidVia, vendor: i.vendor?.trim() || undefined, paidBy: i.paidBy || undefined, bill: i.bill }
+    // a branch's own expense (AMD-A, AMD-Y, BRD …), or none = shared by all branches / head office
+    assert(!i.branchId || (d.settings.branches ?? []).some((b) => b.id === i.branchId), 'Pick a branch from the list.')
+    const base = { date: i.date, category: i.category, description: i.description.trim(), amount: round2(i.amount), gst: round2(i.gst), paidVia: i.paidVia, vendor: i.vendor?.trim() || undefined, paidBy: i.paidBy || undefined, bill: i.bill, branchId: i.branchId || undefined }
     if (id) {
       const e = d.expenses.find((x) => x.id === id)
       assert(e, 'Expense not found.')

@@ -4,9 +4,9 @@ import { Download, FilePlus2, IndianRupee, Plus, Receipt, Trash2, Wallet, AlertC
 import type { Invoice, InvoiceItem } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
-import { createInvoice, userName, visibleInvoices } from '../../lib/actions'
+import { createInvoice, PROFORMA_SERVICE, userName, visibleInvoices } from '../../lib/actions'
 import { INDIAN_STATES, addDays, downloadCsv, fmtDate, gstSplit, inr, invoiceTotals, today, ymd } from '../../lib/format'
-import { Badge, Button, Card, EmptyState, Input, Modal, PageHeader, SearchBox, Select, Table, Tabs, Td, Th, useRun } from '../../components/ui'
+import { Badge, Button, Card, cx, EmptyState, Input, Modal, PageHeader, SearchBox, Select, Table, Tabs, Td, Th, useRun } from '../../components/ui'
 import { MiniStat } from '../dashboards/widgets'
 
 const statusTone = { ISSUED: 'blue', PARTIALLY_PAID: 'amber', PAID: 'green', CANCELLED: 'gray' } as const
@@ -32,6 +32,7 @@ export default function Billing() {
   const [f, setF] = useState({ type: (can('billing.manage') ? 'TAX' : 'PROFORMA') as Invoice['type'], client: '', gstin: '', state: 'Gujarat', due: ymd(addDays(new Date(), 15)) })
   const [items, setItems] = useState<InvoiceItem[]>([{ desc: '', sac: '998311', qty: 1, rate: 0, gstRate: 18 }])
   const draft = invoiceTotals({ ...f, items, paid: 0 } as unknown as Invoice, st)
+  const proforma = f.type === 'PROFORMA'
 
   return (
     <div>
@@ -73,7 +74,7 @@ export default function Billing() {
       <Modal open={open} onClose={() => setOpen(false)} size="xl" title="New invoice" subtitle={`Supplier state ${st}: same state → CGST + SGST, otherwise IGST`}
         footer={<><Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button icon={FilePlus2} onClick={async () => { const id = await run(() => createInvoice(me, { ...f, items }), 'Invoice created'); if (typeof id === 'string') { setOpen(false); nav(`/billing/${id}`) } }}>Create {f.type === 'TAX' ? 'tax invoice' : 'proforma'}</Button></>}>
         <div className="grid gap-4 sm:grid-cols-3">
-          <Select label="Type" value={f.type} onChange={(e) => setF({ ...f, type: e.target.value as Invoice['type'] })}>{can('billing.manage') && <option value="TAX">Tax invoice</option>}<option value="PROFORMA">Proforma</option></Select>
+          <Select label="Type" value={f.type} onChange={(e) => { const type = e.target.value as Invoice['type']; setF({ ...f, type }); if (type === 'PROFORMA') setItems((x) => [{ ...x[0]!, desc: PROFORMA_SERVICE }]) }}>{can('billing.manage') && <option value="TAX">Tax invoice</option>}<option value="PROFORMA">Proforma</option></Select>
           <Input label="Client" required value={f.client} onChange={(e) => setF({ ...f, client: e.target.value })} className="sm:col-span-2" list="clients" />
           <datalist id="clients">{db.bookings.map((b) => <option key={b.id} value={b.companyName} />)}</datalist>
           <Input label="GSTIN" value={f.gstin} onChange={(e) => setF({ ...f, gstin: e.target.value.toUpperCase() })} maxLength={15} />
@@ -89,7 +90,9 @@ export default function Billing() {
                 const cls = 'h-9 w-full rounded-lg border border-line bg-card px-2'
                 return (
                   <tr key={i} className="border-t border-line">
-                    <td className="p-2"><input className={cls} value={it.desc} onChange={(e) => upd({ desc: e.target.value })} list="svcs" placeholder="Service" /></td>
+                    <td className="p-2">{proforma
+                      ? <input className={cx(cls, 'bg-card2 font-semibold')} value={PROFORMA_SERVICE} readOnly aria-label="Service (fixed on proforma invoices)" title="A proforma invoice always reads “Consultancy services”" />
+                      : <input className={cls} value={it.desc} onChange={(e) => upd({ desc: e.target.value })} list="svcs" placeholder="Service" />}</td>
                     <td className="p-2 w-24"><input className={cls} value={it.sac} onChange={(e) => upd({ sac: e.target.value })} /></td>
                     <td className="p-2 w-16"><input type="number" min={1} className={cls} value={it.qty} onChange={(e) => upd({ qty: Number(e.target.value) })} /></td>
                     <td className="p-2 w-28"><input type="number" min={0} className={cls} value={it.rate || ''} onChange={(e) => upd({ rate: Number(e.target.value) })} /></td>
@@ -104,7 +107,8 @@ export default function Billing() {
           <datalist id="svcs">{db.services.map((s) => <option key={s.id} value={s.name} />)}</datalist>
         </div>
         <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
-          <Button size="sm" variant="soft" icon={Plus} onClick={() => setItems([...items, { desc: '', sac: '998311', qty: 1, rate: 0, gstRate: 18 }])}>Add line</Button>
+          {proforma ? <p className="max-w-sm text-xs text-mute">A proforma invoice has one line, “{PROFORMA_SERVICE}” — enter the amount.</p>
+            : <Button size="sm" variant="soft" icon={Plus} onClick={() => setItems([...items, { desc: '', sac: '998311', qty: 1, rate: 0, gstRate: 18 }])}>Add line</Button>}
           <div className="w-64 space-y-1 text-sm">
             <div className="flex justify-between"><span className="text-mute">Taxable</span>{inr(draft.taxable)}</div>
             {draft.igst ? <div className="flex justify-between"><span className="text-mute">IGST</span>{inr(draft.igst)}</div> : <><div className="flex justify-between"><span className="text-mute">CGST</span>{inr(draft.cgst)}</div><div className="flex justify-between"><span className="text-mute">SGST</span>{inr(draft.sgst)}</div></>}

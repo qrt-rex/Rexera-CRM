@@ -68,7 +68,19 @@ db.settings.maintenance = { on: true, message: 'Upgrading', by: a.id, at }
 db.legacyFiles = [{ path: 'uploads/a.pdf', file: { id: 'lg-f-1', name: 'a.pdf', type: 'application/pdf', size: 5, at }, kind: 'KYC' }]
 db.assets = [{ id: 'as-1', tag: 'RX-AST-0001', name: 'Laptop', category: 'IT', serial: 'SN1', status: 'ASSIGNED', assignedTo: a.id, assignedOn: '2026-10-01', createdAt: at, history: [{ at, by: a.id, action: 'ADDED' }, { at, by: a.id, action: 'ASSIGNED', userId: a.id, note: 'new joiner' }] }]
 db.stock = [{ id: 'st-1', name: 'A4 paper', category: 'Stationery', unit: 'ream', qty: 9, minQty: 2, createdAt: at, moves: [{ at, by: a.id, qty: 10 }, { at, by: a.id, qty: -1, issuedTo: b.id }] }]
-db.expenses = [{ id: 'ex-1', date: '2026-10-10', category: 'Pantry', description: 'Tea', amount: 500, gst: 25, paidVia: 'UPI', by: a.id, createdAt: at }]
+db.expenses = [{ id: 'ex-1', date: '2026-10-10', category: 'Pantry', description: 'Tea', amount: 500, gst: 25, paidVia: 'UPI', by: a.id, createdAt: at, branchId: 'br-amd-a' }]
+// October requests: booking type, commission, refunds, TDS, complimentary service, service prices, auto-assign, salary paid
+Object.assign(bk, {
+  bookingType: 'COMBO6', commission: { to: 'DSA', name: 'Mehul Shah', pct: 12.5, amount: 2500, by: a.id, at },
+  refunds: [{ id: 'rf-1', amount: 1000, date: '2026-10-11', reason: 'Scheme closed', status: 'REFUNDED', refundedOn: '2026-10-12', mode: 'NEFT', ref: 'UTR123', by: a.id, at }, { id: 'rf-2', amount: 500, date: '2026-10-12', reason: 'Partial', status: 'PENDING', by: a.id, at }],
+  services: [...(bk.services ?? []), { serviceId: db.services[1].id, name: db.services[1].name, price: 0, complimentary: true, addedBy: a.id, addedAt: at }],
+})
+bk.payments[0].tds = { pct: 10, amount: 450 }
+db.services[0].prices = { MULTIPLE: 70000, COMBO12: 60000 }
+db.settings.leadAssign = { on: true, userIds: [a.id, b.id], next: 1 }
+db.users.push({ ...b, id: 'u-left', username: 'left.person', email: 'left@example.com', active: false, exitOn: '2026-10-15' })
+db.payrollRuns.push({ id: 'pr-x', month: '2026-09', status: 'PAID', provisional: false, calculatedAt: at, calculatedBy: a.id, history: [],
+  rows: [{ userId: a.id, name: a.name, designation: '', department: '', gross: 30000, daysInMonth: 30, paidDays: 30, lopDays: 0, lopAmount: 0, basic: 15000, pfWages: 15000, pfEmployee: 1800, pfEmployer: 1800, pt: 200, incentive: 0, net: 28000, ctc: 30000, hra: 6000, otherAllowance: 9000, paidOn: '2026-10-01', paidRef: 'UTR9', paidBy: a.id }] })
 db.leadUploads = [{ id: 'lup-1', fileName: 'leads oct.xlsx', size: 2048, totalRows: 3, imported: 1, by: a.id, at }]
 Object.assign(db.leads[0], {
   altPhone: '9123456780', location: 'SG Highway', industry: 'Retail', businessType: 'Proprietor', turnover: '0-20L', fundingAmount: '25L', fundingCategory: 'Grant',

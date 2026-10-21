@@ -1,10 +1,11 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { AlertTriangle, Briefcase, Building2, Calculator, CreditCard, FileText, IndianRupee, Layers, MessageSquareText, Plus, Save, Send, Trash2, Wallet } from 'lucide-react'
-import type { FileRef } from '../../lib/types'
+import { AlertTriangle, Briefcase, Building2, Calculator, CreditCard, FileText, IndianRupee, Layers, MessageSquareText, Package, Plus, Save, Send, Trash2, Wallet } from 'lucide-react'
+import type { BookingType, FileRef } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useMe } from '../../lib/auth'
-import { createBooking, findDuplicates, needsPriceSplit, updateBooking, usersWithRole, type BookingInput, type PaymentPartInput } from '../../lib/actions'
+import { createBooking, findDuplicates, needsPriceSplit, PAYMENT_MODES, updateBooking, type BookingInput, type PaymentPartInput } from '../../lib/actions'
+import { BOOKING_TYPES, COMBO_PACKAGES, comboCap, comboMonths, comboType, INDUSTRIES, isFundingService, priceFor } from '../../lib/catalog'
 import { DOC_TYPES } from '../../lib/files'
 import { addDays, fmtDate, inr, isEmail, isGstin, isPan, round2, today, ymd } from '../../lib/format'
 import { rolesOf } from '../../lib/rbac'
@@ -14,8 +15,8 @@ import { CityInput, PhoneInput, StateSelect } from '../../components/fields'
 import { FileField } from '../../components/FileField'
 import { DocUploader, type PendingDoc } from '../../components/DocUploader'
 
-const MODES = ['UPI', 'NEFT', 'RTGS', 'IMPS', 'Cheque', 'Card', 'Cash']
 const COMPANY_DOCS = ['Company PAN card', 'GST certificate', 'Certificate of Incorporation (COI)', 'MSME / Udyam certificate', 'CRM', 'Quotation (QT)', 'Agreement', 'Company documents', 'Other']
+const OTHER = '__other__'
 type Pay = PaymentPartInput & { proof?: FileRef }
 
 export default function BookingForm() {
@@ -35,21 +36,24 @@ export default function BookingForm() {
     contactPerson: existing.contactPerson, mobile: existing.mobile, email: existing.email, pan: existing.pan, gstin: existing.gstin,
     paymentContact: existing.paymentContact ?? existing.mobile, paymentEmail: existing.paymentEmail ?? '',
     services: existing.services?.map((s) => ({ serviceId: s.serviceId, price: s.price })) ?? [{ serviceId: existing.serviceId, price: existing.totalQuoted }],
-    combo: existing.combo?.months, totalQuoted: existing.totalQuoted, mode: existing.mode, bookingDate: existing.bookingDate ?? ymd(existing.createdAt),
+    bookingType: existing.bookingType ?? comboType(existing.combo?.months) ?? ((existing.services?.length ?? 1) > 1 ? 'MULTIPLE' : 'SINGLE'),
+    mode: existing.mode, bookingDate: existing.bookingDate ?? ymd(existing.createdAt),
     payments: [], closedBy: existing.closedBy ?? existing.createdBy,
     successFee: existing.successFee ?? { type: 'PCT', value: existing.successFeePct || 0 }, remarks: existing.remarks ?? '', priority: existing.priority, teamLeadId: existing.teamLeadId,
   } : {
     // a hot lead fills itself in; the sales person can change everything
-    companyName: lead?.company || lead?.name || '', companyAddress: '', city: lead?.city ?? '', state: lead?.state || (lead?.city ? stateForCity(lead.city) ?? '' : '') || 'Gujarat', industry: '',
+    companyName: lead?.company || lead?.name || '', companyAddress: '', city: lead?.city ?? '', state: lead?.state || (lead?.city ? stateForCity(lead.city) ?? '' : '') || 'Gujarat', industry: lead?.industry ?? '',
     contactPerson: lead?.name ?? '', mobile: lead?.phone ?? '', email: lead?.email ?? '', pan: '', gstin: '',
     paymentContact: lead?.phone ?? '', paymentEmail: '',
     services: [{ serviceId: svcFromLead?.id ?? '', price: lead?.price ?? svcFromLead?.price ?? 0 }],
-    combo: undefined, totalQuoted: lead?.price ?? svcFromLead?.price ?? 0, mode: 'Refundable', bookingDate: today(),
+    bookingType: 'SINGLE', mode: 'Refundable', bookingDate: today(),
     payments: [{ amount: 0, date: today(), mode: 'UPI' }], closedBy: me.id,
     successFee: { type: 'PCT', value: 0 }, remarks: '', note: '', priority: 'MEDIUM', teamLeadId: me.teamLeadId, leadId: lead?.id,
   })
   const [docs, setDocs] = useState<PendingDoc[]>([])
   const [tried, setTried] = useState(false)
+  // industry: picked from the list, or typed when it isn't there
+  const [otherIndustry, setOtherIndustry] = useState(() => !!f.industry && !(INDUSTRIES as readonly string[]).includes(f.industry))
   const set = <K extends keyof BookingInput>(k: K, v: BookingInput[K]) => setF((x) => ({ ...x, [k]: v }))
   const setPay = (i: number, patch: Partial<Pay>) => setF((x) => ({ ...x, payments: x.payments.map((p, j) => (j === i ? { ...p, ...patch } : p)) }))
   const setSvc = (i: number, patch: Partial<{ serviceId: string; price: number }>) => setF((x) => ({ ...x, services: x.services.map((s, j) => (j === i ? { ...s, ...patch } : s)) }))
@@ -57,18 +61,27 @@ export default function BookingForm() {
   const rows = f.services.map((x) => ({ ...x, s: db.services.find((s) => s.id === x.serviceId) }))
   const gstRate = Math.max(18, ...rows.map((r) => r.s?.gstRate ?? 18))
   const sumPrices = round2(rows.reduce((t, r) => t + (r.price || 0), 0))
-  const allPriced = rows.length > 0 && rows.every((r) => r.price > 0)
-  const quoteGst = round2((f.totalQuoted || 0) * (1 + gstRate / 100))
   const part1 = f.payments[0]?.amount || 0
   const paid = round2(f.payments.reduce((t, p) => t + (p.amount || 0), 0))
   const withGst = (n: number) => round2(n * (1 + gstRate / 100))
-  const advPct = f.totalQuoted ? Math.round((part1 / f.totalQuoted) * 1000) / 10 : 0
-  const comboEnd = f.combo ? (() => { const x = new Date(f.bookingDate + 'T00:00:00'); x.setMonth(x.getMonth() + f.combo!); return ymd(x) })() : ''
+  const months = comboMonths(f.bookingType)
+  const pkg = months ? COMBO_PACKAGES[months] : undefined
+  const comboEnd = months ? (() => { const x = new Date(f.bookingDate + 'T00:00:00'); x.setMonth(x.getMonth() + months); return ymd(x) })() : ''
   const dups = useMemo(() => findDuplicates(db, f, existing?.id), [db, f, existing?.id])
-  const tls = usersWithRole(db, 'teamlead')
   const isTL = rolesOf(me).includes('teamlead')
   const cats = [...new Set(db.services.map((s) => s.category))]
-  const minServices = f.combo ? 3 : 1
+  const minServices = f.bookingType === 'MULTIPLE' ? 2 : 1
+  const funding = rows.filter((r) => r.s && isFundingService(r.s))
+  const fundingUnpriced = funding.length > 0 && !funding.some((r) => r.price > 0)
+
+  /** Switching the type re-prices the picked services from the Services list (each type can have its own price). */
+  const pickType = (t: BookingType) => setF((x) => {
+    let services = x.services
+    if (t === 'SINGLE') services = services.slice(0, 1)
+    if (t === 'MULTIPLE' && services.length < 2) services = [...services, { serviceId: '', price: 0 }]
+    services = services.map((s) => { const svc = db.services.find((y) => y.id === s.serviceId); return svc ? { ...s, price: priceFor(svc, t) } : s })
+    return { ...x, bookingType: t, services }
+  })
 
   const e = tried ? {
     companyName: f.companyName.trim().length < 2 ? 'Required' : undefined,
@@ -78,7 +91,6 @@ export default function BookingForm() {
     email: !isEmail(f.email) ? 'A valid email is required' : undefined,
     pan: !isPan(f.pan) ? 'Required · ABCDE1234F' : undefined,
     gstin: f.gstin && !isGstin(f.gstin) ? '15 characters, e.g. 24ABCDE1234F1Z5' : undefined,
-    total: !(f.totalQuoted > 0) ? 'Required' : allPriced && Math.abs(sumPrices - f.totalQuoted) >= 0.01 ? `Services add up to ${inr(sumPrices)}` : undefined,
     remarks: f.remarks.trim().length < 3 ? 'Remarks are required' : undefined,
   } : {} as Record<string, string | undefined>
 
@@ -93,7 +105,7 @@ export default function BookingForm() {
       if (ok) nav(`/bookings/${existing.id}`)
       return
     }
-    const newId = await run(() => createBooking(me, { ...f, documents: docs }), isTL ? 'Submitted to Accounts' : 'Submitted to your team leader')
+    const newId = await run(() => createBooking(me, { ...f, documents: docs }), 'Submitted to Accounts')
     if (typeof newId === 'string') nav(`/bookings/${newId}`)
   }
 
@@ -120,7 +132,14 @@ export default function BookingForm() {
             <Input label="Contact person" required value={f.contactPerson} error={e.contactPerson} onChange={(ev) => set('contactPerson', ev.target.value)} />
             <PhoneInput label="Company mobile" required value={f.mobile} onChange={(v) => set('mobile', v)} />
             <Input label="Company email" required type="email" value={f.email} error={e.email} onChange={(ev) => set('email', ev.target.value)} />
-            <Input label="Industry" value={f.industry} onChange={(ev) => set('industry', ev.target.value)} placeholder="e.g. Food Processing" />
+            <div className="grid gap-2">
+              <Select label="Industry" value={otherIndustry ? OTHER : f.industry} onChange={(ev) => { const v = ev.target.value; if (v === OTHER) { setOtherIndustry(true); set('industry', '') } else { setOtherIndustry(false); set('industry', v) } }}>
+                <option value="">— Select industry —</option>
+                {INDUSTRIES.map((x) => <option key={x} value={x}>{x}</option>)}
+                <option value={OTHER}>Other (type it)</option>
+              </Select>
+              {otherIndustry && <Input aria-label="Other industry" value={f.industry} onChange={(ev) => set('industry', ev.target.value)} placeholder="Type the industry" />}
+            </div>
             <Input label="Company PAN" required value={f.pan} error={e.pan} onChange={(ev) => set('pan', ev.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))} maxLength={10} />
             <Input label="GST" value={f.gstin} error={e.gstin} onChange={(ev) => set('gstin', ev.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15))} maxLength={15} hint={f.state === db.settings.supplierState ? 'Same state: CGST + SGST' : 'Other state: IGST'} />
           </Block>
@@ -131,42 +150,52 @@ export default function BookingForm() {
           </Block>
 
           <Card className="overflow-hidden">
-            <CardHeader title="Services & quote" subtitle={`Price bifurcation is required for certification, website, logo and trade services${f.combo ? ' · combo needs at least 3 services' : ''}`} icon={Layers} />
+            <CardHeader title="Booking type & services" subtitle="Price bifurcation is compulsory for loans, certificates and other services · funding: one price is enough, the others can be 0" icon={Layers} />
             <div className="space-y-4 p-5">
               {!existing && (
-                <div className="flex flex-wrap gap-2">
-                  {([undefined, 3, 6, 12] as const).map((m) => (
-                    <button key={String(m)} type="button" onClick={() => setF((x) => ({ ...x, combo: m, services: m && x.services.length < 3 ? [...x.services, ...Array.from({ length: 3 - x.services.length }, () => ({ serviceId: '', price: 0 }))] : x.services }))}
-                      className={cx('rounded-full border px-4 py-1.5 text-sm font-semibold transition', f.combo === m ? 'border-brand bg-brand text-white' : 'border-line hover:bg-card2')}>
-                      {m === undefined ? 'Single booking' : `Combo · ${m === 12 ? '1 year' : `${m} months`}`}
+                <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Booking type">
+                  {BOOKING_TYPES.map((t) => (
+                    <button key={t.id} type="button" role="radio" aria-checked={f.bookingType === t.id} onClick={() => pickType(t.id)}
+                      className={cx('rounded-full border px-4 py-1.5 text-sm font-semibold transition', f.bookingType === t.id ? 'border-brand bg-brand text-white' : 'border-line hover:bg-card2')}>
+                      {t.label}
                     </button>
                   ))}
                 </div>
               )}
-              {f.combo && <p className="rounded-xl bg-info-soft px-3 py-2 text-xs text-info">Combo period: {fmtDate(f.bookingDate)} → {fmtDate(comboEnd)}. More services can be added to this booking until then; you'll be reminded a week before it ends.</p>}
+              {pkg && (
+                <div className="rounded-2xl border border-info/30 bg-info-soft p-4 text-sm">
+                  <p className="flex items-center gap-2 font-bold text-info"><Package className="size-4" />{pkg.name} · {pkg.tagline} · {pkg.months} months</p>
+                  <ul className="mt-1.5 grid gap-x-6 gap-y-0.5 text-xs text-ink/80 sm:grid-cols-2">
+                    <li>Applications at the start: <b>{pkg.minApps}–{pkg.maxApps}</b></li>
+                    <li>Then <b>{pkg.extraPerMonth} more a month</b> (up to {comboCap(pkg)} in all)</li>
+                    <li>Minimum package price: <b>{inr(pkg.minPrice)}</b> (before GST)</li>
+                    <li>Combo period: {fmtDate(f.bookingDate)} → <b>{fmtDate(comboEnd)}</b></li>
+                  </ul>
+                  {sumPrices < pkg.minPrice && <p className="mt-2 text-xs font-semibold text-bad">The services add up to {inr(sumPrices)} — at least {inr(pkg.minPrice)} is needed to book this combo.</p>}
+                </div>
+              )}
               <div className="space-y-2">
                 {rows.map((r, i) => {
                   const must = r.s ? needsPriceSplit(r.s) : false
+                  const fund = r.s ? isFundingService(r.s) : false
                   return (
                     <div key={i} className="grid grid-cols-[1fr_150px_auto] items-end gap-2">
                       <Select label={i === 0 ? 'Service' : undefined} required={i === 0} value={r.serviceId} disabled={!!existing} aria-label={`Service ${i + 1}`}
-                        onChange={(ev) => { const s = db.services.find((x) => x.id === ev.target.value); setSvc(i, { serviceId: ev.target.value, price: r.price || s?.price || 0 }) }}>
+                        onChange={(ev) => { const s = db.services.find((x) => x.id === ev.target.value); setSvc(i, { serviceId: ev.target.value, price: s ? priceFor(s, f.bookingType) : 0 }) }}>
                         <option value="">— Select a service —</option>
                         {cats.map((c) => <optgroup key={c} label={c}>{db.services.filter((s) => s.category === c && s.active).map((s) => <option key={s.id} value={s.id} disabled={f.services.some((x, j) => j !== i && x.serviceId === s.id)}>{s.name}</option>)}</optgroup>)}
                       </Select>
-                      <Input label={i === 0 ? 'Price (₹)' : undefined} type="number" inputMode="decimal" min={0} value={r.price || ''} disabled={!!existing} aria-label={`Price of service ${i + 1}`}
-                        onChange={(ev) => setSvc(i, { price: Number(ev.target.value) })} error={tried && must && !(r.price > 0) ? 'Required' : undefined} placeholder={must ? 'Required' : 'Optional'} />
+                      <Input label={i === 0 ? 'Price (₹)' : undefined} type="number" inputMode="decimal" min={0} value={r.price || (fund ? '0' : '')} disabled={!!existing} aria-label={`Price of service ${i + 1}`}
+                        onChange={(ev) => setSvc(i, { price: Number(ev.target.value) })}
+                        error={tried && ((must && !(r.price > 0)) || (fund && fundingUnpriced)) ? 'Required' : undefined} placeholder={must ? 'Required' : 'Can be 0'} />
                       <Button type="button" variant="ghost" icon={Trash2} aria-label={`Remove service ${i + 1}`} disabled={!!existing || f.services.length <= minServices} onClick={() => set('services', f.services.filter((_, j) => j !== i))} />
                     </div>
                   )
                 })}
-                {!existing && <Button type="button" size="sm" variant="soft" icon={Plus} onClick={() => set('services', [...f.services, { serviceId: '', price: 0 }])}>Add service</Button>}
+                {!existing && f.bookingType !== 'SINGLE' && (!pkg || f.services.length < comboCap(pkg)) && <Button type="button" size="sm" variant="soft" icon={Plus} onClick={() => set('services', [...f.services, { serviceId: '', price: 0 }])}>Add service</Button>}
+                {fundingUnpriced && <p className="text-xs text-warn">Enter the price of at least one funding service — the other funding services can stay 0.</p>}
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
-                <Input label="Total quoted (before GST)" required type="number" inputMode="decimal" min={0} value={f.totalQuoted || ''} disabled={!!existing} error={e.total}
-                  onChange={(ev) => set('totalQuoted', Number(ev.target.value))}
-                  hint={allPriced && Math.abs(sumPrices - f.totalQuoted) >= 0.01 ? undefined : `With ${gstRate}% GST: ${inr(quoteGst)}`} />
-                {!existing && allPriced && Math.abs(sumPrices - f.totalQuoted) >= 0.01 && <Button type="button" variant="outline" className="self-end" onClick={() => set('totalQuoted', sumPrices)}>Use service total · {inr(sumPrices)}</Button>}
                 <Select label="Mode" required value={f.mode} onChange={(ev) => set('mode', ev.target.value as BookingInput['mode'])}><option>Refundable</option><option>Non-Refundable</option></Select>
                 <div>
                   <span className="mb-1.5 block text-xs font-semibold text-mute">After discount success fee <span className="text-bad">*</span></span>
@@ -185,20 +214,20 @@ export default function BookingForm() {
           </Card>
 
           <Card className="overflow-hidden">
-            <CardHeader title="Booking & payments" subtitle="Payment part 1 is required with proof; add part 2, 3… if the client pays in parts" icon={Wallet} />
+            <CardHeader title="Booking & payments" subtitle="Payment part 1 is the advance — it is the total quoted on this entry. Later parts are balance payments (Accounts can add them too)." icon={Wallet} />
             <div className="space-y-4 p-5">
               <Input label="Booking date" required type="date" max={today()} value={f.bookingDate} onChange={(ev) => set('bookingDate', ev.target.value)} className="sm:max-w-xs" />
               {!existing && f.payments.map((p, i) => (
                 <div key={i} className="rounded-2xl border border-line p-4">
                   <div className="mb-3 flex items-center justify-between">
-                    <p className="text-sm font-bold">Payment part {i + 1}{i === 0 && <span className="text-bad"> *</span>}</p>
+                    <p className="text-sm font-bold">{i === 0 ? 'Payment part 1 · advance' : `Payment part ${i + 1}`}{i === 0 && <span className="text-bad"> *</span>}</p>
                     {i > 0 && <Button type="button" size="sm" variant="ghost" icon={Trash2} aria-label={`Remove part ${i + 1}`} onClick={() => set('payments', f.payments.filter((_, j) => j !== i))} />}
                   </div>
                   <div className="grid gap-3 sm:grid-cols-3">
                     <Input label="Amount (before GST)" required type="number" inputMode="decimal" min={0} value={p.amount || ''} onChange={(ev) => setPay(i, { amount: Number(ev.target.value) })}
-                      hint={p.amount ? `With GST ${inr(withGst(p.amount))}${i === 0 && f.totalQuoted ? ` · ${advPct}% of total` : ''}` : undefined} error={tried && !(p.amount > 0) ? 'Required' : undefined} />
-                    <Input label="Date" required type="date" value={p.date} onChange={(ev) => setPay(i, { date: ev.target.value })} />
-                    <Select label="Mode" value={p.mode} onChange={(ev) => setPay(i, { mode: ev.target.value })}>{MODES.map((m) => <option key={m}>{m}</option>)}</Select>
+                      hint={p.amount ? `With GST ${inr(withGst(p.amount))}` : undefined} error={tried && !(p.amount > 0) ? 'Required' : undefined} />
+                    <Input label="Date" required type="date" value={p.date} onChange={(ev) => setPay(i, { date: ev.target.value })} hint="Counts in this month's scorecard" />
+                    <Select label="Mode" value={p.mode} onChange={(ev) => setPay(i, { mode: ev.target.value })}>{PAYMENT_MODES.map((m) => <option key={m}>{m}</option>)}</Select>
                     <div className="sm:col-span-3">
                       <FileField label={i === 0 ? 'Attachment of receiving the payment' : 'Payment proof (optional)'} required={i === 0} accept={DOC_TYPES} acceptLabel="Screenshot or PDF"
                         value={p.proof} onChange={(proof) => setPay(i, { proof })} error={tried && i === 0 && !p.proof ? 'Attach the payment proof' : undefined} />
@@ -216,13 +245,8 @@ export default function BookingForm() {
               {closers.map((u) => <option key={u.id} value={u.id}>{u.name}{u.id === me.id ? ' (me)' : ''}</option>)}
               {!closers.some((u) => u.id === me.id) && <option value={me.id}>{me.name} (me)</option>}
             </Select>
-            {!existing && !isTL && (
-              <Select label="Send to team leader" required value={f.teamLeadId ?? ''} onChange={(ev) => set('teamLeadId', ev.target.value)} hint="They give the first approval.">
-                <option value="">— Select —</option>{tls.map((u) => <option key={u.id} value={u.id}>{u.name}{u.id === me.teamLeadId ? ' (my team leader)' : ''}</option>)}
-              </Select>
-            )}
             <Textarea label="Remarks" required rows={3} value={f.remarks} error={e.remarks} onChange={(ev) => set('remarks', ev.target.value)} className="sm:col-span-2" placeholder="What was agreed with the client, special conditions, next steps…" />
-            {!existing && <Textarea label="Notes for approvers" rows={2} value={f.note ?? ''} onChange={(ev) => set('note', ev.target.value)} className="sm:col-span-2" />}
+            {!existing && <Textarea label="Notes for Accounts" rows={2} value={f.note ?? ''} onChange={(ev) => set('note', ev.target.value)} className="sm:col-span-2" />}
           </Block>
 
           {!existing && (
@@ -237,27 +261,24 @@ export default function BookingForm() {
           <Card className="overflow-hidden">
             <CardHeader title="Summary" icon={Calculator} />
             <div className="space-y-2.5 p-5 text-sm">
-              {rows.filter((r) => r.s).map((r, i) => <Row key={i} k={r.s!.name} v={r.price ? inr(r.price) : <span className="text-mute">—</span>} />)}
-              {f.combo && <Row k="Combo until" v={fmtDate(comboEnd)} />}
-              <div className="my-2 border-t border-dashed border-line" />
-              <Row k="Total quoted" v={inr(f.totalQuoted || 0)} />
-              <Row k={`GST ${gstRate}%`} v={inr(quoteGst - (f.totalQuoted || 0))} />
-              <Row k="Quoted with GST" v={<b>{inr(quoteGst)}</b>} />
+              <Row k="Booking type" v={<b>{BOOKING_TYPES.find((t) => t.id === f.bookingType)?.label}</b>} />
+              {rows.filter((r) => r.s).map((r, i) => <Row key={i} k={r.s!.name} v={r.price ? inr(r.price) : <span className="text-mute">0</span>} />)}
+              {rows.filter((r) => r.s).length > 1 && <Row k="Services total" v={inr(sumPrices)} />}
+              {months && <Row k="Combo until" v={fmtDate(comboEnd)} />}
               {!existing && <>
                 <div className="my-2 border-t border-dashed border-line" />
-                <Row k={`Advance (part 1) · ${advPct}%`} v={inr(part1)} />
-                <Row k="Advance with GST" v={<b className="text-ok">{inr(withGst(part1))}</b>} />
+                <Row k="Total quoted = advance (part 1)" v={<b>{inr(part1)}</b>} />
+                <Row k={`Advance with GST ${gstRate}%`} v={<b className="text-ok">{inr(withGst(part1))}</b>} />
                 {f.payments.length > 1 && <Row k={`All ${f.payments.length} parts with GST`} v={inr(withGst(paid))} />}
-                <Row k="Balance due" v={<b className="text-bad">{inr(Math.max(0, quoteGst - withGst(paid)))}</b>} />
                 <Row k="Success fee" v={f.successFee.value ? (f.successFee.type === 'PCT' ? `${f.successFee.value}%` : inr(f.successFee.value)) : 'None (0)'} />
               </>}
             </div>
             <div className="border-t border-line p-4">
-              <Button variant="accent" size="lg" className="w-full" icon={existing ? Save : Send} onClick={submit}>{existing ? 'Save changes' : isTL ? 'Submit to Accounts' : 'Submit to team leader'}</Button>
-              {!existing && <p className="mt-2 text-center text-[11px] text-mute">Chain: Team Leader → Accounts → Legal → Operations → Admin → Ops approval</p>}
+              <Button variant="accent" size="lg" className="w-full" icon={existing ? Save : Send} onClick={submit}>{existing ? 'Save changes' : 'Submit to Accounts'}</Button>
+              {!existing && <p className="mt-2 text-center text-[11px] text-mute">Chain: Accounts → Legal → Operations → Admin → Ops approval{isTL ? '' : ' · your team leader is kept informed'}</p>}
             </div>
           </Card>
-          {!existing && <p className="mt-3 flex items-center gap-1.5 px-1 text-[11px] text-mute"><IndianRupee className="size-3" />Deadline {fmtDate(f.combo ? comboEnd : ymd(addDays(new Date(), 30)))} · saved with today's date and time</p>}
+          {!existing && <p className="mt-3 flex items-center gap-1.5 px-1 text-[11px] text-mute"><IndianRupee className="size-3" />Deadline {fmtDate(months ? comboEnd : ymd(addDays(new Date(), 30)))} · saved with today's date and time</p>}
         </aside>
       </div>
     </div>

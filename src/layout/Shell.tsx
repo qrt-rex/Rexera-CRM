@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
-  Bell, ChevronDown, ChevronRight, Home, LayoutGrid, LogOut, Mail, Menu as MenuIcon, Moon, Search, Settings, ShieldCheck, Sun, UserCheck, X, Monitor,
+  BadgeCheck, Bell, ChevronDown, ChevronRight, Home, LayoutGrid, LogOut, Mail, Menu as MenuIcon, Moon, Search, Settings, ShieldCheck, Sun, UserCheck, X, Monitor,
   HelpCircle, SlidersHorizontal, Users, CalendarCheck2, TrendingUp, GraduationCap, FileText, Inbox, PartyPopper, BarChart3,
   Wallet, Receipt, Landmark, Trophy, Briefcase, Wrench, MailPlus, ClipboardList, FilePen, Coffee, Package,
 } from 'lucide-react'
@@ -263,7 +263,8 @@ function Sidebar() {
   )
 }
 
-const HR_PATHS = ['/payroll', '/payslips', '/pf', '/incentives', '/incentive-settings', '/break-settings', '/assets', '/recruitment', '/candidates', '/letters', '/performance', '/email-center']
+// Email Center is a workspace page: it opens in the normal layout (HR still sees it in their own menu)
+const HR_PATHS = ['/payroll', '/payslips', '/pf', '/incentives', '/incentive-settings', '/break-settings', '/assets', '/recruitment', '/candidates', '/letters', '/performance', '/salary-status']
 
 /** HR navigation: each item keeps its own colour; only pages that exist and the user may open are listed. */
 const HR_MENU: { label: string; to: string; icon: typeof Home; color: string; perms: Perm[] }[] = [
@@ -272,6 +273,7 @@ const HR_MENU: { label: string; to: string; icon: typeof Home; color: string; pe
   { label: 'Break Time', to: '/break-settings', icon: Coffee, color: 'text-amber-600 bg-amber-100 dark:bg-amber-500/15 dark:text-amber-300', perms: ['employees.manage'] },
   { label: 'Leave Management', to: '/leave', icon: CalendarCheck2, color: 'text-rose-600 bg-rose-100 dark:bg-rose-500/15 dark:text-rose-300', perms: [] },
   { label: 'Payroll', to: '/payroll', icon: Wallet, color: 'text-sky-600 bg-sky-100 dark:bg-sky-500/15 dark:text-sky-300', perms: ['payroll.view', 'payroll.manage'] },
+  { label: 'Salary Paid / Not Paid', to: '/salary-status', icon: BadgeCheck, color: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-500/15 dark:text-emerald-300', perms: ['payroll.view', 'payroll.manage'] },
   { label: 'Payslips', to: '/payslips', icon: Receipt, color: 'text-cyan-600 bg-cyan-100 dark:bg-cyan-500/15 dark:text-cyan-300', perms: [] },
   { label: 'PF Management', to: '/pf', icon: Landmark, color: 'text-green-600 bg-green-100 dark:bg-green-500/15 dark:text-green-300', perms: ['payroll.view', 'payroll.manage'] },
   { label: 'Sales Incentives', to: '/incentives', icon: Trophy, color: 'text-orange-600 bg-orange-100 dark:bg-orange-500/15 dark:text-orange-300', perms: ['incentives.manage', 'payroll.view'] },
@@ -384,13 +386,14 @@ function BellMenu() {
 function OverdueLeadsBanner() {
   const db = useDb()
   const me = useMe()
+  const { can } = useAuth()
   const n = overdueLeadsOf(db, me.id).length
   if (!n) return null
   return (
     <div role="alert" className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-bad/40 bg-bad-soft px-4 py-3 text-sm text-bad">
       <b>Action required: {n} lead(s) without a disposition since yesterday.</b>
       <span className="text-ink/75">Update them now — until you do, no new leads can be given to you.</span>
-      <Link to="/leads" className="ml-auto rounded-full bg-bad px-4 py-1.5 text-xs font-bold text-white">Open my leads</Link>
+      <Link to={can('leads.admin') ? '/leads' : '/dialer'} className="ml-auto rounded-full bg-bad px-4 py-1.5 text-xs font-bold text-white">Open my leads</Link>
     </div>
   )
 }

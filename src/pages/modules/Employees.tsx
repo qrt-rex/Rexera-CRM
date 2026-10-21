@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Briefcase, Building2, Mail, Pencil, Phone, Plus, UsersRound } from 'lucide-react'
+import { Briefcase, Building2, Mail, Pencil, Phone, Plus, RotateCcw, UserMinus, UsersRound } from 'lucide-react'
 import { branchList, branchName } from '../../lib/branches'
 import type { FileRef, Role, User } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
-import { createUser, PASSWORD_HINT, PASSWORD_RULE, updateUser, userName, usersWithRole, type UserInput } from '../../lib/actions'
+import { createUser, PASSWORD_HINT, PASSWORD_RULE, removeEmployee, restoreEmployee, updateUser, userName, usersWithRole, type UserInput } from '../../lib/actions'
 import { collections, dayStatus, monthStart } from '../../lib/metrics'
 import { ROLES, roleColor, roleLabel } from '../../lib/rbac'
-import { fmtDate, inr } from '../../lib/format'
-import { Avatar, Badge, Button, Card, Checkbox, Drawer, Input, Modal, PageHeader, SearchBox, Select, useRun } from '../../components/ui'
+import { fmtDate, inr, today } from '../../lib/format'
+import { Avatar, Badge, Button, Card, Checkbox, Drawer, EmptyState, Input, Modal, PageHeader, SearchBox, Select, Tabs, Textarea, useRun } from '../../components/ui'
 import { RESUME_TYPES } from '../../lib/files'
 import { FileField, FileLink } from '../../components/FileField'
 import { PhoneInput } from '../../components/fields'
@@ -30,7 +30,10 @@ export default function Employees() {
   const [tried, setTried] = useState(false)
   const closeForm = () => { setForm({ open: false, data: blank }); setPw({ password: '', confirm: '', show: false }); setResume(undefined); setTried(false) }
   const manage = can('employees.manage', 'access.manage')
-  const list = useMemo(() => db.users.filter((u) => (!role || u.role === role) && (!q || `${u.name} ${u.email} ${u.designation} ${u.department}`.toLowerCase().includes(q.toLowerCase()))), [db.users, q, role])
+  const [showRemoved, setShowRemoved] = useState(false)
+  const [removing, setRemoving] = useState<{ id: string; lastDay: string; reason: string } | null>(null)
+  const list = useMemo(() => db.users.filter((u) => (showRemoved ? !u.active : u.active) && (!role || u.role === role) && (!q || `${u.name} ${u.email} ${u.designation} ${u.department}`.toLowerCase().includes(q.toLowerCase()))), [db.users, q, role, showRemoved])
+  const removable = db.users.filter((u) => u.active && u.id !== me.id).sort((a, b) => a.name.localeCompare(b.name))
   const open = params.get('open') ? db.users.find((u) => u.id === params.get('open')) : undefined
   useEffect(() => {
     if (params.get('new') && manage) { setForm({ open: true, data: blank }); setParams({}, { replace: true }) }
@@ -53,11 +56,16 @@ export default function Employees() {
   return (
     <div>
       <PageHeader title="Employee Details" subtitle={`${db.users.filter((u) => u.active).length} active people across ${new Set(db.users.map((u) => u.department)).size} departments`} icon={UsersRound}
-        actions={manage && <Button variant="accent" icon={Plus} onClick={() => { closeForm(); setForm({ open: true, data: blank }) }}>Add employee</Button>} />
+        actions={manage && <>
+          <Button variant="outline" icon={UserMinus} onClick={() => setRemoving({ id: '', lastDay: today(), reason: '' })}>Remove employee</Button>
+          <Button variant="accent" icon={Plus} onClick={() => { closeForm(); setForm({ open: true, data: blank }) }}>Add employee</Button>
+        </>} />
       <div className="mb-5 flex flex-wrap gap-3">
         <SearchBox value={q} onChange={setQ} placeholder="Search people…" className="min-w-60 flex-1" />
         <select value={role} onChange={(e) => setRole(e.target.value as Role | '')} className="h-10 rounded-xl border border-line bg-card px-3 text-sm" aria-label="Role"><option value="">All roles</option>{ROLES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}</select>
+        <Tabs value={showRemoved ? 'removed' : 'active'} onChange={(v) => setShowRemoved(v === 'removed')} tabs={[{ id: 'active', label: 'Active', count: db.users.filter((u) => u.active).length }, { id: 'removed', label: 'Removed', count: db.users.filter((u) => !u.active).length }]} />
       </div>
+      {!list.length && <EmptyState icon={UsersRound} title={showRemoved ? 'Nobody has been removed' : 'Nobody matches'} />}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         {list.map((u) => {
           const st = dayStatus(db, u.id)
@@ -84,7 +92,12 @@ export default function Employees() {
       </div>
 
       <Drawer open={!!open} onClose={() => setParams({})} title={open?.name} subtitle={open && `${open.designation} · ${open.department}`}
-        footer={open && manage && <Button icon={Pencil} onClick={() => setForm({ open: true, user: open, data: { name: open.name, username: open.username, email: open.email, phone: open.phone, role: open.role, department: open.department, designation: open.designation, teamLeadId: open.teamLeadId, salary: open.salary, target: open.target, branchId: open.branchId, branchIds: open.branchIds } })}>Edit</Button>}>
+        footer={open && manage && <div className="flex w-full flex-wrap gap-2">
+          {open.active
+            ? open.id !== me.id && <Button variant="ghost" icon={UserMinus} className="mr-auto text-bad" onClick={() => setRemoving({ id: open.id, lastDay: today(), reason: '' })}>Remove</Button>
+            : <Button variant="success" icon={RotateCcw} className="mr-auto" onClick={() => run(() => restoreEmployee(me, open.id), `${open.name} restored`)}>Restore</Button>}
+          <Button icon={Pencil} onClick={() => setForm({ open: true, user: open, data: { name: open.name, username: open.username, email: open.email, phone: open.phone, role: open.role, department: open.department, designation: open.designation, teamLeadId: open.teamLeadId, salary: open.salary, target: open.target, branchId: open.branchId, branchIds: open.branchIds } })}>Edit</Button>
+        </div>}>
         {open && (
           <div className="space-y-5">
             <div className="flex items-center gap-4"><Avatar name={open.name} photo={open.photo} size={72} /><div><Badge tone="navy">{roleLabel(open.role)}</Badge>{!open.active && <Badge tone="red" className="ml-1">Inactive</Badge>}<p className="mt-1 text-sm text-mute">Joined {fmtDate(open.joinedOn)}</p></div></div>
@@ -109,6 +122,23 @@ export default function Employees() {
           </div>
         )}
       </Drawer>
+
+      <Modal open={!!removing} onClose={() => setRemoving(null)} title="Remove employee" size="sm"
+        subtitle="They can't sign in any more and their open leads go back to Unassigned. Their attendance, payroll and client files are kept — Restore brings them back."
+        footer={<><Button variant="outline" onClick={() => setRemoving(null)}>Cancel</Button><Button variant="danger" icon={UserMinus} onClick={async () => {
+          if (!removing) return
+          const who = db.users.find((u) => u.id === removing.id)
+          const n = await run(() => removeEmployee(me, removing.id, removing.lastDay, removing.reason), `${who?.name ?? 'Employee'} removed`)
+          if (n !== undefined) { setRemoving(null); setParams({}) }
+        }}>Remove</Button></>}>
+        {removing && <div className="grid gap-3">
+          <Select label="Employee" required value={removing.id} onChange={(e) => setRemoving({ ...removing, id: e.target.value })}>
+            <option value="">— Select —</option>{removable.map((u) => <option key={u.id} value={u.id}>{u.name} · {roleLabel(u.role)}</option>)}
+          </Select>
+          <Input label="Last working day" type="date" value={removing.lastDay} onChange={(e) => setRemoving({ ...removing, lastDay: e.target.value })} />
+          <Textarea label="Reason" required rows={2} value={removing.reason} onChange={(e) => setRemoving({ ...removing, reason: e.target.value })} placeholder="Resigned, contract ended, terminated…" />
+        </div>}
+      </Modal>
 
       <Modal open={form.open} onClose={closeForm} title={form.user ? `Edit ${form.user.name}` : 'Add employee'} size="lg"
         subtitle={form.user ? 'Role and access are changed in Access Management.' : 'Set their first password (attaching a resume is optional). They can change the password later in Settings → Security.'}

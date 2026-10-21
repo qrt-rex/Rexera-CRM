@@ -148,12 +148,16 @@ function need(perm: 'payroll.manage' | 'incentives.manage', me: User) {
 function runFor(d: DB, month: string) { return d.payrollRuns.find((r) => r.month === month) }
 const log = (d: DB, by: string, action: string, detail: string) => d.audit.unshift({ id: uid('a-'), at: nowIso(), by, action, detail })
 
+/** Recalculated rows keep who was already marked paid (Salary Paid / Not Paid). */
+const keepPaid = (old: PayRow[] | undefined, rows: PayRow[]) =>
+  rows.map((r) => { const o = old?.find((x) => x.userId === r.userId); return o?.paidOn ? { ...r, paidOn: o.paidOn, paidRef: o.paidRef, paidBy: o.paidBy } : r })
+
 export function calculatePayroll(me: User, month: string) {
   need('payroll.manage', me)
   mutate((d) => {
     const existing = runFor(d, month)
     if (existing && ['FINALIZED', 'PAID'].includes(existing.status)) throw new ActionError('This payroll is locked. Unlock it (with a reason) to recalculate.')
-    const rows = payrollPeople(d, month).map((u) => computeRow(d, u, month))
+    const rows = keepPaid(existing?.rows, payrollPeople(d, month).map((u) => computeRow(d, u, month)))
     if (!rows.length) throw new ActionError('Nobody has a salary set for this month. Add salaries in Employee Details.')
     const entry = { at: nowIso(), by: me.id, action: existing ? 'RECALCULATED' : 'CALCULATED', note: `${rows.length} employees` }
     if (existing) Object.assign(existing, { rows, status: 'CALCULATED', provisional: !monthEnded(month), calculatedAt: entry.at, calculatedBy: me.id, history: [...existing.history, entry] })
@@ -173,6 +177,8 @@ export function advancePayroll(me: User, month: string, to: 'APPROVED' | 'FINALI
     run.status = to
     run.history.push({ at: nowIso(), by: me.id, action: to, note })
     log(d, me.id, 'PAYROLL_' + to, monthLabel(month))
+    // the whole month paid: everyone not marked yet is paid today
+    if (to === 'PAID') for (const r of run.rows) if (!r.paidOn) Object.assign(r, { paidOn: ymd(new Date()), paidBy: me.id, paidRef: note.trim() || undefined })
     if (to === 'FINALIZED') {
       const ids = new Set(run.rows.map((r) => r.userId))
       fireAutomation(d, 'payslip-ready', d.users.filter((u) => ids.has(u.id)), () => ({ month: monthLabel(month) }))
@@ -191,12 +197,36 @@ export function unlockPayroll(me: User, month: string, reason: string, recalcula
     run.status = 'CALCULATED'
     run.history.push({ at: nowIso(), by: me.id, action: 'UNLOCKED', note: `${reason.trim()} (was ${was.toLowerCase()})` })
     if (recalculate) {
-      run.rows = payrollPeople(d, month).map((u) => computeRow(d, u, month))
+      run.rows = keepPaid(run.rows, payrollPeople(d, month).map((u) => computeRow(d, u, month)))
       run.provisional = !monthEnded(month)
       run.calculatedAt = nowIso(); run.calculatedBy = me.id
       run.history.push({ at: run.calculatedAt, by: me.id, action: 'RECALCULATED', note: `${run.rows.length} employees` })
     }
     log(d, me.id, 'PAYROLL_UNLOCK', `${monthLabel(month)} (was ${was.toLowerCase()}): ${reason.trim()}`)
+  })
+}
+
+/**
+ * Salary Paid / Not Paid: HR marks one person's salary for a finalised month as paid (date, UTR / cheque no.) or
+ * not paid. When everyone in the month is paid, the month itself becomes Paid.
+ */
+export function setSalaryPaid(me: User, month: string, userId: string, paid: { paidOn: string; ref: string } | null) {
+  need('payroll.manage', me)
+  mutate((d) => {
+    const run = runFor(d, month)
+    if (!run) throw new ActionError('There is no payroll for this month yet.')
+    if (!['FINALIZED', 'PAID'].includes(run.status)) throw new ActionError('Finalise the payroll for this month first.')
+    const r = run.rows.find((x) => x.userId === userId)
+    if (!r) throw new ActionError('This person is not in this month’s payroll.')
+    if (paid) {
+      if (!paid.paidOn || paid.paidOn > ymd(new Date())) throw new ActionError('Enter the date it was paid (not in the future).')
+      Object.assign(r, { paidOn: paid.paidOn, paidRef: paid.ref.trim() || undefined, paidBy: me.id })
+    } else {
+      delete r.paidOn; delete r.paidRef; delete r.paidBy
+      if (run.status === 'PAID') { run.status = 'FINALIZED'; run.history.push({ at: nowIso(), by: me.id, action: 'FINALIZED', note: `${r.name}'s salary marked not paid` }) }
+    }
+    if (paid && run.status === 'FINALIZED' && run.rows.every((x) => x.paidOn)) { run.status = 'PAID'; run.history.push({ at: nowIso(), by: me.id, action: 'PAID', note: 'Every salary marked paid' }) }
+    log(d, me.id, 'SALARY_PAID', `${monthLabel(month)} · ${r.name}: ${paid ? `paid ${paid.paidOn}` : 'not paid'}`)
   })
 }
 

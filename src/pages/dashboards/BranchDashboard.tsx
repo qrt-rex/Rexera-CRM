@@ -397,6 +397,8 @@ function AssignClients({ team }: { team: ReturnType<typeof salesTeam> }) {
   const db = useDb()
   const me = useMe()
   const run = useRun()
+  // where a lead came from is shown to the Super Admin only
+  const showSource = useAuth().can('leads.admin')
   const [mode, setMode] = useState<'unassigned' | 'team'>('unassigned')
   const [picked, setPicked] = useState<string[]>([])
   const [to, setTo] = useState('')
@@ -423,14 +425,14 @@ function AssignClients({ team }: { team: ReturnType<typeof salesTeam> }) {
       </div>
       {!leads.length ? <EmptyState icon={UserPlus} title={mode === 'unassigned' ? 'Every lead is assigned' : 'No open leads with your team'} /> : (
         <Table>
-          <thead><tr><Th className="w-10"><Checkbox checked={all} onChange={(v) => setPicked(v ? leads.map((l) => l.id) : [])} /></Th><Th>Client</Th><Th>Service</Th><Th>Source</Th><Th>Status</Th><Th>{mode === 'team' ? 'With' : 'Added'}</Th></tr></thead>
+          <thead><tr><Th className="w-10"><Checkbox checked={all} onChange={(v) => setPicked(v ? leads.map((l) => l.id) : [])} /></Th><Th>Client</Th><Th>Service</Th>{showSource && <Th>Source</Th>}<Th>Status</Th><Th>{mode === 'team' ? 'With' : 'Added'}</Th></tr></thead>
           <tbody>
             {leads.map((l) => (
               <tr key={l.id} className={cx('hover:bg-card2/60', picked.includes(l.id) && 'bg-brand-soft/50')}>
                 <Td><Checkbox checked={picked.includes(l.id)} onChange={(v) => setPicked((p) => (v ? [...p, l.id] : p.filter((x) => x !== l.id)))} /></Td>
                 <Td><span className="block font-semibold">{l.name}</span><span className="text-[11px] text-mute">{l.company || l.city || l.phone}</span></Td>
                 <Td className="text-xs">{l.service || '—'}</Td>
-                <Td className="text-xs">{l.source}</Td>
+                {showSource && <Td className="text-xs">{l.source}</Td>}
                 <Td><Badge tone={LEAD_STATUS[l.status].tone}>{LEAD_STATUS[l.status].label}</Badge></Td>
                 <Td className="text-xs">{mode === 'team' ? userName(db, l.assignedTo) : fmtDate(l.createdAt)}</Td>
               </tr>

@@ -36,6 +36,7 @@ const SPECS: Spec[] = [
     { prop: 'documents', table: 'booking_documents', fk: 'booking_id', mode: 'id', order: ['uploaded_at', true] },
     { prop: 'clientEmails', table: 'booking_client_emails', fk: 'booking_id', mode: 'id', order: ['sent_at', false] },
     { prop: 'tasks', table: 'booking_tasks', fk: 'booking_id', mode: 'id', order: ['created_at', true] },
+    { prop: 'refunds', table: 'booking_refunds', fk: 'booking_id', mode: 'id', order: ['created_at', true] },
   ] },
   { key: 'invoices', table: 'invoices', order: ['issued_on', false], children: [
     { prop: 'items', table: 'invoice_items', fk: 'invoice_id', mode: 'replace', order: ['position', true] },

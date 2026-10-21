@@ -66,7 +66,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     const counts: Record<Group, number> = { Clients: 0, Leads: 0, People: 0, Pages: 0 }
     if (!s) {
       const actions: Item[] = [
-        ...(can('leads.own', 'leads.manage') ? [{ id: 'a-lead', label: 'CRM Leads', sub: 'Open your leads', icon: UserPlus, to: '/leads', group: 'Actions' as const, score: 0 }] : []),
+        ...(can('leads.admin') ? [{ id: 'a-lead', label: 'CRM Leads', sub: 'All leads, uploads, website leads', icon: UserPlus, to: '/leads', group: 'Actions' as const, score: 0 }] : []),
         ...(can('bookings.create') ? [{ id: 'a-entry', label: 'New CRM entry', sub: 'Book a client with advance', icon: Plus, to: '/bookings/new', group: 'Actions' as const, score: 0 }] : []),
         ...(can('dialer.use') ? [{ id: 'a-dial', label: 'Dialer', sub: 'Call your queue', icon: Phone, to: '/dialer', group: 'Actions' as const, score: 0 }] : []),
         { id: 'a-dash', label: 'My dashboard', sub: roleLabel(me.role), icon: LayoutDashboard, to: `/dashboard/${me.role}`, group: 'Actions' as const, score: 0 },
@@ -80,7 +80,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     for (const m of MODULES) { if (!canSee(m, can)) continue; const sc = scoreOf(s, '', m.label, m.desc); if (sc) all.push({ id: m.key, label: m.label, sub: m.desc, icon: m.icon, to: m.path, group: 'Pages', score: sc }) }
     if (s.length >= 2 || digits.length >= 3) {
       for (const b of visibleBookings(db, me)) { const sc = scoreOf(s, digits, b.companyName, b.bookingId, b.contactPerson, b.mobile, b.serviceName, b.email, b.pan, b.gstin); if (sc) all.push({ id: b.id, label: b.companyName, sub: `${b.bookingId} · ${b.contactPerson} · ${b.mobile}`, icon: Briefcase, to: `/bookings/${b.id}`, group: 'Clients', score: sc, badge: BOOKING_STATUS[b.status]?.label }) }
-      for (const l of visibleLeads(db, me)) { const sc = scoreOf(s, digits, l.name, l.company, l.phone, l.code, l.email); if (sc) all.push({ id: l.id, label: l.name + (l.company ? ` · ${l.company}` : ''), sub: `${l.code} · ${l.phone}`, icon: UserPlus, to: `/leads?open=${l.id}`, group: 'Leads', score: sc, badge: l.status.replace('_', ' ').toLowerCase() }) }
+      for (const l of visibleLeads(db, me)) { const sc = scoreOf(s, digits, l.name, l.company, l.phone, l.code, l.email); if (sc) all.push({ id: l.id, label: l.name + (l.company ? ` · ${l.company}` : ''), sub: `${l.code} · ${l.phone}`, icon: UserPlus, to: can('leads.admin') ? `/leads?open=${l.id}` : `/dialer?lead=${l.id}`, group: 'Leads', score: sc, badge: l.status.replace('_', ' ').toLowerCase() }) }
       if (can('employees.view', 'access.manage', 'employees.manage')) for (const u of db.users) { const sc = scoreOf(s, digits, u.name, u.username, u.email, u.phone); if (sc) all.push({ id: u.id, label: u.name, sub: `${roleLabel(u.role)} · ${u.email}`, icon: UserIcon, to: `/employees?open=${u.id}`, group: 'People', score: sc }) }
     }
     for (const it of all) counts[it.group as Group]++
@@ -97,7 +97,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   useEffect(() => { listRef.current?.querySelector(`[data-i="${sel}"]`)?.scrollIntoView({ block: 'nearest' }) }, [sel])
   if (!open) return null
   const go = (it?: Item) => { if (!it) return; saveRecent(it); nav(it.to); onClose() }
-  const seeAll: Partial<Record<Group, string>> = { Clients: `/bookings`, Leads: `/leads` }
+  const seeAll: Partial<Record<Group, string>> = { Clients: `/bookings`, Leads: can('leads.admin') ? '/leads' : '/dialer' }
   let lastGroup = ''
 
   return createPortal(

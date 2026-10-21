@@ -24,6 +24,7 @@ export const PERM_GROUPS: { group: string; perms: { id: Perm; label: string }[] 
       { id: 'leads.own', label: 'Work own leads' },
       { id: 'leads.manage', label: 'See & manage all leads' },
       { id: 'leads.assign', label: 'Assign leads / clients' },
+      { id: 'leads.admin', label: 'CRM Leads page: add, upload, website leads, auto-assign, lead source (Super Admin)' },
       { id: 'dialer.use', label: 'Use the dialer' },
       { id: 'team.progress', label: 'Sales team progress' },
       { id: 'team.assign', label: 'Assign clients to sales people' },
@@ -62,6 +63,7 @@ export const PERM_GROUPS: { group: string; perms: { id: Perm; label: string }[] 
       { id: 'billing.own', label: 'See own invoices' },
       { id: 'billing.create', label: 'Create proforma / invoices' },
       { id: 'billing.manage', label: 'All invoices, payments & cancel' },
+      { id: 'refunds.manage', label: 'Refund entries (Accounts)' },
     ],
   },
   {
@@ -105,7 +107,7 @@ const common: Perm[] = ['broadcasts.view', 'messages.use', 'schemes.view', 'cont
 export const DEFAULT_ROLE_PERMS: Record<Role, Perm[]> = {
   superadmin: [...ALL_PERMS],
   admin: [...common, 'bookings.all', 'bookings.admin', 'content.manage', 'salesinfo.manage', 'schemes.manage', 'employees.view', 'documents.forms', 'reports.view'],
-  accounts: [...common, 'bookings.all', 'bookings.accounts', 'billing.create', 'billing.manage', 'reports.view', 'reports.export'],
+  accounts: [...common, 'bookings.all', 'bookings.accounts', 'billing.create', 'billing.manage', 'refunds.manage', 'reports.view', 'reports.export'],
   legal: [...common, 'bookings.all', 'bookings.legal', 'documents.forms', 'leave.approve', 'reports.view'],
   operations: [...common, 'bookings.all', 'bookings.process', 'content.manage', 'salesinfo.manage', 'schemes.manage', 'employees.view', 'documents.forms', 'reports.view', 'events.manage'],
   teamlead: [
@@ -128,6 +130,9 @@ export const DEFAULT_ROLE_PERMS: Record<Role, Perm[]> = {
 export const RESERVED: Partial<Record<Perm, Role[]>> = {
   'access.manage': ['superadmin'],
   'billing.manage': ['superadmin', 'accounts'],
+  'refunds.manage': ['superadmin', 'accounts'],
+  // the CRM Leads page (lead source, uploads, website leads, auto-assign) is the Super Admin's; others work leads in the Dialer
+  'leads.admin': ['superadmin'],
   'bookings.accounts': ['superadmin', 'accounts'],
   'payroll.view': ['superadmin', 'hr'],
   'payroll.manage': ['superadmin', 'hr'],

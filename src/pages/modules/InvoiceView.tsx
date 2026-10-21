@@ -1,12 +1,31 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Ban, IndianRupee, Printer, Receipt } from 'lucide-react'
+import { ArrowLeft, Ban, IndianRupee, Mail, MessageCircle, Printer, Receipt } from 'lucide-react'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
 import { cancelInvoice, recordInvoicePayment, setInvoiceBranch, userName, visibleInvoices } from '../../lib/actions'
 import { fmtDate, gstSplit, inr, invoiceTotals, rupeesInWords } from '../../lib/format'
 import { Badge, Button, Card, EmptyState, Input, Modal, useConfirm, useRun } from '../../components/ui'
 import { Logo } from '../../components/Logo'
+
+/**
+ * Share an invoice with the client: an email from the person's own mail app (attach the PDF from Print / PDF) and a
+ * WhatsApp message (wa.me link; a WhatsApp Business integration can replace it later).
+ */
+function shareLinks(x: { kind: string; number: string; date: string; due: string; client: string; company: string; total: string; balance: string; email: string; phone: string }) {
+  const text = [
+    `Dear ${x.client},`, '',
+    `Please find your ${x.kind.toLowerCase()} ${x.number} dated ${x.date} from ${x.company}.`,
+    `Amount: ${x.total}`, ...(x.balance ? [`Balance due: ${x.balance} by ${x.due}`] : []), '',
+    'Thank you,', x.company,
+  ].join('\n')
+  const digits = x.phone.replace(/\D/g, '').slice(-10)
+  return {
+    phone: digits,
+    mail: `mailto:${encodeURIComponent(x.email)}?subject=${encodeURIComponent(`${x.kind} ${x.number} — ${x.company}`)}&body=${encodeURIComponent(text)}`,
+    whatsapp: `https://wa.me/${digits.length === 10 ? `91${digits}` : ''}?text=${encodeURIComponent(text)}`,
+  }
+}
 
 export default function InvoiceView() {
   const { id } = useParams()
@@ -28,6 +47,11 @@ export default function InvoiceView() {
   const creator = db.users.find((u) => u.id === inv.createdBy)
   const needBranch = inv.type === 'TAX' && !branch
   const intra = inv.state.toLowerCase() === st.toLowerCase()
+  const share = shareLinks({
+    kind: inv.type === 'TAX' ? 'Tax invoice' : 'Proforma invoice', number: inv.number, date: fmtDate(inv.date), due: fmtDate(inv.due), client: inv.client,
+    company: db.settings.companyName, total: inr(t.grand), balance: t.balance > 0.5 ? inr(t.balance) : '',
+    email: booking?.paymentEmail || booking?.email || '', phone: booking?.paymentContact || booking?.mobile || '',
+  })
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -42,6 +66,10 @@ export default function InvoiceView() {
           </select>
         )}
         <Button icon={Printer} disabled={needBranch} title={needBranch ? 'Choose the branch first' : undefined} onClick={() => window.print()}>Print / PDF</Button>
+        {inv.status !== 'CANCELLED' && <>
+          <a href={share.mail} className={needBranch ? 'pointer-events-none opacity-50' : ''} title="Opens your email app with the invoice details — attach the PDF from Print / PDF"><Button variant="outline" icon={Mail} disabled={needBranch}>Email</Button></a>
+          <a href={share.whatsapp} target="_blank" rel="noreferrer" className={needBranch ? 'pointer-events-none opacity-50' : ''} title={share.phone ? `WhatsApp ${share.phone}` : 'Opens WhatsApp — pick the client'}><Button variant="outline" icon={MessageCircle} disabled={needBranch}>WhatsApp</Button></a>
+        </>}
       </div>
       {needBranch && <p className="no-print mb-3 rounded-xl bg-warn-soft px-4 py-2 text-sm text-warn">Choose the branch this tax invoice is issued from — its address and GSTIN print on the invoice.</p>}
       {branch && !branch.address && <p className="no-print mb-3 rounded-xl bg-warn-soft px-4 py-2 text-sm text-warn">The {branch.name} address isn't filled in yet — Super Admin / IT can add it under Access → Settings → Branches.</p>}

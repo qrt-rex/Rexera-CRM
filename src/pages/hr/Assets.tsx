@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
-  AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Boxes, Download, History, IndianRupee, Laptop, MoreHorizontal, Package, PackageCheck, Pencil, Plus, Receipt,
+  AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Boxes, Building2, Download, History, IndianRupee, Laptop, MoreHorizontal, Package, PackageCheck, Pencil, Plus, Receipt,
   RotateCcw, ShieldAlert, Trash2, UserCheck, Wrench,
 } from 'lucide-react'
 import type { Asset, Expense, StockItem } from '../../lib/types'
@@ -16,8 +16,11 @@ import { downloadCsv, fmtDate, fmtDateTime, inr, today, ymd } from '../../lib/fo
 import { FileField, FileLink } from '../../components/FileField'
 import { Avatar, Badge, Button, Card, CardHeader, cx, EmptyState, Input, Menu, MenuItem, Modal, PageHeader, SearchBox, Select, Table, Tabs, Td, Textarea, Th, useConfirm, useRun } from '../../components/ui'
 import { MiniStat } from '../dashboards/widgets'
+import { branchCode, branchList } from '../../lib/branches'
 
 type Tab = 'assets' | 'inventory' | 'expenses'
+/** expenses shared by every branch (no branch set) */
+const COMMON = '__common__'
 
 export default function Assets() {
   const [params, setParams] = useSearchParams()
@@ -313,10 +316,17 @@ function ExpensesTab() {
   const [confirm, confirmNode] = useConfirm()
   const [month, setMonth] = useState(today().slice(0, 7))
   const [cat, setCat] = useState('')
+  // branch-wise: AMD-A, AMD-Y, BRD … · COMMON = shared by all branches · '' = every expense (ALL)
+  const [branch, setBranch] = useState('')
   const [edit, setEdit] = useState<{ id?: string; f: ExpenseInput } | null>(null)
-  const all = db.expenses ?? []
+  const branches = branchList(db)
+  const ofBranch = (e: Expense) => !branch || (branch === COMMON ? !e.branchId : e.branchId === branch)
+  const all = (db.expenses ?? []).filter(ofBranch)
   const inMonth = all.filter((e) => e.date.startsWith(month))
   const list = inMonth.filter((e) => !cat || e.category === cat).sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt))
+  const monthAll = (db.expenses ?? []).filter((e) => e.date.startsWith(month))
+  const byBranch = [...branches.map((b) => ({ id: b.id, label: branchCode(db, b.id), v: monthAll.filter((e) => e.branchId === b.id).reduce((s, e) => s + e.amount + e.gst, 0) })),
+    { id: COMMON, label: 'All branches (common)', v: monthAll.filter((e) => !e.branchId).reduce((s, e) => s + e.amount + e.gst, 0) }]
   const total = (xs: Expense[]) => xs.reduce((s, e) => s + e.amount + e.gst, 0)
   const byCat = EXPENSE_CATEGORIES.map((c) => ({ c, v: total(inMonth.filter((e) => e.category === c)) })).filter((x) => x.v > 0).sort((a, b) => b.v - a.v)
   const max = Math.max(1, ...byCat.map((x) => x.v))
@@ -337,18 +347,22 @@ function ExpensesTab() {
         <Card className="overflow-hidden">
           <div className="flex flex-wrap gap-2 border-b border-line p-4">
             <input type="month" value={month} max={today().slice(0, 7)} onChange={(e) => e.target.value && setMonth(e.target.value)} aria-label="Month" className="h-10 rounded-xl border border-line bg-card px-3 text-sm" />
+            <select value={branch} onChange={(e) => setBranch(e.target.value)} aria-label="Branch" className="h-10 rounded-xl border border-line bg-card px-3 text-sm font-semibold">
+              <option value="">ALL branches</option>{branches.map((b) => <option key={b.id} value={b.id}>{branchCode(db, b.id)}</option>)}<option value={COMMON}>Common (all branches)</option>
+            </select>
             <select value={cat} onChange={(e) => setCat(e.target.value)} aria-label="Category" className="h-10 min-w-0 flex-1 rounded-xl border border-line bg-card px-3 text-sm"><option value="">All categories</option>{EXPENSE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select>
-            <Button variant="outline" icon={Download} onClick={() => downloadCsv(`expenses-${month}.csv`, list.map((e) => ({ date: e.date, category: e.category, description: e.description, vendor: e.vendor ?? '', amount: e.amount, gst: e.gst, total: e.amount + e.gst, paid_via: PAID_VIA[e.paidVia], paid_by: name(e.paidBy), bill: e.bill?.name ?? '', added_by: name(e.by) })))}>Export</Button>
-            <Button variant="accent" icon={Plus} onClick={() => setEdit({ f: { date: today(), category: 'Office supplies', description: '', amount: 0, gst: 0, paidVia: 'UPI' } })}>Add expense</Button>
+            <Button variant="outline" icon={Download} onClick={() => downloadCsv(`expenses-${branch ? (branch === COMMON ? 'common' : branchCode(db, branch)) : 'all'}-${month}.csv`, list.map((e) => ({ date: e.date, branch: e.branchId ? branchCode(db, e.branchId) : 'ALL', category: e.category, description: e.description, vendor: e.vendor ?? '', amount: e.amount, gst: e.gst, total: e.amount + e.gst, paid_via: PAID_VIA[e.paidVia], paid_by: name(e.paidBy), bill: e.bill?.name ?? '', added_by: name(e.by) })))}>Export</Button>
+            <Button variant="accent" icon={Plus} onClick={() => setEdit({ f: { date: today(), category: 'Office supplies', description: '', amount: 0, gst: 0, paidVia: 'UPI', branchId: branch && branch !== COMMON ? branch : undefined } })}>Add expense</Button>
           </div>
           {!list.length ? <EmptyState icon={Receipt} title={`No expenses in ${monthLabel}`} text="Record rent, bills, supplies, travel… with the bill attached." /> : (
             <Table>
-              <thead><tr><Th>Date</Th><Th>Expense</Th><Th>Category</Th><Th className="text-right">Amount</Th><Th>Paid</Th><Th>Bill</Th><Th className="text-right">Actions</Th></tr></thead>
+              <thead><tr><Th>Date</Th><Th>Expense</Th><Th>Branch</Th><Th>Category</Th><Th className="text-right">Amount</Th><Th>Paid</Th><Th>Bill</Th><Th className="text-right">Actions</Th></tr></thead>
               <tbody>
                 {list.map((e) => (
                   <tr key={e.id} className="hover:bg-card2/60">
                     <Td className="whitespace-nowrap text-xs">{fmtDate(e.date)}</Td>
                     <Td><span className="block font-semibold">{e.description}</span>{e.vendor && <span className="text-[11px] text-mute">{e.vendor}</span>}</Td>
+                    <Td className="text-xs font-semibold">{e.branchId ? branchCode(db, e.branchId) : <span className="font-normal text-mute">ALL</span>}</Td>
                     <Td className="text-xs">{e.category}</Td>
                     <Td className="whitespace-nowrap text-right"><b className="tabular-nums">{inr(e.amount + e.gst)}</b>{e.gst > 0 && <span className="block text-[11px] text-mute">incl. GST {inr(e.gst)}</span>}</Td>
                     <Td className="text-xs">{PAID_VIA[e.paidVia]}{e.paidBy ? <span className="block text-mute">by {name(e.paidBy)}</span> : null}</Td>
@@ -363,8 +377,19 @@ function ExpensesTab() {
             </Table>
           )}
         </Card>
-        <Card className="self-start overflow-hidden">
-          <CardHeader title="Where the money went" subtitle={monthLabel} icon={IndianRupee} />
+        <div className="space-y-6 self-start">
+        <Card className="overflow-hidden">
+          <CardHeader title="By branch" subtitle={`${monthLabel} · every expense`} icon={Building2} />
+          <ul className="divide-y divide-line/70 text-sm">
+            {byBranch.map((x) => (
+              <li key={x.id}><button onClick={() => setBranch(branch === x.id ? '' : x.id)} className={cx('flex w-full justify-between px-5 py-2.5 hover:bg-card2/60', branch === x.id && 'bg-brand-soft/60 font-semibold')}>
+                <span>{x.label}</span><span className="tabular-nums">{inr(x.v)}</span></button></li>
+            ))}
+            <li className="flex justify-between bg-card2/50 px-5 py-2.5 font-bold"><span>ALL</span><span className="tabular-nums">{inr(byBranch.reduce((s, x) => s + x.v, 0))}</span></li>
+          </ul>
+        </Card>
+        <Card className="overflow-hidden">
+          <CardHeader title="Where the money went" subtitle={`${monthLabel}${branch ? ` · ${branch === COMMON ? 'common' : branchCode(db, branch)}` : ''}`} icon={IndianRupee} />
           <ul className="space-y-3 p-5">
             {byCat.map((x) => (
               <li key={x.c}>
@@ -375,6 +400,7 @@ function ExpensesTab() {
             {!byCat.length && <li className="text-center text-sm text-mute">Nothing spent this month.</li>}
           </ul>
         </Card>
+        </div>
       </div>
       {edit && <ExpenseForm init={edit.f} id={edit.id} onClose={() => setEdit(null)} />}
       {confirmNode}
@@ -393,6 +419,9 @@ function ExpenseForm({ init, id, onClose }: { init: ExpenseInput; id?: string; o
       footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={async () => { if (await run(() => saveExpense(me, f, id), 'Expense saved')) onClose() }}>{id ? 'Save' : 'Add expense'}</Button></>}>
       <div className="grid gap-4 sm:grid-cols-2">
         <Input label="Date" type="date" required max={today()} value={f.date} onChange={(e) => set({ date: e.target.value })} />
+        <Select label="Branch" value={f.branchId ?? ''} onChange={(e) => set({ branchId: e.target.value || undefined })} hint="ALL = shared by every branch / head office">
+          <option value="">ALL (common)</option>{branchList(db).map((b) => <option key={b.id} value={b.id}>{branchCode(db, b.id)} · {b.name}</option>)}
+        </Select>
         <Select label="Category" value={f.category} onChange={(e) => set({ category: e.target.value })}>{EXPENSE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</Select>
         <Input label="Description" required value={f.description} onChange={(e) => set({ description: e.target.value })} placeholder="e.g. Office internet — October" className="sm:col-span-2" />
         <Input label="Amount before GST (₹)" type="number" min={0} required value={f.amount || ''} onChange={(e) => set({ amount: Number(e.target.value) })} />

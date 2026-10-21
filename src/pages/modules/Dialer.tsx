@@ -130,7 +130,9 @@ function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
       const dbb = b.followUp && b.followUp <= t ? 0 : b.status === 'NEW' ? 1 : 2
       return da - dbb || (a.followUp ?? '').localeCompare(b.followUp ?? '')
     }), [db, me, t])
-  const [currentId, setCurrentId] = useState<string | null>(null)
+  // a link to one lead (search, notification) opens it at the top of the queue
+  const [params] = useSearchParams()
+  const [currentId, setCurrentId] = useState<string | null>(() => params.get('lead'))
   const current = queue.find((l) => l.id === currentId) ?? queue[0]
   /** The call in progress (Blutec click-to-call, or the person's own phone): drives the floating call window. */
   const [call, setCall] = useState<{ leadId: string; startedAt: number; endedAt?: number; phone: boolean } | null>(null)

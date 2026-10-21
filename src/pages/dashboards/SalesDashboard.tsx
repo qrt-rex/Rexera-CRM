@@ -52,8 +52,7 @@ export function SalesDashboard({ lead }: { lead: boolean }) {
       </div>
 
       <TileGrid>
-        <Tile to="/leads" icon={UserPlus} label="CRM Leads" desc="Your leads — add, call, update status" tone="navy" badge={n.toCall} />
-        <Tile to="/dialer" icon={Phone} label="Dialer" desc="Call your queue, log outcomes" highlight />
+        <Tile to="/dialer" icon={Phone} label="Dialer · my leads" desc="Call your assigned leads, log outcomes" highlight badge={n.toCall} />
         <Tile to="/documents" icon={FileText} label="Document Form" desc="Collect client documents" tone="blue" />
         <Tile to="/content?tab=FLYER" icon={Images} label="Flyer & Post" desc="Latest marketing material" tone="orange" badge={newPosts || undefined} />
         <Tile to="/schemes" icon={Sparkles} label="Schemes" desc="Government schemes & offers" tone="green" />
