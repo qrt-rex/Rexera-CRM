@@ -120,7 +120,8 @@ function Overview({ id }: { id: string }) {
   const [pay, setPay] = useState<{ amount: number; date: string; mode: string; proofName: string; proof?: FileRef; tds: boolean; tdsPct: number }>(blankPay)
   const [tdsFor, setTdsFor] = useState<{ payId: string; on: boolean; pct: number } | null>(null)
   const [ded, setDed] = useState<number | null>(null)
-  const canPay = b.createdBy === me.id || b.teamLeadId === me.id || can('bookings.accounts')
+  // part payments 2, 3, 4 … are added only by Accounts
+  const canPay = can('bookings.accounts')
   const g = gstSplit(pay.amount || 0, b.gstRate, b.state, db.settings.supplierState)
   const details: [string, string][] = [
     ['Contact person', b.contactPerson], ['Mobile', b.mobile], ['Email', b.email || '—'], ['PAN', b.pan || '—'], ['GSTIN', b.gstin || '—'],

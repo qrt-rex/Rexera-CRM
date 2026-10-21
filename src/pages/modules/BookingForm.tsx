@@ -4,7 +4,7 @@ import { AlertTriangle, Briefcase, Building2, Calculator, CreditCard, FileText, 
 import type { BookingType, FileRef } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useMe } from '../../lib/auth'
-import { createBooking, findDuplicates, needsPriceSplit, PAYMENT_MODES, updateBooking, type BookingInput, type PaymentPartInput } from '../../lib/actions'
+import { createBooking, findDuplicates, needsPriceSplit, PAYMENT_MODES, updateBooking, userName, type BookingInput, type PaymentPartInput } from '../../lib/actions'
 import { BOOKING_TYPES, COMBO_PACKAGES, comboCap, comboMonths, comboType, INDUSTRIES, isFundingService, priceFor } from '../../lib/catalog'
 import { DOC_TYPES } from '../../lib/files'
 import { addDays, fmtDate, inr, isEmail, isGstin, isPan, round2, today, ymd } from '../../lib/format'
@@ -29,7 +29,6 @@ export default function BookingForm() {
   const existing = id ? db.bookings.find((b) => b.id === id) : undefined
   const lead = params.get('lead') ? db.leads.find((l) => l.id === params.get('lead')) : undefined
   const svcFromLead = lead ? db.services.find((s) => s.name === lead.service) : undefined
-  const closers = useMemo(() => db.users.filter((u) => u.active && rolesOf(u).some((r) => r === 'sales' || r === 'teamlead')).sort((a, b) => a.name.localeCompare(b.name)), [db.users])
 
   const [f, setF] = useState<BookingInput>(() => existing ? {
     companyName: existing.companyName, companyAddress: existing.address ?? '', city: existing.city, state: existing.state, industry: existing.industry,
@@ -235,16 +234,13 @@ export default function BookingForm() {
                   </div>
                 </div>
               ))}
-              {!existing && <Button type="button" variant="soft" icon={Plus} onClick={() => set('payments', [...f.payments, { amount: 0, date: today(), mode: 'UPI' }])}>Add payment part</Button>}
+              {!existing && <p className="text-xs text-mute">Later part payments (2, 3, 4 …) are added by Accounts on the CRM entry.</p>}
               {existing && <p className="text-sm text-mute">Payments are added from the CRM entry page (Balance payment).</p>}
             </div>
           </Card>
 
           <Block title="Closing & remarks" icon={MessageSquareText}>
-            <Select label="Lead closed by" required value={f.closedBy} onChange={(ev) => set('closedBy', ev.target.value)}>
-              {closers.map((u) => <option key={u.id} value={u.id}>{u.name}{u.id === me.id ? ' (me)' : ''}</option>)}
-              {!closers.some((u) => u.id === me.id) && <option value={me.id}>{me.name} (me)</option>}
-            </Select>
+            <Input label="Lead closed by" value={f.closedBy === me.id ? `${me.name} (me)` : userName(db, f.closedBy)} readOnly disabled />
             <Textarea label="Remarks" required rows={3} value={f.remarks} error={e.remarks} onChange={(ev) => set('remarks', ev.target.value)} className="sm:col-span-2" placeholder="What was agreed with the client, special conditions, next steps…" />
             {!existing && <Textarea label="Notes for Accounts" rows={2} value={f.note ?? ''} onChange={(ev) => set('note', ev.target.value)} className="sm:col-span-2" />}
           </Block>
