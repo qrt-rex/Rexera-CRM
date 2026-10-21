@@ -7,6 +7,7 @@ export type Perm =
   | 'content.view' | 'content.manage' | 'salesinfo.manage' | 'schemes.view' | 'schemes.manage'
   | 'broadcasts.view' | 'broadcasts.manage'
   | 'billing.own' | 'billing.create' | 'billing.manage' | 'refunds.manage'
+  | 'workflow.manage' | 'forms.manage' | 'followup.manage'
   | 'team.progress' | 'team.assign'
   | 'attendance.all' | 'leave.approve'
   | 'employees.view' | 'employees.manage'
@@ -119,7 +120,7 @@ export interface LeadEvent { at: string; by: string; action: string; note?: stri
 export interface LeadUpload { id: string; fileName: string; size: number; totalRows: number; imported: number; by: string; at: string }
 
 export type BookingStatus =
-  | 'PENDING_TL' | 'PENDING_ACCOUNTS' | 'ACCOUNTS_HOLD' | 'PENDING_LEGAL'
+  | 'PENDING_TL' | 'PENDING_ACCOUNTS' | 'ACCOUNTS_HOLD' | 'PENDING_LEGAL' | 'CHANGES_REQUIRED'
   | 'IN_OPERATIONS' | 'WITH_ADMIN' | 'OPS_REVIEW' | 'ON_HOLD' | 'COMPLETED' | 'REJECTED'
 
 export interface Payment {
@@ -139,6 +140,114 @@ export interface Payment {
   proof?: FileRef
   /** the client paid after deducting TDS (1–15 %, 10 % by default): `amount` is the TDS kept back on this payment */
   tds?: { pct: number; amount: number }
+}
+
+/** One delivery of an automatic client message (welcome email / WhatsApp). Never marked SENT unless the provider accepted it. */
+export interface Delivery {
+  status: 'PENDING' | 'SENDING' | 'SENT' | 'FAILED' | 'NOT_CONFIGURED' | 'NO_CONTACT' | 'SKIPPED'
+  to?: string
+  attempts: number
+  lastAt?: string
+  sentAt?: string
+  error?: string
+  /** the provider's message id (Interakt) */
+  messageId?: string
+  /** staff opened the chat / mail by hand (not a delivery confirmation) */
+  manualAt?: string
+  manualBy?: string
+}
+/** The welcome message sent to the client once Legal approves the file and it moves to Operations (once per file). */
+export interface WelcomeState { email: Delivery; whatsapp: Delivery; createdAt: string; createdBy: string }
+/** Every-15-days follow-up while Operations works the file (Admin can pause / resume / reschedule). */
+export interface FollowUp {
+  everyDays: number
+  startedOn: string
+  nextOn: string
+  lastOn?: string
+  paused?: boolean
+  log: { at: string; by: string; kind: 'NOTE' | 'REMINDER' | 'PAUSE' | 'RESUME' | 'RESCHEDULE'; note?: string }[]
+}
+/** The five Admin work stages tracked on every file Admin works on. */
+export type AdminStageId = 'PRECHECK' | 'FINANCE' | 'DPR' | 'CERTIFICATION' | 'SUBMISSION'
+export type AdminWorkStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'PENDING_DOCUMENTS' | 'PENDING_REVIEW' | 'SUBMITTED' | 'APPROVED' | 'RETURNED' | 'COMPLETED' | 'NOT_NEEDED'
+export interface AdminWorkItem {
+  status: AdminWorkStatus
+  /** the Admin employee doing this stage (defaults to the file's Admin) */
+  assignee?: string
+  due?: string
+  updatedAt: string
+  updatedBy: string
+  startedAt?: string
+  doneAt?: string
+  history: { at: string; by: string; status: AdminWorkStatus; note?: string }[]
+  /** Pre-Check Deck follow-up: every 3 (or 4) days while it is pending */
+  remindEveryDays?: number
+  nextRemindOn?: string
+  lastFollowUpOn?: string
+}
+/** Admin / Operations settings for the automated workflow (Workflow settings page). */
+export interface WorkflowSettings {
+  fileReminderDays: number
+  precheckDays: number
+  welcomeAuto: boolean
+  welcomeEmail: { subject: string; body: string }
+  welcomeWhatsapp: string
+  /** who gets the one-day-before scheme expiry alert */
+  schemeAlertRoles: Role[]
+  /** shown to clients in the welcome message */
+  opsContact: { name: string; phone: string; email: string }
+  /** Interakt template names (approved by Meta); empty = WhatsApp not set up for that message */
+  whatsapp: { welcomeTemplate: string; invoiceTemplate: string; language: string }
+}
+
+// ------------------------------------------------------------------ Document Form Builder (client links)
+export type FormFieldType = 'text' | 'textarea' | 'email' | 'phone' | 'date' | 'number' | 'select' | 'checkbox' | 'file'
+export interface FormField { id: string; label: string; type: FormFieldType; required: boolean; options?: string[]; help?: string }
+/**
+ * A form sent to a client by secure link: ONLINE = fields to fill in (and files to upload); UPLOAD = a document the
+ * client downloads and returns completed. Editing a published form makes a new version; old answers keep theirs.
+ */
+export interface DocForm {
+  id: string
+  /** secret, unguessable part of the link (/f/<token>); a new one revokes the old link */
+  token: string
+  name: string
+  description: string
+  instructions: string
+  kind: 'ONLINE' | 'UPLOAD'
+  fields: FormField[]
+  version: number
+  versions: { version: number; at: string; by: string; fields: FormField[] }[]
+  status: 'DRAFT' | 'PUBLISHED' | 'CLOSED' | 'ARCHIVED'
+  /** the client file it belongs to (optional) */
+  bookingId?: string
+  /** the link stops working after this day */
+  expiresOn?: string
+  /** the client must enter the mobile number on the client file before they see or submit anything */
+  verify: 'NONE' | 'MOBILE'
+  /** UPLOAD forms: the document the client downloads */
+  document?: FileRef
+  createdBy: string
+  createdAt: string
+  updatedAt: string
+  updatedBy: string
+  views: number
+  lastViewedAt?: string
+}
+export interface FormSubmission {
+  id: string
+  formId: string
+  formVersion: number
+  bookingId?: string
+  /** the fields as they were when the client answered */
+  fields: FormField[]
+  answers: Record<string, string | number | boolean>
+  files: { fieldId: string; file: FileRef }[]
+  submittedAt: string
+  status: 'NEW' | 'REVIEWED' | 'ACCEPTED' | 'REJECTED'
+  reviewedBy?: string
+  reviewedAt?: string
+  note?: string
 }
 
 /** How a CRM entry is booked: one service, several services, or a combo package (3 / 6 / 9 / 12 months). */
@@ -236,6 +345,12 @@ export interface Booking {
   commission?: { to: 'CA' | 'DSA'; name: string; pct: number; amount: number; by: string; at: string }
   /** money paid back to the client (Accounts only) */
   refunds?: Refund[]
+  /** automatic welcome message after Legal approval (email + WhatsApp) */
+  welcome?: WelcomeState
+  /** every-15-days follow-up schedule while the file is being processed */
+  followUp?: FollowUp
+  /** Admin checklist: Pre-Check Deck, Finance Added, DPR, Certification, Application / Submission */
+  adminWork?: Partial<Record<AdminStageId, AdminWorkItem>>
   paymentContact?: string
   paymentEmail?: string
   /** booking date entered by sales (createdAt keeps the exact date and time of entry) */
@@ -286,12 +401,29 @@ export interface Invoice {
   branchId?: string
   clientAddress?: string
   clientPan?: string
+  /** each time the PDF was sent to the client (written by the live server only — the provider's answer, never assumed) */
+  shares?: InvoiceShare[]
+}
+export interface InvoiceShare {
+  id: string; at: string; by: string; channel: 'email' | 'whatsapp'; to: string
+  /** SENT = accepted by the mail server / Interakt */
+  status: 'SENT' | 'FAILED' | 'NOT_CONFIGURED' | 'NO_CONTACT'
+  error?: string; messageId?: string
 }
 
 /** Company branch: invoices show its address and GSTIN. */
 export interface Branch { id: string; name: string; /** short code shown on dashboards, e.g. AMD-A */ code?: string; address: string; city: string; state: string; pin: string; gstin: string; phone: string; email: string }
 
-export interface Scheme { id: string; title: string; category: string; summary: string; benefit: string; eligibility: string; active: boolean; createdAt: string; by: string }
+export interface Scheme {
+  id: string; title: string; category: string; summary: string; benefit: string; eligibility: string; active: boolean; createdAt: string; by: string
+  /** price (₹) shown to sales */
+  price?: number
+  /** the scheme runs from startDate to endDate (both inclusive); expired after endDate */
+  startDate?: string
+  endDate?: string
+  updatedAt?: string
+  updatedBy?: string
+}
 export interface Post { id: string; kind: 'FLYER' | 'POST' | 'SALES_INFO'; title: string; body: string; theme: string; createdAt: string; by: string; pinned?: boolean }
 export interface Broadcast { id: string; title: string; body: string; priority: 'NORMAL' | 'HIGH' | 'URGENT'; audience: Role[] | 'ALL'; by: string; at: string; acks: string[] }
 export interface EventItem { id: string; title: string; date: string; time: string; kind: 'MEETING' | 'TRAINING' | 'HOLIDAY' | 'DEADLINE' | 'CELEBRATION'; description: string; by: string }
@@ -416,6 +548,10 @@ export interface Settings {
   breakPolicy?: BreakPolicy
   /** automatic lead assignment (round robin): new website / CSV / manual leads go to these people in turn */
   leadAssign?: LeadAssign
+  /** reminder intervals, welcome templates, scheme alert recipients */
+  workflow?: WorkflowSettings
+  /** written by the live server's scheduled job each time it runs (read-only in the app) */
+  jobs?: { lastRunAt: string; summary?: string }
 }
 /** Round robin: `next` is the position in `userIds` that gets the next lead (wraps back to the first person). */
 export interface LeadAssign { on: boolean; userIds: string[]; next: number }
@@ -629,6 +765,9 @@ export interface DB {
   assets?: Asset[]
   stock?: StockItem[]
   expenses?: Expense[]
+  /** Document Form Builder: forms sent to clients by secure link, and what came back */
+  docForms?: DocForm[]
+  formSubmissions?: FormSubmission[]
   /** one-time data upgrades already applied */
   upgrades: string[]
 }

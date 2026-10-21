@@ -42,6 +42,9 @@ export const PERM_GROUPS: { group: string; perms: { id: Perm; label: string }[] 
       { id: 'bookings.legal', label: 'Legal: review & assign to Operations' },
       { id: 'bookings.process', label: 'Operations: process stages, assign to Admin' },
       { id: 'bookings.admin', label: 'Admin: complete or hold client work' },
+      { id: 'followup.manage', label: 'Pause / resume / reschedule file follow-ups (Admin)' },
+      { id: 'forms.manage', label: 'Document Form Builder: create forms and client links (Admin, Operation Team)' },
+      { id: 'workflow.manage', label: 'Workflow settings: reminder intervals, welcome templates, alerts (Admin)' },
     ],
   },
   {
@@ -106,10 +109,10 @@ const common: Perm[] = ['broadcasts.view', 'messages.use', 'schemes.view', 'cont
 
 export const DEFAULT_ROLE_PERMS: Record<Role, Perm[]> = {
   superadmin: [...ALL_PERMS],
-  admin: [...common, 'bookings.all', 'bookings.admin', 'content.manage', 'salesinfo.manage', 'schemes.manage', 'employees.view', 'documents.forms', 'reports.view'],
+  admin: [...common, 'bookings.all', 'bookings.admin', 'content.manage', 'salesinfo.manage', 'schemes.manage', 'employees.view', 'documents.forms', 'reports.view', 'followup.manage', 'forms.manage', 'workflow.manage'],
   accounts: [...common, 'bookings.all', 'bookings.accounts', 'billing.create', 'billing.manage', 'refunds.manage', 'reports.view', 'reports.export'],
   legal: [...common, 'bookings.all', 'bookings.legal', 'documents.forms', 'leave.approve', 'reports.view'],
-  operations: [...common, 'bookings.all', 'bookings.process', 'content.manage', 'salesinfo.manage', 'schemes.manage', 'employees.view', 'documents.forms', 'reports.view', 'events.manage'],
+  operations: [...common, 'bookings.all', 'bookings.process', 'content.manage', 'salesinfo.manage', 'schemes.manage', 'employees.view', 'documents.forms', 'reports.view', 'events.manage', 'forms.manage'],
   teamlead: [
     ...common, 'salesinfo.manage', 'leads.own', 'leads.assign', 'dialer.use', 'bookings.create', 'bookings.own', 'bookings.team', 'bookings.approve_tl',
     'billing.own', 'billing.create', 'team.progress', 'team.assign', 'documents.forms', 'leave.approve', 'reports.view',
@@ -133,6 +136,10 @@ export const RESERVED: Partial<Record<Perm, Role[]>> = {
   'refunds.manage': ['superadmin', 'accounts'],
   // the CRM Leads page (lead source, uploads, website leads, auto-assign) is the Super Admin's; others work leads in the Dialer
   'leads.admin': ['superadmin'],
+  // workflow settings and follow-up schedules: Admin; client forms: Admin and the Operation team
+  'workflow.manage': ['superadmin', 'admin'],
+  'followup.manage': ['superadmin', 'admin'],
+  'forms.manage': ['superadmin', 'admin', 'operations'],
   'bookings.accounts': ['superadmin', 'accounts'],
   'payroll.view': ['superadmin', 'hr'],
   'payroll.manage': ['superadmin', 'hr'],

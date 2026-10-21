@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Check, CheckCircle2, Clock, PauseCircle, PlayCircle, RotateCcw, Send, ShieldCheck, UserCog, XCircle, type LucideIcon } from 'lucide-react'
+import { Check, CheckCircle2, Clock, FilePen, PauseCircle, PlayCircle, RotateCcw, Send, ShieldCheck, UserCog, XCircle, type LucideIcon } from 'lucide-react'
 import type { Booking } from '../lib/types'
-import { useDb } from '../lib/store'
+import { getDb, useDb } from '../lib/store'
+import { requestWelcomeWhatsapp } from '../lib/share'
 import { useMe } from '../lib/auth'
 import { addDocuments, availableDecisions, decide, userName, usersWithRole, type Decision } from '../lib/actions'
 import { BOOKING_STATUS, CHAIN, hasLegalDoc, HOLD_REASONS, LEGAL_DOC_CATEGORIES, STAGES, stageLabel } from '../lib/workflow'
 import { DocUploader, type PendingDoc } from './DocUploader'
 import { addDays, bookingMoney, fmtDate, inr, ymd } from '../lib/format'
-import { Badge, Button, cx, Input, Modal, Progress, Select, Textarea, useRun } from './ui'
+import { Badge, Button, cx, Input, Modal, Progress, Select, Textarea, useRun, useToast } from './ui'
+import { deliverWelcome } from '../lib/welcome'
 
 export function BookingStatusBadge({ b }: { b: Booking }) {
   const s = BOOKING_STATUS[b.status]
@@ -33,7 +35,7 @@ function chainIndex(b: Booking) {
   switch (b.status) {
     case 'PENDING_TL': case 'REJECTED': return 1
     case 'PENDING_ACCOUNTS': case 'ACCOUNTS_HOLD': return 2
-    case 'PENDING_LEGAL': return 3
+    case 'PENDING_LEGAL': case 'CHANGES_REQUIRED': return 3
     case 'IN_OPERATIONS': return 4
     case 'WITH_ADMIN': return 5
     case 'OPS_REVIEW': return 6
@@ -45,7 +47,7 @@ function chainIndex(b: Booking) {
 export function ChainStepper({ b, compact }: { b: Booking; compact?: boolean }) {
   const db = useDb()
   const idx = chainIndex(b)
-  const problem = b.status === 'REJECTED' ? 'red' : ['ON_HOLD', 'ACCOUNTS_HOLD'].includes(b.status) ? 'amber' : null
+  const problem = b.status === 'REJECTED' ? 'red' : ['ON_HOLD', 'ACCOUNTS_HOLD', 'CHANGES_REQUIRED'].includes(b.status) ? 'amber' : null
   const who = (key: string) => {
     if (key === 'SUBMITTED') return userName(db, b.createdBy)
     if (key === 'TL') return userName(db, b.teamLeadId)
@@ -108,6 +110,7 @@ const DEC_META: Record<Decision['kind'], { label: string; icon: LucideIcon; vari
   HOLD: { label: 'On hold', icon: PauseCircle, variant: 'outline' },
   RESUME: { label: 'Resume', icon: PlayCircle, variant: 'primary' },
   RESUBMIT: { label: 'Resubmit', icon: RotateCcw, variant: 'primary' },
+  REQUEST_CHANGES: { label: 'Changes required', icon: FilePen, variant: 'outline' },
   ASSIGN_OPS: { label: 'Assign to Operations', icon: UserCog, variant: 'accent' },
   ASSIGN_ADMIN: { label: 'Assign to Admin', icon: Send, variant: 'accent' },
   RETURN_OPS: { label: 'Return to Operations', icon: RotateCcw, variant: 'outline' },
@@ -140,6 +143,7 @@ export function DecisionModal({ b, kind, onClose, onDone }: { b: Booking; kind: 
   const db = useDb()
   const me = useMe()
   const run = useRun()
+  const toast = useToast()
   const [remark, setRemark] = useState('')
   const [ops, setOps] = useState('')
   const [admin, setAdmin] = useState('')
@@ -156,7 +160,7 @@ export function DecisionModal({ b, kind, onClose, onDone }: { b: Booking; kind: 
   }, [kind, b])
   if (!kind) return null
   const m = reassign(b, kind) ? { ...DEC_META[kind], label: 'Reassign Operations' } : DEC_META[kind]
-  const needsReason = ['REJECT', 'HOLD', 'RETURN_OPS', 'RETURN_ADMIN'].includes(kind)
+  const needsReason = ['REJECT', 'HOLD', 'RETURN_OPS', 'RETURN_ADMIN', 'REQUEST_CHANGES'].includes(kind)
   const load = (id: string) => db.bookings.filter((x) => (x.opsMemberId === id && x.status === 'IN_OPERATIONS') || (x.adminId === id && x.status === 'WITH_ADMIN')).length
 
   const submit = async () => {
@@ -164,8 +168,20 @@ export function DecisionModal({ b, kind, onClose, onDone }: { b: Booking; kind: 
     if (kind === 'ASSIGN_OPS') dec = { kind, remark, opsMemberId: ops, maxStage, deadline }
     else if (kind === 'ASSIGN_ADMIN') dec = { kind, remark, adminId: admin }
     else dec = { kind, remark } as Decision
+    const first = kind === 'ASSIGN_OPS' && b.status === 'PENDING_LEGAL'
     const ok = await run(() => decide(me, b.id, dec), `${m.label}: done`)
-    if (ok) { onClose(); onDone?.(kind) }
+    if (!ok) return
+    onClose(); onDone?.(kind)
+    // legal approval queued the client's welcome: send it now (the server's job retries if this screen closes)
+    if (first) {
+      const r = await deliverWelcome(me, b.id)
+      if (r) toast(r.status === 'SENT' ? 'success' : 'warning', r.status === 'SENT' ? `Welcome email sent to ${r.to}` : `Welcome email not sent: ${r.error ?? r.status.toLowerCase().replace('_', ' ')} — retry from the file`)
+      // after the email's result is saved, so the two never write over each other
+      if (getDb().bookings.find((x) => x.id === b.id)?.welcome?.whatsapp.status === 'PENDING') {
+        const wa = await requestWelcomeWhatsapp(b.id).catch(() => null)
+        if (wa) toast(wa.status === 'SENT' ? 'success' : 'warning', wa.status === 'SENT' ? `Welcome WhatsApp sent to ${wa.to}` : `Welcome WhatsApp not sent: ${wa.error ?? wa.status.toLowerCase()} — retry from the file`)
+      }
+    }
   }
 
   return (

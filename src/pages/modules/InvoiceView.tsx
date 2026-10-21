@@ -1,16 +1,62 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Ban, IndianRupee, Mail, MessageCircle, Printer, Receipt } from 'lucide-react'
+import { ArrowLeft, Ban, Download, IndianRupee, Mail, MessageCircle, Printer, Receipt, Send } from 'lucide-react'
+import type { Invoice } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
 import { cancelInvoice, recordInvoicePayment, setInvoiceBranch, userName, visibleInvoices } from '../../lib/actions'
-import { fmtDate, gstSplit, inr, invoiceTotals, rupeesInWords } from '../../lib/format'
-import { Badge, Button, Card, EmptyState, Input, Modal, useConfirm, useRun } from '../../components/ui'
+import { fmtDate, fmtDateTime, gstSplit, inr, invoiceTotals, isEmail, isPhone, rupeesInWords } from '../../lib/format'
+import { CLOUD } from '../../lib/cloud'
+import { invoiceFileName, invoicePdf } from '../../lib/invoicePdf'
+import { invoiceShareText, sendInvoiceToClient, type ShareResult } from '../../lib/share'
+import { Badge, Button, Card, Checkbox, EmptyState, Input, Modal, Textarea, useConfirm, useRun, useToast } from '../../components/ui'
 import { Logo } from '../../components/Logo'
 
+const SHARE_TONE = { SENT: 'green', FAILED: 'red', NOT_CONFIGURED: 'amber', NO_CONTACT: 'amber' } as const
+const SHARE_LABEL = { SENT: 'Sent', FAILED: 'Failed', NOT_CONFIGURED: 'Not set up', NO_CONTACT: 'No contact' } as const
+
 /**
- * Share an invoice with the client: an email from the person's own mail app (attach the PDF from Print / PDF) and a
- * WhatsApp message (wa.me link; a WhatsApp Business integration can replace it later).
+ * Send the invoice PDF to the client from the live server: attached to an email and / or as a WhatsApp document
+ * (Interakt). Each result is the provider's answer, kept on the invoice.
+ */
+function SendToClient({ inv, open, onClose }: { inv: Invoice; open: boolean; onClose: () => void }) {
+  const db = useDb()
+  const me = useMe()
+  const toast = useToast()
+  const x = invoiceShareText(db, inv)
+  const [email, setEmail] = useState(x.email), [phone, setPhone] = useState(x.phone), [message, setMessage] = useState(x.message)
+  const [byEmail, setByEmail] = useState(!!x.email), [byWa, setByWa] = useState(!!x.phone)
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<{ email?: ShareResult; whatsapp?: ShareResult } | null>(null)
+  const problem = !byEmail && !byWa ? 'Choose email, WhatsApp or both.' : byEmail && !isEmail(email) ? 'Enter a valid email address.' : byWa && !isPhone(phone) ? 'Enter a valid 10-digit mobile number.' : byEmail && message.trim().length < 3 ? 'Write a short message.' : ''
+  const send = async () => {
+    setBusy(true)
+    try {
+      const r = await sendInvoiceToClient(db, me, inv, { email: byEmail ? email : undefined, phone: byWa ? phone : undefined, message })
+      setResult(r)
+      toast(r.success ? 'success' : 'error', r.success ? 'Invoice sent' : 'Not sent — see the details')
+    } catch (e) { toast('error', e instanceof Error ? e.message : 'Not sent') } finally { setBusy(false) }
+  }
+  const line = (k: string, r?: ShareResult) => r && <p className="flex flex-wrap items-center gap-2"><b>{k}</b><Badge tone={SHARE_TONE[r.status]}>{SHARE_LABEL[r.status]}</Badge><span className="text-mute">{r.to}{r.error ? ` — ${r.error}` : ''}</span></p>
+  return (
+    <Modal open={open} onClose={onClose} title="Send invoice to client" subtitle={`${x.kind} ${inv.number} · the PDF goes as an attachment / WhatsApp document`} size="md"
+      footer={<><Button variant="outline" onClick={onClose}>{result ? 'Close' : 'Cancel'}</Button>{!result && <Button icon={Send} disabled={!!problem || busy} onClick={send}>{busy ? 'Sending…' : 'Send'}</Button>}</>}>
+      {result ? <div className="space-y-2 text-sm">{line('Email', result.email)}{line('WhatsApp', result.whatsapp)}<p className="text-[11px] text-mute">“Sent” means the mail server / Interakt accepted it. Delivery and read receipts aren’t tracked.</p></div> : (
+        <div className="grid gap-3">
+          <Checkbox label="Email with the PDF attached" checked={byEmail} onChange={setByEmail} />
+          {byEmail && <Input label="Client email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />}
+          {byEmail && <Textarea label="Message" rows={4} value={message} onChange={(e) => setMessage(e.target.value)} />}
+          <Checkbox label="WhatsApp (the PDF as a document)" checked={byWa} onChange={setByWa} />
+          {byWa && <Input label="Client WhatsApp number" value={phone} onChange={(e) => setPhone(e.target.value)} hint="Uses the invoice template chosen in Workflow settings → WhatsApp." />}
+          {problem && <p className="text-xs text-warn">{problem}</p>}
+        </div>
+      )}
+    </Modal>
+  )
+}
+
+/**
+ * Share by hand: an email from the person's own mail app (attach the PDF) and a WhatsApp chat (wa.me link).
  */
 function shareLinks(x: { kind: string; number: string; date: string; due: string; client: string; company: string; total: string; balance: string; email: string; phone: string }) {
   const text = [
@@ -35,6 +81,7 @@ export default function InvoiceView() {
   const run = useRun()
   const [confirm, node] = useConfirm()
   const [payOpen, setPayOpen] = useState(false)
+  const [sendOpen, setSendOpen] = useState(false)
   const [amt, setAmt] = useState(0)
   const inv = visibleInvoices(db, me).find((x) => x.id === id)
   if (!inv) return <Card><EmptyState icon={Receipt} title="Invoice not found" action={<Link to="/billing"><Button>All invoices</Button></Link>} /></Card>
@@ -65,10 +112,13 @@ export default function InvoiceView() {
             <option value="">Choose branch…</option>{branches.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
           </select>
         )}
-        <Button icon={Printer} disabled={needBranch} title={needBranch ? 'Choose the branch first' : undefined} onClick={() => window.print()}>Print / PDF</Button>
+        <Button icon={Printer} variant="outline" disabled={needBranch} title={needBranch ? 'Choose the branch first' : undefined} onClick={() => window.print()}>Print</Button>
+        <Button icon={Download} variant="outline" disabled={needBranch} title={needBranch ? 'Choose the branch first' : 'The PDF exactly as the client receives it'}
+          onClick={() => run(async () => { const url = URL.createObjectURL(await invoicePdf(db, inv)); const a = document.createElement('a'); a.href = url; a.download = invoiceFileName(inv); a.click(); setTimeout(() => URL.revokeObjectURL(url), 60_000) })}>PDF</Button>
         {inv.status !== 'CANCELLED' && <>
-          <a href={share.mail} className={needBranch ? 'pointer-events-none opacity-50' : ''} title="Opens your email app with the invoice details — attach the PDF from Print / PDF"><Button variant="outline" icon={Mail} disabled={needBranch}>Email</Button></a>
-          <a href={share.whatsapp} target="_blank" rel="noreferrer" className={needBranch ? 'pointer-events-none opacity-50' : ''} title={share.phone ? `WhatsApp ${share.phone}` : 'Opens WhatsApp — pick the client'}><Button variant="outline" icon={MessageCircle} disabled={needBranch}>WhatsApp</Button></a>
+          {CLOUD && can('billing.manage', 'billing.create') && <Button icon={Send} disabled={needBranch} title={needBranch ? 'Choose the branch first' : 'Email the PDF and / or send it on WhatsApp'} onClick={() => setSendOpen(true)}>Send to client</Button>}
+          <a href={share.mail} className={needBranch ? 'pointer-events-none opacity-50' : ''} title="Opens your email app with the invoice details — attach the PDF yourself"><Button variant="outline" icon={Mail} disabled={needBranch}>{CLOUD ? 'Mail app' : 'Email'}</Button></a>
+          <a href={share.whatsapp} target="_blank" rel="noreferrer" className={needBranch ? 'pointer-events-none opacity-50' : ''} title={share.phone ? `WhatsApp ${share.phone} from your phone / WhatsApp Web` : 'Opens WhatsApp — pick the client'}><Button variant="outline" icon={MessageCircle} disabled={needBranch}>{CLOUD ? 'WhatsApp chat' : 'WhatsApp'}</Button></a>
         </>}
       </div>
       {needBranch && <p className="no-print mb-3 rounded-xl bg-warn-soft px-4 py-2 text-sm text-warn">Choose the branch this tax invoice is issued from — its address and GSTIN print on the invoice.</p>}
@@ -122,6 +172,21 @@ export default function InvoiceView() {
           </div>
         </div>
       </Card>
+      {!!inv.shares?.length && (
+        <Card className="no-print mt-4 p-4">
+          <p className="mb-2 text-sm font-bold">Sent to the client</p>
+          <div className="space-y-1.5 text-sm">
+            {inv.shares.map((s) => (
+              <p key={s.id} className="flex flex-wrap items-center gap-2">
+                {s.channel === 'email' ? <Mail className="size-4 text-mute" /> : <MessageCircle className="size-4 text-mute" />}
+                <span>{s.to || '—'}</span><Badge tone={SHARE_TONE[s.status]}>{SHARE_LABEL[s.status]}</Badge>
+                <span className="text-xs text-mute">{fmtDateTime(s.at)} · {userName(db, s.by)}{s.error ? ` · ${s.error}` : ''}</span>
+              </p>
+            ))}
+          </div>
+        </Card>
+      )}
+      {sendOpen && <SendToClient inv={inv} open onClose={() => setSendOpen(false)} />}
       <Modal open={payOpen} onClose={() => setPayOpen(false)} title="Record payment" size="sm"
         footer={<><Button variant="outline" onClick={() => setPayOpen(false)}>Cancel</Button><Button onClick={async () => { if (await run(() => recordInvoicePayment(me, inv.id, amt, t.grand), 'Payment recorded')) setPayOpen(false) }}>Save</Button></>}>
         <Input label="Amount received (₹)" type="number" min={0} value={amt || ''} onChange={(e) => setAmt(Number(e.target.value))} hint={`Balance ${inr(t.balance)}`} />

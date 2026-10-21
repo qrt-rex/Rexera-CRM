@@ -2,8 +2,9 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   BookOpenCheck, Briefcase, CalendarCheck2, CheckCircle2, ClipboardList, FileClock, FileText, FolderKanban, Images, PauseCircle,
-  Send, ShieldCheck, UserCheck, UserCog, UsersRound, ListTodo, Inbox,
+  Send, ShieldCheck, UserCheck, UserCog, UsersRound, ListTodo, Inbox, FileSignature, Settings2,
 } from 'lucide-react'
+import { AdminProgressOverview, AutomationAlerts } from '../../components/OpsAutomation'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
 import { userName, usersWithRole } from '../../lib/actions'
@@ -121,8 +122,11 @@ export function AdminDashboard() {
         <Tile to="/bookings?status=COMPLETED" icon={CheckCircle2} label="Complete client work" desc="Finished files" tone="green" />
         <Tile to="/bookings?status=ON_HOLD" icon={PauseCircle} label="On hold client" desc="Waiting on client or issue" tone="amber" badge={hold.length} />
         <Tile to="/leave?new=1" icon={CalendarCheck2} label="Request my leave" tone="violet" />
+        <Tile to="/forms" icon={FileSignature} label="Document Form Builder" desc="Client forms & secure links" tone="violet" />
+        <Tile to="/workflow-settings" icon={Settings2} label="Workflow settings" desc="Reminders, welcome message, alerts" tone="navy" />
       </TileGrid>
-      <div className="mt-6 grid gap-6 xl:grid-cols-3">
+      <div className="mt-6"><AutomationAlerts /><AdminProgressOverview /></div>
+      <div className="grid gap-6 xl:grid-cols-3">
         <Section title="My client work" subtitle={`Stages: ${STAGES.join(' → ')}`} icon={Inbox} className="xl:col-span-2" action={<ViewAll to="/work" />}>
           {waiting.length ? <ul className="divide-y divide-line/70">{waiting.slice(0, 8).map((b) => <ClientWorkRow key={b.id} b={b} showDocs />)}</ul> : <EmptyState icon={CheckCircle2} title="Nothing waiting" text="Operations will assign files to you." />}
         </Section>

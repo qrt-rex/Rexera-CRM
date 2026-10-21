@@ -9,6 +9,10 @@ import { aiConfig, aiOverLimit, answerAi, checkAiRequest } from './server/ai.mjs
 import { crmUser, setPassword } from './server/users.mjs'
 import { receive as receiveBlutecWebhook } from './server/blutecWebhook.mjs'
 import { receiveWebsiteLead } from './server/websiteLeads.mjs'
+import { jobsAuthorized, runJobs } from './server/jobs.mjs'
+import { getPublicForm, submitPublicForm } from './server/forms.mjs'
+import { sendInvoice, sendWelcomeNow } from './server/share.mjs'
+import { whatsappConfigured } from './server/whatsapp.mjs'
 import { incentiveReport, reportConfig } from './server/incentives.mjs'
 import { blutecEnv, handleBlutec } from './supabase/functions/_shared/blutec.ts'
 
@@ -160,6 +164,21 @@ async function handleBlutecWebhook(req, res, kind) {
   if (answer.status !== 200) console.warn(`[blutec webhook ${kind}] refused: ${answer.body.message}`)
   work?.catch((e) => console.error(`[blutec webhook ${kind}] ${e.message}`))
 }
+
+/**
+ * Scheduled jobs (server/jobs.mjs): called by a Render Cron Job (POST /api/jobs/run) — or, on an always-on server,
+ * every JOBS_INTERVAL_MINUTES. One run at a time.
+ */
+let jobsRunning = null
+function runScheduledJobs(source) {
+  jobsRunning ??= runJobs(getEnv, { send: deliverClientEmail })
+    .then((r) => { console.log(`[jobs:${source}] ${r.ok ? r.summary : r.message}${r.errors?.length ? ` — ${r.errors.join('; ')}` : ''}`); return r })
+    .catch((e) => { console.error(`[jobs:${source}] ${e.message}`); return { ok: false, message: e.message } })
+    .finally(() => { jobsRunning = null })
+  return jobsRunning
+}
+const jobsEvery = Number(getEnv('JOBS_INTERVAL_MINUTES')) || 0
+if (jobsEvery >= 5) setInterval(() => runScheduledJobs('timer'), jobsEvery * 60_000).unref()
 
 /** Website enquiry form → CRM lead (server/websiteLeads.mjs). A plain HTML form with a thank-you URL is redirected there. */
 async function handleWebsiteLead(req, res) {
@@ -377,44 +396,50 @@ async function handleSendClientEmail(req, res) {
   }
   const problem = checkClientEmail(body)
   if (problem) return sendJson(res, 400, { success: false, message: problem })
-
   const ip = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '?'
   if (overLimit(`ip:${ip}`, 60, 3600_000) || overLimit(`to:${body.to.toLowerCase()}`, 10, 3600_000)) {
     return sendJson(res, 429, { success: false, message: 'Too many emails in the last hour. Please try again later.' })
   }
 
+  const r = await deliverClientEmail(body)
+  return sendJson(res, r.success ? 200 : 500, r)
+}
+
+/**
+ * Sends one branded client email (Resend when configured, else SMTP). Used by the endpoint above and by the scheduled
+ * job's welcome retries. `attachments` = [{ filename, content (base64), contentType }] (server-made only, e.g. the
+ * invoice PDF). Answers { success, message } — success only when the provider accepted it.
+ */
+async function deliverClientEmail(body, attachments = []) {
+  const problem = checkClientEmail(body)
+  if (problem) return { success: false, message: problem }
   const { html, text } = renderClientEmail(body)
   const cc = (body.cc || []).filter(Boolean)
   const replyTo = body.replyTo || body.sender?.email || undefined
-
   try {
-    const resendResult = await sendViaResendApi(body.to, body.subject, html, { text, ...(cc.length && { cc }), ...(replyTo && { reply_to: replyTo }) })
+    const resendResult = await sendViaResendApi(body.to, body.subject, html, { text, ...(cc.length && { cc }), ...(replyTo && { reply_to: replyTo }), ...(attachments.length && { attachments: attachments.map((a) => ({ filename: a.filename, content: a.content })) }) })
     if (resendResult) {
       console.log(`[Resend API] Client email delivered to ${body.to}`)
-      return sendJson(res, 200, { success: true, message: `Email sent to ${body.to}` })
+      return { success: true, message: `Email sent to ${body.to}` }
     }
   } catch (resendErr) {
     console.warn('[Resend API Warning]:', resendErr.message)
   }
-
   const transporter = createMailer()
   const smtpUser = getEnv('SMTP_USER')
   const smtpFrom = getEnv('SMTP_FROM', `"Rexera CRM" <${smtpUser || 'no-reply@hr.rexera.in'}>`)
-  if (!transporter) {
-    return sendJson(res, 500, { success: false, configured: false, message: 'Email is not set up on the server (SMTP_USER / SMTP_PASS).' })
-  }
+  if (!transporter) return { success: false, configured: false, message: 'Email is not set up on the server (SMTP_USER / SMTP_PASS).' }
   try {
-    await transporter.sendMail({ from: smtpFrom, to: body.to, ...(cc.length && { cc }), ...(replyTo && { replyTo }), subject: body.subject, html, text })
+    await transporter.sendMail({
+      from: smtpFrom, to: body.to, ...(cc.length && { cc }), ...(replyTo && { replyTo }), subject: body.subject, html, text,
+      ...(attachments.length && { attachments: attachments.map((a) => ({ filename: a.filename, content: Buffer.from(a.content, 'base64'), contentType: a.contentType })) }),
+    })
     console.log(`[SMTP] Client email delivered to ${body.to}`)
-    return sendJson(res, 200, { success: true, message: `Email sent to ${body.to}` })
+    return { success: true, message: `Email sent to ${body.to}` }
   } catch (err) {
     console.error('[SMTP Error - Client email]:', err.message)
     const isTimeout = /timeout|ETIMEDOUT|ECONNREFUSED/i.test(err.message)
-    return sendJson(res, 500, {
-      success: false,
-      smtpBlocked: isTimeout,
-      message: isTimeout ? 'The email server could not be reached (SMTP timed out).' : `SMTP error: ${err.message}`,
-    })
+    return { success: false, smtpBlocked: isTimeout, message: isTimeout ? 'The email server could not be reached (SMTP timed out).' : `SMTP error: ${err.message}` }
   }
 }
 
@@ -561,6 +586,7 @@ const server = http.createServer(async (req, res) => {
       uptime: process.uptime(),
       timestamp: new Date().toISOString(),
       smtpConfigured: Boolean(getEnv('SMTP_USER') && getEnv('SMTP_PASS')),
+      whatsappConfigured: whatsappConfigured(getEnv),
       // AI assistant set-up at a glance (never the key itself)
       aiConfigured: Boolean(getEnv('AI_API_KEY') || getEnv('OPENAI_API_KEY')),
       aiProvider: (() => { try { return new URL(getEnv('AI_BASE_URL') || 'https://api.openai.com/v1').host } catch { return 'invalid AI_BASE_URL' } })(),
@@ -591,6 +617,45 @@ const server = http.createServer(async (req, res) => {
 
   if ((pathname === '/api/blutec/webhook/ivr' || pathname === '/api/blutec/webhook/calls') && req.method === 'POST') {
     return handleBlutecWebhook(req, res, pathname.endsWith('/ivr') ? 'ivr' : 'calls')
+  }
+
+  // public client forms (no sign-in): read the form / send the answers
+  const formMatch = pathname.match(/^\/api\/forms\/([A-Za-z0-9_-]{8,80})(\/submit)?$/)
+  if (formMatch) {
+    const ip = String(req.headers['x-forwarded-for'] ?? req.socket.remoteAddress ?? '').split(',')[0].trim()
+    try {
+      if (!formMatch[2] && req.method === 'GET') { const r = await getPublicForm(getEnv, formMatch[1], parsedUrl.searchParams.get('mobile'), ip); return sendJson(res, r.status, r.body) }
+      if (formMatch[2] && req.method === 'POST') {
+        let raw
+        try { raw = await readRawBody(req, 22_000_000) } catch { return sendJson(res, 413, { success: false, message: 'Files too large (15 MB in all).' }) }
+        const r = await submitPublicForm(getEnv, formMatch[1], raw, ip)
+        return sendJson(res, r.status, r.body)
+      }
+    } catch (e) {
+      console.error(`[forms] ${e.message}`)
+      return sendJson(res, 502, { success: false, message: 'Sorry, something went wrong — please try again or contact us.' })
+    }
+  }
+
+  // sending to clients from a CRM screen (Supabase sign-in): invoice PDF by email / WhatsApp, WhatsApp welcome
+  if ((pathname === '/api/invoices/send' || pathname === '/api/whatsapp/welcome') && req.method === 'POST') {
+    let raw
+    try { raw = await readRawBody(req, 8_000_000) } catch { return sendJson(res, 413, { success: false, message: 'The invoice PDF is too large.' }) }
+    try {
+      const r = pathname === '/api/invoices/send'
+        ? await sendInvoice(getEnv, req.headers.authorization, raw, { deliverEmail: deliverClientEmail })
+        : await sendWelcomeNow(getEnv, req.headers.authorization, raw)
+      return sendJson(res, r.status, r.body)
+    } catch (e) {
+      console.error(`[${pathname}] ${e.message}`)
+      return sendJson(res, 502, { success: false, message: `Sending failed: ${e.message}` })
+    }
+  }
+
+  if (pathname === '/api/jobs/run' && req.method === 'POST') {
+    if (!jobsAuthorized(getEnv, req.headers['x-jobs-secret'], parsedUrl.searchParams.get('key'))) return sendJson(res, 401, { success: false, message: 'Bad or missing jobs secret.' })
+    const r = await runScheduledJobs('cron')
+    return sendJson(res, r.ok ? 200 : 503, { success: r.ok, ...r })
   }
 
   if (pathname === '/api/website-lead' && req.method === 'POST') {

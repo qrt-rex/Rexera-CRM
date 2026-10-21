@@ -158,6 +158,13 @@ export function upgradeDb(d: DB): DB {
     for (const b of d.settings.branches ?? []) if (b.id === 'br-vdr' && (!b.code || b.code === 'VDR')) b.code = 'BRD'
     d.upgrades.push('crm-requests-1')
   }
+  if (!d.upgrades.includes('workflow-automation-1')) {
+    // workflow settings and follow-ups: Admin; Document Form Builder: Admin and the Operation team
+    const add = (r: Role, ...p: Perm[]) => { d.rolePerms[r] = [...new Set([...(d.rolePerms[r] ?? []), ...p])] }
+    add('admin', 'workflow.manage', 'followup.manage', 'forms.manage')
+    add('operations', 'forms.manage')
+    d.upgrades.push('workflow-automation-1')
+  }
   d.assets ??= []
   d.stock ??= []
   d.expenses ??= []

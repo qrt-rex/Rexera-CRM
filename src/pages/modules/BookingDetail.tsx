@@ -2,8 +2,9 @@ import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   Archive, ArrowLeft, Building2, Layers, Check, CheckCircle2, ChevronRight, CircleDot, Download, FileText, FolderKanban, History, IndianRupee, ListTodo,
-  MessageSquare, Pencil, Plus, Receipt, Send, ShieldCheck, Trash2, Upload, X, Lock, Mail, Gift, Percent, Undo2,
+  MessageSquare, Pencil, Plus, Receipt, Send, ShieldCheck, Trash2, Upload, X, Lock, Mail, Gift, Percent, Undo2, Workflow,
 } from 'lucide-react'
+import { AdminChecklist, FollowUpCard, WelcomeCard } from '../../components/WorkflowPanels'
 import { ClientEmailComposer } from '../../components/ClientEmail'
 import { openBookingPdf } from '../../lib/bookingPdf'
 import { useDb } from '../../lib/store'
@@ -27,7 +28,7 @@ import {
 import { canSee, moduleByKey } from '../../lib/modules'
 import { BookingStatusBadge, ChainStepper, DeadlineBadge, DecisionButtons, PriorityBadge, StageTrack } from '../../components/booking'
 
-type Tab = 'overview' | 'processing' | 'documents' | 'timeline' | 'legacy'
+type Tab = 'overview' | 'workflow' | 'processing' | 'documents' | 'timeline' | 'legacy'
 
 export default function BookingDetail() {
   const { id } = useParams()
@@ -81,11 +82,20 @@ export default function BookingDetail() {
       </div>
 
       <Tabs value={tab} onChange={setTab} className="mb-5 w-fit" tabs={[
-        { id: 'overview', label: 'Overview', icon: Building2 }, { id: 'processing', label: 'Processing', icon: FolderKanban, count: b.tasks.filter((t) => !t.done).length },
+        { id: 'overview', label: 'Overview', icon: Building2 },
+        ...(b.welcome || b.followUp || b.adminWork ? [{ id: 'workflow' as const, label: 'Workflow', icon: Workflow }] : []),
+        { id: 'processing', label: 'Processing', icon: FolderKanban, count: b.tasks.filter((t) => !t.done).length },
         { id: 'documents', label: 'Documents', icon: FileText, count: b.documents.length }, { id: 'timeline', label: 'Timeline', icon: History, count: b.comments.length + b.approvals.length + (b.clientEmails?.length ?? 0) },
         ...(b.legacy ? [{ id: 'legacy' as const, label: 'Old CRM record', icon: Archive }] : []),
       ]} />
       {tab === 'overview' && <Overview id={b.id} />}
+      {tab === 'workflow' && (
+        <div className="grid gap-6 xl:grid-cols-2">
+          <WelcomeCard b={b} />
+          <FollowUpCard b={b} />
+          <AdminChecklist b={b} />
+        </div>
+      )}
       {tab === 'processing' && <Processing id={b.id} />}
       {tab === 'documents' && <Documents id={b.id} />}
       {tab === 'timeline' && <Timeline id={b.id} />}

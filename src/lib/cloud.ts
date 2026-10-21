@@ -40,6 +40,8 @@ const SPECS: Spec[] = [
   ] },
   { key: 'invoices', table: 'invoices', order: ['issued_on', false], children: [
     { prop: 'items', table: 'invoice_items', fk: 'invoice_id', mode: 'replace', order: ['position', true] },
+    // written only by the live server (sends to the client); the CRM reads it and never changes it
+    { prop: 'shares', table: 'invoice_shares', fk: 'invoice_id', mode: 'id', order: ['sent_at', false] },
   ] },
   { key: 'schemes', table: 'schemes', order: ['created_at', false] },
   { key: 'posts', table: 'posts', order: ['created_at', false] },
@@ -72,6 +74,8 @@ const SPECS: Spec[] = [
     { prop: 'moves', table: 'stock_moves', fk: 'item_id', mode: 'append', order: ['id', false], newestFirst: true },
   ] },
   { key: 'expenses', table: 'company_expenses', order: ['created_at', false] },
+  { key: 'docForms', table: 'doc_forms', order: ['created_at', false] },
+  { key: 'formSubmissions', table: 'doc_form_submissions', order: ['submitted_at', false] },
 ]
 /** Tables that aren't one array of the document. The audit log loads its newest 1000 entries (the app keeps 1000). */
 const OTHER_TABLES: [string, [string, boolean], number?][] = [

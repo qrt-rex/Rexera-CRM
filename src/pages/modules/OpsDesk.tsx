@@ -14,6 +14,7 @@ import { monthStart } from '../../lib/metrics'
 import { Avatar, Badge, Button, Card, CardHeader, Checkbox, cx, EmptyState, Input, PageHeader, SearchBox, Select, Stat, Table, Td, Th, useRun } from '../../components/ui'
 import { BookingStatusBadge, DeadlineBadge, DecisionButtons, DecisionModal, PriorityBadge, StageTrack } from '../../components/booking'
 import { StageControls } from '../../components/StageControls'
+import { AdminProgressOverview, AutomationAlerts } from '../../components/OpsAutomation'
 
 type Filter = 'open' | 'active' | 'admin' | 'hold' | 'overdue' | 'done'
 const OPEN = ['IN_OPERATIONS', 'WITH_ADMIN', 'OPS_REVIEW', 'ON_HOLD']
@@ -104,6 +105,9 @@ export default function OpsDesk() {
         <Stat label="Due in 7 days" value={stats.week} icon={Clock} tone="orange" />
         <Stat label="Completed this month" value={stats.done} icon={CheckCircle2} tone="green" />
       </div>
+
+      <AutomationAlerts />
+      <AdminProgressOverview />
 
       {/* Legal's queue: approved by Accounts, waiting to be assigned */}
       <Card id="assign-queue" className="mb-6 scroll-mt-24 overflow-hidden">

@@ -6,6 +6,7 @@ import { checkClientEmail, renderClientEmail, type ClientEmailRequest } from './
 import { aiConfig, aiOverLimit, answerAi, checkAiRequest } from './server/ai.mjs'
 import { setPassword } from './server/users.mjs'
 import { incentiveReport, reportConfig } from './server/incentives.mjs'
+import { getPublicForm, submitPublicForm } from './server/forms.mjs'
 
 /**
  * Local relay for sending password reset emails via SMTP (Nodemailer) or Resend.
@@ -356,7 +357,35 @@ function reportRelay(mode: string): Plugin {
   }
 }
 
+/** Local copy of the live server's public client forms: GET /api/forms/<token>, POST /api/forms/<token>/submit. */
+function formsRelay(mode: string): Plugin {
+  return {
+    name: 'forms-relay',
+    configureServer(server) {
+      server.middlewares.use('/api/forms', async (req, res) => {
+        const env = loadEnv(mode, process.cwd(), ['SUPABASE_', 'VITE_SUPABASE_'])
+        const get = (k: string) => env[k] ?? ''
+        const url = new URL(req.url ?? '', 'http://localhost')
+        const m = url.pathname.match(/^\/([A-Za-z0-9_-]{8,80})(\/submit)?$/)
+        res.setHeader('Content-Type', 'application/json')
+        const send = (r: { status: number; body: unknown }) => { res.statusCode = r.status; res.end(JSON.stringify(r.body)) }
+        try {
+          if (m && !m[2] && req.method === 'GET') return send(await getPublicForm(get, m[1]!, url.searchParams.get('mobile'), req.socket.remoteAddress ?? ''))
+          if (m && m[2] && req.method === 'POST') {
+            const chunks: Buffer[] = []
+            for await (const c of req) chunks.push(c as Buffer)
+            return send(await submitPublicForm(get, m[1]!, Buffer.concat(chunks).toString('utf8'), req.socket.remoteAddress ?? ''))
+          }
+          send({ status: 404, body: { success: false, message: 'Route not found' } })
+        } catch (err) {
+          send({ status: 502, body: { success: false, message: err instanceof Error ? err.message : 'Form error' } })
+        }
+      })
+    },
+  }
+}
+
 export default defineConfig(({ mode }) => ({
-  plugins: [react(), tailwindcss(), blutecRelay(mode), mailerRelay(mode), aiRelay(mode), usersRelay(mode), reportRelay(mode)],
+  plugins: [react(), tailwindcss(), blutecRelay(mode), mailerRelay(mode), aiRelay(mode), usersRelay(mode), reportRelay(mode), formsRelay(mode)],
   server: { port: 5180 },
 }))

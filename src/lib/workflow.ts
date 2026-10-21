@@ -42,6 +42,7 @@ export const BOOKING_STATUS: Record<BookingStatus, { label: string; tone: Tone; 
   PENDING_ACCOUNTS: { label: 'Pending Accounts', tone: 'amber', owner: 'accounts', step: 2 },
   ACCOUNTS_HOLD: { label: 'On hold · Accounts', tone: 'orange', owner: 'accounts', step: 2 },
   PENDING_LEGAL: { label: 'Pending Legal', tone: 'violet', owner: 'legal', step: 3 },
+  CHANGES_REQUIRED: { label: 'Changes required (Legal)', tone: 'amber', owner: 'sales', step: 3 },
   IN_OPERATIONS: { label: 'With Operations', tone: 'cyan', owner: 'operations', step: 4 },
   WITH_ADMIN: { label: 'With Admin', tone: 'blue', owner: 'admin', step: 5 },
   OPS_REVIEW: { label: 'Pending Operations approval', tone: 'violet', owner: 'operations', step: 6 },

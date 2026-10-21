@@ -1,7 +1,7 @@
 import {
   BarChart3, BellRing, BookOpenCheck, Briefcase, CalendarDays, Cloud, ClipboardCheck, Coffee, FileText, Package, FolderKanban, Images, IndianRupee,
   KeyRound, Megaphone, MessagesSquare, Phone, Settings, ShieldCheck, Sparkles, UserCheck, UserCog, UserPlus, Users, UsersRound,
-  CalendarCheck2, Network, ScrollText, Wallet, Receipt, Landmark, Trophy, SlidersHorizontal, Gauge, KeySquare, DatabaseBackup, DatabaseZap, MailPlus, ClipboardList, FilePen, Inbox, Undo2, BadgeCheck, Layers, type LucideIcon,
+  CalendarCheck2, Network, ScrollText, Wallet, Receipt, Landmark, Trophy, SlidersHorizontal, Gauge, KeySquare, DatabaseBackup, DatabaseZap, MailPlus, ClipboardList, FilePen, Inbox, Undo2, BadgeCheck, Layers, FileSignature, Settings2, type LucideIcon,
 } from 'lucide-react'
 import type { Perm, User } from './types'
 import type { Tone } from './workflow'
@@ -29,6 +29,8 @@ export const MODULES: ModuleDef[] = [
   { key: 'approvals', path: '/approvals', label: 'Waiting for me', desc: 'Files that need your decision now', icon: ClipboardCheck, tone: 'amber', perms: ['bookings.approve_tl', 'bookings.accounts', 'bookings.legal', 'bookings.process', 'bookings.admin'], group: 'Client files' },
   { key: 'ops-desk', path: '/ops-desk', label: 'Operations Dashboard', desc: 'Cases assigned by Legal: status, tasks, team, deadlines, progress', icon: UserCog, tone: 'cyan', perms: ['bookings.legal', 'bookings.process'], group: 'Client files' },
   { key: 'work', path: '/work', label: 'Client Work Board', desc: '9-stage processing kanban', icon: FolderKanban, tone: 'cyan', perms: ['bookings.process', 'bookings.admin', 'bookings.legal', 'bookings.all'], group: 'Client files' },
+  { key: 'forms', path: '/forms', label: 'Document Form Builder', desc: 'Build client forms, send secure links, see responses', icon: FileSignature, tone: 'violet', perms: ['forms.manage'], group: 'Client files' },
+  { key: 'workflow-settings', path: '/workflow-settings', label: 'Workflow Settings', desc: 'Reminder intervals, welcome templates, scheme alerts, job status', icon: Settings2, tone: 'navy', perms: ['workflow.manage'], group: 'Admin' },
   { key: 'documents', path: '/documents', label: 'Document Forms', desc: 'Collect and verify client documents', icon: FileText, tone: 'blue', perms: ['documents.forms'], group: 'Client files' },
   { key: 'services', path: '/services', label: 'Services & Combo Packages', desc: 'Prices for single, multiple and combo (3/6/9/12 months) bookings', icon: Layers, tone: 'violet', perms: ['bookings.create', 'bookings.all', 'schemes.manage', 'billing.manage'], group: 'Content' },
   { key: 'schemes', path: '/schemes', label: 'Schemes', desc: 'Government schemes and offers', icon: Sparkles, tone: 'green', perms: ['schemes.view', 'schemes.manage'], group: 'Content' },

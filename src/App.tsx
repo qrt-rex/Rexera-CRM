@@ -58,6 +58,9 @@ const LegacyImport = lazy(() => import('./pages/it/LegacyImport'))
 const Candidates = lazy(() => import('./pages/hr/Candidates'))
 const Letters = lazy(() => import('./pages/hr/Letters'))
 const Apply = lazy(() => import('./pages/Apply'))
+const PublicForm = lazy(() => import('./pages/PublicForm'))
+const Forms = lazy(() => import('./pages/modules/Forms'))
+const WorkflowSettings = lazy(() => import('./pages/modules/WorkflowSettings'))
 const EmailCenter = lazy(() => import('./pages/hr/EmailCenter'))
 const InboxPage = lazy(() => import('./pages/modules/Inbox'))
 
@@ -135,6 +138,8 @@ export default function App() {
             <Route path="/reset-password" element={<S><ResetPassword /></S>} />
             {/* public: candidates apply without signing in */}
             <Route path="/apply/:token" element={<S><Apply /></S>} />
+            {/* public: clients fill in a form from a secure link (the live server checks and stores it) */}
+            <Route path="/f/:token" element={<S><PublicForm /></S>} />
             <Route element={<RequireAuth><Shell /></RequireAuth>}>
               <Route index element={<HomeRedirect />} />
               <Route path="/dashboard" element={<HomeRedirect />} />
@@ -157,6 +162,8 @@ export default function App() {
               <Route path="/billing" element={<Guard m="billing"><S><Billing /></S></Guard>} />
               <Route path="/refunds" element={<Guard m="refunds"><S><Refunds /></S></Guard>} />
               <Route path="/services" element={<Guard m="services"><S><Services /></S></Guard>} />
+              <Route path="/forms" element={<Guard m="forms"><S><Forms /></S></Guard>} />
+              <Route path="/workflow-settings" element={<Guard m="workflow-settings"><S><WorkflowSettings /></S></Guard>} />
               <Route path="/salary-status" element={<Guard m="salary-status"><S><SalaryStatus /></S></Guard>} />
               <Route path="/billing/:id" element={<Guard m="billing"><S><InvoiceView /></S></Guard>} />
               <Route path="/attendance" element={<S><Attendance /></S>} />

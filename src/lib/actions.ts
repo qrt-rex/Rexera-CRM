@@ -1,11 +1,14 @@
 import type {
-  Booking, BookingStatus, BookingType, BDoc, Service, Branch, BreakPolicy, CallOutcome, ClientEmailLog, Shift, CandidateApplication, CandidateForm, DaySession, DB, EventItem, FileRef, Invoice, InvoiceItem, Lead, LeaveType, Perm, Post, Role, Scheme, User,
+  AdminStageId, AdminWorkStatus, Booking, BookingStatus, BookingType, BDoc, Delivery, Service, WorkflowSettings, Branch, BreakPolicy, CallOutcome, ClientEmailLog, Shift, CandidateApplication, CandidateForm, DaySession, DB, EventItem, FileRef, Invoice, InvoiceItem, Lead, LeaveType, Perm, Post, Role, Scheme, User,
 } from './types'
 import { effectivePerms, isMaster, MASTER_ROLES, rolesOf, roleLabel } from './rbac'
 import { clearCloudDb, getDb, mutate, reloadFromCloud, saved } from './store'
 import { CLOUD, cloudSetOwnPassword, cloudSetPassword, cloudSignIn, cloudSignOut, cloudUserId } from './cloud'
 import { bookingBranch, directorBranches, isBranchScoped, leadBranch, NO_BRANCH } from './branches'
 import { BOOKING_TYPES, COMBO_PACKAGES, comboCap, comboMonths, isFundingService } from './catalog'
+import {
+  ADMIN_DONE, ADMIN_STAGES, ADMIN_WORK_STATUSES, addDays as addDaysYmd, adminStatusLabel, CLOSED_FILE_STATUSES, followUpDue, istToday, nextAfter as nextAfterYmd, precheckDue, precheckPending, schemeAlertDue, workflowSettings,
+} from '../../supabase/workflow-rules.mjs'
 import { hashPassword } from './crypto'
 import { CALL_OUTCOMES, FINAL_STAGE, hasLegalDoc, LEAD_STATUS, OPEN_LEAD, STAGE_OUTCOMES, STAGES, stageLabel } from './workflow'
 import { fireAutomation } from './email'
@@ -1124,7 +1127,7 @@ export function canEditBooking(d: DB, me: User, b: Booking) {
   if (isSA(me)) return true
   if (b.status === 'COMPLETED') return false
   if (effectivePerms(d, me).has('bookings.accounts')) return true
-  return b.createdBy === me.id && ['PENDING_TL', 'REJECTED'].includes(b.status)
+  return b.createdBy === me.id && ['PENDING_TL', 'REJECTED', 'CHANGES_REQUIRED'].includes(b.status)
 }
 
 export type BookingPatch = Partial<Pick<Booking, 'companyName' | 'address' | 'contactPerson' | 'mobile' | 'email' | 'pan' | 'gstin' | 'city' | 'state' | 'industry' | 'mode' | 'priority' | 'paymentContact' | 'paymentEmail' | 'bookingDate' | 'closedBy' | 'remarks' | 'successFee' | 'teamLeadId'>>
@@ -1151,6 +1154,7 @@ export type Decision =
   | { kind: 'HOLD'; remark: string }
   | { kind: 'RESUME'; remark: string }
   | { kind: 'RESUBMIT'; remark: string }
+  | { kind: 'REQUEST_CHANGES'; remark: string }
   | { kind: 'ASSIGN_OPS'; remark: string; opsMemberId: string; maxStage: number; deadline: string }
   | { kind: 'ASSIGN_ADMIN'; remark: string; adminId: string }
   | { kind: 'RETURN_OPS'; remark: string }
@@ -1174,7 +1178,11 @@ export function availableDecisions(d: DB, me: User, b: Booking): Decision['kind'
       if (p.has('bookings.accounts')) out.push('APPROVE', 'REJECT')
       break
     case 'PENDING_LEGAL':
-      if (p.has('bookings.legal')) out.push('ASSIGN_OPS', 'REJECT')
+      // Legal approves (= assigns Operations), sends it back for corrections, or rejects it
+      if (p.has('bookings.legal')) out.push('ASSIGN_OPS', 'REQUEST_CHANGES', 'REJECT')
+      break
+    case 'CHANGES_REQUIRED':
+      if (b.createdBy === me.id || sa) out.push('RESUBMIT')
       break
     case 'IN_OPERATIONS':
       if (p.has('bookings.process') && (b.opsMemberId === me.id || sa)) out.push('ASSIGN_ADMIN', 'HOLD')
@@ -1203,11 +1211,11 @@ export function decide(me: User, id: string, dec: Decision) {
     assert(availableDecisions(d, me, b).includes(dec.kind), 'This action is not available right now.')
     const at = nowIso()
     const levelOf: Partial<Record<BookingStatus, string>> = {
-      PENDING_TL: 'Team Leader', PENDING_ACCOUNTS: 'Accounts', ACCOUNTS_HOLD: 'Accounts', PENDING_LEGAL: 'Legal',
+      PENDING_TL: 'Team Leader', PENDING_ACCOUNTS: 'Accounts', ACCOUNTS_HOLD: 'Accounts', PENDING_LEGAL: 'Legal', CHANGES_REQUIRED: 'Sales',
       IN_OPERATIONS: 'Operations', WITH_ADMIN: 'Admin', OPS_REVIEW: 'Operations approval', ON_HOLD: 'Hold', REJECTED: 'Sales',
     }
     const level = levelOf[b.status] ?? b.status
-    if (['REJECT', 'HOLD', 'RETURN_OPS', 'RETURN_ADMIN'].includes(dec.kind)) assert(dec.remark.trim().length >= 3, 'A reason is required.')
+    if (['REJECT', 'HOLD', 'RETURN_OPS', 'RETURN_ADMIN', 'REQUEST_CHANGES'].includes(dec.kind)) assert(dec.remark.trim().length >= 3, dec.kind === 'REQUEST_CHANGES' ? 'Say what needs to be corrected.' : 'A reason is required.')
     const link = `/bookings/${b.id}`
     const label = `${b.bookingId} · ${b.companyName}`
     const toRole = (r: Role) => usersWithRole(d, r).map((u) => u.id)
@@ -1239,9 +1247,20 @@ export function decide(me: User, id: string, dec: Decision) {
         b.holdFrom = undefined; b.holdReason = undefined
         notify(d, [b.createdBy], 'Work resumed', label, link, 'info')
         break
+      case 'REQUEST_CHANGES':
+        // Legal sends the file back to the sales owner to correct; it returns to Legal when resubmitted
+        b.status = 'CHANGES_REQUIRED'
+        notify(d, [b.createdBy, b.teamLeadId], 'Legal asked for corrections', `${label}: ${dec.remark}`, link, 'action')
+        break
       case 'RESUBMIT':
-        b.status = 'PENDING_TL'
-        notify(d, [b.teamLeadId], 'CRM entry resubmitted', label, link, 'action')
+        // corrections go straight back to Legal; a rejected entry starts again at Accounts (no Team Leader step)
+        if (b.status === 'CHANGES_REQUIRED') {
+          b.status = 'PENDING_LEGAL'
+          notify(d, toRole('legal'), 'Corrected file back for legal review', label, link, 'action')
+        } else {
+          b.status = 'PENDING_ACCOUNTS'
+          notify(d, toRole('accounts'), 'CRM entry resubmitted', label, link, 'action')
+        }
         break
       case 'ASSIGN_OPS': {
         const ops = d.users.find((u) => u.id === dec.opsMemberId)
@@ -1255,6 +1274,8 @@ export function decide(me: User, id: string, dec: Decision) {
         if (b.status === 'PENDING_LEGAL') {
           b.status = 'IN_OPERATIONS'
           if (first || !b.stageHistory.length) { b.stage = 1; b.stageHistory.push({ stage: 1, at, by: me.id, note: 'Assigned by Legal' }) }
+          // legal approval starts the automation once: client welcome message + the 15-day follow-up
+          startOpsWorkflow(d, b, me.id, at)
         }
         notify(d, [ops.id], 'New client file assigned to you', `${label} · up to stage ${dec.maxStage}`, link, 'action')
         notify(d, [b.createdBy], 'Legal approved · now with Operations', label, link, 'success')
@@ -1263,8 +1284,10 @@ export function decide(me: User, id: string, dec: Decision) {
       case 'ASSIGN_ADMIN': {
         const ad = d.users.find((u) => u.id === dec.adminId)
         assert(ad && rolesOf(ad).includes('admin'), 'Pick an Admin.')
+        const prevAdmin = b.adminId
         b.adminId = ad.id
         b.status = 'WITH_ADMIN'
+        startAdminWork(d, b, me.id, at, prevAdmin)
         notify(d, [ad.id], 'Operations assigned a file to you', label, link, 'action')
         break
       }
@@ -1296,6 +1319,282 @@ export function decide(me: User, id: string, dec: Decision) {
     b.approvals.push({ id: uid('ap-'), level, action: dec.kind === 'APPROVE' ? 'APPROVED' : dec.kind === 'REJECT' ? 'REJECTED' : dec.kind === 'COMPLETE' ? 'WORK_DONE' : dec.kind === 'APPROVE_DONE' ? 'COMPLETED' : dec.kind, by: me.id, at, remark: dec.remark })
     b.updatedAt = at
     audit(d, me.id, `BOOKING_${dec.kind}`, `${b.bookingId}: ${dec.remark || '—'}`)
+  })
+}
+
+// ============================================================ workflow automation (welcome, follow-ups, Admin checklist)
+/**
+ * Legal approval → Operations: the welcome message is queued once (email PENDING when automatic sending is on and the
+ * client has an email; WhatsApp PENDING when the live server sends it through Interakt and a template is chosen) and
+ * the every-15-days follow-up starts. Never runs twice.
+ */
+function startOpsWorkflow(d: DB, b: Booking, by: string, at: string) {
+  const w = workflowSettings(d.settings.workflow)
+  const t = istToday()
+  b.welcome ??= {
+    email: { status: !w.welcomeAuto ? 'SKIPPED' : isEmail(b.email) ? 'PENDING' : 'NO_CONTACT', to: b.email || undefined, attempts: 0 },
+    // WhatsApp goes out from the live server (Interakt); without it staff open the chat by hand — never reported as delivered
+    whatsapp: { status: !isPhone(b.mobile) ? 'NO_CONTACT' : !(CLOUD && w.whatsapp.welcomeTemplate) ? 'NOT_CONFIGURED' : w.welcomeAuto ? 'PENDING' : 'SKIPPED', to: b.mobile || undefined, attempts: 0 },
+    createdAt: at, createdBy: by,
+  }
+  b.followUp ??= { everyDays: w.fileReminderDays, startedOn: t, nextOn: addDaysYmd(t, w.fileReminderDays), log: [] }
+}
+/** Admin assigned: the five Admin stages are set up (Pre-Check Deck with its 3-day reminder); a new Admin takes over the open ones. */
+function startAdminWork(d: DB, b: Booking, by: string, at: string, prevAdmin?: string) {
+  const w = workflowSettings(d.settings.workflow)
+  const t = istToday()
+  b.adminWork ??= {}
+  for (const s of ADMIN_STAGES) {
+    const cur = b.adminWork[s.id]
+    if (!cur) {
+      b.adminWork[s.id] = {
+        status: 'NOT_STARTED', assignee: b.adminId, updatedAt: at, updatedBy: by, history: [{ at, by, status: 'NOT_STARTED', note: 'Admin assigned' }],
+        ...(s.id === 'PRECHECK' ? { remindEveryDays: w.precheckDays, nextRemindOn: addDaysYmd(t, w.precheckDays) } : {}),
+      }
+    } else if (prevAdmin && prevAdmin !== b.adminId && cur.assignee === prevAdmin && !ADMIN_DONE.includes(cur.status)) {
+      cur.assignee = b.adminId
+      cur.history.push({ at, by, status: cur.status, note: `Handed to ${userName(d, b.adminId)}` })
+    }
+  }
+}
+
+/** The file's Admin, whoever a stage is assigned to, the file's Operations person, and Super Admin / IT. */
+export function canWorkAdminStages(d: DB, me: User, b: Booking) {
+  if (isMaster(me)) return true
+  const p = effectivePerms(d, me)
+  return (p.has('bookings.admin') && (b.adminId === me.id || Object.values(b.adminWork ?? {}).some((w) => w?.assignee === me.id)))
+    || (p.has('bookings.process') && b.opsMemberId === me.id)
+}
+/** Update one Admin stage: status (with a note when it goes back or is skipped), due date, or the Admin doing it. */
+export function setAdminWork(me: User, id: string, stage: AdminStageId, patch: { status?: AdminWorkStatus; note?: string; due?: string | null; assignee?: string }) {
+  mutate((d) => {
+    const b = findB(d, id)
+    const w = b.adminWork?.[stage]
+    assert(w, 'Assign the file to an Admin first — the Admin stages start then.')
+    assert(canWorkAdminStages(d, me, b), 'Only the file’s Admin and Operations person can update its Admin stages.')
+    assert(!CLOSED_FILE_STATUSES.includes(b.status) || isMaster(me), 'This file is closed.')
+    const at = nowIso(), note = patch.note?.trim() ?? ''
+    const label = ADMIN_STAGES.find((s) => s.id === stage)!.label
+    if (patch.assignee !== undefined && patch.assignee !== w.assignee) {
+      const u = d.users.find((x) => x.id === patch.assignee)
+      assert(u && u.active && rolesOf(u).includes('admin'), 'Pick an active Admin.')
+      w.assignee = u.id
+      w.history.push({ at, by: me.id, status: w.status, note: `Assigned to ${u.name}${note ? ` — ${note}` : ''}` })
+      if (u.id !== me.id) notify(d, [u.id], `${label} assigned to you`, `${b.bookingId} · ${b.companyName}`, `/bookings/${b.id}`, 'action')
+    }
+    if (patch.due !== undefined) w.due = patch.due || undefined
+    if (patch.status && patch.status !== w.status) {
+      assert(ADMIN_WORK_STATUSES.some((s) => s.id === patch.status), 'Unknown status.')
+      const wasDone = ADMIN_DONE.includes(w.status)
+      assert(!(wasDone || patch.status === 'RETURNED' || patch.status === 'NOT_NEEDED') || note.length >= 3, patch.status === 'NOT_NEEDED' ? 'Say why this stage isn’t needed.' : wasDone ? 'Say why a finished stage is re-opened.' : 'Say why it was rejected / returned.')
+      if (w.status === 'NOT_STARTED') w.startedAt ??= at
+      w.status = patch.status
+      w.doneAt = ADMIN_DONE.includes(patch.status) ? at : undefined
+      w.history.push({ at, by: me.id, status: patch.status, ...(note ? { note } : {}) })
+      // Pre-Check Deck reminders run only while it is pending
+      if (stage === 'PRECHECK') {
+        if (ADMIN_DONE.includes(patch.status) || patch.status === 'NOT_NEEDED') w.nextRemindOn = undefined
+        else w.nextRemindOn ??= addDaysYmd(istToday(), w.remindEveryDays ?? workflowSettings(d.settings.workflow).precheckDays)
+      }
+      notify(d, [b.opsMemberId, b.adminId, w.assignee].filter((x) => x && x !== me.id), `${label}: ${adminStatusLabel(patch.status)}`, `${b.bookingId} · ${b.companyName}${note ? ` — ${note}` : ''}`, `/bookings/${b.id}`, patch.status === 'RETURNED' ? 'warning' : 'info')
+      audit(d, me.id, 'ADMIN_STAGE', `${b.bookingId}: ${label} → ${adminStatusLabel(patch.status)}${note ? ` — ${note}` : ''}`)
+    }
+    w.updatedAt = at; w.updatedBy = me.id
+    b.updatedAt = at
+  })
+}
+/** Pre-Check Deck follow-up done: the next reminder is the interval (3 or 4 days) from today. */
+export function logPrecheckFollowUp(me: User, id: string, note: string) {
+  mutate((d) => {
+    const b = findB(d, id)
+    const w = b.adminWork?.PRECHECK
+    assert(w && precheckPending(b), 'The Pre-Check Deck is not pending on this file.')
+    assert(canWorkAdminStages(d, me, b), 'Only the file’s Admin and Operations person can record follow-ups.')
+    assert(note.trim().length >= 3, 'Write what was done in the follow-up.')
+    const t = istToday(), at = nowIso()
+    w.lastFollowUpOn = t
+    w.nextRemindOn = addDaysYmd(t, w.remindEveryDays ?? workflowSettings(d.settings.workflow).precheckDays)
+    w.history.push({ at, by: me.id, status: w.status, note: `Follow-up: ${note.trim()}` })
+    w.updatedAt = at; w.updatedBy = me.id
+    audit(d, me.id, 'PRECHECK_FOLLOWUP', `${b.bookingId}: ${note.trim()}`)
+  })
+}
+/** Pre-Check Deck reminder every 3 or 4 days for this file (Admin settings change the default for new files). */
+export function setPrecheckInterval(me: User, id: string, days: number) {
+  mutate((d) => {
+    const b = findB(d, id)
+    const w = b.adminWork?.PRECHECK
+    assert(w, 'This file has no Pre-Check Deck yet.')
+    assert(canWorkAdminStages(d, me, b) || has(me, 'followup.manage'), 'You can’t change this reminder.')
+    assert(days === 3 || days === 4, 'The Pre-Check Deck reminder repeats every 3 or 4 days.')
+    w.remindEveryDays = days
+    if (w.nextRemindOn) w.nextRemindOn = addDaysYmd(w.lastFollowUpOn ?? istToday(), days)
+    w.history.push({ at: nowIso(), by: me.id, status: w.status, note: `Reminder every ${days} days` })
+    audit(d, me.id, 'PRECHECK_INTERVAL', `${b.bookingId}: every ${days} days`)
+  })
+}
+
+/** Operations / Admin record a follow-up with the client on the file (the 15-day schedule keeps its dates). */
+export function addFollowUpNote(me: User, id: string, note: string) {
+  mutate((d) => {
+    const b = findB(d, id)
+    assert(b.followUp, 'This file has no follow-up schedule (it starts when Legal approves it).')
+    assert(isMaster(me) || has(me, 'followup.manage') || b.opsMemberId === me.id || b.adminId === me.id, 'Only the file’s Operations person or Admin can record follow-ups.')
+    assert(note.trim().length >= 3, 'Write what was done in the follow-up.')
+    b.followUp.lastOn = istToday()
+    b.followUp.log.unshift({ at: nowIso(), by: me.id, kind: 'NOTE', note: note.trim() })
+    b.updatedAt = nowIso()
+    audit(d, me.id, 'FOLLOWUP_NOTE', `${b.bookingId}: ${note.trim()}`)
+  })
+}
+/** Admin: pause / resume the 15-day follow-up, or change its next date or interval. */
+export function setFollowUpSchedule(me: User, id: string, change: { paused?: boolean; nextOn?: string; everyDays?: number; note?: string }) {
+  need(me, 'followup.manage')
+  mutate((d) => {
+    const b = findB(d, id)
+    const f = b.followUp
+    assert(f, 'This file has no follow-up schedule.')
+    const at = nowIso(), note = change.note?.trim()
+    if (change.everyDays !== undefined) { assert(Number.isInteger(change.everyDays) && change.everyDays >= 1 && change.everyDays <= 90, 'Repeat every 1–90 days.'); f.everyDays = change.everyDays }
+    if (change.nextOn !== undefined) { assert(change.nextOn >= istToday(), 'The next follow-up can’t be in the past.'); f.nextOn = change.nextOn }
+    if (change.everyDays !== undefined || change.nextOn !== undefined) f.log.unshift({ at, by: me.id, kind: 'RESCHEDULE', note: [`next ${f.nextOn}`, `every ${f.everyDays} days`, note].filter(Boolean).join(' · ') })
+    if (change.paused !== undefined && change.paused !== !!f.paused) {
+      f.paused = change.paused
+      // resuming never sends the missed reminders: the next one is in the future
+      if (!change.paused && f.nextOn < istToday()) f.nextOn = nextAfterYmd(f.nextOn, f.everyDays, istToday())
+      f.log.unshift({ at, by: me.id, kind: change.paused ? 'PAUSE' : 'RESUME', ...(note ? { note } : {}) })
+    }
+    audit(d, me.id, 'FOLLOWUP_SCHEDULE', `${b.bookingId}: ${f.paused ? 'paused' : `next ${f.nextOn}, every ${f.everyDays} days`}`)
+  })
+}
+
+/**
+ * The live server's scheduled job (server/jobs.mjs, called by a Render Cron Job) normally sends the reminders. The
+ * browser only does it when there is no server job: browser mode, or the job hasn't run for 2 hours.
+ */
+export const serverJobsActive = (d: DB, now = Date.now()) => !!d.settings.jobs?.lastRunAt && now - new Date(d.settings.jobs.lastRunAt).getTime() < 2 * 3600_000
+/** file number · client · current stage · the reminder's own details (who, dates, what to do) */
+const reminderBody = (_d: DB, b: Booking, extra: string) => `${b.bookingId} · ${b.companyName} · ${stageLabel(b.stage, b.stageOutcome)} · ${extra}`
+/** Every-15-days follow-up reminders that are due (the next date moves on in the same change, so it can't repeat). */
+export function runFollowUpReminders(now = Date.now()) {
+  const d = getDb(), t = istToday(now)
+  if (CLOUD && serverJobsActive(d, now)) return 0
+  const due = d.bookings.filter((b) => followUpDue(b, t)).map((b) => b.id)
+  if (!due.length) return 0
+  mutate((m) => {
+    for (const id of due) {
+      const b = m.bookings.find((x) => x.id === id)!
+      const f = b.followUp!
+      const was = f.nextOn
+      f.nextOn = nextAfterYmd(f.nextOn, f.everyDays, t)
+      f.log.unshift({ at: new Date(now).toISOString(), by: '', kind: 'REMINDER', note: `Due ${was} · next ${f.nextOn}` })
+      notify(m, [b.opsMemberId, b.adminId], `Follow-up due: ${b.companyName}`, reminderBody(m, b, `last follow-up ${f.lastOn ? fmtDate(f.lastOn) : 'none'} · next ${fmtDate(f.nextOn)} · ${userName(m, b.opsMemberId)} — follow up with the client and record it on the file`), `/bookings/${b.id}`, 'warning')
+    }
+  })
+  return due.length
+}
+/** Pre-Check Deck reminders (every 3 or 4 days while it is pending) to the stage's Admin and the file's Operations person. */
+export function runPrecheckReminders(now = Date.now()) {
+  const d = getDb(), t = istToday(now)
+  if (CLOUD && serverJobsActive(d, now)) return 0
+  const due = d.bookings.filter((b) => precheckDue(b, t)).map((b) => b.id)
+  if (!due.length) return 0
+  mutate((m) => {
+    for (const id of due) {
+      const b = m.bookings.find((x) => x.id === id)!
+      const w = b.adminWork!.PRECHECK!
+      const was = w.nextRemindOn!
+      w.nextRemindOn = nextAfterYmd(was, w.remindEveryDays ?? workflowSettings(m.settings.workflow).precheckDays, t)
+      w.history.push({ at: new Date(now).toISOString(), by: '', status: w.status, note: `Reminder (due ${was}) · next ${w.nextRemindOn}` })
+      notify(m, [w.assignee ?? b.adminId, b.opsMemberId], `Pre-Check Deck follow-up: ${b.companyName}`, reminderBody(m, b, `${adminStatusLabel(w.status)} · last follow-up ${w.lastFollowUpOn ? fmtDate(w.lastFollowUpOn) : 'none'} · next ${fmtDate(w.nextRemindOn)} — follow up and record it`), `/bookings/${b.id}`, 'warning')
+    }
+  })
+  return due.length
+}
+
+/** Admin: reminder intervals, the welcome message templates, the Operations contact and scheme alert recipients. */
+export function saveWorkflowSettings(me: User, w: WorkflowSettings) {
+  need(me, 'workflow.manage')
+  assert(Number.isInteger(w.fileReminderDays) && w.fileReminderDays >= 1 && w.fileReminderDays <= 90, 'File follow-ups repeat every 1–90 days.')
+  assert(w.precheckDays === 3 || w.precheckDays === 4, 'The Pre-Check Deck reminder repeats every 3 or 4 days.')
+  assert(w.welcomeEmail.subject.trim().length >= 3 && w.welcomeEmail.body.trim().length >= 10, 'Write the welcome email subject and message.')
+  assert(w.welcomeWhatsapp.trim().length >= 10, 'Write the WhatsApp welcome message.')
+  assert(w.schemeAlertRoles.length > 0, 'Pick who gets the scheme expiry alert.')
+  assert(!w.opsContact.email || isEmail(w.opsContact.email), 'The Operations contact email is not valid.')
+  assert(!w.opsContact.phone || isPhone(normPhone(w.opsContact.phone)), 'The Operations contact phone must be a 10-digit mobile.')
+  // Interakt template code names: lower-case letters, digits and _ (as Meta names them)
+  const tpl = (s: string) => s.trim()
+  assert([w.whatsapp.welcomeTemplate, w.whatsapp.invoiceTemplate].every((s) => !tpl(s) || /^[a-z0-9_]{1,512}$/.test(tpl(s))), 'WhatsApp template names use lower-case letters, numbers and _ only (copy the code name from Interakt → Templates).')
+  assert(/^[a-z]{2}(_[A-Z]{2})?$/.test(w.whatsapp.language.trim()), 'WhatsApp template language: a code such as en or en_US.')
+  mutate((d) => {
+    d.settings.workflow = {
+      ...w, welcomeEmail: { subject: w.welcomeEmail.subject.trim(), body: w.welcomeEmail.body.trim() }, welcomeWhatsapp: w.welcomeWhatsapp.trim(),
+      opsContact: { name: w.opsContact.name.trim(), phone: w.opsContact.phone ? normPhone(w.opsContact.phone) : '', email: w.opsContact.email.trim() },
+      whatsapp: { welcomeTemplate: tpl(w.whatsapp.welcomeTemplate), invoiceTemplate: tpl(w.whatsapp.invoiceTemplate), language: w.whatsapp.language.trim() },
+    }
+    audit(d, me.id, 'WORKFLOW_SETTINGS', `follow-up every ${w.fileReminderDays} days · pre-check every ${w.precheckDays} · welcome ${w.welcomeAuto ? 'automatic' : 'manual'}`)
+  })
+}
+
+/** People who may (re)send the welcome message: Legal, the Operation team, Admin, Super Admin / IT. */
+export const canSendWelcome = (d: DB, me: User, b: Booking) => visibleBookings(d, me).some((x) => x.id === b.id) && (isMaster(me) || has(me, 'bookings.legal', 'bookings.process', 'bookings.admin'))
+/**
+ * Takes the welcome email for sending (PENDING / FAILED → SENDING). Returns false when it is already sending or was
+ * sent — so two screens (or the server's job) never send it twice.
+ */
+export function claimWelcome(me: User, id: string): boolean {
+  return mutate((d) => {
+    const b = findB(d, id)
+    const e = b.welcome?.email
+    if (!e || !['PENDING', 'FAILED'].includes(e.status) || !canSendWelcome(d, me, b)) return false
+    Object.assign(e, { status: 'SENDING', attempts: e.attempts + 1, lastAt: nowIso(), to: b.email })
+    return true
+  })
+}
+/** Result of a welcome delivery (the provider's answer — never assumed). Also kept in the file's email history. */
+export function recordWelcome(me: User, id: string, channel: 'email' | 'whatsapp', r: { status: Delivery['status']; error?: string; subject?: string }) {
+  mutate((d) => {
+    const b = findB(d, id)
+    const x = b.welcome?.[channel]
+    assert(x, 'No welcome message on this file.')
+    const at = nowIso()
+    Object.assign(x, { status: r.status, lastAt: at, error: r.status === 'SENT' ? undefined : r.error, ...(r.status === 'SENT' ? { sentAt: at } : {}) })
+    if (channel === 'email' && (r.status === 'SENT' || r.status === 'FAILED')) {
+      ;(b.clientEmails ??= []).unshift({ id: uid('ce-'), at, by: me.id, to: x.to ?? b.email, cc: [], subject: r.subject ?? 'Welcome', template: 'welcome', status: r.status, ...(r.error ? { error: r.error } : {}) })
+    }
+    audit(d, me.id, 'WELCOME_' + r.status, `${b.bookingId}: ${channel} → ${x.to ?? '—'}${r.error ? ` (${r.error})` : ''}`)
+    if (r.status === 'FAILED' || r.status === 'NOT_CONFIGURED') notify(d, [b.opsMemberId].filter((u) => u !== me.id), 'Welcome email not sent', `${b.bookingId} · ${b.companyName}: ${r.error ?? 'the mail server is not set up'} — open the file to retry`, `/bookings/${b.id}`, 'warning')
+  })
+}
+/** Send (again) a welcome that failed, was skipped, or had no contact at the time. A delivered welcome is never repeated. */
+export function requeueWelcome(me: User, id: string, channel: 'email' | 'whatsapp' = 'email') {
+  mutate((d) => {
+    const b = findB(d, id)
+    assert(canSendWelcome(d, me, b), 'You can’t send the welcome message for this file.')
+    assert(b.welcome, 'The welcome message starts when Legal approves the file.')
+    const e = b.welcome[channel]
+    assert(e.status !== 'SENT', channel === 'email' ? 'The welcome email was already delivered — use “Email client” for another message.' : 'The welcome WhatsApp was already sent.')
+    assert(e.status !== 'SENDING', 'It is being sent right now.')
+    if (channel === 'email') {
+      assert(isEmail(b.email), 'Add the client’s email on the file first.')
+      Object.assign(e, { status: 'PENDING', to: b.email, error: undefined })
+    } else {
+      assert(CLOUD, 'WhatsApp messages go out from the live CRM.')
+      assert(workflowSettings(d.settings.workflow).whatsapp.welcomeTemplate, 'Choose the WhatsApp welcome template first (Workflow settings → WhatsApp).')
+      assert(isPhone(b.mobile), 'Add the client’s mobile number on the file first.')
+      // a fresh start: three more tries
+      Object.assign(e, { status: 'PENDING', to: b.mobile, error: undefined, attempts: 0 })
+    }
+  })
+}
+/** WhatsApp isn't connected yet: staff opened the chat by hand (recorded, but never counted as delivered). */
+export function noteWhatsappOpened(me: User, id: string) {
+  mutate((d) => {
+    const b = findB(d, id)
+    const x = b.welcome?.whatsapp
+    if (!x) return
+    Object.assign(x, { manualAt: nowIso(), manualBy: me.id })
+    audit(d, me.id, 'WELCOME_WHATSAPP_MANUAL', `${b.bookingId}: opened WhatsApp for ${x.to ?? b.mobile}`)
   })
 }
 
@@ -1748,18 +2047,50 @@ export function cancelInvoice(me: User, id: string) {
 }
 
 // ============================================================ content
-export function upsertScheme(me: User, s: Omit<Scheme, 'id' | 'createdAt' | 'by'> & { id?: string }) {
+/** Schemes: Admin and the Operation team only (sales see them read-only). Price and dates are checked; the end date can't be before the start. */
+export function upsertScheme(me: User, s: Omit<Scheme, 'id' | 'createdAt' | 'by' | 'updatedAt' | 'updatedBy'> & { id?: string }) {
   need(me, 'schemes.manage')
   assert(s.title.trim(), 'Title is required.')
+  assert(s.price == null || (Number.isFinite(s.price) && s.price >= 0), 'Price must be 0 or more.')
+  assert(!s.startDate === !s.endDate, 'Enter both the start date and the end date (or neither).')
+  assert(!s.startDate || !s.endDate || s.endDate >= s.startDate, 'The end date can’t be before the start date.')
   mutate((d) => {
-    if (s.id) { Object.assign(d.schemes.find((x) => x.id === s.id)!, s); return }
-    d.schemes.unshift({ ...s, id: uid('sc-'), createdAt: nowIso(), by: me.id })
-    notify(d, usersWithRole(d, 'sales', 'teamlead').map((u) => u.id), 'New scheme published', s.title, '/schemes', 'info')
+    const at = nowIso()
+    const clean = { ...s, title: s.title.trim(), price: s.price == null || Number.isNaN(s.price) ? undefined : round2(s.price), startDate: s.startDate || undefined, endDate: s.endDate || undefined, updatedAt: at, updatedBy: me.id }
+    if (s.id) {
+      const x = d.schemes.find((y) => y.id === s.id)
+      assert(x, 'Scheme not found.')
+      Object.assign(x, clean)
+      audit(d, me.id, 'SCHEME_EDIT', `${x.title}${x.endDate ? ` · ${x.startDate} → ${x.endDate}` : ''}${x.price != null ? ` · ₹${x.price}` : ''}`)
+      return
+    }
+    d.schemes.unshift({ ...clean, id: uid('sc-'), createdAt: at, by: me.id })
+    notify(d, usersWithRole(d, 'sales', 'teamlead').map((u) => u.id), 'New scheme published', clean.title, '/schemes', 'info')
+    audit(d, me.id, 'SCHEME_ADD', clean.title)
   })
 }
 export function deleteScheme(me: User, id: string) {
   need(me, 'schemes.manage')
-  mutate((d) => { d.schemes = d.schemes.filter((x) => x.id !== id) })
+  mutate((d) => { const x = d.schemes.find((y) => y.id === id); d.schemes = d.schemes.filter((y) => y.id !== id); if (x) audit(d, me.id, 'SCHEME_DELETE', x.title) })
+}
+/**
+ * One day before a scheme ends, the people in Workflow settings → scheme alerts (Admin and Operations by default) are
+ * told once (in the browser when the live server's job isn't running — the audit log records each one).
+ */
+export function runSchemeAlerts(now = Date.now()) {
+  const d = getDb(), t = istToday(now)
+  if (CLOUD && serverJobsActive(d, now)) return 0
+  const due = d.schemes.filter((s) => schemeAlertDue(s, t) && !d.audit.some((a) => a.action === 'SCHEME_EXPIRY_ALERT' && a.detail.startsWith(`${s.id}|${s.endDate}`)))
+  if (!due.length) return 0
+  mutate((m) => {
+    const roles = workflowSettings(m.settings.workflow).schemeAlertRoles
+    const to = usersWithRole(m, ...roles).map((u) => u.id)
+    for (const s of due) {
+      notify(m, to, `Scheme ends tomorrow: ${s.title}`, `Ends ${fmtDate(s.endDate)} — update or close it`, '/schemes', 'warning')
+      audit(m, '', 'SCHEME_EXPIRY_ALERT', `${s.id}|${s.endDate}|${s.title}`)
+    }
+  })
+  return due.length
 }
 /** Flyers & posts: Admin and the Operation team. Sales information: also Team Leaders. */
 const postPerm = (kind: Post['kind']): Perm => (kind === 'SALES_INFO' ? 'salesinfo.manage' : 'content.manage')

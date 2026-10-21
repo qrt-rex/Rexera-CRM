@@ -38,6 +38,7 @@ COPY --from=builder /app/dist ./dist
 COPY server.mjs ./
 COPY supabase/functions/_shared/client-email.mjs supabase/functions/_shared/blutec.ts ./supabase/functions/_shared/
 COPY server/ ./server/
+COPY supabase/workflow-rules.mjs supabase/form-rules.mjs ./supabase/
 # the Blutec webhook receiver reads the lead dispositions from the app's own list
 COPY src/lib/workflow.ts ./src/lib/
 

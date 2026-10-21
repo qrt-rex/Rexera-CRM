@@ -12,7 +12,7 @@ import { applyTheme, getTheme, useAuth, useMe, type Theme } from '../lib/auth'
 import { MESSAGES_ENABLED, MODULES, canSee, moduleLabel } from '../lib/modules'
 import { isMaster, ROLES, roleLabel } from '../lib/rbac'
 import { CLOUD } from '../lib/cloud'
-import { markRead, overdueLeadsOf, runBreakMonitor, runComboReminders, runTaskReminders, unseenLeadsOf } from '../lib/actions'
+import { markRead, overdueLeadsOf, runBreakMonitor, runComboReminders, runFollowUpReminders, runPrecheckReminders, runSchemeAlerts, runTaskReminders, unseenLeadsOf } from '../lib/actions'
 import { runScheduledAutomations } from '../lib/email'
 import { ago, today } from '../lib/format'
 import { Avatar, Button, cx, Menu, MenuItem, Modal } from '../components/ui'
@@ -60,7 +60,7 @@ export function Shell() {
   // scheduled email automations (daily reminders, monthly summaries) run while anyone has the app open
   useEffect(() => {
     if (!companyJobs) return
-    const tick = () => { try { runScheduledAutomations(); runTaskReminders(); runComboReminders() } catch { /* never block the app */ } }
+    const tick = () => { try { runScheduledAutomations(); runTaskReminders(); runComboReminders(); runFollowUpReminders(); runPrecheckReminders(); runSchemeAlerts() } catch { /* never block the app */ } }
     tick()
     const t = setInterval(tick, 5 * 60000)
     return () => clearInterval(t)
