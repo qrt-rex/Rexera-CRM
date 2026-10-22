@@ -15,7 +15,8 @@ export const CLOUD = import.meta.env.VITE_DATA_BACKEND === 'supabase' && cloudCo
 
 type Mode = 'id' | 'replace' | 'append' | 'insertNew'
 interface Child { prop: string | string[]; table: string; fk: string; mode: Mode; order: [string, boolean]; newestFirst?: boolean }
-interface Spec { key: keyof DB; table: string; idProp?: string; idCol?: string; order: [string, boolean]; limit?: number; children?: Child[] }
+/** once: rows are written once under a fixed id (e.g. one break reminder per person per day); an id already in the table is skipped, not an error */
+interface Spec { key: keyof DB; table: string; idProp?: string; idCol?: string; order: [string, boolean]; limit?: number; children?: Child[]; once?: boolean }
 
 /** Each array in the DB document, its table and child tables — parents before the tables that refer to them. */
 const SPECS: Spec[] = [
@@ -51,7 +52,8 @@ const SPECS: Spec[] = [
   { key: 'events', table: 'events', order: ['event_date', true] },
   { key: 'leaves', table: 'leave_requests', order: ['created_at', false] },
   { key: 'sessions', table: 'day_sessions', order: ['work_date', true] },
-  { key: 'notices', table: 'notifications', order: ['created_at', false] },
+  // the Super Admin's browser writes other people's reminders but can't see them, so it may write one twice
+  { key: 'notices', table: 'notifications', order: ['created_at', false], once: true },
   { key: 'messages', table: 'messages', order: ['sent_at', true] },
   { key: 'templates', table: 'message_templates', order: ['name', true] },
   { key: 'payrollRuns', table: 'payroll_runs', order: ['month', false], children: [
@@ -201,7 +203,7 @@ export function plan(prev: DB, next: DB, s: SupabaseClient): Op[][] {
       const isNew = (id: string) => !before.has(id)
       const inserts = parentRows.filter((r) => isNew(r[idCol] as string)), updates = parentRows.filter((r) => !isNew(r[idCol] as string))
       steps.push([
-        ...chunk(inserts, 500).map((part) => () => s.from(spec.table).insert(part)),
+        ...chunk(inserts, 500).map((part) => () => (spec.once ? s.from(spec.table).upsert(part, { onConflict: idCol, ignoreDuplicates: true }) : s.from(spec.table).insert(part))),
         ...updates.map((r) => () => s.from(spec.table).update(r).eq(idCol, r[idCol] as string)),
       ])
       const childOps: Op[] = []

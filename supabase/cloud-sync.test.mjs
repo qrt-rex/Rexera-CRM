@@ -44,6 +44,11 @@ assert.deepEqual(await writes(base, produce(base, (d) => {
   d.leads[0].calls.unshift({ id: 'c-new', at, by: a.id, outcome: 'BUSY', note: '', durationSec: 0 })
 })), [`leads update 1 (id=${lead.id})`, 'lead_calls insert 1'], 'log a call')
 
+// a reminder with a fixed id may already be in the table (written by another browser): skip it, don't fail the save
+assert.deepEqual(await writes(base, produce(base, (d) => {
+  d.notices.unshift({ id: `n-brkstart-2026-10-22-${a.id}`, userId: a.id, title: 'Lunch break has started', at, read: false, kind: 'info' })
+})), ['notifications upsert 1'], 'notification: insert or skip')
+
 assert.deepEqual(await writes(base, produce(base, (d) => { d.leads.splice(0, 1) })), [`leads delete (id in ("${lead.id}"))`], 'delete a lead')
 
 // new CRM entry: the booking, its children, and the counter — not every other setting
