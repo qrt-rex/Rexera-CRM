@@ -551,6 +551,8 @@ export interface CandidateApplication {
   currentCompany?: string
   expectedSalary?: string
   noticePeriod?: string
+  /** the office the candidate is applying for (JOB_BRANCHES) */
+  branch?: string
   linkedin?: string
   message?: string
   resume: FileRef

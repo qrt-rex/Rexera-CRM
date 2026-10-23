@@ -2461,3 +2461,11 @@ begin
 end $$;
 drop trigger if exists booking_documents_review on booking_documents;
 create trigger booking_documents_review before update on booking_documents for each row execute function app.booking_document_review();
+
+-- ##################################################################### 20261024020000_candidate_branch.sql
+-- =====================================================================================================
+-- Rexera CRM · job applications: the branch the candidate applies for (Ahmedabad - Kargil, Ahmedabad - Riverfront
+-- (Altimus), Vadodara). Applicants send it with the public form (anon insert is already allowed). Safe to run more than once.
+-- =====================================================================================================
+alter table candidate_applications add column if not exists branch text check (branch is null or length(branch) <= 100);
+create index if not exists candidate_applications_branch_idx on candidate_applications(branch);

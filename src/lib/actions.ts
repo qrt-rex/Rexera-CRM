@@ -2341,12 +2341,15 @@ export function deleteCandidateForm(me: User, id: string) {
 }
 
 export type ApplicationInput = Omit<CandidateApplication, 'id' | 'formId' | 'submittedAt' | 'status' | 'notes' | 'resume'>
-/** Public: anyone with the link can apply while the form is open. Resume is mandatory. */
+/** Offices a candidate can apply for (the job application form's branch choice). */
+export const JOB_BRANCHES = ['Ahmedabad - Kargil', 'Ahmedabad - Riverfront (Altimus)', 'Vadodara']
+/** Public: anyone with the link can apply while the form is open. Resume and branch are mandatory. */
 export function submitApplication(token: string, a: ApplicationInput, resume: FileRef | undefined) {
   const d = getDb()
   const form = d.candidateForms.find((f) => f.token === token)
   assert(form && form.active, 'This application form is closed.')
   assert(a.name.trim().length >= 2, 'Enter your full name.')
+  assert(a.branch && JOB_BRANCHES.includes(a.branch), 'Choose the branch you are applying for.')
   assert(isEmail(a.email), 'Enter a valid email.')
   assert(isPhone(a.phone), 'Enter a valid 10-digit mobile number.')
   assert(a.qualification.trim(), 'Enter your highest qualification.')

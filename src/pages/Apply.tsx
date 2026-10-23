@@ -3,14 +3,14 @@ import { useParams } from 'react-router-dom'
 import { Briefcase, CheckCircle2, GraduationCap, Send } from 'lucide-react'
 import type { FileRef } from '../lib/types'
 import { useDb } from '../lib/store'
-import { submitApplication, type ApplicationInput } from '../lib/actions'
+import { JOB_BRANCHES, submitApplication, type ApplicationInput } from '../lib/actions'
 import { RESUME_TYPES } from '../lib/files'
 import { Logo } from '../components/Logo'
 import { FileField } from '../components/FileField'
 import { CityInput, PhoneInput } from '../components/fields'
 import { Button, Card, Input, Select, Textarea, useRun } from '../components/ui'
 
-const blank: ApplicationInput = { name: '', email: '', phone: '', city: '', dob: '', qualification: '', college: '', experience: 'Fresher', currentCompany: '', expectedSalary: '', noticePeriod: '', linkedin: '', message: '' }
+const blank: ApplicationInput = { name: '', email: '', phone: '', city: '', dob: '', qualification: '', college: '', experience: 'Fresher', currentCompany: '', expectedSalary: '', noticePeriod: '', branch: '', linkedin: '', message: '' }
 
 /** Public application form (no sign-in) — HR shares /apply/<token>. */
 export default function Apply() {
@@ -55,6 +55,11 @@ export default function Apply() {
             </div>
             <form className="grid gap-4 p-6 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); submit() }}>
               <Input label="Full name" required autoComplete="name" value={a.name} onChange={(e) => set({ name: e.target.value })} className="sm:col-span-2" />
+              <Select label="Branch" required value={a.branch} onChange={(e) => set({ branch: e.target.value })} className="sm:col-span-2"
+                error={tried && !a.branch ? 'Choose the branch you are applying for.' : undefined}>
+                <option value="">— Select the branch —</option>
+                {JOB_BRANCHES.map((x) => <option key={x}>{x}</option>)}
+              </Select>
               <Input label="Email" required type="email" autoComplete="email" value={a.email} onChange={(e) => set({ email: e.target.value })} />
               <PhoneInput label="Mobile number" required value={a.phone} onChange={(v) => set({ phone: v })} />
               <CityInput value={a.city} onChange={(v) => set({ city: v })} />
