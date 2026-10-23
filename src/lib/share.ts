@@ -26,7 +26,12 @@ export async function requestWelcomeWhatsapp(bookingId: string) {
   return r.result
 }
 
-export type ShareResult = { status: InvoiceShare['status']; to: string; error?: string }
+/** A Document Form Builder link to the client on WhatsApp (Interakt form-link template). */
+export async function sendFormWhatsapp(formId: string, phone: string, clientName: string) {
+  return serverPost<{ success: boolean; status: InvoiceShare['status']; to?: string; error?: string }>('/api/forms/share', { formId, phone, clientName })
+}
+
+export type ShareResult ={ status: InvoiceShare['status']; to: string; error?: string }
 const blobBase64 = (b: Blob) => new Promise<string>((ok, fail) => {
   const r = new FileReader()
   r.onload = () => ok(String(r.result).split(',')[1] ?? '')

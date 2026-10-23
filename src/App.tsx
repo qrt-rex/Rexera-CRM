@@ -22,6 +22,7 @@ const Approvals = lazy(() => import('./pages/modules/Approvals'))
 const WorkBoard = lazy(() => import('./pages/modules/WorkBoard'))
 const Documents = lazy(() => import('./pages/modules/Documents'))
 const Schemes = lazy(() => import('./pages/modules/Schemes'))
+const SalesKit = lazy(() => import('./pages/modules/SalesKit'))
 const Content = lazy(() => import('./pages/modules/Content'))
 const Broadcasts = lazy(() => import('./pages/modules/Broadcasts'))
 const Billing = lazy(() => import('./pages/modules/Billing'))
@@ -157,6 +158,7 @@ export default function App() {
               <Route path="/work" element={<Guard m="work"><S><WorkBoard /></S></Guard>} />
               <Route path="/documents" element={<Guard m="documents"><S><Documents /></S></Guard>} />
               <Route path="/schemes" element={<Guard m="schemes"><S><Schemes /></S></Guard>} />
+              <Route path="/sales-kit" element={<Guard m="sales-kit"><S><SalesKit /></S></Guard>} />
               <Route path="/content" element={<Guard m="content"><S><Content /></S></Guard>} />
               <Route path="/broadcasts" element={<Guard m="broadcasts"><S><Broadcasts /></S></Guard>} />
               <Route path="/billing" element={<Guard m="billing"><S><Billing /></S></Guard>} />

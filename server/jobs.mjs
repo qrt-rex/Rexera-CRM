@@ -1,4 +1,4 @@
-// Scheduled jobs for the live CRM (Supabase): welcome-email retries, 15-day file follow-ups, Pre-Check Deck reminders
+// Scheduled jobs for the live CRM (Supabase): welcome-email retries, 15-day file follow-ups, Pitch Deck reminders
 // and the one-day-before scheme expiry alert. Called every 15 minutes by a Render Cron Job (POST /api/jobs/run with
 // JOBS_SECRET) — they don't depend on anyone having the CRM open.
 //
@@ -82,10 +82,10 @@ export async function runJobs(env, { send, now = Date.now(), client, fetchImpl }
     })
   }
 
-  // ---------------------------------------------------------------- Pre-Check Deck (every 3 or 4 days)
+  // ---------------------------------------------------------------- Pitch Deck (every 3 or 4 days)
   for (const r of files) {
     if (!precheckDue(asFile(r), t)) continue
-    await step(`pre-check ${r.booking_code}`, async () => {
+    await step(`pitch deck ${r.booking_code}`, async () => {
       const pc = r.admin_work.PRECHECK, was = pc.nextRemindOn
       const to = [pc.assignee ?? r.admin_id, r.ops_member_id]
       if (!(await once(sb, `precheck:${r.id}:${was}`, 'PRECHECK', r.id, to.filter(Boolean)))) return
@@ -94,7 +94,7 @@ export async function runJobs(env, { send, now = Date.now(), client, fetchImpl }
       const work = { ...r.admin_work, PRECHECK: { ...pc, nextRemindOn: nextOn, history: [...(pc.history ?? []), { at: new Date(now).toISOString(), by: '', status: pc.status, note: `Reminder (due ${was}) · next ${nextOn} (server)` }].slice(-200) } }
       const { data } = await sb.from('bookings').update({ admin_work: work }).eq('id', r.id).eq('admin_work->PRECHECK->>nextRemindOn', was).select('id')
       if (!data?.length) return
-      await notify(sb, to, `Pre-Check Deck follow-up: ${r.company_name}`, `${r.booking_code} · ${r.company_name} · ${adminStatusLabel(pc.status)} · last follow-up ${fmt(pc.lastFollowUpOn)} · next ${fmt(nextOn)} — follow up and record it`, `/bookings/${r.id}`)
+      await notify(sb, to, `Pitch Deck follow-up: ${r.company_name}`, `${r.booking_code} · ${r.company_name} · ${adminStatusLabel(pc.status)} · last follow-up ${fmt(pc.lastFollowUpOn)} · next ${fmt(nextOn)} — follow up and record it`, `/bookings/${r.id}`)
       out.precheck++
     })
   }
@@ -164,7 +164,7 @@ export async function runJobs(env, { send, now = Date.now(), client, fetchImpl }
   }
 
   // the CRM shows when the job last ran (and stops its own browser fallback while it runs)
-  const summary = `follow-ups ${out.followUps} · pre-check ${out.precheck} · schemes ${out.schemes} · welcome sent ${out.welcome.sent}, failed ${out.welcome.failed} · WhatsApp sent ${out.welcome.whatsappSent}, failed ${out.welcome.whatsappFailed}${out.errors.length ? ` · ${out.errors.length} error(s)` : ''}`
+  const summary = `follow-ups ${out.followUps} · pitch deck ${out.precheck} · schemes ${out.schemes} · welcome sent ${out.welcome.sent}, failed ${out.welcome.failed} · WhatsApp sent ${out.welcome.whatsappSent}, failed ${out.welcome.whatsappFailed}${out.errors.length ? ` · ${out.errors.length} error(s)` : ''}`
   await sb.from('app_settings').upsert({ key: 'jobs', value: { lastRunAt: out.at, summary } }, { onConflict: 'key' })
   return { ...out, summary }
 }

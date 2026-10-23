@@ -8,7 +8,7 @@ import { saveWorkflowSettings } from '../../lib/actions'
 import { ROLES } from '../../lib/rbac'
 import { CLOUD } from '../../lib/cloud'
 import { fmtDateTime } from '../../lib/format'
-import { fillTemplate, WELCOME_PLACEHOLDERS, WHATSAPP_INVOICE_VARS, WHATSAPP_WELCOME_VARS, workflowSettings } from '../../../supabase/workflow-rules.mjs'
+import { fillTemplate, WELCOME_PLACEHOLDERS, WHATSAPP_FORM_VARS, WHATSAPP_INVOICE_VARS, WHATSAPP_WELCOME_VARS, workflowSettings } from '../../../supabase/workflow-rules.mjs'
 import { Badge, Button, Card, CardHeader, Checkbox, Input, PageHeader, Select, Textarea, Toggle, useRun } from '../../components/ui'
 
 const SAMPLE = { client_name: 'Asha Patel', company: 'Rexera', service: 'Seed Fund Scheme', reference: 'RX-2026-000123', status: 'With our Operations team', ops_name: 'Sneha Patel', ops_phone: '9876500001', ops_email: 'ops@rexera.co.in' }
@@ -54,7 +54,7 @@ export default function WorkflowSettings() {
           <CardHeader title="Reminders" icon={BellRing} />
           <div className="grid gap-4 p-5">
             <Input label="File follow-up: repeat every (days)" type="number" min={1} max={90} value={w.fileReminderDays} onChange={(e) => set({ fileReminderDays: Number(e.target.value) })} hint="For files Legal approves from now on (15 by default). Change one file on its Workflow tab." />
-            <Select label="Pre-Check Deck reminder: every" value={w.precheckDays} onChange={(e) => set({ precheckDays: Number(e.target.value) })}>
+            <Select label="Pitch Deck reminder: every" value={w.precheckDays} onChange={(e) => set({ precheckDays: Number(e.target.value) })}>
               <option value={3}>3 days (default)</option><option value={4}>4 days</option>
             </Select>
             <div>
@@ -111,6 +111,9 @@ export default function WorkflowSettings() {
               <pre className="whitespace-pre-wrap rounded-xl bg-card2 p-3 font-sans text-[12px]">{'Dear {{1}}, please find attached your {{2}} for {{3}}. Thank you for choosing {{4}}.'}</pre>
             </div>
             <div className="grid content-start gap-2">
+              <Input label="Form link template (Document Form Builder)" placeholder="e.g. form_link" value={w.whatsapp.formTemplate} onChange={(e) => set({ whatsapp: { ...w.whatsapp, formTemplate: e.target.value } })} />
+              <p className="text-[11px] text-mute">Variables: {WHATSAPP_FORM_VARS.map((v, i) => `{{${i + 1}}} ${v}`).join(' · ')}</p>
+              <pre className="whitespace-pre-wrap rounded-xl bg-card2 p-3 font-sans text-[12px]">{'Dear {{1}}, please open this secure link to complete "{{2}}": {{3}} — {{4}}'}</pre>
               <Input label="Template language code" placeholder="en" value={w.whatsapp.language} onChange={(e) => set({ whatsapp: { ...w.whatsapp, language: e.target.value } })} hint="The language the templates were created in (en, en_US, hi …)." />
             </div>
           </div>

@@ -34,7 +34,7 @@ export default function Candidates() {
 
   return (
     <div>
-      <PageHeader title="Candidate Forms" subtitle="Create an application form, share its link with interns and new joinees, and review their details and resumes here" icon={ClipboardList}
+      <PageHeader title="Candidate Forms" subtitle="Create an application form, share its link with interns and new joiners, and review their details and resumes here" icon={ClipboardList}
         actions={<Button variant="accent" icon={Plus} onClick={() => setEdit({ title: '', kind: 'JOB', department: '', description: '' })}>New form</Button>} />
 
       <div className="mb-5 flex items-start gap-3 rounded-2xl border border-info/30 bg-info-soft px-4 py-3 text-sm">

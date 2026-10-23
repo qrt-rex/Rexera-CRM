@@ -3,8 +3,8 @@
 // checked and row-level security decides what they may send — an invoice they can't open can't be sent.
 import { randomBytes } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
-import { sniffType } from '../supabase/form-rules.mjs'
-import { WHATSAPP_INVOICE_VARS, templateValues, workflowSettings } from '../supabase/workflow-rules.mjs'
+import { formOpen, sniffType } from '../supabase/form-rules.mjs'
+import { istToday, WHATSAPP_FORM_VARS, WHATSAPP_INVOICE_VARS, templateValues, workflowSettings } from '../supabase/workflow-rules.mjs'
 import { sendTemplate, welcomeWhatsapp, whatsappProblem } from './whatsapp.mjs'
 
 const reply = (status, body) => ({ status, body })
@@ -90,6 +90,36 @@ export async function sendInvoice(env, authorization, raw, { clients, deliverEma
   if (logErr) console.error(`[invoice send] log: ${logErr.message}`)
   await admin.from('audit_log').insert({ at, by_user: me.id, action: 'INVOICE_SENT', detail: `${inv.number}: ${Object.entries(out).map(([c, r]) => `${c} → ${r.to || '—'} ${r.status}`).join(' · ')}` })
   return reply(200, { success: Object.values(out).some((r) => r.status === 'SENT'), ...out })
+}
+
+/**
+ * POST /api/forms/share — { formId, phone, clientName }: a Document Form Builder link by WhatsApp (Interakt form-link
+ * template). Only staff who can manage the form (row-level security) can send it, and only while the link works.
+ * `appUrl` is the CRM's own address (APP_URL, else the request's host) — the link always points at this CRM.
+ */
+export async function sendFormLink(env, authorization, raw, { clients, fetchImpl, appUrl, now = Date.now() } = {}) {
+  let p
+  try { p = JSON.parse(raw || '{}') } catch { return no(400, 'Bad request.') }
+  const auth = await signedIn(env, authorization, clients)
+  if (auth.error) return auth.error
+  const { admin, asCaller, me } = auth
+  if (typeof p.formId !== 'string' || !p.formId) return no(422, 'Which form?')
+  if (limited(me.id, now)) return no(429, 'Too many messages in the last hour — please try again later.')
+  const { data: f } = await asCaller.from('doc_forms').select('id, token, name, status, expires_on, booking_id').eq('id', p.formId).maybeSingle()
+  if (!f) return no(403, 'You can’t send this form.')
+  if (!formOpen({ status: f.status, expiresOn: f.expires_on }, istToday(now))) return no(422, 'This form’s link isn’t live — publish it (or make a new link) first.')
+  const [{ data: ws }, { data: co }] = await Promise.all([
+    admin.from('app_settings').select('value').eq('key', 'workflow').maybeSingle(),
+    admin.from('app_settings').select('value').eq('key', 'company').maybeSingle(),
+  ])
+  const w = workflowSettings(ws?.value ?? undefined)
+  const link = `${String(env('APP_URL') || appUrl || '').replace(/\/+$/, '')}/f/${f.token}`
+  const res = await sendTemplate(env, {
+    phone: p.phone, template: w.whatsapp.formTemplate, language: w.whatsapp.language, callbackData: `form:${f.id}`,
+    bodyValues: templateValues(WHATSAPP_FORM_VARS, { client_name: String(p.clientName ?? '').slice(0, 120) || 'Sir / Madam', form: f.name, link, company: co?.value?.name || 'Rexera' }),
+  }, fetchImpl)
+  await admin.from('audit_log').insert({ at: new Date(now).toISOString(), by_user: me.id, action: `FORM_LINK_WHATSAPP_${res.status}`, detail: `${f.name} → ${res.to ?? p.phone ?? '—'}${res.error ? ` (${res.error})` : ''}` })
+  return reply(200, { success: res.status === 'SENT', ...res })
 }
 
 /** POST /api/whatsapp/welcome — { bookingId }: send the queued WhatsApp welcome now (the job would within 15 min). */

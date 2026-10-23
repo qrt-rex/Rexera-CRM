@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   Archive, ArrowLeft, Building2, Layers, Check, CheckCircle2, ChevronRight, CircleDot, Download, FileText, FolderKanban, History, IndianRupee, ListTodo,
   MessageSquare, Pencil, Plus, Receipt, Send, ShieldCheck, Trash2, Upload, X, Lock, Mail, Gift, Percent, Undo2, Workflow,
@@ -10,8 +10,8 @@ import { openBookingPdf } from '../../lib/bookingPdf'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
 import {
-  addComboService, addComment, addComplimentaryService, addDocuments, addPayment, addRefund, commissionNow, deleteRefund, needsPriceSplit, addTask, canEditBooking, canEmailClient, canMoveStage, deleteDocument, setStageOutcome, deleteTask, invoiceFromBooking, moveStage,
-  PAYMENT_MODES, setCommission, setDeduction, setDocStatus, setPaymentTds, setRefundStatus, toggleTask, userName, verifyPayment, visibleBookings,
+  addComboService, addComment, addComplimentaryService, addDocuments, addPayment, addRefund, commissionNow, deleteRefund, needsPriceSplit, addTask, canEditBooking, canEmailClient, canForwardAdminStages, canMoveStage, deleteDocument, setStageOutcome, deleteTask, invoiceFromBooking, moveStage,
+  PAYMENT_MODES, setCommission, setDeduction, setPaymentTds, setRefundStatus, toggleTask, userName, verifyPayment, visibleBookings,
 } from '../../lib/actions'
 import { DOC_CATEGORIES, STAGES, STAGE_OUTCOMES, stageLabel } from '../../lib/workflow'
 import { ago, bookingMoney, fmtDate, fmtDateTime, gstSplit, inr, today } from '../../lib/format'
@@ -20,6 +20,7 @@ import type { FileRef, LegacyRow } from '../../lib/types'
 import { DOC_TYPES } from '../../lib/files'
 import { FileField } from '../../components/FileField'
 import { DocUploader, type PendingDoc } from '../../components/DocUploader'
+import { DocReview } from '../../components/DocReview'
 import { StageControls, StageText } from '../../components/StageControls'
 import { FileLink } from '../../components/FileField'
 import {
@@ -37,7 +38,9 @@ export default function BookingDetail() {
   const { can } = useAuth()
   const run = useRun()
   const nav = useNavigate()
-  const [tab, setTab] = useState<Tab>('overview')
+  const [params] = useSearchParams()
+  // a notification can open a tab directly (/bookings/<id>?tab=workflow)
+  const [tab, setTab] = useState<Tab>(() => (['workflow', 'processing', 'documents', 'timeline'].includes(params.get('tab') ?? '') ? params.get('tab') as Tab : 'overview'))
   const [mail, setMail] = useState(false)
   const b = visibleBookings(db, me).find((x) => x.id === id)
   if (!b) return <Card><EmptyState icon={FileText} title="CRM entry not found" text="It doesn't exist or isn't visible to you." action={<Link to="/bookings"><Button>All CRM entries</Button></Link>} /></Card>
@@ -83,7 +86,7 @@ export default function BookingDetail() {
 
       <Tabs value={tab} onChange={setTab} className="mb-5 w-fit" tabs={[
         { id: 'overview', label: 'Overview', icon: Building2 },
-        ...(b.welcome || b.followUp || b.adminWork ? [{ id: 'workflow' as const, label: 'Workflow', icon: Workflow }] : []),
+        ...(b.welcome || b.followUp || b.adminWork || canForwardAdminStages(db, me, b) ? [{ id: 'workflow' as const, label: 'Workflow', icon: Workflow }] : []),
         { id: 'processing', label: 'Processing', icon: FolderKanban, count: b.tasks.filter((t) => !t.done).length },
         { id: 'documents', label: 'Documents', icon: FileText, count: b.documents.length }, { id: 'timeline', label: 'Timeline', icon: History, count: b.comments.length + b.approvals.length + (b.clientEmails?.length ?? 0) },
         ...(b.legacy ? [{ id: 'legacy' as const, label: 'Old CRM record', icon: Archive }] : []),
@@ -459,7 +462,6 @@ function Documents({ id }: { id: string }) {
   const run = useRun()
   const b = useBooking(id)
   const [pending, setPending] = useState<PendingDoc[]>([])
-  const verifier = can('bookings.process', 'bookings.legal', 'bookings.admin')
   return (
     <Card className="overflow-hidden">
       <CardHeader title="Client documents" subtitle="PAN card, GSTIN, CRM, QT, Agreement, pitch deck, F.R, D.P.R… — stored with uploader, date and time" icon={FileText} />
@@ -474,9 +476,7 @@ function Documents({ id }: { id: string }) {
                 <p className="text-[11px] text-mute">{d.category} · {d.size ? `${Math.round(d.size / 1024)} KB · ` : ''}{userName(db, d.by)} · {ago(d.at)}</p>
                 {d.legacyPath && <p className="truncate font-mono text-[10px] text-mute" title={d.legacyPath}>old CRM: {d.legacyPath}</p>}
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                  <Badge tone={d.status === 'VERIFIED' ? 'green' : d.status === 'REJECTED' ? 'red' : 'amber'}>{(d.status ?? 'PENDING').toLowerCase()}</Badge>
-                  {verifier && d.status !== 'VERIFIED' && <button className="text-[11px] font-semibold text-ok hover:underline" onClick={() => setDocStatus(me, b.id, d.id, 'VERIFIED')}>Verify</button>}
-                  {verifier && d.status !== 'REJECTED' && <button className="text-[11px] font-semibold text-bad hover:underline" onClick={() => setDocStatus(me, b.id, d.id, 'REJECTED')}>Reject</button>}
+                  <DocReview bookingId={b.id} doc={d} compact />
                   {d.file && <FileLink file={d.file} label="Open" />}
                   {d.dataUrl && <a href={d.dataUrl} download={d.name} className="text-[11px] font-semibold text-brand-ink hover:underline"><Download className="inline size-3" /> Download</a>}
                   <button aria-label="Delete" className="ml-auto text-mute hover:text-bad" onClick={() => confirm(`Delete ${d.name}?`) && run(() => deleteDocument(me, b.id, d.id), 'Deleted')}><Trash2 className="size-3.5" /></button>

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   BookOpenCheck, Briefcase, CalendarCheck2, CheckCircle2, ClipboardList, FileClock, FileText, FolderKanban, Images, PauseCircle,
-  Send, ShieldCheck, UserCheck, UserCog, UsersRound, ListTodo, Inbox, FileSignature, Settings2,
+  Send, ShieldCheck, UserCheck, UserCog, UsersRound, ListTodo, Inbox, FileSignature, Settings2, ClipboardCheck,
 } from 'lucide-react'
 import { AdminProgressOverview, AutomationAlerts } from '../../components/OpsAutomation'
 import { useDb } from '../../lib/store'
@@ -11,6 +11,7 @@ import { userName, usersWithRole } from '../../lib/actions'
 import { isMaster } from '../../lib/rbac'
 import { monthStart, waitingFor } from '../../lib/metrics'
 import { STAGES } from '../../lib/workflow'
+import { ACTIVE_FILE_STATUSES, ADMIN_DONE, ADMIN_STAGES, adminStatusLabel } from '../../../supabase/workflow-rules.mjs'
 import { fmtDate, ymd } from '../../lib/format'
 import { EmptyState, Stat } from '../../components/ui'
 import { HBars } from '../../components/charts'
@@ -39,6 +40,7 @@ export function OperationsDashboard() {
   const toAdmin = mine.filter((b) => b.status === 'WITH_ADMIN').length
   // Admin finished these: the Operations member approves completion
   const toApprove = useMemo(() => db.bookings.filter((b) => b.status === 'OPS_REVIEW' && (team || b.opsMemberId === me.id)), [db.bookings, team, me.id])
+  const who = team ? 'team' : 'me'
 
   return (
     <div>
@@ -51,13 +53,15 @@ export function OperationsDashboard() {
             ))}
           </div>
         ) : undefined} />
-      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <Stat label="Total files" value={mine.length} icon={FileText} tone="violet" sub={team ? 'across the team' : 'assigned to you'} />
-        <Stat label="Active files" value={active.length} icon={FolderKanban} tone="green" sub="in operations" />
-        <Stat label="Open tasks" value={openTasks} icon={ListTodo} tone="blue" sub="across files" />
-        <Stat label="Pending documents" value={pendingDocs} icon={FileClock} tone="amber" sub="to verify" />
-        <Stat label="On hold / with Admin" value={`${hold} / ${toAdmin}`} icon={PauseCircle} tone="pink" />
-        <Stat label="Waiting for my approval" value={toApprove.length} icon={CheckCircle2} tone="green" sub="work done by Admin" />
+      {/* every count opens its list (Operations Dashboard filtered to the same files) */}
+      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
+        <Stat label="Total files" value={mine.length} icon={FileText} tone="violet" sub={team ? 'across the team' : 'assigned to you'} to={`/ops-desk?filter=all&member=${who}`} />
+        <Stat label="Active files" value={active.length} icon={FolderKanban} tone="green" sub="in operations" to={`/ops-desk?filter=active&member=${who}`} />
+        <Stat label="Open tasks" value={openTasks} icon={ListTodo} tone="blue" sub="across files" to="/work" />
+        <Stat label="Pending documents" value={pendingDocs} icon={FileClock} tone="amber" sub="to verify" to="/documents" />
+        <Stat label="On hold" value={hold} icon={PauseCircle} tone="pink" to={`/ops-desk?filter=hold&member=${who}`} />
+        <Stat label="With Admin" value={toAdmin} icon={Send} tone="blue" to={`/ops-desk?filter=admin&member=${who}`} />
+        <Stat label="Waiting for my approval" value={toApprove.length} icon={CheckCircle2} tone="green" sub="work done by Admin" to={`/ops-desk?filter=review&member=${who}`} />
       </div>
       <TileGrid>
         <Tile to="/ops-desk" icon={UserCog} label="Operations Dashboard" desc="Cases from Legal: status, tasks, deadlines" tone="orange" badge={active.length} highlight={active.length > 0} />
@@ -104,16 +108,22 @@ export function AdminDashboard() {
   const hold = db.bookings.filter((b) => b.status === 'ON_HOLD' && (sa || b.adminId === me.id || b.holdFrom === 'WITH_ADMIN'))
   const monthDone = completed.filter((b) => ymd(b.updatedAt) >= monthStart()).length
   const sentForApproval = db.bookings.filter((b) => b.status === 'OPS_REVIEW' && (sa || b.adminId === me.id)).length
+  // single stages the Operation team forwarded to me (Pitch Deck, Finance, DPR, Certification, Submission)
+  const myStages = db.bookings.filter((b) => ACTIVE_FILE_STATUSES.includes(b.status)).flatMap((b) => ADMIN_STAGES
+    .filter((s) => { const w = b.adminWork?.[s.id]; return !!w && w.assignee === me.id && !ADMIN_DONE.includes(w.status) && w.status !== 'NOT_NEEDED' })
+    .map((s) => ({ b, s, w: b.adminWork![s.id]! })))
+    .sort((x, y) => (x.w.due || '9999').localeCompare(y.w.due || '9999'))
 
   return (
     <div>
       <Greeting subtitle="Admin · move client work through the stages, add documents, then send it to Operations for approval" />
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <Stat label="Assigned to me" value={assigned.length} icon={Inbox} tone="blue" />
-        <Stat label="On hold clients" value={hold.length} icon={PauseCircle} tone="orange" />
-        <Stat label="Sent for Ops approval" value={sentForApproval} icon={Inbox} tone="violet" />
-        <Stat label="Completed (all time)" value={completed.length} icon={CheckCircle2} tone="green" />
-        <Stat label="Completed this month" value={monthDone} icon={ShieldCheck} tone="violet" />
+      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <Stat label="Assigned to me" value={assigned.length} icon={Inbox} tone="blue" to="/approvals" />
+        <Stat label="My open stages" value={myStages.length} icon={ClipboardCheck} tone="cyan" sub="Pitch Deck, DPR, …" onClick={() => document.getElementById('my-stages')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
+        <Stat label="On hold clients" value={hold.length} icon={PauseCircle} tone="orange" to="/bookings?status=ON_HOLD" />
+        <Stat label="Sent for Ops approval" value={sentForApproval} icon={Send} tone="violet" to="/bookings?status=OPS_REVIEW" />
+        <Stat label="Completed (all time)" value={completed.length} icon={CheckCircle2} tone="green" to="/bookings?status=COMPLETED" />
+        <Stat label="Completed this month" value={monthDone} icon={ShieldCheck} tone="violet" to="/bookings?status=COMPLETED" />
       </div>
       <TileGrid>
         <Tile to="/approvals" icon={Inbox} label="Operation team → assigned to me" desc="Files waiting for you" tone="blue" badge={assigned.length} highlight={assigned.length > 0} />
@@ -125,6 +135,22 @@ export function AdminDashboard() {
         <Tile to="/forms" icon={FileSignature} label="Document Form Builder" desc="Client forms & secure links" tone="violet" />
         <Tile to="/workflow-settings" icon={Settings2} label="Workflow settings" desc="Reminders, welcome message, alerts" tone="navy" />
       </TileGrid>
+      <Section id="my-stages" title="My Admin stages" subtitle="Stages the Operation team assigned to you — open one to update its status and upload its file" icon={ClipboardCheck} className="mt-6">
+        {!myStages.length ? <EmptyState icon={CheckCircle2} title="No open stages" text="Pitch Deck, Finance, DPR, Certification and Submission stages assigned to you appear here." /> : (
+          <ul className="divide-y divide-line/70">
+            {myStages.slice(0, 12).map(({ b, s, w }) => (
+              <li key={`${b.id}-${s.id}`} className="flex flex-wrap items-center gap-3 px-5 py-3 text-sm">
+                <span className="min-w-0 flex-1">
+                  <Link to={`/bookings/${b.id}?tab=workflow`} className="font-semibold hover:underline">{s.label} · {b.companyName}</Link>
+                  <span className="block text-[11px] text-mute"><span className="font-mono font-semibold text-ink">{w.ref ?? b.bookingId}</span>{w.assignedBy ? ` · from ${userName(db, w.assignedBy)}` : ''}{w.due ? ` · due ${fmtDate(w.due)}` : ''}</span>
+                </span>
+                <span className="rounded-full bg-card2 px-2.5 py-0.5 text-xs font-semibold">{adminStatusLabel(w.status)}</span>
+                <Link to={`/bookings/${b.id}?tab=workflow`} className="text-xs font-semibold text-brand-ink hover:underline">Update / upload</Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
       <div className="mt-6"><AutomationAlerts /><AdminProgressOverview /></div>
       <div className="grid gap-6 xl:grid-cols-3">
         <Section title="My client work" subtitle={`Stages: ${STAGES.join(' → ')}`} icon={Inbox} className="xl:col-span-2" action={<ViewAll to="/work" />}>

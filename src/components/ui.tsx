@@ -3,6 +3,7 @@ import {
   type ButtonHTMLAttributes, type HTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes,
 } from 'react'
 import { createPortal } from 'react-dom'
+import { Link } from 'react-router-dom'
 import { AlertTriangle, CheckCircle2, Info, Loader2, X, XCircle, type LucideIcon } from 'lucide-react'
 import type { Tone } from '../lib/workflow'
 import { initials } from '../lib/format'
@@ -168,9 +169,10 @@ export function PageHeader({ title, subtitle, icon: Icon, actions }: { title: st
   )
 }
 
-export function Stat({ label, value, icon: Icon, tone = 'navy', sub, trend }: { label: string; value: ReactNode; icon: LucideIcon; tone?: Tone; sub?: ReactNode; trend?: number }) {
-  return (
-    <Card className="p-4 transition hover:-translate-y-0.5 hover:shadow-pop">
+/** A count card; with `to` (a page) or `onClick` the whole card opens the list behind the number. */
+export function Stat({ label, value, icon: Icon, tone = 'navy', sub, trend, to, onClick }: { label: string; value: ReactNode; icon: LucideIcon; tone?: Tone; sub?: ReactNode; trend?: number; to?: string; onClick?: () => void }) {
+  const card = (
+    <Card className={cx('h-full p-4 transition hover:-translate-y-0.5 hover:shadow-pop', (to || onClick) && 'cursor-pointer hover:border-brand/40')}>
       <div className="flex items-start gap-3">
         <span className={cx('grid size-11 shrink-0 place-items-center rounded-xl', toneCls[tone])}><Icon className="size-5" /></span>
         <div className="min-w-0 flex-1">
@@ -184,6 +186,9 @@ export function Stat({ label, value, icon: Icon, tone = 'navy', sub, trend }: { 
       </div>
     </Card>
   )
+  if (to) return <Link to={to} aria-label={`${label}: ${typeof value === 'string' || typeof value === 'number' ? value : ''} — open the list`} className="block rounded-2xl focus-visible:outline-2 focus-visible:outline-brand">{card}</Link>
+  if (onClick) return <button type="button" onClick={onClick} className="block w-full rounded-2xl text-left focus-visible:outline-2 focus-visible:outline-brand">{card}</button>
+  return card
 }
 
 // ------------------------------------------------------------------ Tabs

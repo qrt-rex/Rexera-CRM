@@ -27,5 +27,6 @@ export function fillTemplate(text: string, vars: Record<string, string | number 
 export const WELCOME_PLACEHOLDERS: string[]
 export const WHATSAPP_WELCOME_VARS: string[]
 export const WHATSAPP_INVOICE_VARS: string[]
+export const WHATSAPP_FORM_VARS: string[]
 export function templateValues(names: string[], vars: Record<string, string | number | undefined>): string[]
 export type { Role }

@@ -1,18 +1,19 @@
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Archive, ArrowDown, ArrowUp, Copy, Eye, FilePlus2, FileSignature, Link2, Mail, MessageCircle, Pencil, Plus, RefreshCw, Send, Trash2, XCircle } from 'lucide-react'
+import { Archive, ArrowDown, ArrowUp, Copy, Eye, FilePlus2, FileSignature, Link2, Mail, MessageCircle, Pencil, Plus, RefreshCw, Send, Share2, Trash2, XCircle } from 'lucide-react'
 import type { DocForm, FormField, FormSubmission } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useMe } from '../../lib/auth'
 import { canEmailClient, logClientEmail, userName, visibleBookings } from '../../lib/actions'
 import { attachSubmissionFiles, formLink, newField, renewFormLink, reviewSubmission, saveForm, setFormStatus, type FormInput } from '../../lib/forms'
 import { FIELD_TYPES, formOpen, formProblems } from '../../../supabase/form-rules.mjs'
-import { istToday } from '../../../supabase/workflow-rules.mjs'
+import { istToday, workflowSettings } from '../../../supabase/workflow-rules.mjs'
+import { sendFormWhatsapp } from '../../lib/share'
 import { sendClientEmailClient } from '../../lib/emailClient'
 import { whatsappLink } from '../../lib/welcome'
 import { DOC_TYPES, RESUME_TYPES } from '../../lib/files'
 import { CLOUD } from '../../lib/cloud'
-import { fmtDate, fmtDateTime } from '../../lib/format'
+import { fmtDate, fmtDateTime, isEmail, isPhone } from '../../lib/format'
 import { Badge, Button, Card, Checkbox, cx, EmptyState, Input, Modal, PageHeader, SearchBox, Select, Table, Tabs, Td, Textarea, Th, useConfirm, useRun, useToast } from '../../components/ui'
 import { FileField, FileLink } from '../../components/FileField'
 import { FormRenderer, type FormFiles, type FormValues } from '../../components/FormRenderer'
@@ -53,18 +54,7 @@ function FormsTab() {
   const list = (db.docForms ?? []).filter((f) => (show === 'ARCHIVED' ? f.status === 'ARCHIVED' : f.status !== 'ARCHIVED') && (!q || `${f.name} ${f.description}`.toLowerCase().includes(q.toLowerCase())))
   const client = (f: DocForm) => db.bookings.find((b) => b.id === f.bookingId)
 
-  const emailLink = async (f: DocForm) => {
-    const b = client(f)
-    if (!b || !b.email || !canEmailClient(db, me, b)) { window.location.href = `mailto:${b?.email ?? ''}?subject=${encodeURIComponent(f.name)}&body=${encodeURIComponent(`Dear ${b?.contactPerson ?? 'Sir / Madam'},\n\nPlease open this secure link to ${f.kind === 'UPLOAD' ? 'download the document and send it back completed' : 'fill in the form'}:\n${formLink(f)}\n\nThank you,\n${me.name}`)}`; return }
-    const req = {
-      to: b.email, subject: `${f.name} — ${b.bookingId}`, heading: f.name, company: db.settings.companyName || 'Rexera',
-      message: `Dear ${b.contactPerson},\n\nPlease open the secure link below to ${f.kind === 'UPLOAD' ? 'download the document and send it back completed' : 'fill in the form'}${f.expiresOn ? ` before ${fmtDate(f.expiresOn)}` : ''}.\n\n${formLink(f)}${f.verify === 'MOBILE' ? '\n\nYou will be asked for the mobile number registered with us.' : ''}\n\nThank you.`,
-      sender: { name: me.name, role: 'Operations', phone: me.phone || undefined, email: me.email || undefined }, replyTo: me.email || undefined,
-    }
-    const r = await sendClientEmailClient(req)
-    logClientEmail(me, b.id, { to: b.email, cc: [], subject: req.subject, template: 'form-link', status: r.delivered ? 'SENT' : 'FAILED', ...(r.delivered ? {} : { error: r.message }) })
-    toast(r.delivered ? 'success' : 'error', r.delivered ? `Link emailed to ${b.email}` : `Not sent: ${r.message}`)
-  }
+  const [sharing, setSharing] = useState<DocForm | null>(null)
 
   return (
     <Card className="overflow-hidden">
@@ -86,10 +76,9 @@ function FormsTab() {
                   <Td><Badge tone={STATUS[f.status].tone}>{STATUS[f.status].label}</Badge>{f.expiresOn && <span className={cx('block text-[11px]', f.expiresOn < t ? 'text-bad' : 'text-mute')}>{f.expiresOn < t ? 'expired' : 'until'} {fmtDate(f.expiresOn)}</span>}{f.verify === 'MOBILE' && <span className="block text-[11px] text-mute">mobile check</span>}</Td>
                   <Td className="text-right tabular-nums">{n}<span className="block text-[11px] text-mute">{f.views} view{f.views === 1 ? '' : 's'}</span></Td>
                   <Td>{open ? <span className="flex gap-1">
-                    <Button size="sm" variant="ghost" icon={Copy} aria-label="Copy link" onClick={() => { void navigator.clipboard?.writeText(formLink(f)); toast('success', 'Link copied') }} />
-                    <Button size="sm" variant="ghost" icon={Mail} aria-label="Email link" onClick={() => run(() => emailLink(f))} />
-                    {b?.mobile && <a href={whatsappLink(b.mobile, `${f.name}: please open this secure link — ${formLink(f)}`)} target="_blank" rel="noreferrer"><Button size="sm" variant="ghost" icon={MessageCircle} aria-label="Send on WhatsApp" /></a>}
-                  </span> : <span className="text-xs text-mute">{f.status === 'PUBLISHED' ? 'expired' : 'not live'}</span>}</Td>
+                    <Button size="sm" icon={Share2} onClick={() => setSharing(f)}>Share</Button>
+                    <Button size="sm" variant="ghost" icon={Copy} aria-label="Copy link" title="Copy link" onClick={() => { void navigator.clipboard?.writeText(formLink(f)); toast('success', 'Link copied') }} />
+                  </span> : <span className="text-xs text-mute">{f.status === 'PUBLISHED' ? 'expired — make a new link' : 'publish it to share'}</span>}</Td>
                   <Td className="text-right"><span className="inline-flex flex-wrap justify-end gap-1">
                     <Button size="sm" variant="ghost" icon={Eye} aria-label="Preview" onClick={() => setPreview(f)} />
                     {f.status !== 'ARCHIVED' && <Button size="sm" variant="ghost" icon={Pencil} aria-label="Edit" onClick={() => setEdit({ id: f.id, f: { name: f.name, description: f.description, instructions: f.instructions, kind: f.kind, fields: f.fields, verify: f.verify, bookingId: f.bookingId, expiresOn: f.expiresOn, document: f.document } })} />}
@@ -106,8 +95,71 @@ function FormsTab() {
       )}
       {edit && <FormBuilder init={edit.f} id={edit.id} onClose={() => setEdit(null)} />}
       {preview && <PreviewModal form={preview} onClose={() => setPreview(null)} />}
+      {sharing && <ShareModal f={sharing} onClose={() => setSharing(null)} />}
       {node}
     </Card>
+  )
+}
+
+/**
+ * Send a live form's secure link to the client by email (branded, from the server) and / or WhatsApp — through
+ * Interakt when the form-link template is set (Workflow settings), otherwise by opening WhatsApp with the text.
+ */
+function ShareModal({ f, onClose }: { f: DocForm; onClose: () => void }) {
+  const db = useDb()
+  const me = useMe()
+  const toast = useToast()
+  const b = db.bookings.find((x) => x.id === f.bookingId)
+  const [name, setName] = useState(b?.contactPerson ?? '')
+  const [email, setEmail] = useState(b?.email ?? '')
+  const [phone, setPhone] = useState(b?.mobile ?? '')
+  const [busy, setBusy] = useState<'' | 'email' | 'wa'>('')
+  const waAuto = CLOUD && !!workflowSettings(db.settings.workflow).whatsapp.formTemplate
+  const what = f.kind === 'UPLOAD' ? 'download the document and send it back completed' : 'fill in the form'
+  const text = `Dear ${name || 'Sir / Madam'}, please open this secure link to ${what} (${f.name})${f.expiresOn ? ` before ${fmtDate(f.expiresOn)}` : ''}: ${formLink(f)}`
+  const sendEmail = async () => {
+    setBusy('email')
+    try {
+      const req = {
+        to: email.trim(), subject: `${f.name}${b ? ` — ${b.bookingId}` : ''}`, heading: f.name, company: db.settings.companyName || 'Rexera',
+        message: `Dear ${name || 'Sir / Madam'},\n\nPlease open the secure link below to ${what}${f.expiresOn ? ` before ${fmtDate(f.expiresOn)}` : ''}.\n\n${formLink(f)}${f.verify === 'MOBILE' ? '\n\nYou will be asked for the mobile number registered with us.' : ''}\n\nThank you.`,
+        sender: { name: me.name, role: 'Operations', phone: me.phone || undefined, email: isEmail(me.email) ? me.email : undefined }, replyTo: isEmail(me.email) ? me.email : undefined,
+      }
+      const r = await sendClientEmailClient(req)
+      if (b && canEmailClient(db, me, b)) logClientEmail(me, b.id, { to: req.to, cc: [], subject: req.subject, template: 'form-link', status: r.delivered ? 'SENT' : 'FAILED', ...(r.delivered ? {} : { error: r.message }) })
+      toast(r.delivered ? 'success' : 'error', r.delivered ? `Link emailed to ${req.to}` : `Not sent: ${r.message}`)
+    } finally { setBusy('') }
+  }
+  const sendWhatsapp = async () => {
+    if (!waAuto) { window.open(whatsappLink(phone, text), '_blank', 'noopener'); return }
+    setBusy('wa')
+    try {
+      const r = await sendFormWhatsapp(f.id, phone, name)
+      toast(r.status === 'SENT' ? 'success' : 'error', r.status === 'SENT' ? `Link sent on WhatsApp to ${r.to}` : `Not sent: ${r.error ?? r.status}`)
+    } catch (e) { toast('error', e instanceof Error ? e.message : 'Not sent') } finally { setBusy('') }
+  }
+  return (
+    <Modal open onClose={onClose} title={`Share “${f.name}”`} subtitle={b ? `${b.bookingId} · ${b.companyName}` : 'Not linked to a client file'} size="md" footer={<Button variant="outline" onClick={onClose}>Done</Button>}>
+      <div className="grid gap-4">
+        <Input label="Client name" value={name} onChange={(e) => setName(e.target.value)} />
+        <div className="rounded-xl border border-line p-3">
+          <p className="mb-2 flex items-center gap-2 text-sm font-bold"><Mail className="size-4" />Email</p>
+          <div className="flex flex-wrap items-end gap-2">
+            <Input label="Client email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="min-w-56 flex-1" />
+            <Button icon={Send} loading={busy === 'email'} disabled={!isEmail(email) || !!busy} onClick={sendEmail}>Send email</Button>
+          </div>
+        </div>
+        <div className="rounded-xl border border-line p-3">
+          <p className="mb-2 flex items-center gap-2 text-sm font-bold"><MessageCircle className="size-4" />WhatsApp</p>
+          <div className="flex flex-wrap items-end gap-2">
+            <Input label="Client WhatsApp number" value={phone} onChange={(e) => setPhone(e.target.value)} className="min-w-56 flex-1" />
+            <Button variant="success" icon={MessageCircle} loading={busy === 'wa'} disabled={!isPhone(phone) || !!busy} onClick={sendWhatsapp}>{waAuto ? 'Send on WhatsApp' : 'Open WhatsApp'}</Button>
+          </div>
+          <p className="mt-1.5 text-[11px] text-mute">{waAuto ? 'Sent from the company WhatsApp number (Interakt).' : 'Opens WhatsApp with the message ready — send it from your phone or WhatsApp Web. (Set a form-link template in Workflow settings to send it automatically.)'}</p>
+        </div>
+        <p className="break-all rounded-xl bg-card2 p-3 text-[12px] text-mute">{text}</p>
+      </div>
+    </Modal>
   )
 }
 

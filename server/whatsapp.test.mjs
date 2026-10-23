@@ -2,7 +2,7 @@
 // Nothing leaves this computer: Interakt, the mail server and Supabase are fakes.
 import assert from 'node:assert/strict'
 import { sendTemplate, welcomeWhatsapp } from './whatsapp.mjs'
-import { sendInvoice, sendWelcomeNow } from './share.mjs'
+import { sendFormLink, sendInvoice, sendWelcomeNow } from './share.mjs'
 import { workflowSettings } from '../supabase/workflow-rules.mjs'
 
 const env = (vars) => (k) => vars[k] ?? ''
@@ -150,4 +150,22 @@ ik = fakeInterakt()
 res = await sendWelcomeNow(env(KEY), 'Bearer x', JSON.stringify({ bookingId: 'b1' }), { clients: s.clients, fetchImpl: ik.fetchImpl, now })
 assert.equal(res.body.result.status, 'SENT')
 assert.deepEqual(ik.calls[0].body.template.bodyValues, ['Asha', 'Seed Fund', 'RX-1', 'Sneha', '9800000001'])
-console.log('✓ WhatsApp (Interakt): template requests, welcome once per file, invoice PDF by email + WhatsApp, access checks')
+// ---------------------------------------------------------------- a Form Builder link on WhatsApp
+const form = { id: 'frm-1', token: 'tok_ABCDEFGHIJKLMNOPQRSTUV12', name: 'KYC details', status: 'PUBLISHED', expires_on: null, booking_id: 'b1' }
+const formSetup = (rows, wa = 'form_link') => {
+  const admin = fake({ app_settings: [{ key: 'workflow', value: { whatsapp: { formTemplate: wa } } }, { key: 'company', value: { name: 'Rexera' } }], audit_log: [] })
+  return { admin, clients: { admin, asCaller: fake({ doc_forms: rows }), me: { id: 'ops', name: 'Sneha', active: true } } }
+}
+s = formSetup([])
+assert.equal((await sendFormLink(env(KEY), 'Bearer x', JSON.stringify({ formId: 'frm-1', phone: '9876500001' }), { clients: s.clients })).status, 403, 'a form the caller cannot manage')
+s = formSetup([{ ...form, status: 'CLOSED' }])
+assert.equal((await sendFormLink(env(KEY), 'Bearer x', JSON.stringify({ formId: 'frm-1', phone: '9876500001' }), { clients: s.clients, now })).status, 422, 'a closed link is not sent')
+s = formSetup([form])
+ik = fakeInterakt()
+res = await sendFormLink(env(KEY), 'Bearer x', JSON.stringify({ formId: 'frm-1', phone: '9876500001', clientName: 'Asha' }), { clients: s.clients, fetchImpl: ik.fetchImpl, appUrl: 'https://crm.example.test/', now })
+assert.equal(res.body.status, 'SENT')
+assert.equal(ik.calls[0].body.template.name, 'form_link')
+assert.deepEqual(ik.calls[0].body.template.bodyValues, ['Asha', 'KYC details', 'https://crm.example.test/f/tok_ABCDEFGHIJKLMNOPQRSTUV12', 'Rexera'], 'the link points at this CRM')
+s = formSetup([form], '')
+assert.equal((await sendFormLink(env(KEY), 'Bearer x', JSON.stringify({ formId: 'frm-1', phone: '9876500001' }), { clients: s.clients, now })).body.status, 'NOT_CONFIGURED', 'no form-link template: said so')
+console.log('✓ WhatsApp (Interakt): template requests, welcome once per file, invoice PDF by email + WhatsApp, form links, access checks')

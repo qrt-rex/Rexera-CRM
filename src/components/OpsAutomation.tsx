@@ -11,7 +11,7 @@ import { Badge, Card, CardHeader, cx, EmptyState, Modal, Progress, Table, Td, Th
 
 const pct = (done: number, total: number) => (total ? Math.round((done / total) * 100) : null)
 
-/** What needs attention now: welcome messages not delivered, follow-ups and Pre-Check Deck reminders due, schemes ending, new form responses. */
+/** What needs attention now: welcome messages not delivered, follow-ups and Pitch Deck reminders due, schemes ending, new form responses. */
 export function AutomationAlerts() {
   const db = useDb()
   const me = useMe()
@@ -38,7 +38,7 @@ export function AutomationAlerts() {
       <Box title="Follow-ups (15-day)" icon={CalendarClock} n={follow.length} empty="No follow-ups due in the next 3 days.">
         {follow.map((b) => <Row key={b.id} b={b} sub={`${userName(db, b.opsMemberId)} · last ${b.followUp!.lastOn ? fmtDate(b.followUp!.lastOn) : '—'}`} right={due(b.followUp!.nextOn)} />)}
       </Box>
-      <Box title="Pre-Check Deck reminders" icon={BellRing} n={precheck.length} empty="No Pre-Check Deck follow-ups due.">
+      <Box title="Pitch Deck reminders" icon={BellRing} n={precheck.length} empty="No Pitch Deck follow-ups due.">
         {precheck.map((b) => <Row key={b.id} b={b} sub={`${userName(db, b.adminWork!.PRECHECK!.assignee ?? b.adminId)} · ${adminStatusLabel(b.adminWork!.PRECHECK!.status)}`} right={due(b.adminWork!.PRECHECK!.nextRemindOn!)} />)}
       </Box>
       <Box title="Client welcome not delivered" icon={MailWarning} n={welcome.length} empty="Every welcome message was delivered.">

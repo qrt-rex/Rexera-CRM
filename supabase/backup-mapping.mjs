@@ -53,7 +53,7 @@ export function mapAll(backup) {
   t.booking_approvals = d.bookings.flatMap((b) => b.approvals.map((a) => ({ id: a.id, booking_id: b.id, level: a.level, action: a.action, decided_by: uref(a.by), decided_at: a.at, remark: a.remark ?? '' })))
   t.booking_stage_moves = d.bookings.flatMap((b) => b.stageHistory.map((h, i) => ({ id: `${b.id}-stage-${i + 1}`, booking_id: b.id, stage: h.stage, moved_at: h.at, moved_by: uref(h.by), note: h.note ?? '', outcome: s(h.outcome) })))
   t.booking_comments = d.bookings.flatMap((b) => b.comments.map((c) => ({ id: c.id, booking_id: b.id, author_id: uref(c.by), created_at: c.at, body: c.text, kind: c.kind ?? '' })))
-  t.booking_documents = d.bookings.flatMap((b) => b.documents.map((x) => ({ id: x.id, booking_id: b.id, name: x.name, category: x.category, size_bytes: x.size ?? 0, uploaded_at: x.at, uploaded_by: uref(x.by), status: x.status ?? 'PENDING', storage_path: null, legacy_path: x.legacyPath ?? null, file: x.file ?? null, note: s(x.note) })))
+  t.booking_documents = d.bookings.flatMap((b) => b.documents.map((x) => ({ id: x.id, booking_id: b.id, name: x.name, category: x.category, size_bytes: x.size ?? 0, uploaded_at: x.at, uploaded_by: uref(x.by), status: x.status ?? 'PENDING', storage_path: null, legacy_path: x.legacyPath ?? null, file: x.file ?? null, note: s(x.note), reviewed_by: uref(x.reviewedBy), reviewed_at: s(x.reviewedAt) })))
   t.booking_client_emails = d.bookings.flatMap((b) => (b.clientEmails ?? []).map((e) => ({ id: e.id, booking_id: b.id, sent_by: uref(e.by), sent_at: e.at, to_email: e.to, cc: e.cc ?? [], subject: e.subject, template: e.template, status: e.status, error: s(e.error) })))
   t.booking_tasks = d.bookings.flatMap((b) => b.tasks.map((x) => ({ id: x.id, booking_id: b.id, title: x.title, done: x.done, due_on: s(x.due), created_by: uref(x.by), assignee_id: uref(x.assignee), remind_every_days: x.remindEveryDays ?? null, last_reminded_at: s(x.lastRemindedAt), created_at: x.createdAt ?? b.createdAt })))
 
@@ -126,6 +126,11 @@ export function mapAll(backup) {
     id: x.id, form_id: x.formId, form_version: x.formVersion, booking_id: x.bookingId && bookingIds.has(x.bookingId) ? x.bookingId : null, fields: x.fields ?? [], answers: x.answers ?? {}, files: x.files ?? [],
     submitted_at: x.submittedAt, status: x.status, reviewed_by: uref(x.reviewedBy), reviewed_at: s(x.reviewedAt), note: s(x.note),
   }))
+  t.sales_kit = (d.salesKit ?? []).map((x) => ({
+    id: x.id, category: x.category, position: x.position, name: x.name, benefits: x.benefits ?? '', sectors: x.sectors ?? '', eligibility: x.eligibility ?? '', last_date: x.lastDate ?? '',
+    organisation: x.organisation ?? '', scheme_type: x.schemeType ?? '', applicable_for: x.applicableFor ?? '', min_charge: x.minCharge ?? '', registration_charge: s(x.registrationCharge),
+    updated_at: s(x.updatedAt), updated_by: uref(x.updatedBy),
+  }))
   t.recruitment_datasets = (backup.imports ?? []).map((x) => ({ id: x.id, name: x.name, file_name: x.fileName, sheet: s(x.sheet), kind: x.kind, columns: x.columns, imported_at: x.importedAt, imported_by: uref(x.importedBy), bytes: x.bytes ?? 0 }))
   t.recruitment_rows = (backup.imports ?? []).flatMap((x) => x.rows.map((cells, i) => ({ dataset_id: x.id, row_no: i + 1, cells })))
   return t
@@ -143,7 +148,7 @@ export const ORDER = [
   ['message_templates', 'id'], ['emails', 'id'], ['email_automations', 'key'], ['app_settings', 'key'], ['api_keys', 'id'],
   ['backup_log', 'id'], ['candidate_forms', 'id'], ['candidate_applications', 'id'], ['recruitment_datasets', 'id'], ['recruitment_rows', 'dataset_id,row_no'],
   ['company_assets', 'id'], ['stock_items', 'id'], ['company_expenses', 'id'], ['legacy_files', 'path'],
-  ['doc_forms', 'id'], ['doc_form_submissions', 'id'],
+  ['doc_forms', 'id'], ['doc_form_submissions', 'id'], ['sales_kit', 'id'],
 ]
 export const APPEND_ONLY = ['payroll_history', 'audit_log', 'asset_events', 'stock_moves']   // identity ids: only copied into an empty table
 
@@ -215,7 +220,7 @@ export function rowsToDb(input) {
     approvals: apprOf(r.id).map((a) => ({ id: a.id, level: a.level, action: a.action, by: a.decided_by ?? '', at: a.decided_at, remark: a.remark ?? '' })),
     stageHistory: stageOf(r.id).map((h) => opt({ stage: h.stage, at: h.moved_at, by: h.moved_by ?? '', note: h.note ?? '', outcome: u(h.outcome) })),
     comments: commOf(r.id).map((c) => ({ id: c.id, by: c.author_id ?? '', at: c.created_at, text: c.body, kind: c.kind ?? '' })),
-    documents: docOf(r.id).map((x) => opt({ id: x.id, name: x.name, category: x.category, size: x.size_bytes ?? 0, at: x.uploaded_at, by: x.uploaded_by ?? '', status: x.status, legacyPath: u(x.legacy_path), file: u(x.file), note: u(x.note) })),
+    documents: docOf(r.id).map((x) => opt({ id: x.id, name: x.name, category: x.category, size: x.size_bytes ?? 0, at: x.uploaded_at, by: x.uploaded_by ?? '', status: x.status, legacyPath: u(x.legacy_path), file: u(x.file), note: u(x.note), reviewedBy: u(x.reviewed_by), reviewedAt: u(x.reviewed_at) })),
     tasks: taskOf(r.id).map((x) => opt({ id: x.id, title: x.title, done: x.done, due: u(x.due_on), by: x.created_by ?? '', assignee: u(x.assignee_id), remindEveryDays: u(x.remind_every_days), createdAt: u(x.created_at), lastRemindedAt: u(x.last_reminded_at) })),
     clientEmails: mailOf(r.id).length ? mailOf(r.id).map((e) => opt({ id: e.id, at: e.sent_at, by: e.sent_by ?? '', to: e.to_email, cc: e.cc ?? [], subject: e.subject, template: e.template, status: e.status, error: u(e.error) })) : undefined,
   }))
@@ -295,6 +300,11 @@ export function rowsToDb(input) {
     formSubmissions: rows('doc_form_submissions').map((x) => opt({
       id: x.id, formId: x.form_id, formVersion: x.form_version, bookingId: u(x.booking_id), fields: x.fields ?? [], answers: x.answers ?? {}, files: x.files ?? [],
       submittedAt: x.submitted_at, status: x.status, reviewedBy: u(x.reviewed_by), reviewedAt: u(x.reviewed_at), note: u(x.note),
+    })),
+    salesKit: rows('sales_kit').map((x) => opt({
+      id: x.id, category: x.category, position: x.position, name: x.name, benefits: x.benefits ?? '', sectors: x.sectors ?? '', eligibility: x.eligibility ?? '', lastDate: x.last_date ?? '',
+      organisation: x.organisation ?? '', schemeType: x.scheme_type ?? '', applicableFor: x.applicable_for ?? '', minCharge: x.min_charge ?? '', registrationCharge: u(x.registration_charge),
+      updatedAt: u(x.updated_at), updatedBy: u(x.updated_by),
     })),
   }
   const imports = rows('recruitment_datasets').map((x) => opt({ id: x.id, name: x.name, fileName: x.file_name, sheet: u(x.sheet), kind: x.kind, columns: x.columns, importedAt: x.imported_at, importedBy: x.imported_by ?? '', bytes: x.bytes ?? 0, rows: [...datasetRows(x.id)].sort((a, b) => a.row_no - b.row_no).map((r) => r.cells) }))

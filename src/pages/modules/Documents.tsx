@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Check, CheckCircle2, CircleDashed, FileCheck2, FilePlus2, FileText, Globe, Save, Upload, UserRound, X } from 'lucide-react'
+import { CheckCircle2, CircleDashed, FileCheck2, FilePlus2, FileText, Globe, Save, Upload, UserRound } from 'lucide-react'
 import type { Booking, FileRef } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
-import { addDocuments, setDocStatus, updateClientInfo, userName, visibleBookings } from '../../lib/actions'
+import { addDocuments, updateClientInfo, userName, visibleBookings } from '../../lib/actions'
+import { DocReview } from '../../components/DocReview'
 import { DOC_FORM, KYC_CATEGORIES } from '../../lib/workflow'
 import { ago, fmtDateTime } from '../../lib/format'
 import { checkFile, saveFile } from '../../lib/files'
@@ -27,7 +28,6 @@ export default function Documents() {
   const [q, setQ] = useState('')
   const docs = useMemo(() => bookings.flatMap((x) => x.documents.map((d) => ({ ...d, b: x }))).sort((x, y) => y.at.localeCompare(x.at)), [bookings])
   const list = docs.filter((d) => (tab === 'all' || (d.status ?? 'PENDING') === tab) && (!q || `${d.name} ${d.b.companyName} ${d.category} ${d.note ?? ''}`.toLowerCase().includes(q.toLowerCase())))
-  const verifier = can('bookings.process', 'bookings.legal', 'bookings.admin')
   const missing = bookings.filter((x) => ['IN_OPERATIONS', 'PENDING_LEGAL'].includes(x.status) && !x.documents.some((d) => KYC_CATEGORIES.includes(d.category)))
 
   return (
@@ -61,7 +61,7 @@ export default function Documents() {
         </div>
         {!list.length ? <EmptyState icon={FileText} title="No documents" /> : (
           <Table>
-            <thead><tr><Th>Document</Th><Th>Client</Th><Th>Type</Th><Th>Note</Th><Th>Uploaded</Th><Th>Status</Th><Th className="text-right">Actions</Th></tr></thead>
+            <thead><tr><Th>Document</Th><Th>Client</Th><Th>Type</Th><Th>Note</Th><Th>Uploaded</Th><Th>Status · verified / rejected by</Th></tr></thead>
             <tbody>
               {list.slice(0, 200).map((d) => (
                 <tr key={d.id}>
@@ -70,8 +70,7 @@ export default function Documents() {
                   <Td className="text-xs">{d.category}</Td>
                   <Td className="max-w-56 text-xs text-mute"><span className="line-clamp-2">{d.note ?? '—'}</span></Td>
                   <Td className="text-xs text-mute">{userName(db, d.by)} · {ago(d.at)}</Td>
-                  <Td><Badge tone={d.status === 'VERIFIED' ? 'green' : d.status === 'REJECTED' ? 'red' : 'amber'}>{(d.status ?? 'PENDING').toLowerCase()}</Badge></Td>
-                  <Td className="text-right">{verifier && d.status !== 'VERIFIED' && <span className="inline-flex gap-1"><Button size="sm" variant="success" icon={Check} onClick={() => setDocStatus(me, d.b.id, d.id, 'VERIFIED')}>Verify</Button><Button size="sm" variant="ghost" icon={X} aria-label="Reject" onClick={() => setDocStatus(me, d.b.id, d.id, 'REJECTED')} /></span>}</Td>
+                  <Td><DocReview bookingId={d.b.id} doc={d} /></Td>
                 </tr>
               ))}
             </tbody>
@@ -145,7 +144,7 @@ function DocSlot({ b, cat, title, hint, noteRequired, className }: { b: Booking;
             <li key={d.id} className="rounded-lg bg-card px-2.5 py-1.5 text-xs">
               <div className="flex items-center justify-between gap-2">
                 {d.file ? <FileLink file={d.file} label={d.name} /> : <span className="truncate font-semibold">{d.name}</span>}
-                <Badge tone={d.status === 'VERIFIED' ? 'green' : d.status === 'REJECTED' ? 'red' : 'amber'}>{(d.status ?? 'PENDING').toLowerCase()}</Badge>
+                <DocReview bookingId={b.id} doc={d} compact />
               </div>
               {d.note && <p className="mt-0.5 text-mute">“{d.note}”</p>}
               <p className="text-[10px] text-mute">{fmtDateTime(d.at)}</p>

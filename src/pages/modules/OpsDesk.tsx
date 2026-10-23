@@ -16,9 +16,11 @@ import { BookingStatusBadge, DeadlineBadge, DecisionButtons, DecisionModal, Prio
 import { StageControls } from '../../components/StageControls'
 import { AdminProgressOverview, AutomationAlerts } from '../../components/OpsAutomation'
 
-type Filter = 'open' | 'active' | 'admin' | 'hold' | 'overdue' | 'done'
+type Filter = 'open' | 'active' | 'admin' | 'review' | 'hold' | 'overdue' | 'week' | 'done' | 'all'
+const FILTERS: Filter[] = ['open', 'active', 'admin', 'review', 'hold', 'overdue', 'week', 'done', 'all']
 const OPEN = ['IN_OPERATIONS', 'WITH_ADMIN', 'OPS_REVIEW', 'ON_HOLD']
 const overdue = (b: Booking) => OPEN.includes(b.status) && !!b.deadline && b.deadline < today()
+const dueThisWeek = (b: Booking) => OPEN.includes(b.status) && !!b.deadline && b.deadline >= today() && b.deadline <= ymd(addDays(new Date(), 7))
 /** The Legal decision that handed the file to Operations (latest one when it was re-assigned). */
 const handOver = (b: Booking) => [...b.approvals].reverse().find((a) => a.action === 'ASSIGN_OPS' || a.action === 'ASSIGNED_OPS')
 /** Halfway through the current stage; 100% only once the file is completed. */
@@ -40,8 +42,11 @@ export default function OpsDesk() {
   const queue = useMemo(() => db.bookings.filter((b) => b.status === 'PENDING_LEGAL').sort((a, b) => a.updatedAt.localeCompare(b.updatedAt)), [db.bookings])
   const cases = useMemo(() => db.bookings.filter((b) => b.opsMemberId && b.status !== 'REJECTED'), [db.bookings])
   const own = cases.filter((b) => b.opsMemberId === me.id)
-  const [filter, setFilter] = useState<Filter>('open')
-  const [member, setMember] = useState(() => (!isLegal && own.length ? me.id : ''))
+  // a count on a dashboard opens this page on its list: /ops-desk?filter=hold&member=me
+  const [filter, setFilter] = useState<Filter>(() => (FILTERS.includes(params.get('filter') as Filter) ? params.get('filter') as Filter : 'open'))
+  const [member, setMember] = useState(() => params.get('member') === 'me' ? me.id : params.get('member') === 'team' ? '' : (!isLegal && own.length ? me.id : ''))
+  const show = (f: Filter) => { setFilter(f); setTimeout(() => document.getElementById('cases')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50) }
+  useEffect(() => { if (params.get('filter')) show(FILTERS.includes(params.get('filter') as Filter) ? params.get('filter') as Filter : 'open') }, [params]) // eslint-disable-line react-hooks/exhaustive-deps
   const [q, setQ] = useState('')
   const [assigning, setAssigning] = useState<Booking | null>(null)
 
@@ -61,14 +66,14 @@ export default function OpsDesk() {
     admin: cases.filter((b) => b.status === 'WITH_ADMIN' || b.status === 'OPS_REVIEW').length,
     hold: cases.filter((b) => b.status === 'ON_HOLD').length,
     overdue: cases.filter(overdue).length,
-    week: cases.filter((b) => OPEN.includes(b.status) && b.deadline && b.deadline >= today() && b.deadline <= ymd(addDays(new Date(), 7))).length,
+    week: cases.filter(dueThisWeek).length,
     done: cases.filter((b) => b.status === 'COMPLETED' && ymd(b.updatedAt) >= month).length,
   }
 
   const list = useMemo(() => cases
     .filter((b) => ({
-      open: OPEN.includes(b.status), active: b.status === 'IN_OPERATIONS', admin: b.status === 'WITH_ADMIN' || b.status === 'OPS_REVIEW',
-      hold: b.status === 'ON_HOLD', overdue: overdue(b), done: b.status === 'COMPLETED',
+      open: OPEN.includes(b.status), active: b.status === 'IN_OPERATIONS', admin: b.status === 'WITH_ADMIN' || b.status === 'OPS_REVIEW', review: b.status === 'OPS_REVIEW',
+      hold: b.status === 'ON_HOLD', overdue: overdue(b), week: dueThisWeek(b), done: b.status === 'COMPLETED', all: true,
     })[filter])
     .filter((b) => !member || b.opsMemberId === member)
     .filter((b) => !q || `${b.companyName} ${b.bookingId} ${b.serviceName} ${userName(db, b.opsMemberId)} ${userName(db, b.adminId)}`.toLowerCase().includes(q.toLowerCase()))
@@ -87,8 +92,9 @@ export default function OpsDesk() {
 
   const tabs: { id: Filter; label: string; n: number }[] = [
     { id: 'open', label: 'All open', n: cases.filter((b) => OPEN.includes(b.status)).length }, { id: 'active', label: 'In operations', n: stats.active },
-    { id: 'admin', label: 'With Admin / approval', n: stats.admin }, { id: 'hold', label: 'On hold', n: stats.hold },
-    { id: 'overdue', label: 'Overdue', n: stats.overdue }, { id: 'done', label: 'Completed', n: cases.filter((b) => b.status === 'COMPLETED').length },
+    { id: 'admin', label: 'With Admin / approval', n: stats.admin }, { id: 'review', label: 'Waiting for Ops approval', n: cases.filter((b) => b.status === 'OPS_REVIEW').length },
+    { id: 'hold', label: 'On hold', n: stats.hold }, { id: 'overdue', label: 'Overdue', n: stats.overdue }, { id: 'week', label: 'Due in 7 days', n: stats.week },
+    { id: 'done', label: 'Completed', n: cases.filter((b) => b.status === 'COMPLETED').length }, { id: 'all', label: 'All files', n: cases.length },
   ]
 
   return (
@@ -97,13 +103,13 @@ export default function OpsDesk() {
         actions={isLegal && <Button variant="accent" icon={Scale} onClick={() => document.getElementById('assign-queue')?.scrollIntoView({ behavior: 'smooth' })}>Assign to Operations{queue.length ? ` · ${queue.length}` : ''}</Button>} />
 
       <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
-        <Stat label="Waiting for Legal" value={stats.queue} icon={Scale} tone="violet" sub="to assign" />
-        <Stat label="In operations" value={stats.active} icon={FolderKanban} tone="cyan" />
-        <Stat label="With Admin / approval" value={stats.admin} icon={Send} tone="blue" />
-        <Stat label="On hold" value={stats.hold} icon={PauseCircle} tone="amber" />
-        <Stat label="Overdue" value={stats.overdue} icon={AlarmClock} tone="red" />
-        <Stat label="Due in 7 days" value={stats.week} icon={Clock} tone="orange" />
-        <Stat label="Completed this month" value={stats.done} icon={CheckCircle2} tone="green" />
+        <Stat label="Waiting for Legal" value={stats.queue} icon={Scale} tone="violet" sub="to assign" onClick={() => document.getElementById('assign-queue')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
+        <Stat label="In operations" value={stats.active} icon={FolderKanban} tone="cyan" onClick={() => show('active')} />
+        <Stat label="With Admin / approval" value={stats.admin} icon={Send} tone="blue" onClick={() => show('admin')} />
+        <Stat label="On hold" value={stats.hold} icon={PauseCircle} tone="amber" onClick={() => show('hold')} />
+        <Stat label="Overdue" value={stats.overdue} icon={AlarmClock} tone="red" onClick={() => show('overdue')} />
+        <Stat label="Due in 7 days" value={stats.week} icon={Clock} tone="orange" onClick={() => show('week')} />
+        <Stat label="Completed this month" value={stats.done} icon={CheckCircle2} tone="green" onClick={() => show('done')} />
       </div>
 
       <AutomationAlerts />
@@ -128,7 +134,7 @@ export default function OpsDesk() {
       </Card>
 
       <div className="grid gap-6 2xl:grid-cols-[1fr_380px]">
-        <Card className="overflow-hidden">
+        <Card id="cases" className="scroll-mt-24 overflow-hidden">
           <CardHeader title="Assigned cases" subtitle={`${list.length} shown · most urgent first`} icon={ClipboardList} />
           <div className="space-y-3 border-b border-line p-4">
             <div className="flex gap-1.5 overflow-x-auto pb-1">

@@ -62,7 +62,7 @@ const [a, b] = db.users, bk = db.bookings[0], at = '2026-10-12T05:30:00.000Z'
 a.photo = 'data:image/png;base64,AAAA'; a.shift = { breakStart: '13:00', breakEnd: '13:45', timeZone: 'Asia/Kolkata', offDays: [0] }; a.branchId = 'br-1'
 b.branchIds = ['br-1', 'br-2']
 bk.clientEmails = [{ id: 'ce-1', at, by: a.id, to: 'client@example.com', cc: ['ops@example.com'], subject: 'Welcome', template: 'welcome', status: 'SENT' }]
-bk.documents.push({ id: 'doc-x', name: 'pan.pdf', category: 'KYC', size: 10, at, by: a.id, status: 'PENDING', file: { id: 'f-1', name: 'pan.pdf', type: 'application/pdf', size: 10, at }, note: 'front side' })
+bk.documents.push({ id: 'doc-x', name: 'pan.pdf', category: 'KYC', size: 10, at, by: a.id, status: 'VERIFIED', file: { id: 'f-1', name: 'pan.pdf', type: 'application/pdf', size: 10, at }, note: 'front side', reviewedBy: b.id, reviewedAt: at })
 db.sessions.push({ id: 'ds-x', userId: a.id, date: '2026-10-12', loginAt: at, breaks: [{ start: at }], lateBreak: { breakStart: at, expectedReturn: at, lateMinutes: 3 } })
 db.settings.maintenance = { on: true, message: 'Upgrading', by: a.id, at }
 db.legacyFiles = [{ path: 'uploads/a.pdf', file: { id: 'lg-f-1', name: 'a.pdf', type: 'application/pdf', size: 5, at }, kind: 'KYC' }]
@@ -80,7 +80,7 @@ bk.payments[0].tds = { pct: 10, amount: 450 }
 Object.assign(bk, {
   welcome: { email: { status: 'FAILED', to: 'c@x.test', attempts: 2, lastAt: at, error: 'SMTP timed out' }, whatsapp: { status: 'NOT_CONFIGURED', to: '9876500001', attempts: 0, manualAt: at, manualBy: a.id }, createdAt: at, createdBy: a.id },
   followUp: { everyDays: 15, startedOn: '2026-10-01', nextOn: '2026-10-16', lastOn: '2026-10-05', paused: true, log: [{ at, by: a.id, kind: 'NOTE', note: 'called' }, { at, by: '', kind: 'REMINDER' }] },
-  adminWork: { PRECHECK: { status: 'IN_PROGRESS', assignee: a.id, due: '2026-10-20', updatedAt: at, updatedBy: a.id, startedAt: at, history: [{ at, by: a.id, status: 'IN_PROGRESS', note: 'started' }], remindEveryDays: 4, nextRemindOn: '2026-10-22', lastFollowUpOn: '2026-10-18' }, DPR: { status: 'COMPLETED', updatedAt: at, updatedBy: a.id, doneAt: at, history: [] } },
+  adminWork: { PRECHECK: { status: 'IN_PROGRESS', assignee: a.id, ref: `${bk.bookingId}/2`, assignedBy: b.id, assignedAt: at, due: '2026-10-20', updatedAt: at, updatedBy: a.id, startedAt: at, history: [{ at, by: b.id, status: 'NOT_STARTED', note: 'Forwarded', assignee: a.id, ref: `${bk.bookingId}/2` }, { at, by: a.id, status: 'IN_PROGRESS', note: 'started' }], remindEveryDays: 4, nextRemindOn: '2026-10-22', lastFollowUpOn: '2026-10-18' }, DPR: { status: 'COMPLETED', updatedAt: at, updatedBy: a.id, doneAt: at, history: [] } },
 })
 Object.assign(db.schemes[0], { price: 25000, startDate: '2026-10-01', endDate: '2026-10-31', updatedAt: at, updatedBy: a.id })
 db.settings.workflow = { fileReminderDays: 10, precheckDays: 4, welcomeAuto: false, welcomeEmail: { subject: 'Hi', body: 'Welcome {client_name}' }, welcomeWhatsapp: 'Hi {client_name}', schemeAlertRoles: ['admin'], opsContact: { name: 'Ops', phone: '9800000000', email: 'ops@x.test' }, whatsapp: { welcomeTemplate: 'client_welcome', invoiceTemplate: 'invoice_pdf', language: 'en' } }
@@ -92,6 +92,9 @@ db.docForms = [{ id: 'frm-1', token: 'tok_ABCDEFGHIJKLMNOPQRSTUV12', name: 'KYC'
   createdBy: a.id, createdAt: at, updatedAt: at, updatedBy: a.id, views: 3, lastViewedAt: at }]
 db.formSubmissions = [{ id: 'fs-1', formId: 'frm-1', formVersion: 2, bookingId: bk.id, fields: db.docForms[0].fields, answers: { f2: 'A' }, files: [{ fieldId: 'f1', file: { id: 'f-up', name: 'pan.pdf', type: 'application/pdf', size: 5, at } }], submittedAt: at, status: 'ACCEPTED', reviewedBy: a.id, reviewedAt: at, note: 'ok' }]
 db.services[0].prices = { MULTIPLE: 70000, COMBO12: 60000 }
+// Sales Kit: the seed list (55) plus one edited by the Operation team
+assert.ok(db.salesKit.length >= 50, 'the Sales Kit list is loaded')
+Object.assign(db.salesKit[0], { registrationCharge: 'Govt fee extra', updatedAt: at, updatedBy: a.id })
 db.settings.leadAssign = { on: true, userIds: [a.id, b.id], next: 1 }
 db.users.push({ ...b, id: 'u-left', username: 'left.person', email: 'left@example.com', active: false, exitOn: '2026-10-15' })
 db.payrollRuns.push({ id: 'pr-x', month: '2026-09', status: 'PAID', provisional: false, calculatedAt: at, calculatedBy: a.id, history: [],

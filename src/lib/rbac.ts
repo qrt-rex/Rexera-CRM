@@ -55,6 +55,7 @@ export const PERM_GROUPS: { group: string; perms: { id: Perm; label: string }[] 
       { id: 'salesinfo.manage', label: 'Add / edit sales information (Team Leader, Admin, Operation Team)' },
       { id: 'schemes.view', label: 'View schemes' },
       { id: 'schemes.manage', label: 'Add / edit schemes (Admin, Operation Team)' },
+      { id: 'saleskit.manage', label: 'Edit the Sales Kit (Operation Team only)' },
       { id: 'broadcasts.view', label: 'View broadcasts' },
       { id: 'broadcasts.manage', label: 'Publish broadcasts' },
       { id: 'documents.forms', label: 'Client document forms' },
@@ -112,7 +113,7 @@ export const DEFAULT_ROLE_PERMS: Record<Role, Perm[]> = {
   admin: [...common, 'bookings.all', 'bookings.admin', 'content.manage', 'salesinfo.manage', 'schemes.manage', 'employees.view', 'documents.forms', 'reports.view', 'followup.manage', 'forms.manage', 'workflow.manage'],
   accounts: [...common, 'bookings.all', 'bookings.accounts', 'billing.create', 'billing.manage', 'refunds.manage', 'reports.view', 'reports.export'],
   legal: [...common, 'bookings.all', 'bookings.legal', 'documents.forms', 'leave.approve', 'reports.view'],
-  operations: [...common, 'bookings.all', 'bookings.process', 'content.manage', 'salesinfo.manage', 'schemes.manage', 'employees.view', 'documents.forms', 'reports.view', 'events.manage', 'forms.manage'],
+  operations: [...common, 'bookings.all', 'bookings.process', 'content.manage', 'salesinfo.manage', 'schemes.manage', 'employees.view', 'documents.forms', 'reports.view', 'events.manage', 'forms.manage', 'saleskit.manage'],
   teamlead: [
     ...common, 'salesinfo.manage', 'leads.own', 'leads.assign', 'dialer.use', 'bookings.create', 'bookings.own', 'bookings.team', 'bookings.approve_tl',
     'billing.own', 'billing.create', 'team.progress', 'team.assign', 'documents.forms', 'leave.approve', 'reports.view',
@@ -146,6 +147,8 @@ export const RESERVED: Partial<Record<Perm, Role[]>> = {
   'incentives.manage': ['superadmin', 'hr'],
   // schemes, flyers & posts: Admin and the Operation team; sales information: also Team Leaders (Super Admin / IT always)
   'schemes.manage': ['superadmin', 'admin', 'operations'],
+  // the Sales Kit everyone reads is edited by the Operation team only
+  'saleskit.manage': ['superadmin', 'operations'],
   'content.manage': ['superadmin', 'admin', 'operations'],
   'salesinfo.manage': ['superadmin', 'admin', 'operations', 'teamlead'],
 }

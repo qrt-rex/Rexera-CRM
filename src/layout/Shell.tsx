@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import {
   BadgeCheck, Bell, ChevronDown, ChevronRight, Home, LayoutGrid, LogOut, Mail, Menu as MenuIcon, Moon, Search, Settings, ShieldCheck, Sun, UserCheck, X, Monitor,
   HelpCircle, SlidersHorizontal, Users, CalendarCheck2, TrendingUp, GraduationCap, FileText, Inbox, PartyPopper, BarChart3,
-  Wallet, Receipt, Landmark, Trophy, Briefcase, Wrench, MailPlus, ClipboardList, FilePen, Coffee, Package,
+  Wallet, Receipt, Landmark, Trophy, Briefcase, Wrench, MailPlus, ClipboardList, FilePen, Coffee, Package, PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react'
 import type { Perm, User } from '../lib/types'
 import { Rexy } from '../components/hr/Mascots'
@@ -16,7 +16,8 @@ import { markRead, overdueLeadsOf, runBreakMonitor, runComboReminders, runFollow
 import { runScheduledAutomations } from '../lib/email'
 import { ago, today } from '../lib/format'
 import { Avatar, Button, cx, Menu, MenuItem, Modal } from '../components/ui'
-import { Logo } from '../components/Logo'
+import { Logo, Mark } from '../components/Logo'
+import { useMedia } from '../components/LoginShowcase'
 import { MiniCalendar } from './MiniCalendar'
 import { BreakBanner, BreakReminder } from '../pages/dashboards/widgets'
 import { CommandPalette } from './CommandPalette'
@@ -49,6 +50,14 @@ export function Shell() {
   const nav = useNavigate()
   const unread = useUnread()
   const [mobileNav, setMobileNav] = useState(false)
+  // desktop: the sidebar can shrink to its icons (remembered on this computer); phones keep the slide-in menu
+  const desktop = useMedia('(min-width: 1024px)')
+  const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem('rexera-sidebar') === 'icons' } catch { return false } })
+  const mini = collapsed && desktop
+  const toggleSidebar = () => setCollapsed((c) => {
+    try { localStorage.setItem('rexera-sidebar', c ? 'full' : 'icons') } catch { /* ignore */ }
+    return !c
+  })
   const [palette, setPalette] = useState(false)
   const [theme, setTheme] = useState<Theme>(getTheme)
 
@@ -105,20 +114,25 @@ export function Shell() {
 
       {/* Sidebar */}
       <div className={cx('fixed inset-0 z-40 bg-black/40 lg:hidden', mobileNav ? 'block' : 'hidden')} onClick={() => setMobileNav(false)} />
-      <aside className={cx('no-print fixed inset-y-0 left-0 z-50 flex flex-col border-r border-line transition-transform lg:sticky lg:top-0 lg:h-screen lg:translate-x-0',
-        hrMode ? 'w-64 bg-gradient-to-b from-sky-50 via-sky-100/70 to-indigo-50 dark:from-[#0f1830] dark:via-[#111c38] dark:to-[#141a33]' : 'w-[272px] bg-card',
+      <aside className={cx('no-print fixed inset-y-0 left-0 z-50 flex shrink-0 flex-col border-r border-line transition-[transform,width] duration-200 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0',
+        hrMode ? 'bg-gradient-to-b from-sky-50 via-sky-100/70 to-indigo-50 dark:from-[#0f1830] dark:via-[#111c38] dark:to-[#141a33]' : 'bg-card',
+        mini ? 'w-[72px]' : hrMode ? 'w-64' : 'w-[272px]',
         mobileNav ? 'translate-x-0' : '-translate-x-full')}>
-        <div className="flex h-16 items-center justify-between px-5">
-          <Link to={`/dashboard/${me.role}`} aria-label="Home"><Logo /></Link>
+        <div className={cx('flex h-16 items-center', mini ? 'justify-center' : 'justify-between px-5')}>
+          <Link to={`/dashboard/${me.role}`} aria-label="Home" title={mini ? 'Dashboard' : undefined}>{mini ? <Mark className="h-9" /> : <Logo />}</Link>
           <button className="lg:hidden text-mute" onClick={() => setMobileNav(false)} aria-label="Close menu"><X className="size-5" /></button>
         </div>
-        {hrMode ? <HrSidebar /> : <Sidebar />}
+        {hrMode ? <HrSidebar mini={mini} /> : <Sidebar mini={mini} onExpand={toggleSidebar} />}
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Header */}
         <header className="no-print sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-line bg-card/85 px-4 backdrop-blur-xl sm:px-6">
           <button className="text-mute lg:hidden" onClick={() => setMobileNav(true)} aria-label="Open menu"><MenuIcon className="size-6" /></button>
+          <button onClick={toggleSidebar} aria-label={collapsed ? 'Show the full menu' : 'Hide the menu (icons only)'} title={collapsed ? 'Show the full menu' : 'Hide the menu (icons only)'} aria-pressed={collapsed}
+            className="-ml-1 hidden size-10 shrink-0 place-items-center rounded-xl text-mute hover:bg-card2 hover:text-ink lg:grid">
+            {collapsed ? <PanelLeftOpen className="size-5" /> : <PanelLeftClose className="size-5" />}
+          </button>
           <h1 className="hidden min-w-0 truncate text-lg font-extrabold tracking-tight md:block md:w-64">{title}</h1>
           <button onClick={() => setPalette(true)} className="mx-auto flex h-10 w-full max-w-md items-center gap-3 rounded-xl border border-line bg-card2 px-3.5 text-sm text-mute transition hover:border-brand/50 hover:bg-card hover:shadow-card">
             <Search className="size-4 shrink-0 text-mute" />
@@ -207,7 +221,10 @@ export function Shell() {
   )
 }
 
-function Sidebar() {
+/** A menu item's name: hidden (but read out and shown on hover) when the menu is icons only. */
+const Label = ({ mini, children }: { mini?: boolean; children: ReactNode }) => <span className={mini ? 'sr-only' : 'flex-1 truncate'}>{children}</span>
+
+function Sidebar({ mini, onExpand }: { mini: boolean; onExpand: () => void }) {
   const me = useMe()
   const { can } = useAuth()
   const unread = useUnread()
@@ -222,9 +239,36 @@ function Sidebar() {
   })
   const visible = MODULES.filter((m) => canSee(m, can) && !m.hrOnly && !['attendance', 'notifications', 'security', 'users', 'system', 'inbox'].includes(m.key))
   const groups = [...new Set(visible.map((m) => m.group))]
-  const item = 'flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition'
+  const item = cx('relative flex items-center gap-3 rounded-xl py-2 text-sm font-semibold transition', mini ? 'justify-center px-0' : 'px-3')
   const active = 'bg-brand-soft text-brand-ink'
   const idle = 'text-ink/80 hover:bg-card2 hover:text-ink'
+
+  if (mini) return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2.5 pb-3" aria-label="Main">
+        <NavLink to={`/dashboard/${me.role}`} title="Dashboard" className={({ isActive }) => cx(item, isActive ? active : idle)}><Home className="size-[18px]" /><Label mini>Dashboard</Label></NavLink>
+        <NavLink to="/attendance" title="Attendance Board" className={({ isActive }) => cx(item, isActive ? active : idle)}><UserCheck className="size-[18px]" /><Label mini>Attendance Board</Label></NavLink>
+        {isMaster(me) && <button onClick={() => { if (!(openGroups['dash'] ?? false)) toggle('dash'); onExpand() }} title="All dashboards" className={cx(item, 'w-full', idle)}><LayoutGrid className="size-[18px]" /><Label mini>All dashboards</Label></button>}
+        {groups.map((g) => (
+          <div key={g} className="space-y-0.5 border-t border-line/70 pt-1.5 mt-1.5" role="group" aria-label={g}>
+            {visible.filter((m) => m.group === g).map((m) => (
+              <NavLink key={m.key} to={m.path} title={moduleLabel(m, me)} className={() => cx(item, loc.pathname.startsWith(m.path) ? active : idle)}>
+                <m.icon className="size-[18px] opacity-80" /><Label mini>{moduleLabel(m, me)}</Label>
+                {m.key === 'leads' && <LeadsDot />}
+              </NavLink>
+            ))}
+          </div>
+        ))}
+      </nav>
+      <div className="space-y-0.5 border-t border-line p-2.5">
+        <NavLink to="/settings" title="Profile Settings" className={({ isActive }) => cx(item, isActive ? active : idle)}><Settings className="size-5" /><Label mini>Profile Settings</Label></NavLink>
+        <NavLink to="/inbox" title={`Email${unread.emails ? ` (${unread.emails} unread)` : ''}`} className={({ isActive }) => cx(item, isActive ? active : idle)}>
+          <Mail className="size-5" /><Label mini>Email</Label>
+          {unread.emails > 0 && <span className="absolute right-2 top-1 grid h-4 min-w-4 place-items-center rounded-full bg-accent px-1 text-[9px] font-bold text-white">{unread.emails}</span>}
+        </NavLink>
+      </div>
+    </div>
+  )
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -292,37 +336,40 @@ const HR_MENU: { label: string; to: string; icon: typeof Home; color: string; pe
   { label: 'Settings', to: '/settings', icon: Settings, color: 'text-cyan-600 bg-cyan-100 dark:bg-cyan-500/15 dark:text-cyan-300', perms: [] },
 ]
 
-function HrSidebar() {
+function HrSidebar({ mini }: { mini: boolean }) {
   const me = useMe()
   const { can } = useAuth()
   const unread = useUnread()
   const loc = useLocation()
   const here = loc.pathname + loc.search
-  const item = 'flex items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-semibold transition'
+  const item = cx('relative flex items-center gap-3 rounded-xl py-2 text-[13px] font-semibold transition', mini ? 'justify-center px-0' : 'px-3')
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-3 pb-3" aria-label="HR">
-        <NavLink to={`/dashboard/${isMaster(me) ? 'hr' : me.role}`} className={({ isActive }) => cx(item, 'mb-2 py-2.5 text-sm', isActive ? 'bg-brand text-white shadow-md shadow-brand/25' : 'text-ink/80 hover:bg-white/70 dark:hover:bg-white/5')}>
-          <Home className="size-[18px]" />Dashboard
+      <nav className={cx('min-h-0 flex-1 space-y-0.5 overflow-y-auto pb-3', mini ? 'px-2.5' : 'px-3')} aria-label="HR">
+        <NavLink to={`/dashboard/${isMaster(me) ? 'hr' : me.role}`} title={mini ? 'Dashboard' : undefined} className={({ isActive }) => cx(item, 'mb-2 py-2.5 text-sm', isActive ? 'bg-brand text-white shadow-md shadow-brand/25' : 'text-ink/80 hover:bg-white/70 dark:hover:bg-white/5')}>
+          <Home className="size-[18px]" /><Label mini={mini}>Dashboard</Label>
         </NavLink>
         {HR_MENU.filter((m) => (m.to !== '/messages' || MESSAGES_ENABLED) && (!m.perms.length || can(...m.perms))).map((m) => {
           const active = m.to.includes('?') ? here === m.to : loc.pathname === m.to
           return (
-            <Link key={m.label} to={m.to} className={cx(item, active ? 'bg-white text-ink shadow-sm dark:bg-white/10' : 'text-ink/80 hover:bg-white/70 dark:hover:bg-white/5')}>
-              <span className={cx('grid size-7 place-items-center rounded-lg', m.color)}><m.icon className="size-4" /></span>{m.label}
+            <Link key={m.label} to={m.to} title={mini ? m.label : undefined} className={cx(item, active ? 'bg-white text-ink shadow-sm dark:bg-white/10' : 'text-ink/80 hover:bg-white/70 dark:hover:bg-white/5')}>
+              <span className={cx('grid size-7 shrink-0 place-items-center rounded-lg', m.color)}><m.icon className="size-4" /></span><Label mini={mini}>{m.label}</Label>
             </Link>
           )
         })}
-        <div className="flex flex-col items-center pt-4 text-center">
-          <Rexy pose="wave" className="h-24 w-20" />
-          <p className="mt-1 text-sm font-extrabold">Good <span className="underline decoration-accent decoration-[3px] underline-offset-4">Work!</span></p>
-        </div>
+        {!mini && (
+          <div className="flex flex-col items-center pt-4 text-center">
+            <Rexy pose="wave" className="h-24 w-20" />
+            <p className="mt-1 text-sm font-extrabold">Good <span className="underline decoration-accent decoration-[3px] underline-offset-4">Work!</span></p>
+          </div>
+        )}
       </nav>
-      <div className="space-y-0.5 border-t border-line/70 p-3">
-        <NavLink to="/settings" className={({ isActive }) => cx(item, 'text-sm', isActive ? 'bg-white dark:bg-white/10' : 'text-ink/80 hover:bg-white/70 dark:hover:bg-white/5')}><Settings className="size-5" />Profile Settings</NavLink>
-        <NavLink to="/inbox" className={({ isActive }) => cx(item, 'text-sm', isActive ? 'bg-white dark:bg-white/10' : 'text-ink/80 hover:bg-white/70 dark:hover:bg-white/5')}>
-          <Mail className="size-5" /><span className="flex-1">Email</span>
-          <span className={cx('grid h-6 min-w-6 place-items-center rounded-full px-1.5 text-[11px] font-bold', unread.emails ? 'bg-accent text-white' : 'bg-white text-brand-ink dark:bg-white/10')}>{unread.emails}</span>
+      <div className={cx('space-y-0.5 border-t border-line/70', mini ? 'p-2.5' : 'p-3')}>
+        <NavLink to="/settings" title={mini ? 'Profile Settings' : undefined} className={({ isActive }) => cx(item, 'text-sm', isActive ? 'bg-white dark:bg-white/10' : 'text-ink/80 hover:bg-white/70 dark:hover:bg-white/5')}><Settings className="size-5" /><Label mini={mini}>Profile Settings</Label></NavLink>
+        <NavLink to="/inbox" title={mini ? `Email${unread.emails ? ` (${unread.emails} unread)` : ''}` : undefined} className={({ isActive }) => cx(item, 'text-sm', isActive ? 'bg-white dark:bg-white/10' : 'text-ink/80 hover:bg-white/70 dark:hover:bg-white/5')}>
+          <Mail className="size-5" /><Label mini={mini}>Email</Label>
+          {mini ? unread.emails > 0 && <span className="absolute right-2 top-1 grid h-4 min-w-4 place-items-center rounded-full bg-accent px-1 text-[9px] font-bold text-white">{unread.emails}</span>
+            : <span className={cx('grid h-6 min-w-6 place-items-center rounded-full px-1.5 text-[11px] font-bold', unread.emails ? 'bg-accent text-white' : 'bg-white text-brand-ink dark:bg-white/10')}>{unread.emails}</span>}
         </NavLink>
       </div>
     </div>
@@ -405,6 +452,14 @@ function LeadsBadge() {
   const overdue = overdueLeadsOf(db, me.id).length, fresh = unseenLeadsOf(db, me.id).length
   if (!overdue && !fresh) return null
   return <span className={cx('rounded-full px-1.5 text-[10px] font-bold leading-5', overdue ? 'bg-bad text-white' : 'bg-info text-white')} title={overdue ? `${overdue} overdue lead(s)` : `${fresh} new lead(s)`}>{overdue ? `${overdue} pending` : `${fresh} new`}</span>
+}
+/** The same count on the icons-only menu: a small number on the Leads icon. */
+function LeadsDot() {
+  const db = useDb()
+  const me = useMe()
+  const overdue = overdueLeadsOf(db, me.id).length, fresh = unseenLeadsOf(db, me.id).length
+  if (!overdue && !fresh) return null
+  return <span className={cx('absolute right-1.5 top-0.5 grid h-4 min-w-4 place-items-center rounded-full px-1 text-[9px] font-bold text-white', overdue ? 'bg-bad' : 'bg-info')}>{overdue || fresh}</span>
 }
 
 export const POPUP_KEY = 'rexera-popup-off'

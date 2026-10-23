@@ -77,6 +77,7 @@ const SPECS: Spec[] = [
   ] },
   { key: 'expenses', table: 'company_expenses', order: ['created_at', false] },
   { key: 'docForms', table: 'doc_forms', order: ['created_at', false] },
+  { key: 'salesKit', table: 'sales_kit', order: ['position', true] },
   { key: 'formSubmissions', table: 'doc_form_submissions', order: ['submitted_at', false] },
 ]
 /** Tables that aren't one array of the document. The audit log loads its newest 1000 entries (the app keeps 1000). */

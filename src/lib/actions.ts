@@ -1,5 +1,5 @@
 import type {
-  AdminStageId, AdminWorkStatus, Booking, BookingStatus, BookingType, BDoc, Delivery, Service, WorkflowSettings, Branch, BreakPolicy, CallOutcome, ClientEmailLog, Shift, CandidateApplication, CandidateForm, DaySession, DB, EventItem, FileRef, Invoice, InvoiceItem, Lead, LeaveType, Perm, Post, Role, Scheme, User,
+  AdminStageId, AdminWorkStatus, Booking, BookingStatus, BookingType, BDoc, Delivery, Service, WorkflowSettings, Branch, BreakPolicy, CallOutcome, ClientEmailLog, Shift, CandidateApplication, CandidateForm, DaySession, DB, EventItem, FileRef, Invoice, InvoiceItem, Lead, LeaveType, Perm, Post, Role, SalesKitItem, Scheme, User,
 } from './types'
 import { effectivePerms, isMaster, MASTER_ROLES, rolesOf, roleLabel } from './rbac'
 import { clearCloudDb, getDb, mutate, reloadFromCloud, saved } from './store'
@@ -7,7 +7,7 @@ import { CLOUD, cloudSetOwnPassword, cloudSetPassword, cloudSignIn, cloudSignOut
 import { bookingBranch, directorBranches, isBranchScoped, leadBranch, NO_BRANCH } from './branches'
 import { BOOKING_TYPES, COMBO_PACKAGES, comboCap, comboMonths, isFundingService } from './catalog'
 import {
-  ADMIN_DONE, ADMIN_STAGES, ADMIN_WORK_STATUSES, addDays as addDaysYmd, adminStatusLabel, CLOSED_FILE_STATUSES, followUpDue, istToday, nextAfter as nextAfterYmd, precheckDue, precheckPending, schemeAlertDue, workflowSettings,
+  ACTIVE_FILE_STATUSES, ADMIN_DONE, ADMIN_STAGES, ADMIN_WORK_STATUSES, addDays as addDaysYmd, adminStatusLabel, CLOSED_FILE_STATUSES, followUpDue, istToday, nextAfter as nextAfterYmd, precheckDue, precheckPending, schemeAlertDue, workflowSettings,
 } from '../../supabase/workflow-rules.mjs'
 import { hashPassword } from './crypto'
 import { CALL_OUTCOMES, FINAL_STAGE, hasLegalDoc, LEAD_STATUS, OPEN_LEAD, STAGE_OUTCOMES, STAGES, stageLabel } from './workflow'
@@ -1340,23 +1340,77 @@ function startOpsWorkflow(d: DB, b: Booking, by: string, at: string) {
   }
   b.followUp ??= { everyDays: w.fileReminderDays, startedOn: t, nextOn: addDaysYmd(t, w.fileReminderDays), log: [] }
 }
-/** Admin assigned: the five Admin stages are set up (Pre-Check Deck with its 3-day reminder); a new Admin takes over the open ones. */
+/** Admin assigned: the five Admin stages are set up (Pitch Deck with its 3-day reminder); a new Admin takes over the open ones. */
 function startAdminWork(d: DB, b: Booking, by: string, at: string, prevAdmin?: string) {
+  const fresh = ADMIN_STAGES.filter((s) => !b.adminWork?.[s.id]).map((s) => s.id)
+  const handOver = ADMIN_STAGES.filter((s) => { const cur = b.adminWork?.[s.id]; return !!cur && !!prevAdmin && prevAdmin !== b.adminId && cur.assignee === prevAdmin && !ADMIN_DONE.includes(cur.status) }).map((s) => s.id)
+  if (b.adminId) assignAdminStages(d, b, by, at, Object.fromEntries([...fresh, ...handOver].map((s) => [s, b.adminId!])), fresh.length ? 'Admin assigned' : 'Handed over')
+}
+
+/** The next assignment number on a file: RX-2026-000125/1, /2, /3 … — one more each time it goes to another person. */
+const nextAssignNo = (b: Booking) => 1 + Math.max(0, ...Object.values(b.adminWork ?? {}).flatMap((w) => (w?.history ?? []).map((h) => Number(h.ref?.split('/').pop()) || 0)))
+/**
+ * Gives Admin stages to people: each person gets the next assignment number (stages going to the same person in one
+ * go share it). Creates a stage that isn't set up yet (Pitch Deck with its reminder). Tells each person.
+ */
+function assignAdminStages(d: DB, b: Booking, by: string, at: string, to: Partial<Record<AdminStageId, string>>, note: string) {
   const w = workflowSettings(d.settings.workflow)
-  const t = istToday()
   b.adminWork ??= {}
-  for (const s of ADMIN_STAGES) {
-    const cur = b.adminWork[s.id]
-    if (!cur) {
-      b.adminWork[s.id] = {
-        status: 'NOT_STARTED', assignee: b.adminId, updatedAt: at, updatedBy: by, history: [{ at, by, status: 'NOT_STARTED', note: 'Admin assigned' }],
-        ...(s.id === 'PRECHECK' ? { remindEveryDays: w.precheckDays, nextRemindOn: addDaysYmd(t, w.precheckDays) } : {}),
-      }
-    } else if (prevAdmin && prevAdmin !== b.adminId && cur.assignee === prevAdmin && !ADMIN_DONE.includes(cur.status)) {
-      cur.assignee = b.adminId
-      cur.history.push({ at, by, status: cur.status, note: `Handed to ${userName(d, b.adminId)}` })
+  const byPerson = new Map<string, AdminStageId[]>()
+  for (const [stage, uid] of Object.entries(to) as [AdminStageId, string][]) if (uid && b.adminWork[stage]?.assignee !== uid) byPerson.set(uid, [...(byPerson.get(uid) ?? []), stage])
+  for (const [uid, stages] of byPerson) {
+    const ref = `${b.bookingId}/${nextAssignNo(b)}`
+    for (const stage of stages) {
+      const cur = b.adminWork[stage]
+      const h = { at, by, status: cur?.status ?? 'NOT_STARTED' as AdminWorkStatus, note: `${note}: ${userName(d, uid)} (${ref})`, assignee: uid, ref }
+      if (!cur) {
+        b.adminWork[stage] = {
+          status: 'NOT_STARTED', assignee: uid, ref, assignedBy: by, assignedAt: at, updatedAt: at, updatedBy: by, history: [h],
+          ...(stage === 'PRECHECK' ? { remindEveryDays: w.precheckDays, nextRemindOn: addDaysYmd(istToday(), w.precheckDays) } : {}),
+        }
+      } else Object.assign(cur, { assignee: uid, ref, assignedBy: by, assignedAt: at, updatedAt: at, updatedBy: by, history: [...cur.history, h] })
     }
+    const labels = stages.map((s) => ADMIN_STAGES.find((x) => x.id === s)!.label).join(', ')
+    if (uid !== by) notify(d, [uid], `${ref}: ${labels}`, `${b.companyName} — assigned to you by ${userName(d, by)}`, `/bookings/${b.id}?tab=workflow`, 'action')
+    audit(d, by, 'ADMIN_STAGE_ASSIGN', `${ref}: ${labels} → ${userName(d, uid)}`)
   }
+}
+
+/** The file's Operations person (or Super Admin / IT) gives each Admin stage to an Admin — one by one, to different people. */
+export const canForwardAdminStages = (d: DB, me: User, b: Booking) => ACTIVE_FILE_STATUSES.includes(b.status) && (isMaster(me) || (effectivePerms(d, me).has('bookings.process') && b.opsMemberId === me.id))
+export function forwardAdminStages(me: User, id: string, to: Partial<Record<AdminStageId, string>>, note = '') {
+  mutate((d) => {
+    const b = findB(d, id)
+    assert(canForwardAdminStages(d, me, b), 'Only the file’s Operations person can forward its Admin stages.')
+    const picks = Object.entries(to).filter(([, uid]) => uid) as [AdminStageId, string][]
+    assert(picks.length, 'Pick an Admin for at least one stage.')
+    for (const [stage, uid] of picks) {
+      const u = d.users.find((x) => x.id === uid)
+      assert(u && u.active && rolesOf(u).includes('admin'), 'Pick active Admins only.')
+      const cur = b.adminWork?.[stage]
+      assert(!cur || !ADMIN_DONE.includes(cur.status) || isMaster(me), `${ADMIN_STAGES.find((s) => s.id === stage)!.label} is already done.`)
+    }
+    assignAdminStages(d, b, me.id, nowIso(), Object.fromEntries(picks), note.trim() ? `Forwarded — ${note.trim()}` : 'Forwarded')
+    b.updatedAt = nowIso()
+  })
+}
+/** Who may upload a stage's file: the Admin it is assigned to (by the Operation team), or Super Admin / IT. */
+export const canUploadAdminStage = (me: User, b: Booking, stage: AdminStageId) => !!b.adminWork?.[stage] && (b.adminWork[stage]!.assignee === me.id || isMaster(me))
+/** The Admin's file for a stage (Pitch Deck, Finance, DPR, Certificate, Submission), named with the assignment number. */
+export function addAdminStageFiles(me: User, id: string, stage: AdminStageId, files: FileRef[], note = '') {
+  assert(files.length, 'Choose a file.')
+  mutate((d) => {
+    const b = findB(d, id)
+    const w = b.adminWork?.[stage]
+    assert(w && canUploadAdminStage(me, b, stage), 'You can upload here only when the Operation team has assigned this stage to you.')
+    const s = ADMIN_STAGES.find((x) => x.id === stage)!, at = nowIso(), ref = w.ref ?? b.bookingId
+    for (const file of files) b.documents.push({ id: uid('doc-'), name: `${ref} · ${s.short} · ${file.name}`, category: s.label, size: file.size, at, by: me.id, status: 'PENDING', file, note: [`${s.label} (${ref})`, note.trim()].filter(Boolean).join(' — ') })
+    w.history.push({ at, by: me.id, status: w.status, note: `Uploaded ${files.length} file(s)${note.trim() ? ` — ${note.trim()}` : ''}`, ref })
+    w.updatedAt = at; w.updatedBy = me.id
+    b.updatedAt = at
+    notify(d, [b.opsMemberId].filter((x) => x && x !== me.id), `${ref}: ${s.label} uploaded`, `${b.companyName} · ${files.length} file(s) by ${me.name} — verify in Documents`, `/bookings/${b.id}`, 'action')
+    audit(d, me.id, 'ADMIN_STAGE_UPLOAD', `${ref}: ${s.label} · ${files.map((f) => f.name).join(', ')}`)
+  })
 }
 
 /** The file's Admin, whoever a stage is assigned to, the file's Operations person, and Super Admin / IT. */
@@ -1379,9 +1433,7 @@ export function setAdminWork(me: User, id: string, stage: AdminStageId, patch: {
     if (patch.assignee !== undefined && patch.assignee !== w.assignee) {
       const u = d.users.find((x) => x.id === patch.assignee)
       assert(u && u.active && rolesOf(u).includes('admin'), 'Pick an active Admin.')
-      w.assignee = u.id
-      w.history.push({ at, by: me.id, status: w.status, note: `Assigned to ${u.name}${note ? ` — ${note}` : ''}` })
-      if (u.id !== me.id) notify(d, [u.id], `${label} assigned to you`, `${b.bookingId} · ${b.companyName}`, `/bookings/${b.id}`, 'action')
+      assignAdminStages(d, b, me.id, at, { [stage]: u.id }, note ? `Reassigned — ${note}` : 'Reassigned')
     }
     if (patch.due !== undefined) w.due = patch.due || undefined
     if (patch.status && patch.status !== w.status) {
@@ -1392,7 +1444,7 @@ export function setAdminWork(me: User, id: string, stage: AdminStageId, patch: {
       w.status = patch.status
       w.doneAt = ADMIN_DONE.includes(patch.status) ? at : undefined
       w.history.push({ at, by: me.id, status: patch.status, ...(note ? { note } : {}) })
-      // Pre-Check Deck reminders run only while it is pending
+      // Pitch Deck reminders run only while it is pending
       if (stage === 'PRECHECK') {
         if (ADMIN_DONE.includes(patch.status) || patch.status === 'NOT_NEEDED') w.nextRemindOn = undefined
         else w.nextRemindOn ??= addDaysYmd(istToday(), w.remindEveryDays ?? workflowSettings(d.settings.workflow).precheckDays)
@@ -1404,12 +1456,12 @@ export function setAdminWork(me: User, id: string, stage: AdminStageId, patch: {
     b.updatedAt = at
   })
 }
-/** Pre-Check Deck follow-up done: the next reminder is the interval (3 or 4 days) from today. */
+/** Pitch Deck follow-up done: the next reminder is the interval (3 or 4 days) from today. */
 export function logPrecheckFollowUp(me: User, id: string, note: string) {
   mutate((d) => {
     const b = findB(d, id)
     const w = b.adminWork?.PRECHECK
-    assert(w && precheckPending(b), 'The Pre-Check Deck is not pending on this file.')
+    assert(w && precheckPending(b), 'The Pitch Deck is not pending on this file.')
     assert(canWorkAdminStages(d, me, b), 'Only the file’s Admin and Operations person can record follow-ups.')
     assert(note.trim().length >= 3, 'Write what was done in the follow-up.')
     const t = istToday(), at = nowIso()
@@ -1420,14 +1472,14 @@ export function logPrecheckFollowUp(me: User, id: string, note: string) {
     audit(d, me.id, 'PRECHECK_FOLLOWUP', `${b.bookingId}: ${note.trim()}`)
   })
 }
-/** Pre-Check Deck reminder every 3 or 4 days for this file (Admin settings change the default for new files). */
+/** Pitch Deck reminder every 3 or 4 days for this file (Admin settings change the default for new files). */
 export function setPrecheckInterval(me: User, id: string, days: number) {
   mutate((d) => {
     const b = findB(d, id)
     const w = b.adminWork?.PRECHECK
-    assert(w, 'This file has no Pre-Check Deck yet.')
+    assert(w, 'This file has no Pitch Deck yet.')
     assert(canWorkAdminStages(d, me, b) || has(me, 'followup.manage'), 'You can’t change this reminder.')
-    assert(days === 3 || days === 4, 'The Pre-Check Deck reminder repeats every 3 or 4 days.')
+    assert(days === 3 || days === 4, 'The Pitch Deck reminder repeats every 3 or 4 days.')
     w.remindEveryDays = days
     if (w.nextRemindOn) w.nextRemindOn = addDaysYmd(w.lastFollowUpOn ?? istToday(), days)
     w.history.push({ at: nowIso(), by: me.id, status: w.status, note: `Reminder every ${days} days` })
@@ -1494,7 +1546,7 @@ export function runFollowUpReminders(now = Date.now()) {
   })
   return due.length
 }
-/** Pre-Check Deck reminders (every 3 or 4 days while it is pending) to the stage's Admin and the file's Operations person. */
+/** Pitch Deck reminders (every 3 or 4 days while it is pending) to the stage's Admin and the file's Operations person. */
 export function runPrecheckReminders(now = Date.now()) {
   const d = getDb(), t = istToday(now)
   if (CLOUD && serverJobsActive(d, now)) return 0
@@ -1507,7 +1559,7 @@ export function runPrecheckReminders(now = Date.now()) {
       const was = w.nextRemindOn!
       w.nextRemindOn = nextAfterYmd(was, w.remindEveryDays ?? workflowSettings(m.settings.workflow).precheckDays, t)
       w.history.push({ at: new Date(now).toISOString(), by: '', status: w.status, note: `Reminder (due ${was}) · next ${w.nextRemindOn}` })
-      notify(m, [w.assignee ?? b.adminId, b.opsMemberId], `Pre-Check Deck follow-up: ${b.companyName}`, reminderBody(m, b, `${adminStatusLabel(w.status)} · last follow-up ${w.lastFollowUpOn ? fmtDate(w.lastFollowUpOn) : 'none'} · next ${fmtDate(w.nextRemindOn)} — follow up and record it`), `/bookings/${b.id}`, 'warning')
+      notify(m, [w.assignee ?? b.adminId, b.opsMemberId], `Pitch Deck follow-up: ${b.companyName}`, reminderBody(m, b, `${adminStatusLabel(w.status)} · last follow-up ${w.lastFollowUpOn ? fmtDate(w.lastFollowUpOn) : 'none'} · next ${fmtDate(w.nextRemindOn)} — follow up and record it`), `/bookings/${b.id}`, 'warning')
     }
   })
   return due.length
@@ -1517,7 +1569,7 @@ export function runPrecheckReminders(now = Date.now()) {
 export function saveWorkflowSettings(me: User, w: WorkflowSettings) {
   need(me, 'workflow.manage')
   assert(Number.isInteger(w.fileReminderDays) && w.fileReminderDays >= 1 && w.fileReminderDays <= 90, 'File follow-ups repeat every 1–90 days.')
-  assert(w.precheckDays === 3 || w.precheckDays === 4, 'The Pre-Check Deck reminder repeats every 3 or 4 days.')
+  assert(w.precheckDays === 3 || w.precheckDays === 4, 'The Pitch Deck reminder repeats every 3 or 4 days.')
   assert(w.welcomeEmail.subject.trim().length >= 3 && w.welcomeEmail.body.trim().length >= 10, 'Write the welcome email subject and message.')
   assert(w.welcomeWhatsapp.trim().length >= 10, 'Write the WhatsApp welcome message.')
   assert(w.schemeAlertRoles.length > 0, 'Pick who gets the scheme expiry alert.')
@@ -1525,15 +1577,15 @@ export function saveWorkflowSettings(me: User, w: WorkflowSettings) {
   assert(!w.opsContact.phone || isPhone(normPhone(w.opsContact.phone)), 'The Operations contact phone must be a 10-digit mobile.')
   // Interakt template code names: lower-case letters, digits and _ (as Meta names them)
   const tpl = (s: string) => s.trim()
-  assert([w.whatsapp.welcomeTemplate, w.whatsapp.invoiceTemplate].every((s) => !tpl(s) || /^[a-z0-9_]{1,512}$/.test(tpl(s))), 'WhatsApp template names use lower-case letters, numbers and _ only (copy the code name from Interakt → Templates).')
+  assert([w.whatsapp.welcomeTemplate, w.whatsapp.invoiceTemplate, w.whatsapp.formTemplate].every((s) => !tpl(s) || /^[a-z0-9_]{1,512}$/.test(tpl(s))), 'WhatsApp template names use lower-case letters, numbers and _ only (copy the code name from Interakt → Templates).')
   assert(/^[a-z]{2}(_[A-Z]{2})?$/.test(w.whatsapp.language.trim()), 'WhatsApp template language: a code such as en or en_US.')
   mutate((d) => {
     d.settings.workflow = {
       ...w, welcomeEmail: { subject: w.welcomeEmail.subject.trim(), body: w.welcomeEmail.body.trim() }, welcomeWhatsapp: w.welcomeWhatsapp.trim(),
       opsContact: { name: w.opsContact.name.trim(), phone: w.opsContact.phone ? normPhone(w.opsContact.phone) : '', email: w.opsContact.email.trim() },
-      whatsapp: { welcomeTemplate: tpl(w.whatsapp.welcomeTemplate), invoiceTemplate: tpl(w.whatsapp.invoiceTemplate), language: w.whatsapp.language.trim() },
+      whatsapp: { welcomeTemplate: tpl(w.whatsapp.welcomeTemplate), invoiceTemplate: tpl(w.whatsapp.invoiceTemplate), formTemplate: tpl(w.whatsapp.formTemplate), language: w.whatsapp.language.trim() },
     }
-    audit(d, me.id, 'WORKFLOW_SETTINGS', `follow-up every ${w.fileReminderDays} days · pre-check every ${w.precheckDays} · welcome ${w.welcomeAuto ? 'automatic' : 'manual'}`)
+    audit(d, me.id, 'WORKFLOW_SETTINGS', `follow-up every ${w.fileReminderDays} days · pitch deck every ${w.precheckDays} · welcome ${w.welcomeAuto ? 'automatic' : 'manual'}`)
   })
 }
 
@@ -1867,9 +1919,20 @@ export function updateClientInfo(me: User, id: string, info: { email: string; mo
     audit(d, me.id, 'CLIENT_INFO', `${b.bookingId}: email / number / website updated`)
   })
 }
+/** A verified / rejected document is final: only a Super Admin can change it (the database checks this too). */
+export const canReviewDoc = (me: User, doc: Pick<BDoc, 'status'>) => isSA(me) || !doc.status || doc.status === 'PENDING'
 export function setDocStatus(me: User, id: string, docId: string, status: 'VERIFIED' | 'REJECTED') {
   need(me, 'bookings.process', 'bookings.legal', 'bookings.admin')
-  mutate((d) => { const doc = findB(d, id).documents.find((x) => x.id === docId); if (doc) doc.status = status })
+  mutate((d) => {
+    const b = findB(d, id)
+    const doc = b.documents.find((x) => x.id === docId)
+    assert(doc, 'Document not found.')
+    assert(canReviewDoc(me, doc), `This document was already ${doc.status?.toLowerCase()}${doc.reviewedBy ? ` by ${userName(d, doc.reviewedBy)}` : ''} — only a Super Admin can change it.`)
+    if (doc.status === status) return
+    const was = doc.status ?? 'PENDING'
+    Object.assign(doc, { status, reviewedBy: me.id, reviewedAt: nowIso() })
+    audit(d, me.id, `DOC_${status}`, `${b.bookingId}: ${doc.name}${was !== 'PENDING' ? ` (was ${was.toLowerCase()})` : ''}`)
+  })
 }
 export function deleteDocument(me: User, id: string, docId: string) {
   mutate((d) => {
@@ -2048,6 +2111,42 @@ export function cancelInvoice(me: User, id: string) {
 }
 
 // ============================================================ content
+export type SalesKitInput = Omit<SalesKitItem, 'id' | 'position' | 'updatedAt' | 'updatedBy'>
+/** Sales Kit: everyone reads it; the Operation team (saleskit.manage) adds, edits and removes schemes. */
+export function saveSalesKitItem(me: User, x: SalesKitInput, id?: string) {
+  need(me, 'saleskit.manage')
+  const v = { ...x, name: x.name.trim(), category: x.category.trim() }
+  for (const k of ['benefits', 'sectors', 'eligibility', 'lastDate', 'organisation', 'schemeType', 'applicableFor', 'minCharge'] as const) v[k] = (x[k] ?? '').trim()
+  v.registrationCharge = x.registrationCharge?.trim() || undefined
+  assert(v.name, 'Scheme name is required.')
+  assert(v.category, 'Pick the category.')
+  assert(v.minCharge, 'Enter our minimum charge (e.g. INR 10,000 + 18% GST).')
+  mutate((d) => {
+    d.salesKit ??= []
+    const at = nowIso()
+    if (id) {
+      const cur = d.salesKit.find((s) => s.id === id)
+      assert(cur, 'Scheme not found.')
+      Object.assign(cur, v, { updatedAt: at, updatedBy: me.id })
+      audit(d, me.id, 'SALES_KIT_EDIT', `${cur.category}: ${cur.name}`)
+      return
+    }
+    const position = 1 + Math.max(0, ...d.salesKit.filter((s) => s.category === v.category).map((s) => s.position))
+    d.salesKit.push({ ...v, id: uid('sk-'), position, updatedAt: at, updatedBy: me.id })
+    notify(d, usersWithRole(d, 'sales', 'teamlead').map((u) => u.id), 'Sales Kit: new scheme', `${v.category} · ${v.name}`, '/sales-kit', 'info')
+    audit(d, me.id, 'SALES_KIT_ADD', `${v.category}: ${v.name}`)
+  })
+}
+export function deleteSalesKitItem(me: User, id: string) {
+  need(me, 'saleskit.manage')
+  mutate((d) => {
+    const cur = d.salesKit?.find((s) => s.id === id)
+    assert(cur, 'Scheme not found.')
+    d.salesKit = d.salesKit!.filter((s) => s.id !== id)
+    audit(d, me.id, 'SALES_KIT_DELETE', `${cur.category}: ${cur.name}`)
+  })
+}
+
 /** Schemes: Admin and the Operation team only (sales see them read-only). Price and dates are checked; the end date can't be before the start. */
 export function upsertScheme(me: User, s: Omit<Scheme, 'id' | 'createdAt' | 'by' | 'updatedAt' | 'updatedBy'> & { id?: string }) {
   need(me, 'schemes.manage')

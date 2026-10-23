@@ -47,7 +47,7 @@ function events(files: Booking[]): Event[] {
       const w = b.adminWork?.[s.id]
       if (!w) continue
       if (w.doneAt) out.push({ kind: `done:${s.id}`, at: w.doneAt, b, by: w.assignee ?? b.adminId, detail: w.startedAt ? `${daysBetween(day(w.startedAt), day(w.doneAt))} days` : undefined })
-      if (s.id === 'PRECHECK') for (const h of w.history) if (/^Reminder/.test(h.note ?? '')) out.push({ kind: 'reminder', at: h.at, b, detail: 'Pre-Check Deck' })
+      if (s.id === 'PRECHECK') for (const h of w.history) if (/^Reminder/.test(h.note ?? '')) out.push({ kind: 'reminder', at: h.at, b, detail: 'Pitch Deck' })
     }
   }
   return out

@@ -158,7 +158,7 @@ export function HrDashboard() {
           mascot={<Kabir pose="stand" className="h-full w-full" />} />
         <Kpi to="/leave" tone="pink" icon={UserMinus} label="On Leave" value={data.onLeave} hint={`${data.pending} request${data.pending === 1 ? '' : 's'} pending`} delay={160}
           mascot={<Bao className="h-full w-full" />} />
-        <Kpi to="/employees" tone="violet" icon={UserPlus} label="New Joinees This Month" value={data.joinees.length} delay={240}
+        <Kpi to="/employees" tone="violet" icon={UserPlus} label="New Joiners This Month" value={data.joinees.length} delay={240}
           hint={data.joinees.length ? data.joinees.map((u) => u.name.split(' ')[0]).slice(0, 3).join(', ') : 'Nobody has joined yet this month'}
           mascot={<Meera className="h-full w-full" />} />
       </div>
@@ -226,7 +226,7 @@ export function HrDashboard() {
       <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
         {canPeople && <Distribution dist={data.dist} total={data.active.length} />}
         {canPeople && (
-          <Panel title="Recent Joinees" icon={UserPlus} action={<ViewAll to="/employees" />}>
+          <Panel title="Recent Joiners" icon={UserPlus} action={<ViewAll to="/employees" />}>
             {!data.recent.length ? <Empty text="No employees yet." /> : (
               <ul className="divide-y divide-line/70 px-2 pb-2">
                 {data.recent.map((u) => (

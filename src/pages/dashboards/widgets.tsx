@@ -181,9 +181,9 @@ export function BreakBanner() {
   )
 }
 
-export function Section({ title, subtitle, icon, action, children, className }: { title: string; subtitle?: string; icon?: LucideIcon; action?: ReactNode; children: ReactNode; className?: string }) {
+export function Section({ id, title, subtitle, icon, action, children, className }: { id?: string; title: string; subtitle?: string; icon?: LucideIcon; action?: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <Card className={cx('overflow-hidden anim-fade-up', className)}>
+    <Card id={id} className={cx('scroll-mt-24 overflow-hidden anim-fade-up', className)}>
       <CardHeader title={title} subtitle={subtitle} icon={icon} action={action} />
       {children}
     </Card>

@@ -21,7 +21,7 @@ assert.equal(followUpDue(f('IN_OPERATIONS', '2026-10-16', true), '2026-10-20'), 
 assert.equal(followUpDue(f('COMPLETED', '2026-10-16'), '2026-10-20'), false, 'completed files stop')
 assert.equal(followUpDue(f('ON_HOLD', '2026-10-16'), '2026-10-20'), true, 'on hold still needs chasing')
 
-// Pre-Check Deck: pending and due
+// Pitch Deck: pending and due
 const pc = (status, nextRemindOn, file = 'WITH_ADMIN') => ({ status: file, adminWork: { PRECHECK: { status, nextRemindOn, history: [], updatedAt: '', updatedBy: '' } } })
 assert.equal(precheckDue(pc('IN_PROGRESS', '2026-10-20'), '2026-10-20'), true)
 assert.equal(precheckDue(pc('APPROVED', '2026-10-20'), '2026-10-20'), false, 'approved stops')
@@ -59,4 +59,4 @@ assert.deepEqual([a2.stages.PRECHECK.total, a2.pct], [1, 0], 'the stage assignee
 assert.equal(fillTemplate('Hi {client_name} — {reference} {unknown}', { client_name: 'Asha', reference: 'RX-1' }), 'Hi Asha — RX-1 {unknown}')
 assert.equal(workflowSettings({ precheckDays: 4 }).fileReminderDays, 15)
 assert.equal(workflowSettings({ welcomeEmail: { subject: 'S' } }).welcomeEmail.body.length > 50, true, 'missing parts come from the defaults')
-console.log('✓ workflow rules: India dates, follow-ups, Pre-Check Deck, schemes, Admin progress, templates')
+console.log('✓ workflow rules: India dates, follow-ups, Pitch Deck, schemes, Admin progress, templates')

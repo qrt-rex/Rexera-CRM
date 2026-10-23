@@ -2,6 +2,8 @@ import type { Call, DB, IncentiveRules, Lead, Perm, PfSettings, Role } from './t
 import { defaultAutomations } from './emailTemplates'
 import { DEFAULT_ROLE_PERMS } from './rbac'
 import { ymd } from './format'
+import { CLOUD } from './cloud'
+import { SALES_KIT_SEED } from './salesKitData'
 
 export const DEFAULT_PF: PfSettings = {
   enabled: true, employeePct: 12, employerPct: 12, epsPct: 8.33, ceilingEnabled: false, wageCeiling: 15000, floorEnabled: false, wageFloor: 0, ptEnabled: true, basicPct: 50, hraPct: 40,
@@ -224,6 +226,13 @@ export function upgradeDb(d: DB): DB {
       if (l.assignedTo && !l.assignedAt) { l.assignedAt = l.createdAt; l.seenAt = l.createdAt }
     }
     d.upgrades.push('lead-dispositions-1')
+  }
+  d.salesKit ??= []
+  if (!d.upgrades.includes('sales-kit-1')) {
+    // the Sales Kit: edited by the Operation team. The live CRM gets the list from its migration (sales_kit table).
+    d.rolePerms.operations = [...new Set([...(d.rolePerms.operations ?? []), 'saleskit.manage' as Perm])]
+    if (!CLOUD && !d.salesKit.length) d.salesKit = SALES_KIT_SEED.map((x) => ({ ...x }))
+    d.upgrades.push('sales-kit-1')
   }
   return d
 }

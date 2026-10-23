@@ -1,4 +1,4 @@
-// node server/jobs.test.mjs — scheduled jobs: follow-ups, Pre-Check Deck, scheme expiry, welcome retries; never twice
+// node server/jobs.test.mjs — scheduled jobs: follow-ups, Pitch Deck, scheme expiry, welcome retries; never twice
 import assert from 'node:assert/strict'
 import { runJobs, jobsAuthorized } from './jobs.mjs'
 
@@ -63,7 +63,7 @@ let r = await runJobsWith(sb, env({ SUPABASE_URL: 'x', SUPABASE_SECRET_KEY: 'sb_
 assert.equal(r.ok, true)
 assert.equal(r.followUps, 1, 'b1 follow-up was due on the 16th')
 assert.equal(sb.t.bookings[0].follow_up.nextOn, '2026-10-31', 'next follow-up 15 days on, in the future')
-assert.equal(r.precheck, 1, 'b2 pre-check due on the 20th')
+assert.equal(r.precheck, 1, 'b2 pitch deck due on the 20th')
 assert.equal(sb.t.bookings[1].admin_work.PRECHECK.nextRemindOn, '2026-10-23')
 assert.equal(r.schemes, 1, 'scheme ending tomorrow')
 assert.equal(r.welcome.sent, 1, 'queued welcome for b1 (older than 5 min) sent')
@@ -72,7 +72,7 @@ assert.equal(sent.length, 1)
 assert.match(sent[0].subject, /RX-1/)
 assert.equal(sb.t.booking_client_emails.length, 1)
 const n1 = sb.t.notifications.length
-assert.ok(sb.t.notifications.some((n) => n.user_id === 'adm' && /Pre-Check/.test(n.title)))
+assert.ok(sb.t.notifications.some((n) => n.user_id === 'adm' && /Pitch Deck/.test(n.title)))
 assert.ok(sb.t.notifications.some((n) => n.user_id === 'ops' && /Follow-up due/.test(n.title)))
 assert.equal(sb.t.app_settings.find((s) => s.key === 'jobs').value.lastRunAt, new Date(now).toISOString())
 
@@ -102,4 +102,4 @@ assert.equal(jobsAuthorized(env({ JOBS_SECRET: 'a-long-enough-secret' }), 'a-lon
 assert.equal(jobsAuthorized(env({ JOBS_SECRET: 'a-long-enough-secret' }), 'wrong'), false)
 assert.equal(jobsAuthorized(env({ JOBS_SECRET: 'short' }), 'short'), false, 'too short a secret is refused')
 assert.equal(jobsAuthorized(env({}), ''), false, 'no secret set: closed')
-console.log('✓ scheduled jobs: follow-ups, Pre-Check Deck, scheme expiry, welcome retries — each once')
+console.log('✓ scheduled jobs: follow-ups, Pitch Deck, scheme expiry, welcome retries — each once')

@@ -1,10 +1,10 @@
 // Workflow rules shared by the CRM (browser) and the live server's scheduled jobs (server/jobs.mjs), so both decide
-// the same way: which files are due a follow-up, when the Pre-Check Deck reminder repeats, when a scheme expires,
+// the same way: which files are due a follow-up, when the Pitch Deck reminder repeats, when a scheme expires,
 // Admin progress figures, and the welcome message text. Plain JavaScript, no imports.
 
 /** The five Admin work stages tracked on every file Admin works on. */
 export const ADMIN_STAGES = [
-  { id: 'PRECHECK', label: 'Pre-Check Deck', short: 'Pre-Check' },
+  { id: 'PRECHECK', label: 'Pitch Deck', short: 'Pitch Deck' },
   { id: 'FINANCE', label: 'Finance Added', short: 'Finance' },
   { id: 'DPR', label: 'DPR — Detailed Project Report', short: 'DPR' },
   { id: 'CERTIFICATION', label: 'Certification', short: 'Certification' },
@@ -56,7 +56,7 @@ export const DEFAULT_WORKFLOW = {
   schemeAlertRoles: ['admin', 'operations'],
   opsContact: { name: '', phone: '', email: '' },
   // Interakt template names (approved by Meta in the Interakt dashboard); empty = not set up, nothing is sent
-  whatsapp: { welcomeTemplate: '', invoiceTemplate: '', language: 'en' },
+  whatsapp: { welcomeTemplate: '', invoiceTemplate: '', formTemplate: '', language: 'en' },
 }
 /** The settings with every missing value filled from the defaults. */
 export const workflowSettings = (w) => ({
@@ -70,6 +70,7 @@ export const workflowSettings = (w) => ({
 /** What fills {{1}}, {{2}}, … of each template, in this order — the template in Interakt must use the same order. */
 export const WHATSAPP_WELCOME_VARS = ['client_name', 'service', 'reference', 'ops_name', 'ops_phone']
 export const WHATSAPP_INVOICE_VARS = ['client_name', 'document', 'amount', 'company']
+export const WHATSAPP_FORM_VARS = ['client_name', 'form', 'link', 'company']
 /** Template values in order; WhatsApp refuses an empty variable, so a missing one becomes "-". */
 export const templateValues = (names, vars) => names.map((n) => String(vars?.[n] ?? '').replace(/\s+/g, ' ').trim().slice(0, 900) || '-')
 
@@ -98,7 +99,7 @@ export function nextAfter(from, every, today) {
 /** Due today (or overdue): the file is being worked, the schedule isn't paused and its date has come. */
 export const followUpDue = (b, today) => !!b.followUp && !b.followUp.paused && ACTIVE_FILE_STATUSES.includes(b.status) && b.followUp.nextOn <= today
 
-// ------------------------------------------------------------------ Pre-Check Deck reminder (every 3 or 4 days)
+// ------------------------------------------------------------------ Pitch Deck reminder (every 3 or 4 days)
 export const precheckPending = (b) => {
   const w = b.adminWork?.PRECHECK
   return !!w && ACTIVE_FILE_STATUSES.includes(b.status) && !ADMIN_DONE.includes(w.status) && w.status !== 'NOT_NEEDED'

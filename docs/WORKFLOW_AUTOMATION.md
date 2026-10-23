@@ -10,10 +10,10 @@ Sales ─► Team Leader ─► Accounts ─► LEGAL ──approve──► OPE
                                       │  └─changes required─► Sales corrects ─► back to Legal
                                       └─reject─► Sales (resubmit → Accounts)
                          on approval:  client welcome email (+ WhatsApp link) · 15-day follow-up starts
-                         on Admin:     5-stage Admin checklist · Pre-Check Deck reminder every 3–4 days
+                         on Admin:     5-stage Admin checklist · Pitch Deck reminder every 3–4 days
 ```
 
-- **Rules shared by the app and the server**: `supabase/workflow-rules.mjs` (IST dates, follow-ups, Pre-Check Deck,
+- **Rules shared by the app and the server**: `supabase/workflow-rules.mjs` (IST dates, follow-ups, Pitch Deck,
   scheme dates, Admin progress, message templates) and `supabase/form-rules.mjs` (form fields, file checks).
   The browser and the live server use the same code, so the two can't disagree.
 - **Scheduled jobs**: the server runs them, not the browser. `POST /api/jobs/run` → `server/jobs.mjs`, called every
@@ -29,7 +29,7 @@ Sales ─► Team Leader ─► Accounts ─► LEGAL ──approve──► OPE
 
 | New | Purpose |
 |---|---|
-| `src/components/WorkflowPanels.tsx` | Booking → **Workflow** tab: welcome message status / retry / preview / WhatsApp, 15-day follow-up, Admin checklist + Pre-Check Deck |
+| `src/components/WorkflowPanels.tsx` | Booking → **Workflow** tab: welcome message status / retry / preview / WhatsApp, 15-day follow-up, Admin checklist + Pitch Deck |
 | `src/pages/modules/Forms.tsx` (`/forms`) | Document Form Builder: build, preview, publish / close / archive, new link, send by email / WhatsApp, responses |
 | `src/pages/PublicForm.tsx` (`/f/:token`) | The client's form page (no login) |
 | `src/components/FormRenderer.tsx` | Shared field renderer (builder preview + client page) |
@@ -90,7 +90,7 @@ Super Admin may take every action. Every decision records who acted, when and th
 | Reminder | Starts | Repeats | Stops | Who is told |
 |---|---|---|---|---|
 | **File follow-up** | Legal approval (first time only) | every 15 days (Workflow settings; changeable per file) | file completed or rejected, or paused | Operations member + Admin |
-| **Pre-Check Deck** | Admin assigned | every 3 days (3 or 4, global and per file) | stage Approved / Completed / Not needed | file's Admin + Operations member |
+| **Pitch Deck** | Admin assigned | every 3 days (3 or 4, global and per file) | stage Approved / Completed / Not needed | file's Admin + Operations member |
 | **Scheme ending** | — | once, the day before the end date | after it is sent | roles in Workflow settings (Admin, Operations by default) |
 | **Welcome retry** | Legal approval | pending > 5 min, stuck sending > 15 min, failed: up to 3 attempts, 30 min apart | sent, or 3 failed attempts | Operations member on failure |
 
@@ -122,7 +122,7 @@ Super Admin may take every action. Every decision records who acted, when and th
 | Follow-up notes | ✓ | ✓ | own files | | | | |
 | Pause / resume / reschedule follow-up | ✓ | ✓ | | | | | |
 | Admin checklist stages | ✓ | own files | own files | | | | |
-| Pre-Check Deck interval (3/4 days) | ✓ | ✓ | own files | | | | |
+| Pitch Deck interval (3/4 days) | ✓ | ✓ | own files | | | | |
 | Form Builder + responses (`forms.manage`) | ✓ | ✓ | ✓ | | | | |
 | Workflow settings (`workflow.manage`) | ✓ | ✓ | | | | | |
 | Schemes: add / edit (`schemes.manage`) | ✓ | ✓ | ✓ | | | | |
@@ -139,7 +139,7 @@ Super Admin may take every action. Every decision records who acted, when and th
 ## 8. Tests
 
 Run with `npm run db:check`. All pass:
-- `server/jobs.test.mjs`: follow-up, Pre-Check, scheme and welcome-retry jobs each send exactly once across repeated runs; a follow-up several days overdue sends one reminder and moves to the next future date; the jobs secret is required.
+- `server/jobs.test.mjs`: follow-up, Pitch Deck, scheme and welcome-retry jobs each send exactly once across repeated runs; a follow-up several days overdue sends one reminder and moves to the next future date; the jobs secret is required.
 - `server/forms.test.mjs`:
   - malformed, closed and expired links are refused;
   - the mobile check (nothing of the form is shown before it);
@@ -157,7 +157,7 @@ Run with `npm run db:check`. All pass:
 - **Legal**: request changes needs a reason; the owner can edit and resubmit; approval moves the file to Operations and creates the welcome and follow-up once.
 - **Welcome**: a second approval doesn't duplicate it; without SMTP it honestly reports "Not set up".
 - **Admin**: the checklist is created with 5 stages; Sales are blocked; "returned" needs a note.
-- **Pre-Check reminder**: fires once, then not again; an interval of 5 days is refused; it stops when done.
+- **Pitch Deck reminder**: fires once, then not again; an interval of 5 days is refused; it stops when done.
 - **Follow-up reminder**: fires once; Operations can't pause it, Admin can; resume moves the date forward.
 - **Schemes**: bad dates are refused, Sales can't edit, the expiry alert fires once.
 - **Progress**: shows 1/5 (20%).
@@ -167,6 +167,26 @@ Run with `npm run db:check`. All pass:
 **Not tested here:**
 - **The SQL migration**: no Postgres on this computer. Run it in the Supabase SQL editor; it stops with a visible error if anything is wrong.
 - **Real email delivery**: no SMTP password on this computer.
+
+## 8a. October 24 additions
+
+- **Clickable counts**: every count on the Operation team dashboard opens its list. Most go to the Operations Dashboard via `/ops-desk?filter=active|admin|review|hold|overdue|week|done|all&member=me|team`; tasks go to `/work` and documents to `/documents`. The Operations Dashboard and Admin dashboard counts are clickable too.
+- **Forward stages**: the file's Operations person uses **Forward stages** on the Workflow tab to give Pitch Deck, Finance, DPR, Certification and Submission to different Admins.
+  - Each new person gets the next assignment number: `RX-2026-000127/1`, `/2`, `/3` … (stages given to the same person at the same time share one).
+  - The number is shown on the stage, sent in the notification, and used in the uploaded file's name.
+  - It is kept in the stage history (`admin_work.*.history[].ref`), so no new column is needed.
+- **Admin upload**: when a stage is assigned to an Admin, they get **Upload file** on that stage (and in its status window). The file is stored on the CRM entry as a document of that stage, and Operations is told so they can verify it.
+  - The Admin dashboard lists **My Admin stages**.
+- **Document review is final**: once a document is verified or rejected, only a Super Admin can change it.
+  - Who decided, and when, is shown everywhere.
+  - In the database, `booking_documents.reviewed_by` / `reviewed_at` are stamped by a trigger, which also refuses the change (`20261024010000_document_review_lock.sql`).
+- **Form Builder → Share**: send a form link by email (any address) and WhatsApp. WhatsApp goes through Interakt when a **form link template** is set in Workflow settings (`{{1}}` client, `{{2}}` form, `{{3}}` link, `{{4}}` company); otherwise WhatsApp opens with the message ready.
+  - Route: `POST /api/forms/share`.
+- **Sales Kit** (`/sales-kit`): the 55 schemes from *Sales Kit.xlsx* in 7 categories.
+  - Everyone can read it; only the Operation team (`saleskit.manage`, plus Super Admin / IT) can add, edit or remove schemes. This is checked in the app and by RLS.
+  - Migration: `20261024000000_sales_kit.sql`, which also loads the list.
+- **Wording**: "Pre-Check Deck" is now **Pitch Deck** everywhere on screen (internal names such as `PRECHECK` and `precheckDays` are unchanged, so existing data keeps working).
+  - Spelling fixes: "Joinees" → "Joiners"; in the Sales Kit, "encouaged", "custome hiring", "verticle", "regitration", "Liqiuor", "Empowermentc" and "Tamilnadu" are corrected.
 
 ## 9. Deployment
 

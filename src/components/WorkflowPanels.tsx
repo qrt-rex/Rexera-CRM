@@ -1,10 +1,14 @@
-import { useState } from 'react'
-import { BellRing, CalendarClock, ClipboardCheck, Eye, Mail, MessageCircle, Pause, Play, RefreshCw, Send } from 'lucide-react'
-import type { AdminStageId, AdminWorkStatus, Booking, Delivery } from '../lib/types'
+import { useRef, useState } from 'react'
+import { BellRing, CalendarClock, ClipboardCheck, Eye, Forward, Mail, MessageCircle, Pause, Play, RefreshCw, Send, Upload } from 'lucide-react'
+import type { AdminStageId, AdminWorkStatus, Booking, Delivery, FileRef } from '../lib/types'
+import { checkFile, saveFile } from '../lib/files'
+import { isMaster } from '../lib/rbac'
+import { DOC_ACCEPT } from './DocUploader'
+import { FileLink } from './FileField'
 import { useDb } from '../lib/store'
 import { useAuth, useMe } from '../lib/auth'
 import {
-  addFollowUpNote, canSendWelcome, canWorkAdminStages, logPrecheckFollowUp, noteWhatsappOpened, requeueWelcome, setAdminWork, setFollowUpSchedule, setPrecheckInterval, userName, usersWithRole,
+  addAdminStageFiles, addFollowUpNote, canForwardAdminStages, canSendWelcome, canUploadAdminStage, canWorkAdminStages, forwardAdminStages, logPrecheckFollowUp, noteWhatsappOpened, requeueWelcome, setAdminWork, setFollowUpSchedule, setPrecheckInterval, userName, usersWithRole,
 } from '../lib/actions'
 import { deliverWelcome, welcomeContent, whatsappLink } from '../lib/welcome'
 import { requestWelcomeWhatsapp } from '../lib/share'
@@ -134,24 +138,51 @@ export function FollowUpCard({ b }: { b: Booking }) {
   )
 }
 
-/** The five Admin stages on this file, each with its own status, person and due date; Pre-Check Deck has its reminder. */
+/** Upload button for a stage's file — shown only to the Admin the Operation team assigned the stage to. */
+function StageUpload({ b, stage, label = 'Upload file' }: { b: Booking; stage: AdminStageId; label?: string }) {
+  const me = useMe()
+  const run = useRun()
+  const toast = useToast()
+  const input = useRef<HTMLInputElement>(null)
+  const [busy, setBusy] = useState(false)
+  if (!canUploadAdminStage(me, b, stage)) return null
+  const upload = async (files: FileList) => {
+    setBusy(true)
+    try {
+      const refs: FileRef[] = []
+      for (const f of Array.from(files)) { checkFile(f, DOC_ACCEPT, f.name); refs.push(await saveFile(f)) }
+      await run(() => addAdminStageFiles(me, b.id, stage, refs), `${refs.length} file(s) uploaded`)
+    } catch (e) { toast('error', e instanceof Error ? e.message : 'Could not upload.') } finally { setBusy(false) }
+  }
+  return <>
+    <input ref={input} type="file" multiple accept={DOC_ACCEPT} className="hidden" onChange={(e) => { if (e.target.files?.length) void upload(e.target.files); e.target.value = '' }} />
+    <Button size="sm" variant="outline" icon={Upload} loading={busy} onClick={() => input.current?.click()}>{label}</Button>
+  </>
+}
+
+/** The five Admin stages on this file, each with its own status, person and due date; Pitch Deck has its reminder. */
 export function AdminChecklist({ b }: { b: Booking }) {
   const db = useDb()
   const me = useMe()
   const run = useRun()
   const [edit, setEdit] = useState<{ stage: AdminStageId; status: AdminWorkStatus; note: string; due: string; assignee: string } | null>(null)
+  const [fwd, setFwd] = useState<{ to: Partial<Record<AdminStageId, string>>; note: string } | null>(null)
   const [fu, setFu] = useState('')
   const work = b.adminWork
   const mayWork = canWorkAdminStages(db, me, b)
+  const mayForward = canForwardAdminStages(db, me, b)
   const admins = usersWithRole(db, 'admin')
   const t = istToday()
   const eligible = work ? ADMIN_STAGES.filter((s) => work[s.id] && work[s.id]!.status !== 'NOT_NEEDED') : []
   const done = eligible.filter((s) => ADMIN_DONE.includes(work![s.id]!.status)).length
   const pc = work?.PRECHECK
+  const filesOf = (s: (typeof ADMIN_STAGES)[number]) => b.documents.filter((d) => d.category === s.label)
+  const openForward = () => setFwd({ to: Object.fromEntries(ADMIN_STAGES.map((s) => [s.id, work?.[s.id]?.assignee ?? ''])), note: '' })
   return (
     <Card className="overflow-hidden xl:col-span-2">
-      <CardHeader title="Admin checklist" subtitle={work ? `${done} of ${eligible.length} stages done` : 'Starts when Operations assigns the file to an Admin'} icon={ClipboardCheck} />
-      {!work ? <p className="px-5 py-4 text-sm text-mute">No Admin yet.</p> : (
+      <CardHeader title="Admin checklist" subtitle={work ? `${done} of ${eligible.length} stages done · each stage can go to a different Admin` : 'Starts when Operations assigns the file to an Admin'} icon={ClipboardCheck}
+        action={mayForward && <Button size="sm" variant="outline" icon={Forward} onClick={openForward}>Forward stages</Button>} />
+      {!work ? <p className="px-5 py-4 text-sm text-mute">No Admin yet.{mayForward && ' Forward the stages to Admins one by one, or assign the whole file with “Assign to Admin”.'}</p> : (
         <>
           <div className="px-5 pt-4"><Progress value={eligible.length ? (done / eligible.length) * 100 : 0} tone={done === eligible.length && eligible.length ? 'green' : 'orange'} /></div>
           <ul className="divide-y divide-line/70">
@@ -161,10 +192,12 @@ export function AdminChecklist({ b }: { b: Booking }) {
               const overdue = !!w.due && w.due < t && !ADMIN_DONE.includes(w.status) && w.status !== 'NOT_NEEDED'
               return (
                 <li key={s.id} className="flex flex-wrap items-center gap-3 px-5 py-3 text-sm">
-                  <span className="min-w-0 flex-1"><b>{s.label}</b>
-                    <span className="block text-[11px] text-mute">{userName(db, w.assignee)} · updated {fmtDateTime(w.updatedAt)}{w.due ? ` · due ${fmtDate(w.due)}` : ''}{w.history.at(-1)?.note ? ` · ${w.history.at(-1)!.note}` : ''}</span></span>
+                  <span className="min-w-0 flex-1"><b>{s.label}</b>{w.ref && <span className="ml-2 rounded-md bg-card2 px-1.5 py-0.5 font-mono text-[11px] font-semibold">{w.ref}</span>}
+                    <span className="block text-[11px] text-mute">{userName(db, w.assignee)}{w.assignedBy ? ` (assigned by ${userName(db, w.assignedBy)})` : ''} · updated {fmtDateTime(w.updatedAt)}{w.due ? ` · due ${fmtDate(w.due)}` : ''}{w.history.at(-1)?.note ? ` · ${w.history.at(-1)!.note}` : ''}</span>
+                    {filesOf(s).length > 0 && <span className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]">{filesOf(s).map((d) => d.file ? <FileLink key={d.id} file={d.file} label={d.name} /> : <span key={d.id}>{d.name}</span>)}</span>}</span>
                   {overdue && <Badge tone="red">Overdue</Badge>}
                   <Badge tone={workTone(w.status)}>{adminStatusLabel(w.status)}</Badge>
+                  <StageUpload b={b} stage={s.id} />
                   {mayWork && <Button size="sm" variant="ghost" onClick={() => setEdit({ stage: s.id, status: w.status, note: '', due: w.due ?? '', assignee: w.assignee ?? b.adminId ?? '' })}>Update</Button>}
                 </li>
               )
@@ -172,19 +205,19 @@ export function AdminChecklist({ b }: { b: Booking }) {
           </ul>
           {pc && (
             <div className="border-t border-line bg-card2/40 px-5 py-3 text-sm">
-              <p className="flex flex-wrap items-center gap-x-4 gap-y-1"><b>Pre-Check Deck reminder</b>
+              <p className="flex flex-wrap items-center gap-x-4 gap-y-1"><b>Pitch Deck reminder</b>
                 {precheckPending(b) ? <>
                   <span>Next: <b className={cx(pc.nextRemindOn && pc.nextRemindOn < t && 'text-bad')}>{pc.nextRemindOn ? fmtDate(pc.nextRemindOn) : '—'}</b>{pc.nextRemindOn && pc.nextRemindOn < t && <Badge tone="red" className="ml-1">Overdue</Badge>}</span>
                   <span className="text-mute">Last follow-up: {pc.lastFollowUpOn ? fmtDate(pc.lastFollowUpOn) : '—'}</span>
                   <span className="flex items-center gap-1 text-mute">Every
-                    <select aria-label="Pre-Check Deck reminder interval" disabled={!mayWork} value={pc.remindEveryDays ?? 3} onChange={(e) => run(() => setPrecheckInterval(me, b.id, Number(e.target.value)), 'Reminder interval changed')} className="h-8 rounded-lg border border-line bg-card px-2 text-xs">
+                    <select aria-label="Pitch Deck reminder interval" disabled={!mayWork} value={pc.remindEveryDays ?? 3} onChange={(e) => run(() => setPrecheckInterval(me, b.id, Number(e.target.value)), 'Reminder interval changed')} className="h-8 rounded-lg border border-line bg-card px-2 text-xs">
                       <option value={3}>3</option><option value={4}>4</option>
                     </select> days</span>
                 </> : <span className="text-mute">Stopped — {adminStatusLabel(pc.status).toLowerCase()}</span>}
               </p>
               {mayWork && precheckPending(b) && (
                 <div className="mt-2 flex flex-wrap items-end gap-2">
-                  <Input aria-label="Pre-Check Deck follow-up" value={fu} onChange={(e) => setFu(e.target.value)} placeholder="What was followed up (deck sent, client reminded…)" className="min-w-60 flex-1" />
+                  <Input aria-label="Pitch Deck follow-up" value={fu} onChange={(e) => setFu(e.target.value)} placeholder="What was followed up (deck sent, client reminded…)" className="min-w-60 flex-1" />
                   <Button size="sm" icon={BellRing} onClick={async () => { if (await run(() => logPrecheckFollowUp(me, b.id, fu), 'Follow-up recorded — next reminder moved')) setFu('') }}>Record follow-up</Button>
                 </div>
               )}
@@ -201,9 +234,35 @@ export function AdminChecklist({ b }: { b: Booking }) {
         }}>Save</Button></>}>
         {edit && <div className="grid gap-3">
           <Select label="Status" value={edit.status} onChange={(e) => setEdit({ ...edit, status: e.target.value as AdminWorkStatus })}>{ADMIN_WORK_STATUSES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</Select>
+          {canUploadAdminStage(me, b, edit.stage) && (
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-dashed border-line p-3 text-xs text-mute">
+              <StageUpload b={b} stage={edit.stage} label="Upload the file for this stage" />
+              <span>Saved on this CRM entry as {work?.[edit.stage]?.ref ?? b.bookingId} · {ADMIN_STAGES.find((s) => s.id === edit.stage)!.short}</span>
+            </div>
+          )}
           <Select label="Admin doing it" value={edit.assignee} onChange={(e) => setEdit({ ...edit, assignee: e.target.value })}>{admins.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</Select>
           <Input label="Due date" type="date" value={edit.due} onChange={(e) => setEdit({ ...edit, due: e.target.value })} />
           <Textarea label="Note" rows={2} value={edit.note} onChange={(e) => setEdit({ ...edit, note: e.target.value })} hint="Needed when a stage is returned, not needed, or a finished stage is re-opened" />
+        </div>}
+      </Modal>
+      <Modal open={!!fwd} onClose={() => setFwd(null)} title="Forward Admin stages" subtitle={`Each stage can go to a different Admin. Every new person gets the next number: ${b.bookingId}/1, /2, /3 …`} size="md"
+        footer={<><Button variant="outline" onClick={() => setFwd(null)}>Cancel</Button><Button icon={Forward} onClick={async () => {
+          if (!fwd) return
+          const changed = Object.fromEntries(Object.entries(fwd.to).filter(([s, uid]) => uid && uid !== work?.[s as AdminStageId]?.assignee))
+          if (await run(() => forwardAdminStages(me, b.id, changed, fwd.note), 'Stages forwarded')) setFwd(null)
+        }}>Forward</Button></>}>
+        {fwd && <div className="grid gap-3">
+          {ADMIN_STAGES.map((s) => {
+            const w = work?.[s.id], finished = !!w && ADMIN_DONE.includes(w.status)
+            return (
+              <Select key={s.id} label={`${s.label}${w?.ref ? ` · now ${w.ref}` : ''}${finished ? ' · done' : ''}`} value={fwd.to[s.id] ?? ''} disabled={finished && !isMaster(me)}
+                onChange={(e) => setFwd({ ...fwd, to: { ...fwd.to, [s.id]: e.target.value } })}>
+                <option value="">— Not forwarded —</option>
+                {admins.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </Select>
+            )
+          })}
+          <Textarea label="Note for the Admins (optional)" rows={2} value={fwd.note} onChange={(e) => setFwd({ ...fwd, note: e.target.value })} />
         </div>}
       </Modal>
     </Card>

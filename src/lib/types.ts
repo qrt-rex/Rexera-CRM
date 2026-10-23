@@ -7,7 +7,7 @@ export type Perm =
   | 'content.view' | 'content.manage' | 'salesinfo.manage' | 'schemes.view' | 'schemes.manage'
   | 'broadcasts.view' | 'broadcasts.manage'
   | 'billing.own' | 'billing.create' | 'billing.manage' | 'refunds.manage'
-  | 'workflow.manage' | 'forms.manage' | 'followup.manage'
+  | 'workflow.manage' | 'forms.manage' | 'followup.manage' | 'saleskit.manage'
   | 'team.progress' | 'team.assign'
   | 'attendance.all' | 'leave.approve'
   | 'employees.view' | 'employees.manage'
@@ -174,13 +174,17 @@ export interface AdminWorkItem {
   status: AdminWorkStatus
   /** the Admin employee doing this stage (defaults to the file's Admin) */
   assignee?: string
+  /** assignment number: the file number plus /1, /2, /3 … — one more each time the file goes to another person */
+  ref?: string
+  assignedBy?: string
+  assignedAt?: string
   due?: string
   updatedAt: string
   updatedBy: string
   startedAt?: string
   doneAt?: string
-  history: { at: string; by: string; status: AdminWorkStatus; note?: string }[]
-  /** Pre-Check Deck follow-up: every 3 (or 4) days while it is pending */
+  history: { at: string; by: string; status: AdminWorkStatus; note?: string; assignee?: string; ref?: string }[]
+  /** Pitch Deck follow-up: every 3 (or 4) days while it is pending */
   remindEveryDays?: number
   nextRemindOn?: string
   lastFollowUpOn?: string
@@ -197,7 +201,7 @@ export interface WorkflowSettings {
   /** shown to clients in the welcome message */
   opsContact: { name: string; phone: string; email: string }
   /** Interakt template names (approved by Meta); empty = WhatsApp not set up for that message */
-  whatsapp: { welcomeTemplate: string; invoiceTemplate: string; language: string }
+  whatsapp: { welcomeTemplate: string; invoiceTemplate: string; formTemplate: string; language: string }
 }
 
 // ------------------------------------------------------------------ Document Form Builder (client links)
@@ -271,7 +275,11 @@ export interface Refund {
 export interface Approval { id: string; level: string; action: string; by: string; at: string; remark: string }
 export interface StageMove { stage: number; at: string; by: string; note: string; outcome?: string }
 export interface BComment { id: string; by: string; at: string; text: string; kind: string }
-export interface BDoc { id: string; name: string; category: string; size: number; at: string; by: string; dataUrl?: string; status?: 'PENDING' | 'VERIFIED' | 'REJECTED'; legacyPath?: string; file?: FileRef; note?: string }
+export interface BDoc {
+  id: string; name: string; category: string; size: number; at: string; by: string; dataUrl?: string; status?: 'PENDING' | 'VERIFIED' | 'REJECTED'; legacyPath?: string; file?: FileRef; note?: string
+  /** who verified / rejected it, and when (final: only a Super Admin can change it afterwards) */
+  reviewedBy?: string; reviewedAt?: string
+}
 export interface BTask {
   id: string; title: string; done: boolean; due?: string; by: string; assignee?: string
   /** remind the processing person and the admin person every N days (15) until done */
@@ -349,7 +357,7 @@ export interface Booking {
   welcome?: WelcomeState
   /** every-15-days follow-up schedule while the file is being processed */
   followUp?: FollowUp
-  /** Admin checklist: Pre-Check Deck, Finance Added, DPR, Certification, Application / Submission */
+  /** Admin checklist: Pitch Deck, Finance Added, DPR, Certification, Application / Submission */
   adminWork?: Partial<Record<AdminStageId, AdminWorkItem>>
   paymentContact?: string
   paymentEmail?: string
@@ -409,6 +417,29 @@ export interface InvoiceShare {
   /** SENT = accepted by the mail server / Interakt */
   status: 'SENT' | 'FAILED' | 'NOT_CONFIGURED' | 'NO_CONTACT'
   error?: string; messageId?: string
+}
+
+/** One scheme in the Sales Kit (what sales offers clients): everyone reads it, the Operation team edits it. */
+export interface SalesKitItem {
+  id: string
+  /** Grant, Equity, Loan … (the sheets of the original Sales Kit) */
+  category: string
+  position: number
+  name: string
+  benefits: string
+  sectors: string
+  eligibility: string
+  /** a date or "Rolling basis" */
+  lastDate: string
+  organisation: string
+  schemeType: string
+  applicableFor: string
+  /** our upfront charge, e.g. "INR 10,000 + 18% GST" */
+  minCharge: string
+  /** government registration charge / note (Certification, GeM) */
+  registrationCharge?: string
+  updatedAt?: string
+  updatedBy?: string
 }
 
 /** Company branch: invoices show its address and GSTIN. */
@@ -767,6 +798,7 @@ export interface DB {
   expenses?: Expense[]
   /** Document Form Builder: forms sent to clients by secure link, and what came back */
   docForms?: DocForm[]
+  salesKit?: SalesKitItem[]
   formSubmissions?: FormSubmission[]
   /** one-time data upgrades already applied */
   upgrades: string[]
