@@ -553,6 +553,14 @@ export interface CandidateApplication {
   noticePeriod?: string
   /** the office the candidate is applying for (JOB_BRANCHES) */
   branch?: string
+  /** the position they apply for (starts as the form's role title) */
+  position?: string
+  /** Internship / Fresher / Employee (experienced) */
+  candidateType?: 'INTERNSHIP' | 'FRESHER' | 'EXPERIENCED'
+  /** current CTC (experienced candidates) */
+  currentCtc?: string
+  /** preferred interview slot, India time: YYYY-MM-DDTHH:mm */
+  interviewAt?: string
   linkedin?: string
   message?: string
   resume: FileRef

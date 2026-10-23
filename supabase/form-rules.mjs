@@ -35,6 +35,40 @@ export function fileProblem(name, declaredType, size, bytes) {
   return null
 }
 
+// ------------------------------------------------------------------ job applications (/apply/<token>)
+/** Offices a candidate can apply for. */
+export const JOB_BRANCHES = ['Ahmedabad - Kargil', 'Ahmedabad - Riverfront (Altimus)', 'Vadodara']
+/** A resume: PDF or Word only. */
+export const RESUME_MIME = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+/** How the candidate applies: an experienced employee also gives experience, company, current CTC and notice period. */
+export const CANDIDATE_TYPES = [
+  { id: 'INTERNSHIP', label: 'Internship' }, { id: 'FRESHER', label: 'Fresher' }, { id: 'EXPERIENCED', label: 'Employee (experienced)' },
+]
+export const candidateTypeLabel = (id) => CANDIDATE_TYPES.find((t) => t.id === id)?.label ?? ''
+/** India time now as YYYY-MM-DDTHH:mm (what a date-and-time box gives). */
+export const istNowLocal = (now = Date.now()) => new Date(now + 5.5 * 3600_000).toISOString().slice(0, 16)
+/**
+ * What's wrong with a job application (field → message), checked the same way in the browser and on the server.
+ * LinkedIn and the message are optional; the interview slot must be in the future (India time).
+ */
+export function applicationProblems(a, now = Date.now()) {
+  const e = {}
+  if (String(a?.name ?? '').trim().length < 2) e.name = 'Enter your full name.'
+  if (!String(a?.position ?? '').trim()) e.position = 'Enter the position you are applying for.'
+  if (!JOB_BRANCHES.includes(a?.branch)) e.branch = 'Choose the branch you are applying for.'
+  if (!CANDIDATE_TYPES.some((t) => t.id === a?.candidateType)) e.candidateType = 'Choose Internship, Fresher or Employee (experienced).'
+  if (!EMAIL.test(String(a?.email ?? '').trim())) e.email = 'Enter a valid email.'
+  if (!normMobile(a?.phone)) e.phone = 'Enter a valid 10-digit mobile number.'
+  if (!String(a?.qualification ?? '').trim()) e.qualification = 'Enter your highest qualification.'
+  if (a?.candidateType === 'EXPERIENCED' && !String(a?.currentCtc ?? '').trim()) e.currentCtc = 'Enter your current CTC.'
+  const slot = String(a?.interviewAt ?? '')
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(slot)) e.interviewAt = 'Choose your preferred date and time for the interview.'
+  else if (slot <= istNowLocal(now)) e.interviewAt = 'The interview date and time must be in the future.'
+  const link = String(a?.linkedin ?? '').trim()
+  if (link && !/^https?:\/\/\S+\.\S+/i.test(link)) e.linkedin = 'Enter the full link (starting with https://), or leave it empty.'
+  return e
+}
+
 /** Problems with a form definition (staff side), or [] when it can be published. */
 export function formProblems(f) {
   const out = []

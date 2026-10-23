@@ -11,6 +11,7 @@ import { receive as receiveBlutecWebhook } from './server/blutecWebhook.mjs'
 import { receiveWebsiteLead } from './server/websiteLeads.mjs'
 import { jobsAuthorized, runJobs } from './server/jobs.mjs'
 import { getPublicForm, submitPublicForm } from './server/forms.mjs'
+import { submitJobApplication } from './server/apply.mjs'
 import { sendFormLink, sendInvoice, sendWelcomeNow } from './server/share.mjs'
 import { whatsappConfigured } from './server/whatsapp.mjs'
 import { incentiveReport, reportConfig } from './server/incentives.mjs'
@@ -622,6 +623,21 @@ const server = http.createServer(async (req, res) => {
   }
   if (pathname === '/api/blutec/webhook/ivr' && req.method === 'POST') {
     return handleBlutecWebhook(req, res, 'ivr')
+  }
+
+  // public job applications (no sign-in): the server checks and saves them, and tells HR
+  const applyMatch = pathname.match(/^\/api\/apply\/([A-Za-z0-9_-]{6,64})$/)
+  if (applyMatch && req.method === 'POST') {
+    const ip = String(req.headers['x-forwarded-for'] ?? req.socket.remoteAddress ?? '').split(',')[0].trim()
+    let raw
+    try { raw = await readRawBody(req, 64_000) } catch { return sendJson(res, 413, { success: false, message: 'Too large.' }) }
+    try {
+      const r = await submitJobApplication(getEnv, applyMatch[1], raw, ip)
+      return sendJson(res, r.status, r.body)
+    } catch (e) {
+      console.error(`[apply] ${e.message}`)
+      return sendJson(res, 502, { success: false, message: 'Sorry, your application could not be saved — please try again in a minute.' })
+    }
   }
 
   // public client forms (no sign-in): read the form / send the answers

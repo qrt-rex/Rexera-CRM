@@ -9,6 +9,7 @@ import { BOOKING_TYPES, COMBO_PACKAGES, comboCap, comboMonths, isFundingService 
 import {
   ACTIVE_FILE_STATUSES, ADMIN_DONE, ADMIN_STAGES, ADMIN_WORK_STATUSES, addDays as addDaysYmd, adminStatusLabel, CLOSED_FILE_STATUSES, followUpDue, istToday, nextAfter as nextAfterYmd, precheckDue, precheckPending, schemeAlertDue, workflowSettings,
 } from '../../supabase/workflow-rules.mjs'
+import { applicationProblems, JOB_BRANCHES } from '../../supabase/form-rules.mjs'
 import { hashPassword } from './crypto'
 import { CALL_OUTCOMES, FINAL_STAGE, hasLegalDoc, LEAD_STATUS, OPEN_LEAD, STAGE_OUTCOMES, STAGES, stageLabel } from './workflow'
 import { fireAutomation } from './email'
@@ -2341,18 +2342,17 @@ export function deleteCandidateForm(me: User, id: string) {
 }
 
 export type ApplicationInput = Omit<CandidateApplication, 'id' | 'formId' | 'submittedAt' | 'status' | 'notes' | 'resume'>
-/** Offices a candidate can apply for (the job application form's branch choice). */
-export const JOB_BRANCHES = ['Ahmedabad - Kargil', 'Ahmedabad - Riverfront (Altimus)', 'Vadodara']
-/** Public: anyone with the link can apply while the form is open. Resume and branch are mandatory. */
+export { JOB_BRANCHES }
+/**
+ * Public: anyone with the link can apply while the form is open. Resume and branch are mandatory. This saves in
+ * browser mode; the live CRM sends the application to the server instead (server/apply.mjs, same checks).
+ */
 export function submitApplication(token: string, a: ApplicationInput, resume: FileRef | undefined) {
   const d = getDb()
   const form = d.candidateForms.find((f) => f.token === token)
   assert(form && form.active, 'This application form is closed.')
-  assert(a.name.trim().length >= 2, 'Enter your full name.')
-  assert(a.branch && JOB_BRANCHES.includes(a.branch), 'Choose the branch you are applying for.')
-  assert(isEmail(a.email), 'Enter a valid email.')
-  assert(isPhone(a.phone), 'Enter a valid 10-digit mobile number.')
-  assert(a.qualification.trim(), 'Enter your highest qualification.')
+  const problem = Object.values(applicationProblems(a as unknown as Record<string, unknown>))[0]
+  assert(!problem, problem ?? '')
   assert(resume, 'Upload your resume (PDF or Word).')
   assert(!d.candidates.some((c) => c.formId === form.id && c.email.toLowerCase() === a.email.trim().toLowerCase()), 'You have already applied for this role with this email.')
   mutate((m) => {

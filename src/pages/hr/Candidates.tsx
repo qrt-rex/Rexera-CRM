@@ -5,6 +5,7 @@ import { useDb } from '../../lib/store'
 import { useMe } from '../../lib/auth'
 import { deleteCandidateForm, JOB_BRANCHES, saveCandidateForm, setCandidateFormActive, updateCandidate } from '../../lib/actions'
 import { downloadCsv, fmtDate, fmtDateTime, today } from '../../lib/format'
+import { CANDIDATE_TYPES, candidateTypeLabel } from '../../../supabase/form-rules.mjs'
 import { openFile } from '../../lib/files'
 import { FileLink } from '../../components/FileField'
 import { Badge, Button, Card, CardHeader, Drawer, EmptyState, Input, Modal, PageHeader, SearchBox, Select, Table, Td, Textarea, Th, useConfirm, usePaged, useRun, useToast } from '../../components/ui'
@@ -24,11 +25,14 @@ export default function Candidates() {
   const [formFilter, setFormFilter] = useState('')
   const [status, setStatus] = useState('')
   const [branch, setBranch] = useState('')
+  const [ctype, setCtype] = useState('')
   const [q, setQ] = useState('')
   const [openId, setOpenId] = useState<string | null>(null)
-  const list = useMemo(() => db.candidates.filter((c) => (!formFilter || c.formId === formFilter) && (!status || c.status === status) && (!branch || c.branch === branch)
-    && (!q || `${c.name} ${c.email} ${c.phone} ${c.city} ${c.qualification} ${c.branch ?? ''}`.toLowerCase().includes(q.toLowerCase()))), [db.candidates, formFilter, status, branch, q])
-  const { slice, pager } = usePaged(list, 25, [formFilter, status, branch, q])
+  const list = useMemo(() => db.candidates.filter((c) => (!formFilter || c.formId === formFilter) && (!status || c.status === status) && (!branch || c.branch === branch) && (!ctype || c.candidateType === ctype)
+    && (!q || `${c.name} ${c.email} ${c.phone} ${c.city} ${c.qualification} ${c.branch ?? ''} ${c.position ?? ''}`.toLowerCase().includes(q.toLowerCase()))), [db.candidates, formFilter, status, branch, ctype, q])
+  const { slice, pager } = usePaged(list, 25, [formFilter, status, branch, ctype, q])
+  /** "2026-10-28T11:30" → 28 Oct 2026, 11:30 am */
+  const slot = (s?: string) => (s ? `${fmtDate(s.slice(0, 10))}, ${new Date(`2000-01-01T${s.slice(11, 16)}:00`).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}` : '')
   const open = openId ? db.candidates.find((c) => c.id === openId) : undefined
   const formName = (id: string) => db.candidateForms.find((f) => f.id === id)?.title ?? '—'
   const copy = (f: CandidateForm) => navigator.clipboard?.writeText(linkFor(f)).then(() => toast('success', 'Link copied — share it with the candidate'), () => toast('error', 'Copy blocked — select the link and copy it'))
@@ -76,17 +80,19 @@ export default function Candidates() {
           <select value={formFilter} onChange={(e) => setFormFilter(e.target.value)} className="h-10 rounded-xl border border-line bg-card px-3 text-sm" aria-label="Form"><option value="">All forms</option>{db.candidateForms.map((f) => <option key={f.id} value={f.id}>{f.title}</option>)}</select>
           <select value={status} onChange={(e) => setStatus(e.target.value)} className="h-10 rounded-xl border border-line bg-card px-3 text-sm" aria-label="Status"><option value="">All statuses</option>{Object.entries(STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select>
           <select value={branch} onChange={(e) => setBranch(e.target.value)} className="h-10 rounded-xl border border-line bg-card px-3 text-sm" aria-label="Branch"><option value="">All branches</option>{JOB_BRANCHES.map((x) => <option key={x}>{x}</option>)}</select>
-          <Button variant="outline" disabled={!list.length} onClick={() => downloadCsv(`applications-${today()}.csv`, list.map((c) => ({ applied_for: formName(c.formId), branch: c.branch ?? '', name: c.name, email: c.email, phone: c.phone, city: c.city, dob: c.dob ?? '', qualification: c.qualification, college: c.college ?? '', experience: c.experience, current_company: c.currentCompany ?? '', expected: c.expectedSalary ?? '', notice: c.noticePeriod ?? '', linkedin: c.linkedin ?? '', status: STATUS[c.status].label, submitted: c.submittedAt, resume: c.resume.name })))}>Export</Button>
+          <select value={ctype} onChange={(e) => setCtype(e.target.value)} className="h-10 rounded-xl border border-line bg-card px-3 text-sm" aria-label="Applying as"><option value="">Intern / fresher / experienced</option>{CANDIDATE_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</select>
+          <Button variant="outline" disabled={!list.length} onClick={() => downloadCsv(`applications-${today()}.csv`, list.map((c) => ({ form: formName(c.formId), position: c.position ?? '', branch: c.branch ?? '', applying_as: candidateTypeLabel(c.candidateType), preferred_interview: c.interviewAt?.replace('T', ' ') ?? '', current_ctc: c.currentCtc ?? '', name: c.name, email: c.email, phone: c.phone, city: c.city, dob: c.dob ?? '', qualification: c.qualification, college: c.college ?? '', experience: c.experience, current_company: c.currentCompany ?? '', expected: c.expectedSalary ?? '', notice: c.noticePeriod ?? '', linkedin: c.linkedin ?? '', status: STATUS[c.status].label, submitted: c.submittedAt, resume: c.resume.name })))}>Export</Button>
         </div>
         {!list.length ? <EmptyState icon={Users} title="No applications yet" text="Share a form link — applications appear here with their resumes." /> : (
           <Table>
-            <thead><tr><Th>Candidate</Th><Th>Applied for · branch</Th><Th>Qualification · experience</Th><Th>Resume</Th><Th>Status</Th><Th>Submitted</Th></tr></thead>
+            <thead><tr><Th>Candidate</Th><Th>Position · branch</Th><Th>Applying as · qualification</Th><Th>Preferred interview</Th><Th>Resume</Th><Th>Status</Th><Th>Submitted</Th></tr></thead>
             <tbody>
               {slice.map((c) => (
                 <tr key={c.id} className="cursor-pointer hover:bg-card2/60" onClick={() => setOpenId(c.id)}>
                   <Td><p className="font-semibold">{c.name}</p><p className="text-xs text-mute">{c.email} · {c.phone}</p></Td>
-                  <Td className="text-sm">{formName(c.formId)}{c.branch && <span className="block text-xs text-mute">{c.branch}</span>}</Td>
-                  <Td className="text-xs">{c.qualification}<span className="block text-mute">{c.experience}</span></Td>
+                  <Td className="text-sm">{c.position || formName(c.formId)}{c.branch && <span className="block text-xs text-mute">{c.branch}</span>}</Td>
+                  <Td className="text-xs">{candidateTypeLabel(c.candidateType) || c.experience}{c.currentCtc && <span className="block text-mute">CTC {c.currentCtc}</span>}<span className="block text-mute">{c.qualification}</span></Td>
+                  <Td className="text-xs">{slot(c.interviewAt) || <span className="text-mute">—</span>}</Td>
                   <Td><span onClick={(e) => e.stopPropagation()}><FileLink file={c.resume} label="Resume" /></span></Td>
                   <Td><Badge tone={STATUS[c.status].tone}>{STATUS[c.status].label}</Badge></Td>
                   <Td className="text-xs text-mute">{fmtDate(c.submittedAt)}</Td>
@@ -103,7 +109,7 @@ export default function Candidates() {
         {open && (
           <div className="space-y-5">
             <div className="grid grid-cols-2 gap-3 text-sm">
-              {([['Branch', open.branch], ['Email', open.email], ['Mobile', open.phone], ['City', open.city], ['Date of birth', open.dob ? fmtDate(open.dob) : ''], ['Qualification', open.qualification], ['College', open.college], ['Experience', open.experience], ['Current company', open.currentCompany], ['Expected', open.expectedSalary], ['Notice period', open.noticePeriod]] as [string, string | undefined][]).filter(([, v]) => v).map(([k, v]) => (
+              {([['Position applied for', open.position], ['Branch', open.branch], ['Applying as', candidateTypeLabel(open.candidateType)], ['Preferred interview', slot(open.interviewAt)], ['Current CTC', open.currentCtc], ['Email', open.email], ['Mobile', open.phone], ['City', open.city], ['Date of birth', open.dob ? fmtDate(open.dob) : ''], ['Qualification', open.qualification], ['College', open.college], ['Experience', open.experience], ['Current company', open.currentCompany], ['Expected', open.expectedSalary], ['Notice period', open.noticePeriod]] as [string, string | undefined][]).filter(([, v]) => v).map(([k, v]) => (
                 <div key={k} className="rounded-xl bg-card2 px-3 py-2"><p className="text-[11px] text-mute">{k}</p><p className="break-words font-semibold">{v}</p></div>
               ))}
             </div>
