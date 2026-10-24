@@ -65,7 +65,7 @@ export async function submitJobApplication(env, token, raw, ip, client) {
     experience: text(a.experience, 40) || 'Fresher', current_company: text(a.currentCompany, 200) || null, expected_salary: text(a.expectedSalary, 60) || null,
     notice_period: text(a.noticePeriod, 60) || null, linkedin: /^https?:\/\//i.test(text(a.linkedin)) ? text(a.linkedin) : null, message: text(a.message, 4000) || null,
     branch: a.branch, position: text(a.position, 120), candidate_type: a.candidateType, interview_at: a.interviewAt,
-    current_ctc: a.candidateType === 'EXPERIENCED' ? text(a.currentCtc, 60) : null,
+    current_ctc: text(a.currentCtc, 60) || null,
     resume, status: 'NEW', notes: null, submitted_at: at,
   }
   let { error } = await sb.from('candidate_applications').insert(row)

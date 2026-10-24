@@ -37,7 +37,7 @@ const base = {
 const files = { 'file-cv1k2m3n4': pdf, 'file-bad1x2y3z': exe }
 const app = {
   name: 'Asha Patel', email: 'Asha@Example.test', phone: '+91 98765 43210', city: 'Ahmedabad', qualification: 'MBA', experience: '1–3 years', branch: 'Vadodara',
-  position: 'Business Development Executive', candidateType: 'EXPERIENCED', currentCtc: '3,60,000', interviewAt: '2099-01-15T11:30', linkedin: '',
+  position: 'BDE (Business Development Executive)', candidateType: 'EXPERIENCED', currentCtc: '3,60,000', interviewAt: '2099-01-15T11:30', linkedin: '',
 }
 const body = (x = {}) => JSON.stringify({ application: { ...app, ...x.application }, resume: { id: 'file-cv1k2m3n4', name: 'cv.pdf', type: 'application/pdf', size: 10, at: '2026-10-24T05:00:00.000Z', ...x.resume } })
 let ip = 0
@@ -60,17 +60,21 @@ assert.equal(r.status, 200)
 const row = sb.t.candidate_applications[0]
 assert.equal(row.email, 'asha@example.test'); assert.equal(row.phone, '9876543210'); assert.equal(row.branch, 'Vadodara')
 assert.equal(row.status, 'NEW'); assert.equal(row.linkedin, null, 'optional link left empty')
-assert.equal(row.position, 'Business Development Executive'); assert.equal(row.candidate_type, 'EXPERIENCED'); assert.equal(row.current_ctc, '3,60,000'); assert.equal(row.interview_at, '2099-01-15T11:30')
+assert.equal(row.position, 'BDE (Business Development Executive)'); assert.equal(row.candidate_type, 'EXPERIENCED'); assert.equal(row.current_ctc, '3,60,000'); assert.equal(row.interview_at, '2099-01-15T11:30')
 assert.equal(row.resume.type, 'application/pdf'); assert.equal(row.resume.size, pdf.length)
 assert.deepEqual(sb.t.notifications.map((n) => n.user_id), ['hr1'], 'active HR told')
 assert.match(sb.t.notifications[0].body, /Employee \(experienced\) · interview 2099-01-15 11:30/)
 assert.equal((await send(sb, 'tok-job-1', body())).status, 409, 'same email twice')
-// a fresher: no CTC needed (and none kept)
-r = await send(sb, 'tok-job-1', body({ application: { email: 'ravi@example.test', candidateType: 'FRESHER', currentCtc: '9', experience: 'Fresher' } }))
+// a fresher: CTC is optional — kept when given, empty when not
+r = await send(sb, 'tok-job-1', body({ application: { email: 'ravi@example.test', candidateType: 'FRESHER', currentCtc: '', experience: 'Fresher' } }))
 assert.equal(r.status, 200); assert.equal(sb.t.candidate_applications.at(-1).current_ctc, null)
+r = await send(sb, 'tok-job-1', body({ application: { email: 'meena@example.test', candidateType: 'INTERNSHIP', currentCtc: '8,000 stipend', experience: 'Internship' } }))
+assert.equal(r.status, 200); assert.equal(sb.t.candidate_applications.at(-1).current_ctc, '8,000 stipend')
+r = await send(sb, 'tok-job-1', body({ application: { email: 'x@example.test', position: 'CEO' } }))
+assert.equal(r.body.errors.position, 'Choose the position you are applying for.', 'only positions from the list')
 
 // the new columns aren't in the database yet: the application is still saved, those answers in the message
 sb = fake({ ...base, __noBranch: true }, files)
 assert.equal((await send(sb, 'tok-job-1', body())).status, 200)
-assert.match(sb.t.candidate_applications[0].message, /^Branch: Vadodara\nPosition: Business Development Executive\nApplying as: Employee \(experienced\)\nPreferred interview: 2099-01-15T11:30\nCurrent CTC: 3,60,000/)
+assert.match(sb.t.candidate_applications[0].message, /^Branch: Vadodara\nPosition: BDE \(Business Development Executive\)\nApplying as: Employee \(experienced\)\nPreferred interview: 2099-01-15T11:30\nCurrent CTC: 3,60,000/)
 console.log('✓ job applications: form open, answers, branch, position, interview slot, CTC, resume contents, duplicates, HR told')

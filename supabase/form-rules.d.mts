@@ -15,6 +15,7 @@ export const JOB_BRANCH_INFO: JobBranch[]
 export const JOB_BRANCHES: string[]
 export function jobBranch(name?: string): JobBranch | undefined
 export const RESUME_MIME: string[]
+export const JOB_POSITIONS: string[]
 export const CANDIDATE_TYPES: { id: 'INTERNSHIP' | 'FRESHER' | 'EXPERIENCED'; label: string }[]
 export function candidateTypeLabel(id?: string): string
 export function istNowLocal(now?: number): string

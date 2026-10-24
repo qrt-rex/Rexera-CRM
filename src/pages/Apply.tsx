@@ -4,7 +4,7 @@ import { Briefcase, CheckCircle2, GraduationCap, MapPin, Send } from 'lucide-rea
 import type { FileRef } from '../lib/types'
 import { useDb } from '../lib/store'
 import { submitApplication, type ApplicationInput } from '../lib/actions'
-import { applicationProblems, CANDIDATE_TYPES, istNowLocal, JOB_BRANCH_INFO, jobBranch } from '../../supabase/form-rules.mjs'
+import { applicationProblems, CANDIDATE_TYPES, istNowLocal, JOB_BRANCH_INFO, JOB_POSITIONS, jobBranch } from '../../supabase/form-rules.mjs'
 import { CLOUD } from '../lib/cloud'
 import { RESUME_TYPES } from '../lib/files'
 import { Logo } from '../components/Logo'
@@ -20,7 +20,7 @@ const blank: ApplicationInput = {
 const EXPERIENCE = ['Less than 1 year', '1–3 years', '3–5 years', '5+ years']
 /** Only an experienced employee sends experience, company, CTC and notice period. */
 const tidy = (a: ApplicationInput): ApplicationInput => a.candidateType === 'EXPERIENCED' ? a
-  : { ...a, experience: a.candidateType === 'INTERNSHIP' ? 'Internship' : 'Fresher', currentCompany: '', currentCtc: '', noticePeriod: '' }
+  : { ...a, experience: a.candidateType === 'INTERNSHIP' ? 'Internship' : 'Fresher', currentCompany: '', noticePeriod: '' }
 
 /** Public application form (no sign-in) — HR shares /apply/<token>. */
 export default function Apply() {
@@ -36,7 +36,7 @@ export default function Apply() {
   const set = (p: Partial<ApplicationInput>) => setA((v) => ({ ...v, ...p }))
   const intern = form?.kind === 'INTERNSHIP'
   // the position starts as the role's title (the candidate can change it); an internship form starts as Internship
-  useEffect(() => { if (form) setA((v) => ({ ...v, position: v.position || form.title, candidateType: v.candidateType ?? (form.kind === 'INTERNSHIP' ? 'INTERNSHIP' : undefined) })) }, [form])
+  useEffect(() => { if (form) setA((v) => ({ ...v, position: v.position || (form.position && JOB_POSITIONS.includes(form.position) ? form.position : form.kind === 'INTERNSHIP' ? 'Intern' : ''), candidateType: v.candidateType ?? (form.kind === 'INTERNSHIP' ? 'INTERNSHIP' : undefined) })) }, [form])
   const errs = tried ? applicationProblems(tidy(a) as unknown as Record<string, unknown>) : {}
   const experienced = a.candidateType === 'EXPERIENCED'
 
@@ -91,10 +91,13 @@ export default function Apply() {
             </div>
             <form className="grid gap-4 p-6 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); submit() }}>
               <Input label="Full name" required autoComplete="name" value={a.name} onChange={(e) => set({ name: e.target.value })} className="sm:col-span-2" error={errs.name} />
-              <Input label="Position applied for" required value={a.position} onChange={(e) => set({ position: e.target.value })} error={errs.position} />
+              <Select label="Position applied for" required value={a.position} onChange={(e) => set({ position: e.target.value })} error={errs.position}>
+                <option value="">— Select the position —</option>
+                {JOB_POSITIONS.map((p) => <option key={p}>{p}</option>)}
+              </Select>
               <Select label="Branch" required value={a.branch} onChange={(e) => set({ branch: e.target.value })} error={errs.branch}>
                 <option value="">— Select the branch —</option>
-                {JOB_BRANCH_INFO.map((b) => <option key={b.name} value={b.name}>{b.name} — {b.area}</option>)}
+                {JOB_BRANCH_INFO.map((b) => <option key={b.name} value={b.name}>{b.name} — {b.address}</option>)}
               </Select>
               {jobBranch(a.branch) && (
                 <p className="-mt-2 flex items-start gap-2 rounded-xl bg-card2 px-3 py-2 text-xs text-mute sm:col-span-2"><MapPin className="mt-0.5 size-3.5 shrink-0 text-brand" /><span><b className="text-ink">{a.branch} office:</b> {jobBranch(a.branch)!.address}</span></p>
@@ -116,9 +119,9 @@ export default function Apply() {
                   {EXPERIENCE.map((x) => <option key={x}>{x}</option>)}
                 </Select>
                 <Input label="Current company" value={a.currentCompany} onChange={(e) => set({ currentCompany: e.target.value })} />
-                <Input label="Current CTC (₹ / year)" required value={a.currentCtc} onChange={(e) => set({ currentCtc: e.target.value })} placeholder="e.g. 3,60,000" error={errs.currentCtc} />
                 <Input label="Notice period" value={a.noticePeriod} onChange={(e) => set({ noticePeriod: e.target.value })} placeholder="e.g. 30 days" />
               </>}
+              <Input label={experienced ? 'Current CTC (₹ / year)' : 'Current CTC (₹ / year, optional)'} required={experienced} value={a.currentCtc} onChange={(e) => set({ currentCtc: e.target.value })} placeholder={a.candidateType === 'INTERNSHIP' ? 'e.g. current stipend, or leave empty' : 'e.g. 3,60,000'} error={errs.currentCtc} />
               <Input label={a.candidateType === 'INTERNSHIP' ? 'Expected stipend (₹ / month)' : 'Expected salary (₹ / month)'} value={a.expectedSalary} onChange={(e) => set({ expectedSalary: e.target.value })} />
               <Input label="LinkedIn / portfolio link (optional)" type="url" value={a.linkedin} onChange={(e) => set({ linkedin: e.target.value })} placeholder="https://" className="sm:col-span-2" error={errs.linkedin} />
               <Textarea label="Anything you'd like us to know (optional)" value={a.message} onChange={(e) => set({ message: e.target.value })} className="sm:col-span-2" />
