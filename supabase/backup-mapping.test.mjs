@@ -71,7 +71,7 @@ db.stock = [{ id: 'st-1', name: 'A4 paper', category: 'Stationery', unit: 'ream'
 db.expenses = [{ id: 'ex-1', date: '2026-10-10', category: 'Pantry', description: 'Tea', amount: 500, gst: 25, paidVia: 'UPI', by: a.id, createdAt: at, branchId: 'br-amd-a' }]
 // October requests: booking type, commission, refunds, TDS, complimentary service, service prices, auto-assign, salary paid
 Object.assign(bk, {
-  bookingType: 'COMBO6', commission: { to: 'DSA', name: 'Mehul Shah', pct: 12.5, amount: 2500, by: a.id, at },
+  bookingType: 'COMBO6', commission: { to: 'DSA', name: 'Mehul Shah', pct: 12.5, amount: 2500, by: a.id, at, status: 'PAID', paidOn: '2026-10-20', paidAmount: 2500, mode: 'NEFT', ref: 'UTR77', paidBy: a.id },
   refunds: [{ id: 'rf-1', amount: 1000, date: '2026-10-11', reason: 'Scheme closed', status: 'REFUNDED', refundedOn: '2026-10-12', mode: 'NEFT', ref: 'UTR123', by: a.id, at }, { id: 'rf-2', amount: 500, date: '2026-10-12', reason: 'Partial', status: 'PENDING', by: a.id, at }],
   services: [...(bk.services ?? []), { serviceId: db.services[1].id, name: db.services[1].name, price: 0, complimentary: true, addedBy: a.id, addedAt: at }],
 })
@@ -83,7 +83,8 @@ Object.assign(bk, {
   adminWork: { PRECHECK: { status: 'IN_PROGRESS', assignee: a.id, ref: `${bk.bookingId}/2`, assignedBy: b.id, assignedAt: at, due: '2026-10-20', updatedAt: at, updatedBy: a.id, startedAt: at, history: [{ at, by: b.id, status: 'NOT_STARTED', note: 'Forwarded', assignee: a.id, ref: `${bk.bookingId}/2` }, { at, by: a.id, status: 'IN_PROGRESS', note: 'started' }], remindEveryDays: 4, nextRemindOn: '2026-10-22', lastFollowUpOn: '2026-10-18' }, DPR: { status: 'COMPLETED', updatedAt: at, updatedBy: a.id, doneAt: at, history: [] } },
 })
 Object.assign(db.schemes[0], { price: 25000, startDate: '2026-10-01', endDate: '2026-10-31', updatedAt: at, updatedBy: a.id })
-db.settings.workflow = { fileReminderDays: 10, precheckDays: 4, welcomeAuto: false, welcomeEmail: { subject: 'Hi', body: 'Welcome {client_name}' }, welcomeWhatsapp: 'Hi {client_name}', schemeAlertRoles: ['admin'], opsContact: { name: 'Ops', phone: '9800000000', email: 'ops@x.test' }, whatsapp: { welcomeTemplate: 'client_welcome', invoiceTemplate: 'invoice_pdf', language: 'en' } }
+db.settings.branches[0].bank = 'HDFC Bank · A/c 123 · IFSC HDFC0000001'
+db.settings.workflow = { adminStageAccess: { [a.id]: ['PRECHECK', 'DPR'] }, fileReminderDays: 10, precheckDays: 4, welcomeAuto: false, welcomeEmail: { subject: 'Hi', body: 'Welcome {client_name}' }, welcomeWhatsapp: 'Hi {client_name}', schemeAlertRoles: ['admin'], opsContact: { name: 'Ops', phone: '9800000000', email: 'ops@x.test' }, whatsapp: { welcomeTemplate: 'client_welcome', invoiceTemplate: 'invoice_pdf', language: 'en' } }
 bk.welcome.whatsapp.messageId = 'ik-1'
 db.invoices[0].shares = [{ id: 'ish-2', at: '2026-10-13T05:30:00.000Z', by: a.id, channel: 'whatsapp', to: '9876500001', status: 'SENT', messageId: 'ik-9' }, { id: 'ish-1', at, by: a.id, channel: 'email', to: 'c@x.test', status: 'FAILED', error: 'SMTP timed out' }]
 db.settings.jobs = { lastRunAt: at, summary: 'follow-ups 1' }

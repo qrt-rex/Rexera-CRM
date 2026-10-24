@@ -1345,8 +1345,39 @@ function startOpsWorkflow(d: DB, b: Booking, by: string, at: string) {
 function startAdminWork(d: DB, b: Booking, by: string, at: string, prevAdmin?: string) {
   const fresh = ADMIN_STAGES.filter((s) => !b.adminWork?.[s.id]).map((s) => s.id)
   const handOver = ADMIN_STAGES.filter((s) => { const cur = b.adminWork?.[s.id]; return !!cur && !!prevAdmin && prevAdmin !== b.adminId && cur.assignee === prevAdmin && !ADMIN_DONE.includes(cur.status) }).map((s) => s.id)
-  if (b.adminId) assignAdminStages(d, b, by, at, Object.fromEntries([...fresh, ...handOver].map((s) => [s, b.adminId!])), fresh.length ? 'Admin assigned' : 'Handed over')
+  if (!b.adminId) return
+  // the Admin gets the stages they are allowed to do; the others wait for the Operation team to forward them
+  const allowed = [...fresh, ...handOver].filter((s) => adminMayDo(d, b.adminId!, s))
+  assignAdminStages(d, b, by, at, Object.fromEntries(allowed.map((s) => [s, b.adminId!])), fresh.length ? 'Admin assigned' : 'Handed over')
+  const w = workflowSettings(d.settings.workflow)
+  for (const s of fresh.filter((x) => !allowed.includes(x))) {
+    b.adminWork![s] = {
+      status: 'NOT_STARTED', updatedAt: at, updatedBy: by, history: [{ at, by, status: 'NOT_STARTED', note: `${userName(d, b.adminId)} doesn’t handle this document — forward it to an Admin who does` }],
+      ...(s === 'PRECHECK' ? { remindEveryDays: w.precheckDays, nextRemindOn: addDaysYmd(istToday(), w.precheckDays) } : {}),
+    }
+  }
 }
+
+/** Document types an Admin may handle (Operations Dashboard → Admin document permissions); not set = all five. */
+export const adminStageAccess = (d: DB, userId: string): AdminStageId[] => workflowSettings(d.settings.workflow).adminStageAccess?.[userId] ?? ADMIN_STAGES.map((s) => s.id)
+export const adminMayDo = (d: DB, userId: string, stage: AdminStageId) => adminStageAccess(d, userId).includes(stage)
+export const canSetAdminStageAccess = (me: User) => isMaster(me) || has(me, 'workflow.manage')
+/** Sets which of the five document types one Admin may handle and upload (null = all five, no limit). */
+export function setAdminStageAccess(me: User, userId: string, stages: AdminStageId[] | null) {
+  assert(canSetAdminStageAccess(me), 'Only Admin managers (Workflow settings) or Super Admin can change document permissions.')
+  mutate((d) => {
+    const u = d.users.find((x) => x.id === userId)
+    assert(u && rolesOf(u).includes('admin'), 'Pick an Admin.')
+    assert(!stages || stages.every((s) => ADMIN_STAGES.some((x) => x.id === s)), 'Unknown document type.')
+    const w = workflowSettings(d.settings.workflow)
+    const access = { ...(w.adminStageAccess ?? {}) }
+    if (stages) access[userId] = ADMIN_STAGES.map((s) => s.id).filter((s) => stages.includes(s)); else delete access[userId]
+    d.settings.workflow = { ...w, adminStageAccess: access }
+    audit(d, me.id, 'ADMIN_DOC_ACCESS', `${u.name}: ${stages ? (stages.length ? stages.map((s) => ADMIN_STAGES.find((x) => x.id === s)!.short).join(', ') : 'none') : 'all document types'}`)
+  })
+}
+/** A stage is submitted / approved / completed only once its file has been uploaded to the CRM entry. */
+export const stageFiles = (b: Booking, stage: AdminStageId) => { const label = ADMIN_STAGES.find((s) => s.id === stage)!.label; return b.documents.filter((x) => x.category === label) }
 
 /** The next assignment number on a file: RX-2026-000125/1, /2, /3 … — one more each time it goes to another person. */
 const nextAssignNo = (b: Booking) => 1 + Math.max(0, ...Object.values(b.adminWork ?? {}).flatMap((w) => (w?.history ?? []).map((h) => Number(h.ref?.split('/').pop()) || 0)))
@@ -1388,6 +1419,7 @@ export function forwardAdminStages(me: User, id: string, to: Partial<Record<Admi
     for (const [stage, uid] of picks) {
       const u = d.users.find((x) => x.id === uid)
       assert(u && u.active && rolesOf(u).includes('admin'), 'Pick active Admins only.')
+      assert(adminMayDo(d, uid, stage), `${u.name} isn’t allowed to handle ${ADMIN_STAGES.find((s) => s.id === stage)!.label} (Admin document permissions).`)
       const cur = b.adminWork?.[stage]
       assert(!cur || !ADMIN_DONE.includes(cur.status) || isMaster(me), `${ADMIN_STAGES.find((s) => s.id === stage)!.label} is already done.`)
     }
@@ -1395,8 +1427,9 @@ export function forwardAdminStages(me: User, id: string, to: Partial<Record<Admi
     b.updatedAt = nowIso()
   })
 }
-/** Who may upload a stage's file: the Admin it is assigned to (by the Operation team), or Super Admin / IT. */
-export const canUploadAdminStage = (me: User, b: Booking, stage: AdminStageId) => !!b.adminWork?.[stage] && (b.adminWork[stage]!.assignee === me.id || isMaster(me))
+/** Who may upload a stage's file: the Admin it is assigned to and who is allowed that document type, or Super Admin / IT. */
+export const canUploadAdminStage = (me: User, b: Booking, stage: AdminStageId) => !!b.adminWork?.[stage]
+  && (isMaster(me) || (b.adminWork[stage]!.assignee === me.id && adminMayDo(getDb(), me.id, stage)))
 /** The Admin's file for a stage (Pitch Deck, Finance, DPR, Certificate, Submission), named with the assignment number. */
 export function addAdminStageFiles(me: User, id: string, stage: AdminStageId, files: FileRef[], note = '') {
   assert(files.length, 'Choose a file.')
@@ -1434,6 +1467,7 @@ export function setAdminWork(me: User, id: string, stage: AdminStageId, patch: {
     if (patch.assignee !== undefined && patch.assignee !== w.assignee) {
       const u = d.users.find((x) => x.id === patch.assignee)
       assert(u && u.active && rolesOf(u).includes('admin'), 'Pick an active Admin.')
+      assert(adminMayDo(d, u.id, stage), `${u.name} isn’t allowed to handle ${label} (Admin document permissions).`)
       assignAdminStages(d, b, me.id, at, { [stage]: u.id }, note ? `Reassigned — ${note}` : 'Reassigned')
     }
     if (patch.due !== undefined) w.due = patch.due || undefined
@@ -1441,9 +1475,12 @@ export function setAdminWork(me: User, id: string, stage: AdminStageId, patch: {
       assert(ADMIN_WORK_STATUSES.some((s) => s.id === patch.status), 'Unknown status.')
       const wasDone = ADMIN_DONE.includes(w.status)
       assert(!(wasDone || patch.status === 'RETURNED' || patch.status === 'NOT_NEEDED') || note.length >= 3, patch.status === 'NOT_NEEDED' ? 'Say why this stage isn’t needed.' : wasDone ? 'Say why a finished stage is re-opened.' : 'Say why it was rejected / returned.')
+      // submitted / approved / completed only with the file uploaded on the CRM entry
+      assert(!['SUBMITTED', 'APPROVED', 'COMPLETED'].includes(patch.status) || stageFiles(b, stage).length > 0, `Upload the ${label} file first — a stage is submitted only once its file is on the CRM entry.`)
       if (w.status === 'NOT_STARTED') w.startedAt ??= at
       w.status = patch.status
       w.doneAt = ADMIN_DONE.includes(patch.status) ? at : undefined
+      if (patch.status === 'SUBMITTED') { w.submittedAt = at; w.submittedBy = me.id }
       w.history.push({ at, by: me.id, status: patch.status, ...(note ? { note } : {}) })
       // Pitch Deck reminders run only while it is pending
       if (stage === 'PRECHECK') {
@@ -1582,7 +1619,8 @@ export function saveWorkflowSettings(me: User, w: WorkflowSettings) {
   assert(/^[a-z]{2}(_[A-Z]{2})?$/.test(w.whatsapp.language.trim()), 'WhatsApp template language: a code such as en or en_US.')
   mutate((d) => {
     d.settings.workflow = {
-      ...w, welcomeEmail: { subject: w.welcomeEmail.subject.trim(), body: w.welcomeEmail.body.trim() }, welcomeWhatsapp: w.welcomeWhatsapp.trim(),
+      // document permissions are set on the Operations Dashboard: keep what is stored, not this page's copy
+      ...w, adminStageAccess: d.settings.workflow?.adminStageAccess, welcomeEmail: { subject: w.welcomeEmail.subject.trim(), body: w.welcomeEmail.body.trim() }, welcomeWhatsapp: w.welcomeWhatsapp.trim(),
       opsContact: { name: w.opsContact.name.trim(), phone: w.opsContact.phone ? normPhone(w.opsContact.phone) : '', email: w.opsContact.email.trim() },
       whatsapp: { welcomeTemplate: tpl(w.whatsapp.welcomeTemplate), invoiceTemplate: tpl(w.whatsapp.invoiceTemplate), formTemplate: tpl(w.whatsapp.formTemplate), language: w.whatsapp.language.trim() },
     }
@@ -1783,6 +1821,7 @@ export function setCommission(me: User, id: string, c: { to: 'CA' | 'DSA'; name:
   need(me, 'bookings.accounts')
   mutate((d) => {
     const b = findB(d, id)
+    assert(b.commission?.status !== 'PAID', 'This commission is already paid — mark it unpaid on the Commission page before changing it.')
     if (!c) { delete b.commission; audit(d, me.id, 'COMMISSION', `${b.bookingId}: removed`); return }
     assert(c.to === 'CA' || c.to === 'DSA', 'Pick CA or DSA.')
     assert(c.name.trim().length >= 2, 'Enter the CA / DSA name.')
@@ -1795,6 +1834,31 @@ export function setCommission(me: User, id: string, c: { to: 'CA' | 'DSA'; name:
 }
 /** Commission on what was collected so far (before GST) — it grows as balance payments come in. */
 export const commissionNow = (b: Booking) => (b.commission ? round2((b.payments.reduce((t, p) => t + p.amount, 0) * b.commission.pct) / 100) : 0)
+/** What the commission is worth: the amount paid once it is paid, otherwise today's figure (it grows with each payment). */
+export const commissionDue = (b: Booking) => (b.commission?.status === 'PAID' ? b.commission.paidAmount ?? b.commission.amount : commissionNow(b))
+/** Accounts records the commission as paid to the CA / DSA (or takes that back). */
+export function setCommissionPaid(me: User, id: string, paid: { paidOn: string; mode: string; ref?: string } | null) {
+  need(me, 'bookings.accounts')
+  mutate((d) => {
+    const b = findB(d, id)
+    const c = b.commission
+    assert(c, 'This CRM entry has no commission.')
+    if (!paid) {
+      assert(c.status === 'PAID', 'It isn’t marked paid.')
+      Object.assign(c, { status: 'PENDING', paidOn: undefined, paidAmount: undefined, mode: undefined, ref: undefined, paidBy: undefined })
+      audit(d, me.id, 'COMMISSION_UNPAID', `${b.bookingId}: ${c.to} ${c.name}`)
+      return
+    }
+    assert(c.status !== 'PAID', 'It is already marked paid.')
+    assert(/^\d{4}-\d{2}-\d{2}$/.test(paid.paidOn) && paid.paidOn <= today(), 'Enter the date it was paid (not in the future).')
+    assert(paid.mode.trim(), 'Choose how it was paid.')
+    const amount = commissionNow(b)
+    assert(amount > 0, 'No payment has been received on this entry yet, so there is no commission to pay.')
+    Object.assign(c, { status: 'PAID', paidOn: paid.paidOn, paidAmount: amount, mode: paid.mode.trim(), ref: paid.ref?.trim() || undefined, paidBy: me.id })
+    b.updatedAt = nowIso()
+    audit(d, me.id, 'COMMISSION_PAID', `${b.bookingId}: ${c.to} ${c.name} · ₹${amount} · ${paid.mode}${paid.ref ? ` · ${paid.ref}` : ''}`)
+  })
+}
 
 // ------------------------------------------------------------ refunds (Accounts only)
 /** Accounts records money to be paid back to a client (pending until it is actually refunded). */

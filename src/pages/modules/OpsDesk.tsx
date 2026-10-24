@@ -15,6 +15,7 @@ import { Avatar, Badge, Button, Card, CardHeader, Checkbox, cx, EmptyState, Inpu
 import { BookingStatusBadge, DeadlineBadge, DecisionButtons, DecisionModal, PriorityBadge, StageTrack } from '../../components/booking'
 import { StageControls } from '../../components/StageControls'
 import { AdminProgressOverview, AutomationAlerts } from '../../components/OpsAutomation'
+import { AdminDocAccess } from '../../components/AdminDocAccess'
 
 type Filter = 'open' | 'active' | 'admin' | 'review' | 'hold' | 'overdue' | 'week' | 'done' | 'all'
 const FILTERS: Filter[] = ['open', 'active', 'admin', 'review', 'hold', 'overdue', 'week', 'done', 'all']
@@ -114,6 +115,7 @@ export default function OpsDesk() {
 
       <AutomationAlerts />
       <AdminProgressOverview />
+      <AdminDocAccess />
 
       {/* Legal's queue: approved by Accounts, waiting to be assigned */}
       <Card id="assign-queue" className="mb-6 scroll-mt-24 overflow-hidden">

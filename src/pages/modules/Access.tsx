@@ -183,6 +183,7 @@ function BranchesCard() {
               <PhoneInput label="Phone" value={b.phone} onChange={(v) => set(i, { phone: v })} />
               <Input label="Email" type="email" value={b.email} onChange={(e) => set(i, { email: e.target.value })} />
             </div>
+            <Input label="Bank details on invoices" value={b.bank ?? ''} onChange={(e) => set(i, { bank: e.target.value })} placeholder="Bank · A/c number · IFSC" hint="Printed on this branch's invoices; nothing is printed when empty" />
           </div>
         ))}
       </div>

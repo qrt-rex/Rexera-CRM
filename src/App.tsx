@@ -27,6 +27,7 @@ const Content = lazy(() => import('./pages/modules/Content'))
 const Broadcasts = lazy(() => import('./pages/modules/Broadcasts'))
 const Billing = lazy(() => import('./pages/modules/Billing'))
 const Refunds = lazy(() => import('./pages/modules/Refunds'))
+const Commission = lazy(() => import('./pages/modules/Commission'))
 const Services = lazy(() => import('./pages/modules/Services'))
 const SalaryStatus = lazy(() => import('./pages/hr/SalaryStatus'))
 const InvoiceView = lazy(() => import('./pages/modules/InvoiceView'))
@@ -163,6 +164,7 @@ export default function App() {
               <Route path="/broadcasts" element={<Guard m="broadcasts"><S><Broadcasts /></S></Guard>} />
               <Route path="/billing" element={<Guard m="billing"><S><Billing /></S></Guard>} />
               <Route path="/refunds" element={<Guard m="refunds"><S><Refunds /></S></Guard>} />
+              <Route path="/commission" element={<Guard m="commission"><S><Commission /></S></Guard>} />
               <Route path="/services" element={<Guard m="services"><S><Services /></S></Guard>} />
               <Route path="/forms" element={<Guard m="forms"><S><Forms /></S></Guard>} />
               <Route path="/workflow-settings" element={<Guard m="workflow-settings"><S><WorkflowSettings /></S></Guard>} />

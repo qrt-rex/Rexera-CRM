@@ -188,6 +188,24 @@ Run with `npm run db:check`. All pass:
 - **Wording**: "Pre-Check Deck" is now **Pitch Deck** everywhere on screen (internal names such as `PRECHECK` and `precheckDays` are unchanged, so existing data keeps working).
   - Spelling fixes: "Joinees" → "Joiners"; in the Sales Kit, "encouaged", "custome hiring", "verticle", "regitration", "Liqiuor", "Empowermentc" and "Tamilnadu" are corrected.
 
+## 8b. October 24 (2) additions
+
+- **Admin document permissions** (Operations Dashboard): Admin managers (`workflow.manage`) and Super Admin tick which of the five documents each Admin may handle.
+  - Stored in `settings.workflow.adminStageAccess`; a person not listed may handle all five.
+  - Stages are forwarded only to Admins allowed that document, and only they can upload it.
+  - Assigning a whole file to an Admin gives them only their allowed documents; the rest stay "Not assigned" until forwarded.
+- **Submission rule**: a stage can be marked Submitted, Approved or Completed only once its file is uploaded on the CRM entry.
+  - `submittedAt` / `submittedBy` are recorded.
+- **Reports → Admin documents**: a per-person summary, then one row per person and file with the five documents.
+  - Each document shows its status, assignment number, upload and submission dates, file review and links.
+  - Rows expand to show the history. Filters: person, status, date range and search; CSV export.
+- **Commission** (`/commission`, Accounts, directly under Refunds): every CA / DSA commission, worked out from the payments received (before GST).
+  - Shows the count and the total, paid and not-paid amounts, with filters, sorting, Mark paid / Undo, CSV, and a PDF report.
+  - A paid commission can't be edited until it is marked unpaid.
+- **Invoices**: sending the same invoice to the same recipient again within 2 minutes is refused by the server. The Send window also warns about a send in the last 24 hours and needs "Send it again" ticked.
+- **No placeholder data**: the bank line on invoices comes from each branch's **Bank details** (Access → Settings → Invoice branches); nothing is printed when it is empty.
+- **Live updates**: `20261024040000_realtime_all_tables.sql` adds any table missing from the realtime publication.
+
 ## 9. Deployment
 
 1. **Database**: Supabase → SQL editor → paste and run `supabase/run-now.sql`. It is safe to run again.

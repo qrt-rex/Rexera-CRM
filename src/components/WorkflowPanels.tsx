@@ -8,7 +8,7 @@ import { FileLink } from './FileField'
 import { useDb } from '../lib/store'
 import { useAuth, useMe } from '../lib/auth'
 import {
-  addAdminStageFiles, addFollowUpNote, canForwardAdminStages, canSendWelcome, canUploadAdminStage, canWorkAdminStages, forwardAdminStages, logPrecheckFollowUp, noteWhatsappOpened, requeueWelcome, setAdminWork, setFollowUpSchedule, setPrecheckInterval, userName, usersWithRole,
+  addAdminStageFiles, addFollowUpNote, adminMayDo, canForwardAdminStages, stageFiles, canSendWelcome, canUploadAdminStage, canWorkAdminStages, forwardAdminStages, logPrecheckFollowUp, noteWhatsappOpened, requeueWelcome, setAdminWork, setFollowUpSchedule, setPrecheckInterval, userName, usersWithRole,
 } from '../lib/actions'
 import { deliverWelcome, welcomeContent, whatsappLink } from '../lib/welcome'
 import { requestWelcomeWhatsapp } from '../lib/share'
@@ -193,7 +193,7 @@ export function AdminChecklist({ b }: { b: Booking }) {
               return (
                 <li key={s.id} className="flex flex-wrap items-center gap-3 px-5 py-3 text-sm">
                   <span className="min-w-0 flex-1"><b>{s.label}</b>{w.ref && <span className="ml-2 rounded-md bg-card2 px-1.5 py-0.5 font-mono text-[11px] font-semibold">{w.ref}</span>}
-                    <span className="block text-[11px] text-mute">{userName(db, w.assignee)}{w.assignedBy ? ` (assigned by ${userName(db, w.assignedBy)})` : ''} · updated {fmtDateTime(w.updatedAt)}{w.due ? ` · due ${fmtDate(w.due)}` : ''}{w.history.at(-1)?.note ? ` · ${w.history.at(-1)!.note}` : ''}</span>
+                    <span className="block text-[11px] text-mute">{w.assignee ? userName(db, w.assignee) : <b className="text-warn">Not assigned — forward it</b>}{w.assignedBy ? ` (assigned by ${userName(db, w.assignedBy)})` : ''} · updated {fmtDateTime(w.updatedAt)}{w.submittedAt ? ` · submitted ${fmtDateTime(w.submittedAt)}` : ''}{w.due ? ` · due ${fmtDate(w.due)}` : ''}{w.history.at(-1)?.note ? ` · ${w.history.at(-1)!.note}` : ''}</span>
                     {filesOf(s).length > 0 && <span className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]">{filesOf(s).map((d) => d.file ? <FileLink key={d.id} file={d.file} label={d.name} /> : <span key={d.id}>{d.name}</span>)}</span>}</span>
                   {overdue && <Badge tone="red">Overdue</Badge>}
                   <Badge tone={workTone(w.status)}>{adminStatusLabel(w.status)}</Badge>
@@ -229,7 +229,7 @@ export function AdminChecklist({ b }: { b: Booking }) {
         footer={<><Button variant="outline" onClick={() => setEdit(null)}>Cancel</Button><Button onClick={async () => {
           if (!edit) return
           const cur = work?.[edit.stage]
-          const ok = await run(() => setAdminWork(me, b.id, edit.stage, { status: edit.status !== cur?.status ? edit.status : undefined, note: edit.note, due: (edit.due || null) !== (cur?.due ?? null) ? edit.due || null : undefined, assignee: edit.assignee !== cur?.assignee ? edit.assignee : undefined }), 'Stage updated')
+          const ok = await run(() => setAdminWork(me, b.id, edit.stage, { status: edit.status !== cur?.status ? edit.status : undefined, note: edit.note, due: (edit.due || null) !== (cur?.due ?? null) ? edit.due || null : undefined, assignee: edit.assignee && edit.assignee !== cur?.assignee ? edit.assignee : undefined }), 'Stage updated')
           if (ok) setEdit(null)
         }}>Save</Button></>}>
         {edit && <div className="grid gap-3">
@@ -240,7 +240,13 @@ export function AdminChecklist({ b }: { b: Booking }) {
               <span>Saved on this CRM entry as {work?.[edit.stage]?.ref ?? b.bookingId} · {ADMIN_STAGES.find((s) => s.id === edit.stage)!.short}</span>
             </div>
           )}
-          <Select label="Admin doing it" value={edit.assignee} onChange={(e) => setEdit({ ...edit, assignee: e.target.value })}>{admins.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</Select>
+          {['SUBMITTED', 'APPROVED', 'COMPLETED'].includes(edit.status) && !stageFiles(b, edit.stage).length && (
+            <p className="rounded-xl bg-warn-soft px-3 py-2 text-xs text-warn">Upload the file for this stage first — it can be marked {adminStatusLabel(edit.status).toLowerCase()} only once its file is on the CRM entry.</p>
+          )}
+          <Select label="Admin doing it" value={edit.assignee} onChange={(e) => setEdit({ ...edit, assignee: e.target.value })} hint="Only Admins allowed this document are listed">
+            {!edit.assignee && <option value="">— Not assigned —</option>}
+            {admins.filter((u) => adminMayDo(db, u.id, edit.stage) || u.id === edit.assignee).map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </Select>
           <Input label="Due date" type="date" value={edit.due} onChange={(e) => setEdit({ ...edit, due: e.target.value })} />
           <Textarea label="Note" rows={2} value={edit.note} onChange={(e) => setEdit({ ...edit, note: e.target.value })} hint="Needed when a stage is returned, not needed, or a finished stage is re-opened" />
         </div>}
@@ -258,7 +264,7 @@ export function AdminChecklist({ b }: { b: Booking }) {
               <Select key={s.id} label={`${s.label}${w?.ref ? ` · now ${w.ref}` : ''}${finished ? ' · done' : ''}`} value={fwd.to[s.id] ?? ''} disabled={finished && !isMaster(me)}
                 onChange={(e) => setFwd({ ...fwd, to: { ...fwd.to, [s.id]: e.target.value } })}>
                 <option value="">— Not forwarded —</option>
-                {admins.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                {admins.filter((u) => adminMayDo(db, u.id, s.id) || u.id === fwd.to[s.id]).map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
               </Select>
             )
           })}

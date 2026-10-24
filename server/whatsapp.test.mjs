@@ -135,6 +135,11 @@ assert.deepEqual(tpl.bodyValues, ['Asha', 'Tax invoice RX/26-27/0044', 'Rs. 17,7
 assert.deepEqual(s.admin.t.invoice_shares.map((x) => [x.channel, x.status, x.to_addr, x.sent_by]), [['email', 'SENT', 'asha@foods.test', 'acc'], ['whatsapp', 'SENT', '9876500001', 'acc']])
 assert.equal(s.admin.t.invoice_shares[1].message_id, 'ik-msg-1')
 assert.ok(s.admin.t.audit_log.some((x) => x.action === 'INVOICE_SENT'))
+res = await sendInvoice(env(KEY), 'Bearer x', body(), { clients: s.clients, deliverEmail, fetchImpl: ik.fetchImpl, now: now + 30_000 })
+assert.equal(res.status, 409, 'the same invoice to the same person again within 2 minutes (double click) is refused')
+assert.equal(s.admin.t.invoice_shares.length, 2, 'nothing more logged')
+res = await sendInvoice(env(KEY), 'Bearer x', body({ email: undefined }), { clients: s.clients, deliverEmail, fetchImpl: ik.fetchImpl, now: now + 3 * 60_000 })
+assert.equal(res.body.whatsapp.status, 'SENT', 'a deliberate resend later goes through')
 // no WhatsApp template: nothing uploaded, said honestly
 s = setup()
 s.admin.t.app_settings[0].value = {}

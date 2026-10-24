@@ -1,7 +1,7 @@
 import {
   BarChart3, BellRing, BookOpenCheck, Briefcase, CalendarDays, Cloud, ClipboardCheck, Coffee, FileText, Package, FolderKanban, Images, IndianRupee,
   BookMarked, KeyRound, Megaphone, MessagesSquare, Phone, Settings, ShieldCheck, Sparkles, UserCheck, UserCog, UserPlus, Users, UsersRound,
-  CalendarCheck2, Network, ScrollText, Wallet, Receipt, Landmark, Trophy, SlidersHorizontal, Gauge, KeySquare, DatabaseBackup, DatabaseZap, MailPlus, ClipboardList, FilePen, Inbox, Undo2, BadgeCheck, Layers, FileSignature, Settings2, type LucideIcon,
+  CalendarCheck2, Network, ScrollText, Wallet, Receipt, Landmark, Trophy, SlidersHorizontal, Gauge, KeySquare, DatabaseBackup, DatabaseZap, MailPlus, ClipboardList, FilePen, Inbox, Undo2, BadgeCheck, BadgePercent, Layers, FileSignature, Settings2, type LucideIcon,
 } from 'lucide-react'
 import type { Perm, User } from './types'
 import type { Tone } from './workflow'
@@ -39,6 +39,7 @@ export const MODULES: ModuleDef[] = [
   { key: 'broadcasts', path: '/broadcasts', label: 'Broadcasts', desc: 'Company updates with acknowledgement', icon: Megaphone, tone: 'red', perms: ['broadcasts.view', 'broadcasts.manage'], group: 'Content' },
   { key: 'billing', path: '/billing', label: 'Invoice / Bill', desc: 'GST invoices, proforma and receivables', icon: IndianRupee, tone: 'amber', perms: ['billing.own', 'billing.create', 'billing.manage'], group: 'Finance' },
   { key: 'refunds', path: '/refunds', label: 'Refunds', desc: 'Refund entries — paid back to the client or not', icon: Undo2, tone: 'red', perms: ['refunds.manage'], group: 'Finance' },
+  { key: 'commission', path: '/commission', label: 'Commission', desc: 'CA / DSA commission — owed and paid, with PDF export', icon: BadgePercent, tone: 'violet', perms: ['bookings.accounts'], group: 'Finance' },
   { key: 'attendance', path: '/attendance', label: 'Attendance Board', desc: 'Live day status and history', icon: UserCheck, tone: 'green', perms: [], group: 'People' },
   { key: 'leave', path: '/leave', label: 'Leave', desc: 'Request my leave, approve requests', icon: CalendarCheck2, tone: 'violet', perms: [], group: 'People' },
   { key: 'employees', path: '/employees', label: 'Employee Details', desc: 'Directory, profiles and teams', icon: UsersRound, tone: 'cyan', perms: ['employees.view', 'employees.manage', 'access.manage'], group: 'People' },

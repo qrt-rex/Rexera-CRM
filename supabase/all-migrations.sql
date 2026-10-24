@@ -2480,3 +2480,17 @@ alter table candidate_applications add column if not exists candidate_type text 
 alter table candidate_applications add column if not exists current_ctc text check (current_ctc is null or length(current_ctc) <= 60);
 alter table candidate_applications add column if not exists interview_at text check (interview_at is null or interview_at ~ '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$');
 create index if not exists candidate_applications_interview_idx on candidate_applications(interview_at);
+
+-- ##################################################################### 20261024040000_realtime_all_tables.sql
+-- =====================================================================================================
+-- Rexera CRM · live updates for every table: each open CRM screen gets other people's changes at once (row-level
+-- security still decides who sees what). Adds any table not yet in the realtime publication. Safe to run more than once.
+-- =====================================================================================================
+do $$ declare t text; begin
+  if not exists (select 1 from pg_publication where pubname = 'supabase_realtime') then create publication supabase_realtime; end if;
+  for t in select tablename from pg_tables where schemaname = 'public' and tablename not in ('login_attempts', 'reminder_log') loop
+    if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t) then
+      execute format('alter publication supabase_realtime add table public.%I', t);
+    end if;
+  end loop;
+end $$;

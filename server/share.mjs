@@ -3,7 +3,7 @@
 // checked and row-level security decides what they may send — an invoice they can't open can't be sent.
 import { randomBytes } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
-import { formOpen, sniffType } from '../supabase/form-rules.mjs'
+import { formOpen, normMobile, sniffType } from '../supabase/form-rules.mjs'
 import { istToday, WHATSAPP_FORM_VARS, WHATSAPP_INVOICE_VARS, templateValues, workflowSettings } from '../supabase/workflow-rules.mjs'
 import { sendTemplate, welcomeWhatsapp, whatsappProblem } from './whatsapp.mjs'
 
@@ -58,6 +58,12 @@ export async function sendInvoice(env, authorization, raw, { clients, deliverEma
   if (!pdf.length || sniffType(pdf) !== 'application/pdf') return no(422, 'The invoice PDF is missing or damaged — try again.')
   if (pdf.length > MAX_PDF) return no(413, 'The invoice PDF is larger than 5 MB.')
   const fileName = `${String(p.fileName || inv.number).replace(/\.pdf$/i, '').replace(/[^\w.-]+/g, '-').slice(0, 80) || 'invoice'}.pdf`
+  // a double click (or a second screen) must not send the same invoice to the same person twice
+  const { data: sent } = await admin.from('invoice_shares').select('channel, to_addr, status, sent_at').eq('invoice_id', inv.id)
+  const twice = (channel, to) => (sent ?? []).some((s) => s.channel === channel && s.status === 'SENT' && String(s.to_addr).toLowerCase() === String(to ?? '').trim().toLowerCase() && now - new Date(s.sent_at).getTime() < 2 * 60_000)
+  if ((p.email && twice('email', p.email.to)) || (p.whatsapp && twice('whatsapp', normMobile(p.whatsapp.phone) || p.whatsapp.phone))) {
+    return no(409, 'This invoice was sent to the same recipient a moment ago — check the “Sent to the client” list before sending again.')
+  }
   const at = new Date(now).toISOString(), out = {}
 
   if (p.email) {

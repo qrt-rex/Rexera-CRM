@@ -178,6 +178,9 @@ export interface AdminWorkItem {
   ref?: string
   assignedBy?: string
   assignedAt?: string
+  /** when it was last marked Submitted, and by whom */
+  submittedAt?: string
+  submittedBy?: string
   due?: string
   updatedAt: string
   updatedBy: string
@@ -200,6 +203,8 @@ export interface WorkflowSettings {
   schemeAlertRoles: Role[]
   /** shown to clients in the welcome message */
   opsContact: { name: string; phone: string; email: string }
+  /** document types each Admin may handle and upload (user id → stages); a person not listed may do all five */
+  adminStageAccess?: Record<string, AdminStageId[]>
   /** Interakt template names (approved by Meta); empty = WhatsApp not set up for that message */
   whatsapp: { welcomeTemplate: string; invoiceTemplate: string; formTemplate: string; language: string }
 }
@@ -350,7 +355,11 @@ export interface Booking {
   /** Single / Multiple / Combo (older entries: worked out from the services and combo) */
   bookingType?: BookingType
   /** commission to the CA / DSA who brought the client (Accounts, optional): 5–30 % */
-  commission?: { to: 'CA' | 'DSA'; name: string; pct: number; amount: number; by: string; at: string }
+  commission?: {
+    to: 'CA' | 'DSA'; name: string; pct: number; amount: number; by: string; at: string
+    /** paid out to the CA / DSA (Accounts): the amount actually paid is kept */
+    status?: 'PENDING' | 'PAID'; paidOn?: string; paidAmount?: number; mode?: string; ref?: string; paidBy?: string
+  }
   /** money paid back to the client (Accounts only) */
   refunds?: Refund[]
   /** automatic welcome message after Legal approval (email + WhatsApp) */
@@ -443,7 +452,11 @@ export interface SalesKitItem {
 }
 
 /** Company branch: invoices show its address and GSTIN. */
-export interface Branch { id: string; name: string; /** short code shown on dashboards, e.g. AMD-A */ code?: string; address: string; city: string; state: string; pin: string; gstin: string; phone: string; email: string }
+export interface Branch {
+  id: string; name: string; /** short code shown on dashboards, e.g. AMD-A */ code?: string; address: string; city: string; state: string; pin: string; gstin: string; phone: string; email: string
+  /** bank details printed on its invoices, e.g. "HDFC Bank · A/c 5020… · IFSC HDFC0001234" (nothing printed when empty) */
+  bank?: string
+}
 
 export interface Scheme {
   id: string; title: string; category: string; summary: string; benefit: string; eligibility: string; active: boolean; createdAt: string; by: string

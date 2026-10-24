@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import {
   AlertTriangle, BadgeCheck, BarChart3, Briefcase, CalendarCheck2, CheckCircle2, ClipboardCheck, FileSearch, FileText, IndianRupee,
-  PauseCircle, Scale, UserCheck, UserCog, Wallet, BookOpenCheck,
+  PauseCircle, Scale, UserCheck, UserCog, Wallet, BookOpenCheck, Undo2, BadgePercent,
 } from 'lucide-react'
 import { useDb } from '../../lib/store'
 import { useMe } from '../../lib/auth'
@@ -28,6 +28,8 @@ export function AccountsDashboard() {
   const month = collections(db, salesIds, monthStart())
   const totals = pipelineTotals(db)
   const rev = revenueByMonth(db)
+  const refundsPending = db.bookings.reduce((n, b) => n + (b.refunds ?? []).filter((r) => r.status === 'PENDING').length, 0)
+  const commissionsPending = db.bookings.filter((b) => b.commission && b.commission.status !== 'PAID').length
 
   return (
     <div>
@@ -42,6 +44,8 @@ export function AccountsDashboard() {
         <Tile to="/bookings" icon={Briefcase} label="CRM Entries" desc="View and edit every entry, payments & deductions" tone="violet" />
         <Tile to="/approvals" icon={BadgeCheck} label="Client files" desc="Approve, reject or put on hold" tone="amber" badge={waiting.length} highlight={waiting.length > 0} />
         <Tile to="/billing" icon={IndianRupee} label="Invoice / Bill" desc="GST invoices & receivables" tone="green" />
+        <Tile to="/refunds" icon={Undo2} label="Refunds" desc="Paid back to the client or not" tone="red" badge={refundsPending} />
+        <Tile to="/commission" icon={BadgePercent} label="Commission" desc="CA / DSA commission — owed and paid" tone="violet" badge={commissionsPending} />
         <Tile to="/reports" icon={BarChart3} label="Reports" desc="Collections, outstanding, exports" tone="navy" />
         <Tile to="/leave?new=1" icon={CalendarCheck2} label="Request my leave" tone="violet" />
         <Tile to="/attendance" icon={UserCheck} label="Attendance Board" tone="green" />
