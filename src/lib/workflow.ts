@@ -137,7 +137,10 @@ export const KYC_CATEGORIES = ['KYC', 'Aadhaar card', 'Company PAN card', 'Passp
 export const DOC_CATEGORIES = [
   ...DOC_FORM.map((d) => d.cat),
   'CRM', 'Quotation (QT)', 'Agreement', 'Undertaking', 'Payment receipt', 'F.R (Financial report)', 'D.P.R (Detailed project report)', 'KYC', 'Company documents',
-  'Government certificates', 'Financial', 'Other',
+  'Government certificates', 'Financial', 'Submission',
+  // shared with the client on the website portal from the file's "Client portal" tab
+  'Progress report',
+  'Other',
 ]
 
 /** Best guess of the document type from its title / file name (the person can change it). */

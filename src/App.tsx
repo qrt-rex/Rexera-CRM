@@ -21,6 +21,7 @@ const BookingDetail = lazy(() => import('./pages/modules/BookingDetail'))
 const Approvals = lazy(() => import('./pages/modules/Approvals'))
 const WorkBoard = lazy(() => import('./pages/modules/WorkBoard'))
 const Documents = lazy(() => import('./pages/modules/Documents'))
+const PortalClients = lazy(() => import('./pages/modules/PortalClients'))
 const Schemes = lazy(() => import('./pages/modules/Schemes'))
 const SalesKit = lazy(() => import('./pages/modules/SalesKit'))
 const Content = lazy(() => import('./pages/modules/Content'))
@@ -158,6 +159,7 @@ export default function App() {
               <Route path="/approvals" element={<Guard m="approvals"><S><Approvals /></S></Guard>} />
               <Route path="/work" element={<Guard m="work"><S><WorkBoard /></S></Guard>} />
               <Route path="/documents" element={<Guard m="documents"><S><Documents /></S></Guard>} />
+            <Route path="/portal-clients" element={<Guard m="portal-clients"><S><PortalClients /></S></Guard>} />
               <Route path="/schemes" element={<Guard m="schemes"><S><Schemes /></S></Guard>} />
               <Route path="/sales-kit" element={<Guard m="sales-kit"><S><SalesKit /></S></Guard>} />
               <Route path="/content" element={<Guard m="content"><S><Content /></S></Guard>} />

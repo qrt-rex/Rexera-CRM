@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   Archive, ArrowLeft, Building2, Layers, Check, CheckCircle2, ChevronRight, CircleDot, Download, FileText, FolderKanban, History, IndianRupee, ListTodo,
-  MessageSquare, Pencil, Plus, Receipt, Send, ShieldCheck, Trash2, Upload, X, Lock, Mail, Gift, Percent, Undo2, Workflow,
+  MessageSquare, Pencil, Plus, Receipt, Send, ShieldCheck, Trash2, Upload, X, Lock, Mail, Gift, Percent, Undo2, Workflow, Globe,
 } from 'lucide-react'
 import { AdminChecklist, FollowUpCard, WelcomeCard } from '../../components/WorkflowPanels'
 import { ClientEmailComposer } from '../../components/ClientEmail'
@@ -21,6 +21,7 @@ import { DOC_TYPES } from '../../lib/files'
 import { FileField } from '../../components/FileField'
 import { DocUploader, type PendingDoc } from '../../components/DocUploader'
 import { DocReview } from '../../components/DocReview'
+import { ClientPortalPanel } from '../../components/ClientPortalPanel'
 import { StageControls, StageText } from '../../components/StageControls'
 import { FileLink } from '../../components/FileField'
 import {
@@ -29,7 +30,7 @@ import {
 import { canSee, moduleByKey } from '../../lib/modules'
 import { BookingStatusBadge, ChainStepper, DeadlineBadge, DecisionButtons, PriorityBadge, StageTrack } from '../../components/booking'
 
-type Tab = 'overview' | 'workflow' | 'processing' | 'documents' | 'timeline' | 'legacy'
+type Tab = 'overview' | 'workflow' | 'processing' | 'documents' | 'portal' | 'timeline' | 'legacy'
 
 export default function BookingDetail() {
   const { id } = useParams()
@@ -40,7 +41,7 @@ export default function BookingDetail() {
   const nav = useNavigate()
   const [params] = useSearchParams()
   // a notification can open a tab directly (/bookings/<id>?tab=workflow)
-  const [tab, setTab] = useState<Tab>(() => (['workflow', 'processing', 'documents', 'timeline'].includes(params.get('tab') ?? '') ? params.get('tab') as Tab : 'overview'))
+  const [tab, setTab] = useState<Tab>(() => (['workflow', 'processing', 'documents', 'portal', 'timeline'].includes(params.get('tab') ?? '') ? params.get('tab') as Tab : 'overview'))
   const [mail, setMail] = useState(false)
   const b = visibleBookings(db, me).find((x) => x.id === id)
   if (!b) return <Card><EmptyState icon={FileText} title="CRM entry not found" text="It doesn't exist or isn't visible to you." action={<Link to="/bookings"><Button>All CRM entries</Button></Link>} /></Card>
@@ -88,7 +89,7 @@ export default function BookingDetail() {
         { id: 'overview', label: 'Overview', icon: Building2 },
         ...(b.welcome || b.followUp || b.adminWork || canForwardAdminStages(db, me, b) ? [{ id: 'workflow' as const, label: 'Workflow', icon: Workflow }] : []),
         { id: 'processing', label: 'Processing', icon: FolderKanban, count: b.tasks.filter((t) => !t.done).length },
-        { id: 'documents', label: 'Documents', icon: FileText, count: b.documents.length }, { id: 'timeline', label: 'Timeline', icon: History, count: b.comments.length + b.approvals.length + (b.clientEmails?.length ?? 0) },
+        { id: 'documents', label: 'Documents', icon: FileText, count: b.documents.length }, { id: 'portal', label: 'Client portal', icon: Globe }, { id: 'timeline', label: 'Timeline', icon: History, count: b.comments.length + b.approvals.length + (b.clientEmails?.length ?? 0) },
         ...(b.legacy ? [{ id: 'legacy' as const, label: 'Old CRM record', icon: Archive }] : []),
       ]} />
       {tab === 'overview' && <Overview id={b.id} />}
@@ -101,6 +102,7 @@ export default function BookingDetail() {
       )}
       {tab === 'processing' && <Processing id={b.id} />}
       {tab === 'documents' && <Documents id={b.id} />}
+      {tab === 'portal' && <ClientPortalPanel b={b} />}
       {tab === 'timeline' && <Timeline id={b.id} />}
       {tab === 'legacy' && <LegacyRecord id={b.id} />}
       {mail && <ClientEmailComposer b={b} onClose={() => setMail(false)} />}
