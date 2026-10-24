@@ -38,6 +38,8 @@ const SPECS: Spec[] = [
     { prop: 'clientEmails', table: 'booking_client_emails', fk: 'booking_id', mode: 'id', order: ['sent_at', false] },
     { prop: 'tasks', table: 'booking_tasks', fk: 'booking_id', mode: 'id', order: ['created_at', true] },
     { prop: 'refunds', table: 'booking_refunds', fk: 'booking_id', mode: 'id', order: ['created_at', true] },
+    // files the client uploaded in the portal: written by the server only, the CRM reads them
+    { prop: 'clientUploads', table: 'client_doc_uploads', fk: 'booking_id', mode: 'id', order: ['at', true] },
   ] },
   { key: 'invoices', table: 'invoices', order: ['issued_on', false], children: [
     { prop: 'items', table: 'invoice_items', fk: 'invoice_id', mode: 'replace', order: ['position', true] },
@@ -78,7 +80,14 @@ const SPECS: Spec[] = [
   { key: 'expenses', table: 'company_expenses', order: ['created_at', false] },
   { key: 'docForms', table: 'doc_forms', order: ['created_at', false] },
   { key: 'salesKit', table: 'sales_kit', order: ['position', true] },
+  { key: 'siteContent', table: 'site_content', idProp: 'key', idCol: 'key', order: ['key', true] },
+  { key: 'siteHistory', table: 'site_content_history', order: ['published_at', false], limit: 300 },
+  // written by the server only (each website form submission); the CRM reads it
+  { key: 'webLeadLog', table: 'website_lead_log', order: ['at', false], limit: 500 },
   { key: 'formSubmissions', table: 'doc_form_submissions', order: ['submitted_at', false] },
+  // client portal accounts and their activity: written by the server only (/api/portal-admin, /api/portal)
+  { key: 'clientAccounts', table: 'client_accounts', order: ['invited_at', false] },
+  { key: 'clientActivity', table: 'client_activity', order: ['at', false], limit: 2000 },
 ]
 /** Tables that aren't one array of the document. The audit log loads its newest 1000 entries (the app keeps 1000). */
 const OTHER_TABLES: [string, [string, boolean], number?][] = [

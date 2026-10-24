@@ -99,6 +99,8 @@ export const PERM_GROUPS: { group: string; perms: { id: Perm; label: string }[] 
       { id: 'reports.view', label: 'Reports & analytics' },
       { id: 'reports.export', label: 'Export data (CSV)' },
       { id: 'access.manage', label: 'Roles, users & permissions' },
+      { id: 'website.manage', label: 'Website content, publishing & website leads (Super Admin)' },
+      { id: 'portal.manage', label: 'Client portal accounts: invite, link, deactivate (Super Admin)' },
       { id: 'audit.view', label: 'Activity log' },
     ],
   },
@@ -133,6 +135,9 @@ export const DEFAULT_ROLE_PERMS: Record<Role, Perm[]> = {
 /** Permissions a role may never hold, whatever the matrix or per-user grants say. */
 export const RESERVED: Partial<Record<Perm, Role[]>> = {
   'access.manage': ['superadmin'],
+  // the live website and client portal accounts: Super Admin only
+  'website.manage': ['superadmin'],
+  'portal.manage': ['superadmin'],
   'billing.manage': ['superadmin', 'accounts'],
   'refunds.manage': ['superadmin', 'accounts'],
   // the CRM Leads page (lead source, uploads, website leads, auto-assign) is the Super Admin's; others work leads in the Dialer

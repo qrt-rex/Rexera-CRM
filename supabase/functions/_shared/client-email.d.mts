@@ -16,4 +16,4 @@ export interface ClientEmailRequest {
 }
 export declare const CLIENT_EMAIL_LIMITS: { subject: number; message: number; details: number; cc: number; steps: number }
 export declare function checkClientEmail(p: unknown): string | null
-export declare function renderClientEmail(p: ClientEmailRequest): { html: string; text: string }
+export declare function renderClientEmail(p: ClientEmailRequest, extra?: { button?: { label: string; url: string } }): { html: string; text: string }

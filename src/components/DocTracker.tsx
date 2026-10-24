@@ -5,9 +5,9 @@ import type { AdminStageId, AdminWorkItem, BDoc, Booking } from '../lib/types'
 import { useDb } from '../lib/store'
 import { useMe } from '../lib/auth'
 import { stageFiles, userName, usersWithRole, visibleBookings } from '../lib/actions'
-import { ADMIN_DONE, ADMIN_STAGES, ADMIN_WORK_STATUSES, adminStatusLabel } from '../../supabase/workflow-rules.mjs'
+import { ADMIN_DONE, ADMIN_STAGES, ADMIN_WORK_STATUSES, adminStatusLabel, workflowSettings } from '../../supabase/workflow-rules.mjs'
 import { downloadCsv, fmtDate, fmtDateTime, today, ymd } from '../lib/format'
-import { Badge, Button, Card, CardHeader, cx, EmptyState, Input, SearchBox, Table, Td, Th } from './ui'
+import { Badge, Button, Card, CardHeader, cx, EmptyState, Input, SearchBox, Stat, Table, Td, Th } from './ui'
 import { FileLink } from './FileField'
 
 const tone = (s: AdminWorkItem['status']) => ADMIN_WORK_STATUSES.find((x) => x.id === s)!.tone
@@ -49,17 +49,30 @@ export function DocTracker() {
     return !q || `${r.b.companyName} ${r.b.bookingId} ${userName(db, r.person)} ${its.map((w) => w.ref ?? '').join(' ')}`.toLowerCase().includes(q.toLowerCase())
   }).sort((a, b) => userName(db, a.person).localeCompare(userName(db, b.person)) || b.b.updatedAt.localeCompare(a.b.updatedAt))
 
-  // per-person summary over what is shown
-  const people = [...new Set(list.map((r) => r.person))]
-  const summary = people.map((p) => {
-    const mine = list.filter((r) => r.person === p)
-    return {
-      p, files: mine.length,
-      stages: ADMIN_STAGES.map((s) => { const its = mine.filter((r) => r.stages.includes(s.id)).map((r) => r.b.adminWork![s.id]!).filter((w) => w.status !== 'NOT_NEEDED'); return { total: its.length, done: its.filter((w) => ADMIN_DONE.includes(w.status)).length } }),
-      uploaded: mine.reduce((n, r) => n + r.stages.reduce((m, s) => m + stageFiles(r.b, s).length, 0), 0),
-      submitted: mine.reduce((n, r) => n + items(r).filter((w) => w.submittedAt).length, 0),
-    }
-  })
+  // ---------------------------------------------------------------- admin-wise counts (every Admin, from the CRM entries)
+  // assigned = a document stage given to the Admin (not "not needed"); uploaded = it has a file; completed = approved /
+  // completed; pending = assigned − completed
+  const books = useMemo(() => visibleBookings(db, me).filter((b) => b.adminWork), [db, me])
+  const access = workflowSettings(db.settings.workflow).adminStageAccess ?? {}
+  const adminRows = useMemo(() => usersWithRole(db, 'admin').map((u) => {
+    const per = ADMIN_STAGES.map((s) => {
+      const its = books.map((b) => ({ b, w: b.adminWork![s.id] })).filter((x) => x.w?.assignee === u.id && x.w.status !== 'NOT_NEEDED')
+      return { allowed: !access[u.id] || access[u.id]!.includes(s.id), assigned: its.length, uploaded: its.filter((x) => stageFiles(x.b, s.id).length).length, done: its.filter((x) => ADMIN_DONE.includes(x.w!.status)).length }
+    })
+    const sum = (k: 'assigned' | 'uploaded' | 'done') => per.reduce((n, x) => n + x[k], 0)
+    return { u, per, assigned: sum('assigned'), uploaded: sum('uploaded'), completed: sum('done'), pending: sum('assigned') - sum('done'), types: per.filter((x) => x.allowed).length }
+  }), [db, books, access])
+  const [aq, setAq] = useState('')
+  const [docType, setDocType] = useState<'' | AdminStageId>('')
+  const [onlyPending, setOnlyPending] = useState(false)
+  const [sortBy, setSortBy] = useState<'name' | 'assigned' | 'uploaded' | 'pending' | 'completed'>('pending')
+  const adminList = adminRows
+    .filter((r) => !aq || `${r.u.name} ${r.u.email}`.toLowerCase().includes(aq.toLowerCase()))
+    .filter((r) => !docType || r.per[ADMIN_STAGES.findIndex((s) => s.id === docType)]!.allowed)
+    .filter((r) => !onlyPending || r.pending > 0)
+    .sort((a, b) => (sortBy === 'name' ? a.u.name.localeCompare(b.u.name) : b[sortBy] - a[sortBy] || a.u.name.localeCompare(b.u.name)))
+  const tot = (k: 'assigned' | 'uploaded' | 'completed' | 'pending') => adminList.reduce((n, r) => n + r[k], 0)
+  const totType = (i: number) => adminList.reduce((n, r) => n + r.per[i]!.assigned, 0)
 
   const csv = () => downloadCsv(`admin-documents-${today()}.csv`, list.flatMap((r) => r.stages.map((s) => {
     const w = r.b.adminWork![s]!, docs = stageFiles(r.b, s)
@@ -72,19 +85,45 @@ export function DocTracker() {
 
   return (
     <div className="space-y-6">
+      {/* report cards: totals over the Admins listed below */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+        <Stat label="Total documents assigned" value={tot('assigned')} icon={FileStack} tone="navy" />
+        {ADMIN_STAGES.map((s, i) => <Stat key={s.id} label={s.short} value={totType(i)} icon={FileStack} tone="violet" sub="assigned" />)}
+        <Stat label="Files uploaded" value={tot('uploaded')} icon={FileStack} tone="blue" />
+        <Stat label="Pending" value={tot('pending')} icon={FileStack} tone="amber" />
+        <Stat label="Submitted / completed" value={tot('completed')} icon={FileStack} tone="green" />
+      </div>
+
       <Card className="overflow-hidden">
-        <CardHeader title="Admin documents by person" subtitle="Pitch Deck, Finance, DPR, Certification and Submission — done / assigned, files uploaded, stages submitted" icon={FileStack} />
-        {!summary.length ? <EmptyState icon={FileStack} title="No Admin documents yet" text="They appear once the Operation team assigns or forwards the Admin stages of a file." /> : (
+        <CardHeader title="Admin-wise documents" subtitle="Each cell: done / assigned · files uploaded — ✓ the document is assigned to this Admin, — it isn't" icon={FileStack} />
+        <div className="flex flex-wrap items-center gap-3 border-b border-line p-4">
+          <SearchBox value={aq} onChange={setAq} placeholder="Search Admin…" className="min-w-52 flex-1" />
+          <select value={docType} onChange={(e) => setDocType(e.target.value as '' | AdminStageId)} aria-label="Document" className="h-10 rounded-xl border border-line bg-card px-3 text-sm">
+            <option value="">Any document</option>{ADMIN_STAGES.map((s) => <option key={s.id} value={s.id}>Assigned {s.short}</option>)}
+          </select>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={onlyPending} onChange={(e) => setOnlyPending(e.target.checked)} className="size-4 accent-[#2E3A8C]" />With pending only</label>
+          <select value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)} aria-label="Sort" className="h-10 rounded-xl border border-line bg-card px-3 text-sm">
+            <option value="pending">Most pending</option><option value="assigned">Most assigned</option><option value="uploaded">Most uploaded</option><option value="completed">Most completed</option><option value="name">Name</option>
+          </select>
+        </div>
+        {!adminList.length ? <EmptyState icon={FileStack} title="No Admins match" text="Try another search or filter." /> : (
           <Table>
-            <thead><tr><Th>Person</Th><Th className="text-right">Files</Th>{ADMIN_STAGES.map((s) => <Th key={s.id} className="text-center">{s.short}</Th>)}<Th className="text-right">Files uploaded</Th><Th className="text-right">Submitted</Th></tr></thead>
+            <thead><tr><Th>Admin</Th>{ADMIN_STAGES.map((s) => <Th key={s.id} className="text-center">{s.short}</Th>)}<Th className="text-right">Total assigned</Th><Th className="text-right">Uploaded</Th><Th className="text-right">Pending</Th><Th className="text-right">Completed</Th></tr></thead>
             <tbody>
-              {summary.map((x) => (
-                <tr key={x.p || '-'} className="cursor-pointer hover:bg-card2/60" onClick={() => setPerson(x.p || '-')}>
-                  <Td><b>{x.p ? userName(db, x.p) : 'Not assigned'}</b>{x.p && <span className="block text-[11px] text-mute">{db.users.find((u) => u.id === x.p)?.email}</span>}</Td>
-                  <Td className="text-right tabular-nums">{x.files}</Td>
-                  {x.stages.map((c, i) => <Td key={i} className="text-center tabular-nums">{c.total ? <span className={cx(c.done === c.total ? 'font-bold text-ok' : '')}>{c.done}/{c.total}</span> : <span className="text-mute">—</span>}</Td>)}
-                  <Td className="text-right tabular-nums">{x.uploaded}</Td>
-                  <Td className="text-right tabular-nums">{x.submitted}</Td>
+              {adminList.map((r) => (
+                <tr key={r.u.id} className="cursor-pointer hover:bg-card2/60" onClick={() => setPerson(r.u.id)} title="Show this Admin's files below">
+                  <Td><b>{r.u.name}</b><span className="block text-[11px] text-mute">{r.types} of 5 documents assigned</span></Td>
+                  {r.per.map((c, i) => (
+                    <Td key={i} className="text-center text-xs tabular-nums">
+                      <span className={cx('block font-bold', c.allowed ? 'text-ok' : 'text-mute')}>{c.allowed ? '✓' : '—'}</span>
+                      {c.assigned ? <span className={cx(c.done === c.assigned && 'font-bold text-ok')}>{c.done}/{c.assigned}</span> : <span className="text-mute">0</span>}
+                      {c.assigned > 0 && <span className="block text-[10px] text-mute">{c.uploaded} uploaded</span>}
+                    </Td>
+                  ))}
+                  <Td className="text-right font-bold tabular-nums">{r.assigned}</Td>
+                  <Td className="text-right tabular-nums">{r.uploaded}</Td>
+                  <Td className={cx('text-right tabular-nums', r.pending > 0 && 'font-bold text-warn')}>{r.pending}</Td>
+                  <Td className="text-right tabular-nums text-ok">{r.completed}</Td>
                 </tr>
               ))}
             </tbody>

@@ -68,6 +68,7 @@ export function OperationsDashboard() {
         <Tile to="/documents" icon={FileText} label="Document Management" desc="Upload & verify client documents" tone="blue" badge={pendingDocs} />
         <Tile to="/work" icon={ClipboardList} label="Tasks & Follow-ups" desc="Kanban of your files and stages" tone="green" badge={openTasks} />
         <Tile to="/reports" icon={BookOpenCheck} label="Reports" desc="Stage-wise and turnaround" tone="navy" />
+        <Tile to="/reports?tab=docs" icon={ClipboardCheck} label="Admin documents" desc="Admin-wise documents: assigned, uploaded, pending, completed" tone="violet" />
         <Tile to="/approvals" icon={Send} label="Assign to Admin" desc="Hand ready files to Admin" tone="orange" badge={active.length} />
         <Tile to="/content" icon={Images} label="Flyer, post edit" desc="Create marketing material" tone="pink" />
         <Tile to="/employees" icon={UsersRound} label="Employee details" desc="Directory and teams" tone="cyan" />

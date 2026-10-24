@@ -1,5 +1,5 @@
 import type {
-  AdminStageId, AdminWorkStatus, Booking, BookingStatus, BookingType, BDoc, Delivery, Service, WorkflowSettings, Branch, BreakPolicy, CallOutcome, ClientEmailLog, Shift, CandidateApplication, CandidateForm, DaySession, DB, EventItem, FileRef, Invoice, InvoiceItem, Lead, LeaveType, Perm, Post, Role, SalesKitItem, Scheme, User,
+  AdminStageId, AdminWorkStatus, Booking, BookingStatus, BookingType, BDoc, Delivery, Service, WorkflowSettings, Branch, BreakPolicy, CallOutcome, ClientEmailLog, Shift, CandidateApplication, CandidateForm, DaySession, DB, EventItem, FileRef, Invoice, InvoiceItem, Lead, LeaveType, Milestone, Perm, Post, Role, SalesKitItem, Scheme, User,
 } from './types'
 import { effectivePerms, isMaster, MASTER_ROLES, rolesOf, roleLabel } from './rbac'
 import { clearCloudDb, getDb, mutate, reloadFromCloud, saved } from './store'
@@ -10,6 +10,8 @@ import {
   ACTIVE_FILE_STATUSES, ADMIN_DONE, ADMIN_STAGES, ADMIN_WORK_STATUSES, addDays as addDaysYmd, adminStatusLabel, CLOSED_FILE_STATUSES, followUpDue, istToday, nextAfter as nextAfterYmd, precheckDue, precheckPending, schemeAlertDue, workflowSettings,
 } from '../../supabase/workflow-rules.mjs'
 import { applicationProblems, formPositions, JOB_POSITIONS } from '../../supabase/form-rules.mjs'
+import { docStatus, reviewSteps } from '../../supabase/portal-rules.mjs'
+import { serverPost } from './serverApi'
 import { hashPassword } from './crypto'
 import { CALL_OUTCOMES, FINAL_STAGE, hasLegalDoc, LEAD_STATUS, OPEN_LEAD, STAGE_OUTCOMES, STAGES, stageLabel } from './workflow'
 import { fireAutomation } from './email'
@@ -2597,3 +2599,163 @@ export function updateSettings(me: User, patch: Partial<DB['settings']>) {
   assert(isMaster(me), 'Only Super Admin or IT Support can change settings.')
   mutate((d) => { Object.assign(d.settings, patch); audit(d, me.id, 'SETTINGS', JSON.stringify(patch)) })
 }
+
+// ============================================================ client portal: documents asked from the client, milestones, updates
+/** The entry's Operation team member, portal / workflow managers and Super Admin / IT run its client portal side. */
+export const canRunClientPortal = (me: User, b: Booking) => isMaster(me) || has(me, 'portal.manage', 'workflow.manage') || b.opsMemberId === me.id
+/** What one requested document's status is now (supabase/portal-rules.mjs), or null when the client isn't asked for it. */
+export const clientDocState = (b: Booking, cat: AdminStageId) => docStatus(b.clientDocs?.[cat], b.clientUploads, cat)
+const stageShort = (cat: AdminStageId) => ADMIN_STAGES.find((s) => s.id === cat)!.short
+
+/** Which of the five documents the client is asked for (checkboxes). Taking one off keeps its record and history. */
+export function setClientDocs(me: User, bookingId: string, picks: AdminStageId[], assignee?: string) {
+  mutate((d) => {
+    const b = findB(d, bookingId)
+    assert(canRunClientPortal(me, b), 'Only the entry’s Operation team member, Super Admin or a portal manager can change this.')
+    const at = nowIso()
+    b.clientDocs ??= {}
+    const changed: string[] = []
+    for (const s of ADMIN_STAGES) {
+      const cur = b.clientDocs[s.id], want = picks.includes(s.id)
+      if (want && !cur) {
+        b.clientDocs[s.id] = { status: 'ASSIGNED', statusAt: at, assignedAt: at, assignedBy: me.id, ...(assignee ? { assignee } : {}), history: [{ at, by: me.id, action: 'Requested from you', client: true }] }
+        changed.push(`+${s.short}`)
+      } else if (want && cur?.removed) {
+        Object.assign(cur, { removed: false, removedAt: undefined, status: 'ASSIGNED', statusAt: at, assignedAt: at, assignedBy: me.id })
+        cur.history.push({ at, by: me.id, action: 'Requested from you again', client: true })
+        changed.push(`+${s.short}`)
+      } else if (!want && cur && !cur.removed) {
+        assert(cur.status !== 'APPROVED' || isSA(me), `${s.short} is approved — only the Super Admin can take it off.`)
+        Object.assign(cur, { removed: true, removedAt: at })
+        cur.history.push({ at, by: me.id, action: 'No longer needed', client: true })
+        changed.push(`−${s.short}`)
+      }
+    }
+    if (!changed.length) return
+    b.updatedAt = at
+    audit(d, me.id, 'CLIENT_DOCS', `${b.bookingId}: ${changed.join(', ')}`)
+  })
+}
+
+/**
+ * Review steps on a document the client sent: START (submitted → under review), APPROVE / REJECT (under review),
+ * REOPEN (approved → asked again; Super Admin only). `remark` is shown to the client — required to reject.
+ */
+export function reviewClientDoc(me: User, bookingId: string, cat: AdminStageId, step: 'START' | 'APPROVE' | 'REJECT' | 'REOPEN', remark = '') {
+  remark = remark.trim()
+  mutate((d) => {
+    const b = findB(d, bookingId)
+    const w = b.clientDocs?.[cat]
+    assert(w && !w.removed, 'This document isn’t requested from the client.')
+    assert(canRunClientPortal(me, b) || w.assignee === me.id, 'Only the entry’s Operation team member, the person handling this document or Super Admin can review it.')
+    const state = clientDocState(b, cat)
+    if (step === 'REOPEN') assert(state === 'APPROVED' && isSA(me), 'Only the Super Admin can reopen an approved document.')
+    else assert(reviewSteps(state).includes(step), step === 'START' ? 'The client hasn’t uploaded a new file yet.' : 'Start the review first.')
+    assert(step !== 'REJECT' || remark.length >= 3, 'Tell the client what to change (shown to them).')
+    const at = nowIso()
+    w.status = step === 'START' ? 'UNDER_REVIEW' : step === 'APPROVE' ? 'APPROVED' : step === 'REJECT' ? 'REJECTED' : 'ASSIGNED'
+    w.statusAt = at
+    if (step === 'APPROVE' || step === 'REJECT') { w.reviewedBy = me.id; w.reviewedAt = at; w.clientRemark = remark || undefined }
+    if (step === 'REOPEN') w.clientRemark = remark || undefined
+    const action = { START: 'Review started', APPROVE: 'Approved', REJECT: 'Please upload again', REOPEN: 'Requested from you again' }[step]
+    w.history.push({ at, by: me.id, action, ...(remark ? { note: remark } : {}), client: true })
+    b.updatedAt = at
+    if (step !== 'START') notify(d, [b.opsMemberId, w.assignee].filter((x) => x !== me.id), `Client ${stageShort(cat)}: ${action.toLowerCase()}`, `${b.bookingId} · ${b.companyName}${remark ? ` — ${remark}` : ''}`, `/bookings/${b.id}`, 'info')
+    audit(d, me.id, `CLIENT_DOC_${step}`, `${b.bookingId} · ${stageShort(cat)}${remark ? `: ${remark}` : ''}`)
+  })
+}
+
+/** Staff-only details of a requested document: who handles it and an internal note (never shown to the client). */
+export function setClientDocInternal(me: User, bookingId: string, cat: AdminStageId, patch: { assignee?: string | null; internalNote?: string }) {
+  mutate((d) => {
+    const b = findB(d, bookingId)
+    const w = b.clientDocs?.[cat]
+    assert(w, 'This document isn’t requested from the client.')
+    assert(canRunClientPortal(me, b), 'Only the entry’s Operation team member, Super Admin or a portal manager can change this.')
+    const at = nowIso()
+    if (patch.assignee !== undefined && (patch.assignee || undefined) !== w.assignee) {
+      assert(!patch.assignee || d.users.some((u) => u.id === patch.assignee && u.active), 'Pick an active team member.')
+      w.assignee = patch.assignee || undefined
+      w.history.push({ at, by: me.id, action: patch.assignee ? `Handled by ${userName(d, patch.assignee)}` : 'No one handling it' })
+      if (patch.assignee && patch.assignee !== me.id) notify(d, [patch.assignee], `Client document: ${stageShort(cat)}`, `${b.bookingId} · ${b.companyName} — you review what the client sends`, `/bookings/${b.id}`, 'action')
+    }
+    if (patch.internalNote !== undefined && patch.internalNote.trim() !== (w.internalNote ?? '')) {
+      w.internalNote = patch.internalNote.trim() || undefined
+      w.history.push({ at, by: me.id, action: 'Internal note updated' })
+    }
+    b.updatedAt = at
+  })
+}
+
+/** Adds or changes a milestone (tasks included). Done milestones record when; `visible` ones show in the client portal. */
+export function saveMilestone(me: User, bookingId: string, m: Pick<Milestone, 'title' | 'status' | 'visible'> & Partial<Pick<Milestone, 'id' | 'due' | 'note' | 'tasks'>>) {
+  const title = m.title.trim()
+  assert(title.length >= 2, 'Name the milestone.')
+  assert(!m.due || /^\d{4}-\d{2}-\d{2}$/.test(m.due), 'Pick a due date.')
+  assert((m.tasks ?? []).every((t) => t.title.trim().length >= 2), 'Every task needs a name.')
+  return mutate((d) => {
+    const b = findB(d, bookingId)
+    assert(canRunClientPortal(me, b), 'Only the entry’s Operation team member, Super Admin or a portal manager can change milestones.')
+    const at = nowIso()
+    b.milestones ??= []
+    const cur = m.id ? b.milestones.find((x) => x.id === m.id) : undefined
+    const tasks = (m.tasks ?? []).map((t) => ({ ...t, id: t.id || uid('mt-'), title: t.title.trim() }))
+    const doneAt = m.status === 'DONE' ? (cur?.status === 'DONE' ? cur.doneAt : at) : undefined
+    if (cur) Object.assign(cur, { title, due: m.due || undefined, status: m.status, visible: m.visible, note: m.note?.trim() || undefined, tasks, doneAt, updatedAt: at })
+    else b.milestones.push({ id: uid('ms-'), title, due: m.due || undefined, status: m.status, visible: m.visible, note: m.note?.trim() || undefined, tasks, doneAt, createdAt: at, createdBy: me.id })
+    b.updatedAt = at
+    audit(d, me.id, cur ? 'MILESTONE_EDIT' : 'MILESTONE_ADD', `${b.bookingId}: ${title} (${m.status})`)
+    return cur?.id ?? b.milestones.at(-1)!.id
+  })
+}
+export function setMilestoneTask(me: User, bookingId: string, milestoneId: string, taskId: string, done: boolean) {
+  mutate((d) => {
+    const b = findB(d, bookingId)
+    assert(canRunClientPortal(me, b), 'Only the entry’s Operation team member, Super Admin or a portal manager can change milestones.')
+    const t = b.milestones?.find((x) => x.id === milestoneId)?.tasks?.find((x) => x.id === taskId)
+    assert(t, 'Task not found.')
+    t.done = done
+    b.updatedAt = nowIso()
+  })
+}
+export function removeMilestone(me: User, bookingId: string, milestoneId: string) {
+  mutate((d) => {
+    const b = findB(d, bookingId)
+    assert(canRunClientPortal(me, b), 'Only the entry’s Operation team member, Super Admin or a portal manager can change milestones.')
+    const m = b.milestones?.find((x) => x.id === milestoneId)
+    assert(m, 'Milestone not found.')
+    b.milestones = b.milestones!.filter((x) => x.id !== milestoneId)
+    b.updatedAt = nowIso()
+    audit(d, me.id, 'MILESTONE_REMOVE', `${b.bookingId}: ${m.title}`)
+  })
+}
+
+/** An update shown to the client in the portal (with an optional file). */
+export function publishClientUpdate(me: User, bookingId: string, u: { title: string; text: string; file?: FileRef }) {
+  const title = u.title.trim(), text = u.text.trim()
+  assert(title.length >= 3, 'Write a short title.')
+  assert(text.length >= 3 && text.length <= 4000, 'Write the update (up to 4000 characters).')
+  mutate((d) => {
+    const b = findB(d, bookingId)
+    assert(canRunClientPortal(me, b), 'Only the entry’s Operation team member, Super Admin or a portal manager can publish updates.')
+    const at = nowIso()
+    b.clientUpdates = [...(b.clientUpdates ?? []), { id: uid('cup-'), at, by: me.id, title, text, ...(u.file ? { file: u.file } : {}) }]
+    b.updatedAt = at
+    audit(d, me.id, 'CLIENT_UPDATE', `${b.bookingId}: ${title}`)
+  })
+}
+export function removeClientUpdate(me: User, bookingId: string, updateId: string) {
+  mutate((d) => {
+    const b = findB(d, bookingId)
+    assert(canRunClientPortal(me, b), 'Only the entry’s Operation team member, Super Admin or a portal manager can remove updates.')
+    const u = b.clientUpdates?.find((x) => x.id === updateId)
+    assert(u, 'Update not found.')
+    b.clientUpdates = b.clientUpdates!.filter((x) => x.id !== updateId)
+    b.updatedAt = nowIso()
+    audit(d, me.id, 'CLIENT_UPDATE_REMOVE', `${b.bookingId}: ${u.title}`)
+  })
+}
+
+/** The Super Admin's portal account actions (the live server does them: sign-in accounts, emails, sessions). */
+export const portalAdmin = (action: 'invite' | 'send-link' | 'status' | 'revoke' | 'link' | 'assign', body: Record<string, unknown>) =>
+  serverPost<{ success: boolean; message?: string; accountId?: string; emailed?: boolean; status?: string; code?: string }>(`/api/portal-admin/${action}`, body)

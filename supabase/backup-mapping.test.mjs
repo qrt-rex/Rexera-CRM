@@ -110,6 +110,19 @@ Object.assign(db.leads[0], {
   chain: [{ to: a.id, by: b.id, at, kind: 'ASSIGNED' }, { to: b.id, by: a.id, at, kind: 'FORWARDED', note: 'Gujarati speaker' }],
   history: [{ at, by: a.id, action: 'Forwarded to B', note: 'Gujarati speaker' }],
 })
+// website managed from the CRM, and the website lead log
+db.siteContent = [{ key: 'hero', draft: { title: 'New headline' }, published: { title: 'Live headline' }, updatedAt: at, updatedBy: a.id, publishedAt: at, publishedBy: a.id }, { key: 'services', draft: [{ id: 's1', title: 'Grants', active: true }], updatedAt: at, updatedBy: a.id }]
+db.siteHistory = [{ id: 'sh-1', key: 'hero', content: { title: 'Live headline' }, at, by: a.id }]
+db.webLeadLog = [{ id: 'wl-1', at, status: 'SAVED', form: 'contact', name: 'Asha', phone: '9876500001', leadId: db.leads[0].id, fields: { service: 'Seed Fund' } }, { id: 'wl-2', at, status: 'FAILED', error: 'read-only', retriedAt: at, retriedBy: a.id }]
+// client portal: documents asked from the client, their uploads, milestones, updates, accounts and activity
+Object.assign(bk, {
+  clientDocs: { DPR: { status: 'REJECTED', statusAt: at, assignedAt: at, assignedBy: a.id, assignee: b.id, clientRemark: 'Page 3 missing', internalNote: 'call first', reviewedBy: b.id, reviewedAt: at, history: [{ at, by: a.id, action: 'Requested from you', client: true }, { at, by: b.id, action: 'Internal note updated' }] }, FINANCE: { status: 'ASSIGNED', statusAt: at, assignedAt: at, assignedBy: a.id, removed: true, removedAt: at, history: [] } },
+  clientUploads: [{ id: 'cu-1', category: 'DPR', file: { id: 'file-cu1', name: 'dpr.pdf', type: 'application/pdf', size: 9, at }, at, accountId: 'ca-1', note: 'first draft' }],
+  milestones: [{ id: 'ms-1', title: 'Kick-off', status: 'DONE', visible: true, doneAt: at, createdAt: at, createdBy: a.id, tasks: [{ id: 'mt-1', title: 'Call', done: true }] }],
+  clientUpdates: [{ id: 'cup-1', at, by: a.id, title: 'Submitted', text: 'Application submitted', file: { id: 'file-u1', name: 'ack.pdf', type: 'application/pdf', size: 4, at } }],
+})
+db.clientAccounts = [{ id: 'ca-1', authUserId: '00000000-0000-0000-0000-000000000001', email: 'client@example.com', name: 'Client', phone: '9876500001', bookingIds: [bk.id], status: 'ACTIVE', invitedAt: at, invitedBy: a.id, activatedAt: at, lastLoginAt: at, assignedTo: b.id }]
+db.clientActivity = [{ id: 'cact-1', accountId: 'ca-1', bookingId: bk.id, at, action: 'UPLOADED', detail: 'DPR: dpr.pdf' }, { id: 'cact-2', accountId: 'ca-1', at, action: 'INVITED', by: a.id }]
 check('demo data', db)
 
 const file = process.argv[2]

@@ -38,8 +38,12 @@ function blocks(message) {
 const NAVY = '#2E3A8C', ORANGE = '#F47B20', INK = '#1F2937', MUTE = '#6B7280', LINE = '#E5E7EB', SOFT = '#F5F7FB', GREEN = '#0E9F6E'
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
 
-/** { html, text } for a client email. Input: { subject, heading?, message, details?, steps?, sender, company? } */
-export function renderClientEmail(p) {
+/**
+ * { html, text } for a client email. Input: { subject, heading?, message, details?, steps?, sender, company? }.
+ * `button` ({ label, url }) is added by the server only (e.g. the client portal invite link) — never from a request.
+ */
+export function renderClientEmail(p, { button } = {}) {
+  const btn = button && /^https?:\/\//.test(button.url) ? button : null
   const company = p.company || 'Rexera'
   const heading = p.heading || p.subject
   const s = p.sender || {}
@@ -80,6 +84,8 @@ export function renderClientEmail(p) {
     <tr><td style="padding:28px 28px 8px">
       <h1 style="margin:0 0 18px;color:${NAVY};font-size:21px;line-height:1.35">${esc(heading)}</h1>
       ${body}
+      ${btn ? `<p style="margin:4px 0 22px"><a href="${esc(btn.url)}" style="display:inline-block;background:${ORANGE};color:#ffffff;font-size:15px;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:10px">${esc(btn.label)}</a></p>
+      <p style="margin:0 0 18px;color:${MUTE};font-size:12px;line-height:1.6;word-break:break-all">If the button doesn't work, copy this link into your browser:<br>${esc(btn.url)}</p>` : ''}
       ${detailsHtml}
       ${stepsHtml}
       <p style="margin:0 0 4px;color:${INK};font-size:15px">Warm regards,</p>
@@ -98,6 +104,7 @@ export function renderClientEmail(p) {
   const text = [
     heading, '',
     p.message.trim(), '',
+    ...(btn ? [`${btn.label}: ${btn.url}`, ''] : []),
     ...(details.length ? [...details.map(([k, v]) => `${k}: ${v}`), ''] : []),
     ...(steps.length ? ['Your file progress:', ...steps.map((st, i) => `${st.state === 'done' ? '[x]' : st.state === 'current' ? '[>]' : '[ ]'} ${i + 1}. ${st.label}`), ''] : []),
     'Warm regards,', s.name, [s.role, company].filter(Boolean).join(' · '), [s.phone, s.email].filter(Boolean).join(' · '),

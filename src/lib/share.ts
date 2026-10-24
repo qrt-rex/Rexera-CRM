@@ -1,24 +1,14 @@
 import type { DB, Invoice, InvoiceShare, User } from './types'
 import type { ClientEmailRequest } from '../../supabase/functions/_shared/client-email.mjs'
-import { CLOUD } from './cloud'
-import { getSupabase } from './supabase'
 import { fmtDate, inr, invoiceTotals, isEmail } from './format'
 import { invoiceFileName, invoicePdf } from './invoicePdf'
+import { serverPost } from './serverApi'
 
 /**
  * Sending to clients through the live server (server/share.mjs): the server checks this person's own sign-in, and
  * the WhatsApp key (Interakt) and the mail server's password never reach the browser. Needs the live CRM (Supabase).
  */
-async function serverPost<T>(url: string, body: unknown): Promise<T> {
-  if (!CLOUD) throw new Error('Sending to clients works on the live CRM (connected to Supabase).')
-  const { data: { session } } = await (await getSupabase()).auth.getSession()
-  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token ?? ''}` }, body: JSON.stringify(body) })
-    .catch(() => { throw new Error('The CRM server could not be reached — check the connection and try again.') })
-  if ((res.headers.get('content-type') ?? '').includes('text/html')) throw new Error('This copy of the CRM has no sending server.')
-  const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.message || `The server answered ${res.status}.`)
-  return data as T
-}
+export { serverPost }
 
 /** Asks the server to send the file's queued WhatsApp welcome now (otherwise its job does within 15 minutes). */
 export async function requestWelcomeWhatsapp(bookingId: string) {

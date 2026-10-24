@@ -1,6 +1,6 @@
 import {
   BarChart3, BellRing, BookOpenCheck, Briefcase, CalendarDays, Cloud, ClipboardCheck, Coffee, FileText, Package, FolderKanban, Images, IndianRupee,
-  BookMarked, KeyRound, Megaphone, MessagesSquare, Phone, Settings, ShieldCheck, Sparkles, UserCheck, UserCog, UserPlus, Users, UsersRound,
+  BookMarked, Globe, UserRoundCheck, KeyRound, Megaphone, MessagesSquare, Phone, Settings, ShieldCheck, Sparkles, UserCheck, UserCog, UserPlus, Users, UsersRound,
   CalendarCheck2, Network, ScrollText, Wallet, Receipt, Landmark, Trophy, SlidersHorizontal, Gauge, KeySquare, DatabaseBackup, DatabaseZap, MailPlus, ClipboardList, FilePen, Inbox, Undo2, BadgeCheck, BadgePercent, Layers, FileSignature, Settings2, type LucideIcon,
 } from 'lucide-react'
 import type { Perm, User } from './types'
@@ -30,6 +30,8 @@ export const MODULES: ModuleDef[] = [
   { key: 'ops-desk', path: '/ops-desk', label: 'Operations Dashboard', desc: 'Cases assigned by Legal: status, tasks, team, deadlines, progress', icon: UserCog, tone: 'cyan', perms: ['bookings.legal', 'bookings.process'], group: 'Client files' },
   { key: 'work', path: '/work', label: 'Client Work Board', desc: '9-stage processing kanban', icon: FolderKanban, tone: 'cyan', perms: ['bookings.process', 'bookings.admin', 'bookings.legal', 'bookings.all'], group: 'Client files' },
   { key: 'forms', path: '/forms', label: 'Document Form Builder', desc: 'Build client forms, send secure links, see responses', icon: FileSignature, tone: 'violet', perms: ['forms.manage'], group: 'Client files' },
+  { key: 'website', path: '/website', label: 'Website', desc: 'rexera.co.in content, publishing and website leads', icon: Globe, tone: 'blue', perms: ['website.manage'], group: 'Admin' },
+  { key: 'client-portal', path: '/client-portal', label: 'Client Portal', desc: 'Client logins: invite, link to CRM entries, access and activity', icon: UserRoundCheck, tone: 'green', perms: ['portal.manage'], group: 'Admin' },
   { key: 'workflow-settings', path: '/workflow-settings', label: 'Workflow Settings', desc: 'Reminder intervals, welcome templates, scheme alerts, job status', icon: Settings2, tone: 'navy', perms: ['workflow.manage'], group: 'Admin' },
   { key: 'documents', path: '/documents', label: 'Document Forms', desc: 'Collect and verify client documents', icon: FileText, tone: 'blue', perms: ['documents.forms'], group: 'Client files' },
   { key: 'services', path: '/services', label: 'Services & Combo Packages', desc: 'Prices for single, multiple and combo (3/6/9/12 months) bookings', icon: Layers, tone: 'violet', perms: ['bookings.create', 'bookings.all', 'schemes.manage', 'billing.manage'], group: 'Content' },

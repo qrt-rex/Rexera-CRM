@@ -8,7 +8,10 @@ import { checkClientEmail, renderClientEmail } from './supabase/functions/_share
 import { aiConfig, aiOverLimit, answerAi, checkAiRequest } from './server/ai.mjs'
 import { crmUser, setPassword } from './server/users.mjs'
 import { receive as receiveBlutecWebhook } from './server/blutecWebhook.mjs'
-import { receiveWebsiteLead } from './server/websiteLeads.mjs'
+import { receiveWebsiteLead, retryWebsiteLead } from './server/websiteLeads.mjs'
+import { getSiteContent } from './server/site.mjs'
+import { portalAdmin, portalClient } from './server/portal.mjs'
+import { createClient } from '@supabase/supabase-js'
 import { jobsAuthorized, runJobs } from './server/jobs.mjs'
 import { getPublicForm, submitPublicForm } from './server/forms.mjs'
 import { submitJobApplication } from './server/apply.mjs'
@@ -411,10 +414,10 @@ async function handleSendClientEmail(req, res) {
  * job's welcome retries. `attachments` = [{ filename, content (base64), contentType }] (server-made only, e.g. the
  * invoice PDF). Answers { success, message } — success only when the provider accepted it.
  */
-async function deliverClientEmail(body, attachments = []) {
+async function deliverClientEmail(body, attachments = [], extra = {}) {
   const problem = checkClientEmail(body)
   if (problem) return { success: false, message: problem }
-  const { html, text } = renderClientEmail(body)
+  const { html, text } = renderClientEmail(body, extra)
   const cc = (body.cc || []).filter(Boolean)
   const replyTo = body.replyTo || body.sender?.email || undefined
   try {
@@ -683,6 +686,51 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === '/api/website-lead' && req.method === 'POST') {
     return handleWebsiteLead(req, res)
+  }
+
+  // the website reads its published content (public, read-only)
+  if (pathname === '/api/site/content' && req.method === 'GET') {
+    try {
+      const r = await getSiteContent(getEnv, { fresh: parsedUrl.searchParams.has('fresh') })
+      res.writeHead(r.status, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=30' })
+      return res.end(JSON.stringify(r.body))
+    } catch (e) {
+      console.error(`[site content] ${e.message}`)
+      return sendJson(res, 502, { success: false, message: 'Content not available right now.' })
+    }
+  }
+
+  // Super Admin: save a failed website enquiry as a lead again
+  if (pathname === '/api/website-lead/retry' && req.method === 'POST') {
+    let body
+    try { body = await readJsonBody(req) } catch { return sendJson(res, 400, { success: false, message: 'Bad JSON' }) }
+    try {
+      const who = req.headers.authorization ? await crmUser(getEnv, req.headers.authorization).catch(() => null) : null
+      const url = getEnv('SUPABASE_URL') || getEnv('VITE_SUPABASE_URL'), secret = getEnv('SUPABASE_SECRET_KEY') || ''
+      if (!url || !secret.startsWith('sb_secret_')) return sendJson(res, 503, { success: false, message: 'The CRM is not connected yet.' })
+      const r = await retryWebsiteLead(createClient(url, secret, { auth: { persistSession: false, autoRefreshToken: false } }), who, body)
+      return sendJson(res, r.status, r.body)
+    } catch (e) { return sendJson(res, 502, { success: false, message: e.message }) }
+  }
+
+  // client portal: the Super Admin manages access; clients read and upload only through here (server/portal.mjs)
+  const portalMatch = pathname.match(/^\/api\/(portal|portal-admin)\/([a-z-]{2,20})$/)
+  if (portalMatch && (req.method === 'POST' || req.method === 'GET')) {
+    const ip = String(req.headers['x-forwarded-for'] ?? req.socket.remoteAddress ?? '').split(',')[0].trim()
+    let body = {}
+    if (req.method === 'POST') {
+      try { body = JSON.parse((await readRawBody(req, 8_000_000)) || '{}') } catch { return sendJson(res, 400, { success: false, message: 'Bad request or file too large (5 MB).' }) }
+    } else body = Object.fromEntries(parsedUrl.searchParams)
+    const deps = { appUrl: `${req.headers['x-forwarded-proto'] === 'http' ? 'http' : 'https'}://${String(req.headers.host || '').replace(/[^\w.:-]/g, '')}`, sendEmail: (mail, extra) => deliverClientEmail(mail, [], extra) }
+    try {
+      const r = portalMatch[1] === 'portal-admin'
+        ? await portalAdmin(getEnv, req.headers.authorization ? await crmUser(getEnv, req.headers.authorization).catch(() => null) : null, portalMatch[2], body, deps)
+        : await portalClient(getEnv, req.headers.authorization, portalMatch[2], body, ip, deps)
+      return sendJson(res, r.status, r.body)
+    } catch (e) {
+      console.error(`[portal ${portalMatch[2]}] ${e.message}`)
+      return sendJson(res, 502, { success: false, message: 'Sorry, something went wrong — please try again in a minute.' })
+    }
   }
 
   if (pathname === '/api/blutec' && req.method === 'POST') {

@@ -6,11 +6,12 @@ import {
 } from 'lucide-react'
 import { AdminChecklist, FollowUpCard, WelcomeCard } from '../../components/WorkflowPanels'
 import { ClientEmailComposer } from '../../components/ClientEmail'
+import { ClientPortalCard } from '../../components/ClientPortalPanel'
 import { openBookingPdf } from '../../lib/bookingPdf'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
 import {
-  addComboService, addComment, addComplimentaryService, addDocuments, addPayment, addRefund, commissionNow, deleteRefund, needsPriceSplit, addTask, canEditBooking, canEmailClient, canForwardAdminStages, canMoveStage, deleteDocument, setStageOutcome, deleteTask, invoiceFromBooking, moveStage,
+  addComboService, addComment, addComplimentaryService, addDocuments, addPayment, addRefund, commissionNow, deleteRefund, needsPriceSplit, addTask, canEditBooking, canEmailClient, canForwardAdminStages, canRunClientPortal, canMoveStage, deleteDocument, setStageOutcome, deleteTask, invoiceFromBooking, moveStage,
   PAYMENT_MODES, setCommission, setDeduction, setPaymentTds, setRefundStatus, toggleTask, userName, verifyPayment, visibleBookings,
 } from '../../lib/actions'
 import { DOC_CATEGORIES, STAGES, STAGE_OUTCOMES, stageLabel } from '../../lib/workflow'
@@ -86,7 +87,7 @@ export default function BookingDetail() {
 
       <Tabs value={tab} onChange={setTab} className="mb-5 w-fit" tabs={[
         { id: 'overview', label: 'Overview', icon: Building2 },
-        ...(b.welcome || b.followUp || b.adminWork || canForwardAdminStages(db, me, b) ? [{ id: 'workflow' as const, label: 'Workflow', icon: Workflow }] : []),
+        ...(b.welcome || b.followUp || b.adminWork || b.clientDocs || b.milestones || canForwardAdminStages(db, me, b) || canRunClientPortal(me, b) ? [{ id: 'workflow' as const, label: 'Workflow', icon: Workflow }] : []),
         { id: 'processing', label: 'Processing', icon: FolderKanban, count: b.tasks.filter((t) => !t.done).length },
         { id: 'documents', label: 'Documents', icon: FileText, count: b.documents.length }, { id: 'timeline', label: 'Timeline', icon: History, count: b.comments.length + b.approvals.length + (b.clientEmails?.length ?? 0) },
         ...(b.legacy ? [{ id: 'legacy' as const, label: 'Old CRM record', icon: Archive }] : []),
@@ -97,6 +98,7 @@ export default function BookingDetail() {
           <WelcomeCard b={b} />
           <FollowUpCard b={b} />
           <AdminChecklist b={b} />
+          <ClientPortalCard b={b} />
         </div>
       )}
       {tab === 'processing' && <Processing id={b.id} />}

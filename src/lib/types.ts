@@ -7,7 +7,7 @@ export type Perm =
   | 'content.view' | 'content.manage' | 'salesinfo.manage' | 'schemes.view' | 'schemes.manage'
   | 'broadcasts.view' | 'broadcasts.manage'
   | 'billing.own' | 'billing.create' | 'billing.manage' | 'refunds.manage'
-  | 'workflow.manage' | 'forms.manage' | 'followup.manage' | 'saleskit.manage'
+  | 'workflow.manage' | 'forms.manage' | 'followup.manage' | 'saleskit.manage' | 'website.manage' | 'portal.manage'
   | 'team.progress' | 'team.assign'
   | 'attendance.all' | 'leave.approve'
   | 'employees.view' | 'employees.manage'
@@ -368,6 +368,12 @@ export interface Booking {
   followUp?: FollowUp
   /** Admin checklist: Pitch Deck, Finance Added, DPR, Certification, Application / Submission */
   adminWork?: Partial<Record<AdminStageId, AdminWorkItem>>
+  /** documents asked from the client in the portal, and what the client uploaded (server-written) */
+  clientDocs?: Partial<Record<AdminStageId, ClientDocItem>>
+  clientUploads?: ClientUpload[]
+  /** project milestones and updates published to the client portal */
+  milestones?: Milestone[]
+  clientUpdates?: ClientUpdate[]
   paymentContact?: string
   paymentEmail?: string
   /** booking date entered by sales (createdAt keeps the exact date and time of entry) */
@@ -426,6 +432,70 @@ export interface InvoiceShare {
   /** SENT = accepted by the mail server / Interakt */
   status: 'SENT' | 'FAILED' | 'NOT_CONFIGURED' | 'NO_CONTACT'
   error?: string; messageId?: string
+}
+
+// ------------------------------------------------------------------ client portal
+/** A document the Operation team asks the client for (same five categories as the Admin stages). */
+export interface ClientDocItem {
+  /** stored state; what the client sees follows from it and their uploads (supabase/portal-rules.mjs) */
+  status: 'ASSIGNED' | 'UNDER_REVIEW' | 'APPROVED' | 'REJECTED'
+  statusAt: string
+  assignedAt: string
+  assignedBy: string
+  /** the team member handling it */
+  assignee?: string
+  /** no longer asked for (kept for the record) */
+  removed?: boolean
+  removedAt?: string
+  /** shown to the client (e.g. why it was rejected) */
+  clientRemark?: string
+  /** staff only — never sent to the portal */
+  internalNote?: string
+  reviewedBy?: string
+  reviewedAt?: string
+  history: { at: string; by: string; action: string; note?: string; client?: boolean }[]
+}
+/** A file the client uploaded in the portal (written by the server only). */
+export interface ClientUpload { id: string; category: AdminStageId; file: FileRef; at: string; accountId: string; note?: string; docId?: string }
+export interface MilestoneTask { id: string; title: string; done: boolean; due?: string; assignee?: string }
+/** Project milestone; `visible` ones (and their progress) are shown to the client. */
+export interface Milestone {
+  id: string; title: string; due?: string; status: 'PENDING' | 'IN_PROGRESS' | 'DONE'; visible: boolean
+  note?: string; tasks?: MilestoneTask[]; doneAt?: string; createdAt: string; createdBy: string; updatedAt?: string
+}
+/** An update published to the client (portal). */
+export interface ClientUpdate { id: string; at: string; by: string; title: string; text: string; file?: FileRef }
+/** A client's portal login, linked to one or more CRM entries (managed by the server for the Super Admin). */
+export interface ClientAccount {
+  id: string; authUserId?: string; email: string; name: string; phone?: string; bookingIds: string[]
+  status: 'INVITED' | 'ACTIVE' | 'DISABLED'
+  invitedAt: string; invitedBy: string; activatedAt?: string; lastLoginAt?: string; assignedTo?: string; disabledAt?: string
+}
+/** What happened in / to a portal account (sign-ins, uploads, profile changes, invites, access changes). */
+export interface ClientActivity { id: string; accountId: string; bookingId?: string; at: string; action: string; detail?: string; by?: string }
+
+// ------------------------------------------------------------------ website (rexera.co.in) managed from the CRM
+export type SiteKey = 'hero' | 'banners' | 'about' | 'services' | 'portfolio' | 'sections' | 'contact' | 'forms' | 'seo'
+/** One part of the website: the draft being edited and what is live (the website reads only `published`). */
+export interface SiteContent {
+  key: SiteKey
+  draft: unknown
+  published?: unknown
+  updatedAt: string
+  updatedBy: string
+  publishedAt?: string
+  publishedBy?: string
+}
+/** Every publish is kept, so an earlier version can be restored. */
+export interface SiteHistory { id: string; key: SiteKey; content: unknown; at: string; by: string }
+/** Each website form submission as it arrived (saved / already a lead / failed …), so a failed one can be retried. */
+export interface WebLeadLog {
+  id: string; at: string
+  status: 'SAVED' | 'EXISTING' | 'FAILED' | 'INVALID' | 'SPAM'
+  form?: string; name?: string; phone?: string; email?: string; error?: string; leadId?: string
+  /** the form fields as received (never the form key) */
+  fields?: Record<string, unknown>
+  retriedAt?: string; retriedBy?: string
 }
 
 /** One scheme in the Sales Kit (what sales offers clients): everyone reads it, the Operation team edits it. */
@@ -824,6 +894,11 @@ export interface DB {
   /** Document Form Builder: forms sent to clients by secure link, and what came back */
   docForms?: DocForm[]
   salesKit?: SalesKitItem[]
+  clientAccounts?: ClientAccount[]
+  clientActivity?: ClientActivity[]
+  siteContent?: SiteContent[]
+  siteHistory?: SiteHistory[]
+  webLeadLog?: WebLeadLog[]
   formSubmissions?: FormSubmission[]
   /** one-time data upgrades already applied */
   upgrades: string[]

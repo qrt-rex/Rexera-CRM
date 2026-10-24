@@ -22,8 +22,20 @@ export function getSupabase(): Promise<SupabaseClient> {
   const cfg = cloudConfig()
   if (cfg.status === 'unsafe-key') return Promise.reject(new Error('A secret key is set for the browser. Use the publishable key (sb_publishable_…) instead.'))
   if (cfg.status !== 'ready') return Promise.reject(new Error('Supabase is not configured (VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY).'))
-  client ??= import('@supabase/supabase-js').then(({ createClient }) => createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true } }))
+  // a client portal sign-in link (/portal/welcome#access_token=…) belongs to the portal's own connection below
+  client ??= import('@supabase/supabase-js').then(({ createClient }) => createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: !location.pathname.startsWith('/portal') } }))
   return client
+}
+
+let portal: Promise<SupabaseClient> | null = null
+/**
+ * The client portal's own Supabase connection: its sign-in is stored apart from the CRM's (a client signing in
+ * never touches a staff member's session in the same browser), and it reads no table — only /api/portal/* answers.
+ */
+export function getPortalSupabase(): Promise<SupabaseClient> {
+  if (cloudConfig().status !== 'ready') return Promise.reject(new Error('The client portal is not available on this copy.'))
+  portal ??= import('@supabase/supabase-js').then(({ createClient }) => createClient(url, key, { auth: { storageKey: 'rexera-client-portal', persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'implicit' } }))
+  return portal
 }
 
 /** Reachability check: the tables answer (and, signed out, return nothing — row-level security at work). */

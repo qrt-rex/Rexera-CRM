@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { Briefcase, Building2, Mail, Pencil, Phone, Plus, RotateCcw, UserMinus, UsersRound } from 'lucide-react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { Briefcase, Building2, FileStack, Mail, Pencil, Phone, Plus, RotateCcw, UserMinus, UsersRound } from 'lucide-react'
+import { ADMIN_DONE, ADMIN_STAGES, workflowSettings } from '../../../supabase/workflow-rules.mjs'
 import { branchList, branchName } from '../../lib/branches'
 import type { FileRef, Role, User } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
-import { createUser, PASSWORD_HINT, PASSWORD_RULE, removeEmployee, restoreEmployee, updateUser, userName, usersWithRole, type UserInput } from '../../lib/actions'
+import { adminStageAccess, createUser, PASSWORD_HINT, PASSWORD_RULE, removeEmployee, restoreEmployee, updateUser, userName, usersWithRole, type UserInput } from '../../lib/actions'
 import { collections, dayStatus, monthStart } from '../../lib/metrics'
-import { ROLES, roleColor, roleLabel } from '../../lib/rbac'
+import { ROLES, roleColor, roleLabel, rolesOf } from '../../lib/rbac'
 import { fmtDate, inr, today } from '../../lib/format'
 import { Avatar, Badge, Button, Card, Checkbox, Drawer, EmptyState, Input, Modal, PageHeader, SearchBox, Select, Tabs, Textarea, useRun } from '../../components/ui'
 import { RESUME_TYPES } from '../../lib/files'
@@ -109,6 +110,22 @@ export default function Employees() {
               ))}
               {open.resume && manage && <div className="col-span-2 rounded-xl bg-card2 px-3 py-2"><p className="text-[11px] text-mute">Resume</p><FileLink file={open.resume} /></div>}
             </div>
+            {rolesOf(open).includes('admin') && (() => {
+              const docs = adminStageAccess(db, open.id), limited = !!workflowSettings(db.settings.workflow).adminStageAccess?.[open.id]
+              const items = db.bookings.flatMap((b) => ADMIN_STAGES.map((s) => b.adminWork?.[s.id]).filter((w) => w?.assignee === open.id && w.status !== 'NOT_NEEDED'))
+              return (
+                <Card className="p-4">
+                  <p className="flex items-center gap-2 text-sm font-bold"><FileStack className="size-4" />Assigned documents{!limited && <Badge tone="gray">all 5 (not set)</Badge>}</p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">{ADMIN_STAGES.map((s) => <Badge key={s.id} tone={docs.includes(s.id) ? 'blue' : 'gray'}>{docs.includes(s.id) ? '✓' : '—'} {s.short}</Badge>)}</div>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-center text-sm">
+                    <div><p className="text-lg font-extrabold">{items.length}</p><p className="text-[11px] text-mute">Stages assigned</p></div>
+                    <div><p className="text-lg font-extrabold">{items.filter((w) => !ADMIN_DONE.includes(w!.status)).length}</p><p className="text-[11px] text-mute">Pending</p></div>
+                    <div><p className="text-lg font-extrabold">{items.filter((w) => ADMIN_DONE.includes(w!.status)).length}</p><p className="text-[11px] text-mute">Completed</p></div>
+                  </div>
+                  <Link to="/ops-desk" className="mt-2 inline-block text-xs font-semibold text-brand-ink hover:underline">Change on the Operations Dashboard</Link>
+                </Card>
+              )
+            })()}
             {['sales', 'teamlead'].includes(open.role) && (
               <Card className="p-4"><p className="flex items-center gap-2 text-sm font-bold"><Briefcase className="size-4" />This month</p>
                 <div className="mt-2 grid grid-cols-3 gap-2 text-center text-sm">

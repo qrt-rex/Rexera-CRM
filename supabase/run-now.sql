@@ -1,5 +1,5 @@
 -- =====================================================================================================
--- Rexera CRM · migrations to run on the live Supabase project (2026-10-15 … 2026-10-24, in order).
+-- Rexera CRM · migrations to run on the live Supabase project (2026-10-15 … 2026-10-25, in order).
 -- Paste all of it into Supabase → SQL Editor → Run. Each part is safe to run more than once.
 -- Generated from supabase/migrations/.
 -- =====================================================================================================
@@ -1095,3 +1095,224 @@ alter table candidate_forms add column if not exists position text check (positi
 alter table candidate_forms add column if not exists position text check (position is null or length(position) <= 120);
 alter table candidate_forms add column if not exists positions text[] not null default '{}';
 update candidate_forms set positions = array[position] where position is not null and cardinality(positions) = 0;
+
+-- ##################################################################### 20261025000000_website_cms.sql
+-- =====================================================================================================
+-- Rexera CRM · the website managed from the CRM (Super Admin) and the website lead log. Safe to run more than once.
+--  * site_content: each part of rexera.co.in — draft (edited in the CRM) and published (what the website reads,
+--    through the server's GET /api/site/content).
+--  * site_content_history: every published version (restore an earlier one).
+--  * website_lead_log: every website form submission as it arrived, written by the server; failed ones can be retried.
+--  * site-assets: public bucket for website images (only website managers upload / delete).
+-- =====================================================================================================
+create table if not exists site_content (
+  key          text primary key check (key in ('hero', 'banners', 'about', 'services', 'portfolio', 'sections', 'contact', 'forms', 'seo')),
+  draft        jsonb,
+  published    jsonb,
+  updated_at   timestamptz not null default now(),
+  updated_by   text references app_users(id) on delete set null,
+  published_at timestamptz,
+  published_by text references app_users(id) on delete set null
+);
+create table if not exists site_content_history (
+  id           text primary key,
+  key          text not null,
+  content      jsonb,
+  published_at timestamptz not null default now(),
+  published_by text references app_users(id) on delete set null
+);
+create index if not exists site_content_history_idx on site_content_history(published_at desc);
+alter table site_content enable row level security;
+alter table site_content_history enable row level security;
+drop policy if exists site_content_manage on site_content;
+create policy site_content_manage on site_content for all to authenticated using (app.has_perm('website.manage')) with check (app.has_perm('website.manage'));
+drop policy if exists site_history_manage on site_content_history;
+create policy site_history_manage on site_content_history for all to authenticated using (app.has_perm('website.manage')) with check (app.has_perm('website.manage'));
+
+create table if not exists website_lead_log (
+  id         text primary key,
+  at         timestamptz not null default now(),
+  status     text not null check (status in ('SAVED', 'EXISTING', 'FAILED', 'INVALID', 'SPAM')),
+  form       text,
+  name       text,
+  phone      text,
+  email      text,
+  error      text,
+  lead_id    text,
+  fields     jsonb,
+  retried_at timestamptz,
+  retried_by text references app_users(id) on delete set null
+);
+create index if not exists website_lead_log_at_idx on website_lead_log(at desc);
+alter table website_lead_log enable row level security;
+drop policy if exists website_lead_log_read on website_lead_log;
+create policy website_lead_log_read on website_lead_log for select to authenticated using (app.has_perm('website.manage'));
+-- written only by the server (secret key)
+
+-- public images for the website
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('site-assets', 'site-assets', true, 3145728, array['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml'])
+on conflict (id) do update set public = true;
+drop policy if exists site_assets_add on storage.objects;
+create policy site_assets_add on storage.objects for insert to authenticated with check (bucket_id = 'site-assets' and app.has_perm('website.manage'));
+drop policy if exists site_assets_remove on storage.objects;
+create policy site_assets_remove on storage.objects for delete to authenticated using (bucket_id = 'site-assets' and app.has_perm('website.manage'));
+
+do $$ declare t text; begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    foreach t in array array['site_content', 'site_content_history', 'website_lead_log'] loop
+      if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t) then
+        execute format('alter publication supabase_realtime add table public.%I', t);
+      end if;
+    end loop;
+  end if;
+end $$;
+
+-- ##################################################################### 20261025010000_staff_only_reads.sql
+-- Client portal, step 1: client logins are Supabase "authenticated" users too, so everything that any signed-in
+-- account could read is narrowed to CRM staff (a signed-in account linked to an active app_users row). Clients reach
+-- their own data only through the server (/api/portal/*), never these tables.
+create or replace function app.is_staff() returns boolean
+language sql stable security definer set search_path = public as $$
+  select app.current_user_id() is not null
+$$;
+grant execute on function app.is_staff() to authenticated, service_role;
+
+drop policy if exists users_read on app_users;
+create policy users_read on app_users for select to authenticated using (app.is_staff());
+drop policy if exists extra_roles_read on user_extra_roles;
+create policy extra_roles_read on user_extra_roles for select to authenticated using (app.is_staff());
+drop policy if exists role_perms_read on role_permissions;
+create policy role_perms_read on role_permissions for select to authenticated using (app.is_staff());
+drop policy if exists services_read on services;
+create policy services_read on services for select to authenticated using (app.is_staff());
+drop policy if exists schemes_read on schemes;
+create policy schemes_read on schemes for select to authenticated using (app.is_staff() and (active or app.has_perm('schemes.manage')));
+drop policy if exists broadcasts_read on broadcasts;
+create policy broadcasts_read on broadcasts for select to authenticated using (app.is_staff() and (audience is null or app.user_roles(app.me()) && audience or app.has_perm('broadcasts.manage')));
+drop policy if exists acks_read on broadcast_acks;
+create policy acks_read on broadcast_acks for select to authenticated using (app.is_staff());
+drop policy if exists events_read on events;
+create policy events_read on events for select to authenticated using (app.is_staff());
+drop policy if exists runs_read on payroll_runs;
+create policy runs_read on payroll_runs for select to authenticated using (app.has_perm('payroll.view') or (app.is_staff() and status in ('FINALIZED','PAID')));
+drop policy if exists rules_read on incentive_rule_versions;
+create policy rules_read on incentive_rule_versions for select to authenticated using (app.is_staff());
+drop policy if exists templates_read on message_templates;
+create policy templates_read on message_templates for select to authenticated using (app.is_staff());
+drop policy if exists automations_read on email_automations;
+create policy automations_read on email_automations for select to authenticated using (app.is_staff());
+drop policy if exists settings_read on app_settings;
+create policy settings_read on app_settings for select to authenticated using (app.is_staff());
+drop policy if exists sales_kit_read on sales_kit;
+create policy sales_kit_read on sales_kit for select to authenticated using (app.is_staff());
+drop policy if exists notices_insert on notifications;
+create policy notices_insert on notifications for insert to authenticated with check (app.is_staff());
+drop policy if exists audit_insert on audit_log;
+create policy audit_insert on audit_log for insert to authenticated with check (app.is_staff() and (by_user = app.me() or by_user is null));
+
+-- CRM files: staff only (a client gets a short-lived link to their own files from the server)
+drop policy if exists crm_files_read on storage.objects;
+create policy crm_files_read on storage.objects for select to authenticated using (bucket_id = 'crm-files' and app.is_staff());
+drop policy if exists crm_files_add on storage.objects;
+create policy crm_files_add on storage.objects for insert to authenticated with check (bucket_id = 'crm-files' and app.is_staff());
+
+-- ##################################################################### 20261025020000_client_portal.sql
+-- =====================================================================================================
+-- Rexera CRM · client portal (clients sign in with email + password after an invite from the Super Admin).
+-- Safe to run more than once. Needs 20261025010000_staff_only_reads.sql first (client logins can't read staff data).
+--  * bookings.client_docs / milestones / client_updates: what the Operation team asks the client for, the project's
+--    milestones and the updates published to the client (edited in the CRM).
+--  * client_accounts: one portal login per client email, linked to their CRM entries (no entry in two accounts).
+--  * client_activity: everything that happens in or to a portal account.
+--  * client_doc_uploads: files the client uploaded (into the private crm-files bucket).
+--  Clients never read these tables: the live server answers /api/portal/* for them, checking which entries are theirs.
+--  The accounts, activity and uploads are written only by the server (secret key); the CRM reads them.
+-- =====================================================================================================
+alter table bookings add column if not exists client_docs jsonb;
+alter table bookings add column if not exists milestones jsonb;
+alter table bookings add column if not exists client_updates jsonb;
+
+create table if not exists client_accounts (
+  id            text primary key,
+  auth_user_id  uuid unique,
+  email         citext not null unique,
+  name          text not null,
+  phone         text,
+  booking_ids   text[] not null default '{}',
+  status        text not null default 'INVITED' check (status in ('INVITED', 'ACTIVE', 'DISABLED')),
+  invited_at    timestamptz not null default now(),
+  invited_by    text references app_users(id) on delete set null,
+  activated_at  timestamptz,
+  last_login_at timestamptz,
+  assigned_to   text references app_users(id) on delete set null,
+  disabled_at   timestamptz
+);
+create index if not exists client_accounts_bookings_idx on client_accounts using gin (booking_ids);
+
+-- one CRM entry belongs to one portal account
+create or replace function app.client_account_unique_bookings() returns trigger language plpgsql as $$
+begin
+  if exists (select 1 from client_accounts c where c.id <> new.id and c.booking_ids && new.booking_ids) then
+    raise exception 'A CRM entry is already linked to another client portal account.';
+  end if;
+  return new;
+end $$;
+drop trigger if exists client_account_unique_bookings on client_accounts;
+create trigger client_account_unique_bookings before insert or update of booking_ids on client_accounts
+  for each row execute function app.client_account_unique_bookings();
+
+create table if not exists client_activity (
+  id         text primary key,
+  account_id text not null references client_accounts(id) on delete cascade,
+  booking_id text,
+  at         timestamptz not null default now(),
+  action     text not null,
+  detail     text,
+  by_user    text references app_users(id) on delete set null
+);
+create index if not exists client_activity_idx on client_activity(account_id, at desc);
+
+create table if not exists client_doc_uploads (
+  id         text primary key,
+  booking_id text not null references bookings(id) on delete cascade,
+  category   text not null check (category in ('PRECHECK', 'FINANCE', 'DPR', 'CERTIFICATION', 'SUBMISSION')),
+  file       jsonb not null,
+  at         timestamptz not null default now(),
+  account_id text references client_accounts(id) on delete set null,
+  note       text
+);
+create index if not exists client_doc_uploads_idx on client_doc_uploads(booking_id, at);
+
+alter table client_accounts enable row level security;
+alter table client_activity enable row level security;
+alter table client_doc_uploads enable row level security;
+-- staff only: portal managers see every account; others see the accounts of entries they can open
+drop policy if exists client_accounts_read on client_accounts;
+create policy client_accounts_read on client_accounts for select to authenticated
+  using (app.has_perm('portal.manage') or (app.is_staff() and exists (select 1 from unnest(booking_ids) b(id) where app.can_see_booking(b.id))));
+drop policy if exists client_activity_read on client_activity;
+create policy client_activity_read on client_activity for select to authenticated
+  using (app.has_perm('portal.manage') or (booking_id is not null and app.can_see_booking(booking_id)));
+drop policy if exists client_doc_uploads_read on client_doc_uploads;
+create policy client_doc_uploads_read on client_doc_uploads for select to authenticated using (app.can_see_booking(booking_id));
+
+-- "sign out everywhere" for a client (the server calls it; nobody else may)
+create or replace function public.portal_revoke_sessions(uid uuid) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  delete from auth.refresh_tokens where user_id = uid::text;
+  delete from auth.sessions where user_id = uid;
+end $$;
+revoke all on function public.portal_revoke_sessions(uuid) from public, anon, authenticated;
+grant execute on function public.portal_revoke_sessions(uuid) to service_role;
+
+do $$ declare t text; begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    foreach t in array array['client_accounts', 'client_activity', 'client_doc_uploads'] loop
+      if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t) then
+        execute format('alter publication supabase_realtime add table public.%I', t);
+      end if;
+    end loop;
+  end if;
+end $$;

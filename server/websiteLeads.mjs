@@ -69,23 +69,65 @@ const istMidnight = (now = Date.now()) => { const ist = new Date(now + 5.5 * 360
  * Handles one enquiry. Returns { status, body } (and `redirect` for a plain HTML form that asked for a thank-you page).
  * `env(name)` reads the server's environment.
  */
-export async function receiveWebsiteLead(env, { contentType, raw, ip, headerKey }) {
+export async function receiveWebsiteLead(env, { contentType, raw, ip, headerKey }, client) {
   const parsed = parseEnquiry(contentType, raw)
   if (parsed.error) return { status: 400, body: { success: false, message: parsed.error } }
   const x = parsed.lead
   const key = env('WEBSITE_LEAD_KEY')
   if (key && !sameKey(headerKey || x.key, key)) return { status: 401, body: { success: false, message: 'Wrong or missing form key.' } }
   const done = { status: 200, body: { success: true, message: 'Thank you — our team will call you shortly.' }, redirect: /^https:\/\//i.test(x.redirect) ? x.redirect : undefined }
-  if (x.spam) return done // bots get a normal answer and nothing is saved
   if (limited(ip || 'unknown')) return { status: 429, body: { success: false, message: 'Too many enquiries from this connection — please try again later.' } }
-  if (!x.phone) return { status: 422, body: { success: false, message: 'Please enter a valid 10-digit mobile number.' } }
-  if (x.name.length < 2) x.name = x.company || 'Website enquiry'
 
   const url = env('SUPABASE_URL') || env('VITE_SUPABASE_URL'), secret = env('SUPABASE_SECRET_KEY') || ''
-  if (!url || !secret.startsWith('sb_secret_')) return { status: 503, body: { success: false, message: 'The CRM is not connected yet (SUPABASE_URL and SUPABASE_SECRET_KEY on the server).' } }
-  const sb = createClient(url, secret, { auth: { persistSession: false, autoRefreshToken: false } })
-  await saveLead(sb, x)
-  return done
+  const sb = client ?? (url && secret.startsWith('sb_secret_') ? createClient(url, secret, { auth: { persistSession: false, autoRefreshToken: false } }) : null)
+  if (x.spam) { await logAttempt(sb, x, 'SPAM'); return done } // bots get a normal answer and nothing is saved
+  if (!x.phone) { await logAttempt(sb, x, 'INVALID', { error: 'No valid 10-digit mobile number' }); return { status: 422, body: { success: false, message: 'Please enter a valid 10-digit mobile number.' } } }
+  if (!sb) return { status: 503, body: { success: false, message: 'The CRM is not connected yet (SUPABASE_URL and SUPABASE_SECRET_KEY on the server).' } }
+  if (x.name.length < 2) x.name = x.company || 'Website enquiry'
+  try {
+    const r = await saveLead(sb, x)
+    await logAttempt(sb, x, r.existing ? 'EXISTING' : 'SAVED', { leadId: r.id })
+    return done
+  } catch (e) {
+    // kept in the log with every field, so the Super Admin can retry it from Website → Leads
+    await logAttempt(sb, x, 'FAILED', { error: e.message })
+    throw e
+  }
+}
+
+/** The fields of an enquiry worth keeping (never the form key or the redirect). */
+const keep = (x) => Object.fromEntries(Object.entries(x).filter(([k, v]) => !['key', 'redirect', 'spam'].includes(k) && v !== '' && v != null))
+/** One line in the website lead log (Website → Leads). A failure to write the log never loses the enquiry itself. */
+async function logAttempt(sb, x, status, extra = {}) {
+  const row = {
+    id: `wl-${crypto.randomUUID().slice(0, 12)}`, at: new Date().toISOString(), status, form: x.page || null, name: x.name || null, phone: x.phone || null,
+    email: x.email || null, error: extra.error ?? null, lead_id: extra.leadId ?? null, fields: status === 'SPAM' ? null : keep(x),
+  }
+  if (sb) try { await sb.from('website_lead_log').insert(row) } catch { /* the lead flow goes on */ }
+  return row
+}
+
+/**
+ * POST /api/website-lead/retry — { id, phone? }: saves a failed (or phone-less) website enquiry as a lead again.
+ * `who` is the signed-in CRM user; only the Super Admin / IT may do it.
+ */
+export async function retryWebsiteLead(sb, who, body) {
+  if (!who || !who.roles.some((r) => r === 'superadmin' || r === 'it')) return { status: 403, body: { success: false, message: 'Only the Super Admin can retry website leads.' } }
+  const { data: row } = await sb.from('website_lead_log').select('*').eq('id', String(body?.id ?? '')).maybeSingle()
+  if (!row) return { status: 404, body: { success: false, message: 'Not found.' } }
+  if (!['FAILED', 'INVALID'].includes(row.status)) return { status: 409, body: { success: false, message: 'This enquiry is already in CRM Leads.' } }
+  const x = { ...(row.fields ?? {}), extra: row.fields?.extra ?? {} }
+  if (body?.phone) x.phone = normMobile(body.phone)
+  if (!x.phone) return { status: 422, body: { success: false, message: 'Enter a valid 10-digit mobile number to save it.' } }
+  if (!x.name || x.name.length < 2) x.name = x.company || 'Website enquiry'
+  try {
+    const r = await saveLead(sb, x)
+    await sb.from('website_lead_log').update({ status: r.existing ? 'EXISTING' : 'SAVED', lead_id: r.id ?? null, phone: x.phone, error: null, retried_at: new Date().toISOString(), retried_by: who.id }).eq('id', row.id)
+    return { status: 200, body: { success: true, message: r.existing ? 'Added to the existing lead with this number.' : 'Saved as a new lead.' } }
+  } catch (e) {
+    await sb.from('website_lead_log').update({ error: e.message, retried_at: new Date().toISOString(), retried_by: who.id }).eq('id', row.id)
+    return { status: 502, body: { success: false, message: `Still not saved: ${e.message}` } }
+  }
 }
 
 /** Saves the enquiry: a new lead (auto-assigned when that is on), or a note on the existing lead with this number. */

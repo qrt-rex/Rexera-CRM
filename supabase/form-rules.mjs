@@ -46,6 +46,7 @@ export const JOB_BRANCHES = JOB_BRANCH_INFO.map((b) => b.name)
 export const jobBranch = (name) => JOB_BRANCH_INFO.find((b) => b.name === name)
 /** Positions a candidate can apply for (HR picks one on the form; the candidate sees it chosen). */
 export const JOB_POSITIONS = [
+  'Branch Manager',
   'BDM (Business Development Manager)', 'BDE (Business Development Executive)', 'Tele-sales Executive', 'Sales Team Leader',
   'Admin', 'Operation Team Member', 'HR', 'Accounts Executive', 'Legal Executive', 'Digital Marketing Executive',
   'Graphic Designer', 'IT Support', 'Office Assistant', 'Intern',

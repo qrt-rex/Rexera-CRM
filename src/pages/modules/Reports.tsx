@@ -13,8 +13,9 @@ import { Bars, Donut, HBars } from '../../components/charts'
 import { WorkProgress } from './WorkProgress'
 import { OpsReport } from '../../components/OpsReport'
 import { DocTracker } from '../../components/DocTracker'
+import { ClientDocReport } from '../../components/ClientDocs'
 
-type Tab = 'overview' | 'progress' | 'ops' | 'docs' | 'services' | 'revenue' | 'cards' | 'export'
+type Tab = 'overview' | 'progress' | 'ops' | 'docs' | 'clients' | 'services' | 'revenue' | 'cards' | 'export'
 
 export default function Reports() {
   const db = useDb()
@@ -36,7 +37,7 @@ export default function Reports() {
     return done.length ? Math.round(done.reduce((s, b) => s + daysBetween(ymd(b.createdAt), ymd(b.updatedAt)), 0) / done.length) : 0
   }, [books])
   const sales = db.users.filter((u) => u.active && rolesOf(u).some((r) => r === 'sales' || r === 'teamlead'))
-  const tabs: { id: Tab; label: string }[] = [{ id: 'overview', label: 'Overview' }, { id: 'progress', label: 'Work progress' }, { id: 'ops', label: 'Operations & Admin' }, { id: 'docs', label: 'Admin documents' }, { id: 'services', label: 'Service reports' }, { id: 'revenue', label: 'Profit & revenue' }, { id: 'cards', label: 'Report cards' }, ...(can('reports.export') ? [{ id: 'export' as Tab, label: 'Export data' }] : [])]
+  const tabs: { id: Tab; label: string }[] = [{ id: 'overview', label: 'Overview' }, { id: 'progress', label: 'Work progress' }, { id: 'ops', label: 'Operations & Admin' }, { id: 'docs', label: 'Admin documents' }, { id: 'clients', label: 'Client documents' },{ id: 'services', label: 'Service reports' }, { id: 'revenue', label: 'Profit & revenue' }, { id: 'cards', label: 'Report cards' }, ...(can('reports.export') ? [{ id: 'export' as Tab, label: 'Export data' }] : [])]
 
   const exports: [string, () => void][] = [
     ['All CRM entries', () => downloadCsv(`crm-entries-${today()}.csv`, books.map((b) => { const m = bookingMoney(b); return { id: b.bookingId, company: b.companyName, service: b.serviceName, status: BOOKING_STATUS[b.status].label, stage: b.stage, quoted: m.quotedWithGst, collected: m.collected, outstanding: m.outstanding, sales: userName(db, b.createdBy), created: ymd(b.createdAt) } }))],
@@ -66,6 +67,7 @@ export default function Reports() {
       {tab === 'progress' && <WorkProgress />}
       {tab === 'ops' && <OpsReport />}
       {tab === 'docs' && <DocTracker />}
+      {tab === 'clients' && <ClientDocReport />}
       {tab === 'services' && (
         <Card className="overflow-hidden">
           <CardHeader title="Service-wise report" action={<Button size="sm" variant="outline" icon={Download} onClick={() => downloadCsv('service-report.csv', byService.map((s) => ({ service: s.label, bookings: s.count, collected: Math.round(s.collected) })))}>CSV</Button>} />

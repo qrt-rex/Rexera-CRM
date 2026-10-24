@@ -23,6 +23,9 @@ const WorkBoard = lazy(() => import('./pages/modules/WorkBoard'))
 const Documents = lazy(() => import('./pages/modules/Documents'))
 const Schemes = lazy(() => import('./pages/modules/Schemes'))
 const SalesKit = lazy(() => import('./pages/modules/SalesKit'))
+const Website = lazy(() => import('./pages/modules/Website'))
+const ClientPortal = lazy(() => import('./pages/modules/ClientPortal'))
+const Portal = lazy(() => import('./pages/portal/Portal'))
 const Content = lazy(() => import('./pages/modules/Content'))
 const Broadcasts = lazy(() => import('./pages/modules/Broadcasts'))
 const Billing = lazy(() => import('./pages/modules/Billing'))
@@ -142,6 +145,8 @@ export default function App() {
             <Route path="/apply/:token" element={<S><Apply /></S>} />
             {/* public: clients fill in a form from a secure link (the live server checks and stores it) */}
             <Route path="/f/:token" element={<S><PublicForm /></S>} />
+            {/* clients sign in to their own portal (a separate sign-in from the CRM; the live server answers for them) */}
+            <Route path="/portal/*" element={<S><Portal /></S>} />
             <Route element={<RequireAuth><Shell /></RequireAuth>}>
               <Route index element={<HomeRedirect />} />
               <Route path="/dashboard" element={<HomeRedirect />} />
@@ -160,6 +165,8 @@ export default function App() {
               <Route path="/documents" element={<Guard m="documents"><S><Documents /></S></Guard>} />
               <Route path="/schemes" element={<Guard m="schemes"><S><Schemes /></S></Guard>} />
               <Route path="/sales-kit" element={<Guard m="sales-kit"><S><SalesKit /></S></Guard>} />
+              <Route path="/website" element={<Guard m="website"><S><Website /></S></Guard>} />
+              <Route path="/client-portal" element={<Guard m="client-portal"><S><ClientPortal /></S></Guard>} />
               <Route path="/content" element={<Guard m="content"><S><Content /></S></Guard>} />
               <Route path="/broadcasts" element={<Guard m="broadcasts"><S><Broadcasts /></S></Guard>} />
               <Route path="/billing" element={<Guard m="billing"><S><Billing /></S></Guard>} />

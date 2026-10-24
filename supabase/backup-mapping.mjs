@@ -47,6 +47,7 @@ export function mapAll(backup) {
     success_fee: b.successFee ?? null, remarks: s(b.remarks), closed_by: uref(b.closedBy), stage_outcome: s(b.stageOutcome), stage_reason: s(b.stageReason),
     booking_type: s(b.bookingType), commission: b.commission ?? null,
     welcome: b.welcome ?? null, follow_up: b.followUp ?? null, admin_work: b.adminWork && Object.keys(b.adminWork).length ? b.adminWork : null,
+    client_docs: b.clientDocs && Object.keys(b.clientDocs).length ? b.clientDocs : null, milestones: b.milestones?.length ? b.milestones : null, client_updates: b.clientUpdates?.length ? b.clientUpdates : null,
   }))
   t.booking_payments = d.bookings.flatMap((b) => b.payments.map((p) => ({ id: p.id, booking_id: b.id, part: p.part, amount: p.amount, gst: p.gst, total: p.total, paid_on: p.date, mode: p.mode, proof_name: p.proofName, recorded_by: uref(p.recordedBy), verified: p.verified, is_adjustment: p.mode === 'Adjustment', date_unknown: !!p.dateUnknown, proof: p.proof ?? null, tds_pct: p.tds?.pct ?? null, tds_amount: p.tds?.amount ?? null })))
   t.booking_refunds = d.bookings.flatMap((b) => (b.refunds ?? []).map((x) => ({ id: x.id, booking_id: b.id, amount: x.amount, requested_on: x.date, reason: x.reason ?? '', status: x.status, refunded_on: s(x.refundedOn), mode: s(x.mode), ref: s(x.ref), created_by: uref(x.by), created_at: x.at })))
@@ -55,6 +56,7 @@ export function mapAll(backup) {
   t.booking_comments = d.bookings.flatMap((b) => b.comments.map((c) => ({ id: c.id, booking_id: b.id, author_id: uref(c.by), created_at: c.at, body: c.text, kind: c.kind ?? '' })))
   t.booking_documents = d.bookings.flatMap((b) => b.documents.map((x) => ({ id: x.id, booking_id: b.id, name: x.name, category: x.category, size_bytes: x.size ?? 0, uploaded_at: x.at, uploaded_by: uref(x.by), status: x.status ?? 'PENDING', storage_path: null, legacy_path: x.legacyPath ?? null, file: x.file ?? null, note: s(x.note), reviewed_by: uref(x.reviewedBy), reviewed_at: s(x.reviewedAt) })))
   t.booking_client_emails = d.bookings.flatMap((b) => (b.clientEmails ?? []).map((e) => ({ id: e.id, booking_id: b.id, sent_by: uref(e.by), sent_at: e.at, to_email: e.to, cc: e.cc ?? [], subject: e.subject, template: e.template, status: e.status, error: s(e.error) })))
+  t.client_doc_uploads = d.bookings.flatMap((b) => (b.clientUploads ?? []).map((x) => ({ id: x.id, booking_id: b.id, category: x.category, file: x.file, at: x.at, account_id: s(x.accountId), note: s(x.note) })))
   t.booking_tasks = d.bookings.flatMap((b) => b.tasks.map((x) => ({ id: x.id, booking_id: b.id, title: x.title, done: x.done, due_on: s(x.due), created_by: uref(x.by), assignee_id: uref(x.assignee), remind_every_days: x.remindEveryDays ?? null, last_reminded_at: s(x.lastRemindedAt), created_at: x.createdAt ?? b.createdAt })))
 
   t.invoices = d.invoices.map((i) => ({ id: i.id, number: i.number, type: i.type, booking_id: s(i.bookingId), client: i.client, gstin: i.gstin ?? '', state: i.state, paid: i.paid, status: i.status, issued_on: i.date, due_on: i.due, sales_person: uref(i.salesPerson), created_by: uref(i.createdBy), branch_id: s(i.branchId), client_address: s(i.clientAddress), client_pan: s(i.clientPan) }))
@@ -131,6 +133,11 @@ export function mapAll(backup) {
     organisation: x.organisation ?? '', scheme_type: x.schemeType ?? '', applicable_for: x.applicableFor ?? '', min_charge: x.minCharge ?? '', registration_charge: s(x.registrationCharge),
     updated_at: s(x.updatedAt), updated_by: uref(x.updatedBy),
   }))
+  t.site_content = (d.siteContent ?? []).map((x) => ({ key: x.key, draft: x.draft ?? null, published: x.published ?? null, updated_at: x.updatedAt, updated_by: uref(x.updatedBy), published_at: s(x.publishedAt), published_by: uref(x.publishedBy) }))
+  t.site_content_history = (d.siteHistory ?? []).map((x) => ({ id: x.id, key: x.key, content: x.content ?? null, published_at: x.at, published_by: uref(x.by) }))
+  t.client_accounts = (d.clientAccounts ?? []).map((x) => ({ id: x.id, auth_user_id: s(x.authUserId), email: x.email, name: x.name, phone: s(x.phone), booking_ids: x.bookingIds ?? [], status: x.status, invited_at: x.invitedAt, invited_by: uref(x.invitedBy), activated_at: s(x.activatedAt), last_login_at: s(x.lastLoginAt), assigned_to: uref(x.assignedTo), disabled_at: s(x.disabledAt) }))
+  t.client_activity = (d.clientActivity ?? []).map((x) => ({ id: x.id, account_id: x.accountId, booking_id: s(x.bookingId), at: x.at, action: x.action, detail: s(x.detail), by_user: uref(x.by) }))
+  t.website_lead_log = (d.webLeadLog ?? []).map((x) => ({ id: x.id, at: x.at, status: x.status, form: s(x.form), name: s(x.name), phone: s(x.phone), email: s(x.email), error: s(x.error), lead_id: s(x.leadId), fields: x.fields ?? null, retried_at: s(x.retriedAt), retried_by: uref(x.retriedBy) }))
   t.recruitment_datasets = (backup.imports ?? []).map((x) => ({ id: x.id, name: x.name, file_name: x.fileName, sheet: s(x.sheet), kind: x.kind, columns: x.columns, imported_at: x.importedAt, imported_by: uref(x.importedBy), bytes: x.bytes ?? 0 }))
   t.recruitment_rows = (backup.imports ?? []).flatMap((x) => x.rows.map((cells, i) => ({ dataset_id: x.id, row_no: i + 1, cells })))
   return t
@@ -149,6 +156,8 @@ export const ORDER = [
   ['backup_log', 'id'], ['candidate_forms', 'id'], ['candidate_applications', 'id'], ['recruitment_datasets', 'id'], ['recruitment_rows', 'dataset_id,row_no'],
   ['company_assets', 'id'], ['stock_items', 'id'], ['company_expenses', 'id'], ['legacy_files', 'path'],
   ['doc_forms', 'id'], ['doc_form_submissions', 'id'], ['sales_kit', 'id'],
+  ['site_content', 'key'], ['site_content_history', 'id'], ['website_lead_log', 'id'],
+  ['client_accounts', 'id'], ['client_activity', 'id'], ['client_doc_uploads', 'id'],
 ]
 export const APPEND_ONLY = ['payroll_history', 'audit_log', 'asset_events', 'stock_moves']   // identity ids: only copied into an empty table
 
@@ -203,7 +212,7 @@ export function rowsToDb(input) {
 
   const payOf = group('booking_payments', 'booking_id'), apprOf = group('booking_approvals', 'booking_id'), stageOf = group('booking_stage_moves', 'booking_id')
   const commOf = group('booking_comments', 'booking_id'), docOf = group('booking_documents', 'booking_id'), taskOf = group('booking_tasks', 'booking_id')
-  const mailOf = group('booking_client_emails', 'booking_id'), refundOf = group('booking_refunds', 'booking_id')
+  const mailOf = group('booking_client_emails', 'booking_id'), refundOf = group('booking_refunds', 'booking_id'), cupOf = group('client_doc_uploads', 'booking_id')
   const bookings = rows('bookings').map((r) => opt({
     id: r.id, bookingId: r.booking_code, companyName: r.company_name, contactPerson: r.contact_person, mobile: r.mobile, email: r.email ?? '',
     pan: r.pan ?? '', gstin: r.gstin ?? '', city: r.city ?? '', state: r.state ?? '', industry: r.industry ?? '', serviceId: r.service_id ?? '', serviceName: r.service_name,
@@ -215,6 +224,8 @@ export function rowsToDb(input) {
     services: u(r.services), combo: u(r.combo), paymentContact: u(r.payment_contact), paymentEmail: u(r.payment_email), bookingDate: u(r.booking_date),
     successFee: u(r.success_fee), remarks: u(r.remarks), closedBy: u(r.closed_by), stageOutcome: u(r.stage_outcome), stageReason: u(r.stage_reason),
     bookingType: u(r.booking_type), commission: u(r.commission), welcome: u(r.welcome), followUp: u(r.follow_up), adminWork: u(r.admin_work),
+    clientDocs: u(r.client_docs), milestones: u(r.milestones), clientUpdates: u(r.client_updates),
+    clientUploads: cupOf(r.id).length ? cupOf(r.id).map((x) => opt({ id: x.id, category: x.category, file: x.file, at: x.at, accountId: x.account_id ?? '', note: u(x.note) })) : undefined,
     refunds: refundOf(r.id).length ? refundOf(r.id).map((x) => opt({ id: x.id, amount: x.amount, date: x.requested_on, reason: x.reason ?? '', status: x.status, refundedOn: u(x.refunded_on), mode: u(x.mode), ref: u(x.ref), by: x.created_by ?? '', at: x.created_at })) : undefined,
     payments: payOf(r.id).map((p) => opt({ id: p.id, part: p.part, amount: p.amount, gst: p.gst, total: p.total, date: p.paid_on, mode: p.mode, proofName: p.proof_name ?? '', recordedBy: p.recorded_by ?? '', verified: p.verified, dateUnknown: p.date_unknown || undefined, proof: u(p.proof), tds: p.tds_pct != null ? { pct: p.tds_pct, amount: p.tds_amount ?? 0 } : undefined })),
     approvals: apprOf(r.id).map((a) => ({ id: a.id, level: a.level, action: a.action, by: a.decided_by ?? '', at: a.decided_at, remark: a.remark ?? '' })),
@@ -301,6 +312,11 @@ export function rowsToDb(input) {
       id: x.id, formId: x.form_id, formVersion: x.form_version, bookingId: u(x.booking_id), fields: x.fields ?? [], answers: x.answers ?? {}, files: x.files ?? [],
       submittedAt: x.submitted_at, status: x.status, reviewedBy: u(x.reviewed_by), reviewedAt: u(x.reviewed_at), note: u(x.note),
     })),
+    siteContent: rows('site_content').map((x) => opt({ key: x.key, draft: x.draft ?? null, published: u(x.published), updatedAt: x.updated_at, updatedBy: x.updated_by ?? '', publishedAt: u(x.published_at), publishedBy: u(x.published_by) })),
+    siteHistory: rows('site_content_history').map((x) => ({ id: x.id, key: x.key, content: x.content ?? null, at: x.published_at, by: x.published_by ?? '' })),
+    clientAccounts: rows('client_accounts').map((x) => opt({ id: x.id, authUserId: u(x.auth_user_id), email: x.email, name: x.name, phone: u(x.phone), bookingIds: x.booking_ids ?? [], status: x.status, invitedAt: x.invited_at, invitedBy: x.invited_by ?? '', activatedAt: u(x.activated_at), lastLoginAt: u(x.last_login_at), assignedTo: u(x.assigned_to), disabledAt: u(x.disabled_at) })),
+    clientActivity: rows('client_activity').map((x) => opt({ id: x.id, accountId: x.account_id, bookingId: u(x.booking_id), at: x.at, action: x.action, detail: u(x.detail), by: u(x.by_user) })),
+    webLeadLog: rows('website_lead_log').map((x) => opt({ id: x.id, at: x.at, status: x.status, form: u(x.form), name: u(x.name), phone: u(x.phone), email: u(x.email), error: u(x.error), leadId: u(x.lead_id), fields: u(x.fields), retriedAt: u(x.retried_at), retriedBy: u(x.retried_by) })),
     salesKit: rows('sales_kit').map((x) => opt({
       id: x.id, category: x.category, position: x.position, name: x.name, benefits: x.benefits ?? '', sectors: x.sectors ?? '', eligibility: x.eligibility ?? '', lastDate: x.last_date ?? '',
       organisation: x.organisation ?? '', schemeType: x.scheme_type ?? '', applicableFor: x.applicable_for ?? '', minCharge: x.min_charge ?? '', registrationCharge: u(x.registration_charge),
