@@ -1,7 +1,7 @@
 import type {
   AdminStageId, AdminWorkStatus, Booking, BookingStatus, BookingType, BDoc, Delivery, Service, WorkflowSettings, Branch, BreakPolicy, CallOutcome, ClientEmailLog, Shift, CandidateApplication, CandidateForm, DaySession, DB, EventItem, FileRef, Invoice, InvoiceItem, Lead, LeaveType, Milestone, Perm, Post, Role, SalesKitItem, Scheme, User,
 } from './types'
-import { effectivePerms, isMaster, MASTER_ROLES, rolesOf, roleLabel } from './rbac'
+import { effectivePerms, isMaster, isStageOnlyAdmin, MASTER_ROLES, rolesOf, roleLabel } from './rbac'
 import { clearCloudDb, getDb, mutate, reloadFromCloud, saved } from './store'
 import { CLOUD, cloudSetOwnPassword, cloudSetPassword, cloudSignIn, cloudSignOut, cloudUserId } from './cloud'
 import { bookingBranch, directorBranches, isBranchScoped, leadBranch, NO_BRANCH } from './branches'
@@ -890,6 +890,8 @@ export function deleteLeadUpload(me: User, uploadId: string) {
 
 // ============================================================ bookings (CRM entries)
 export function visibleBookings(d: DB, me: User): Booking[] {
+  // an Admin set up in Operations Dashboard → Team: only the files with work for them
+  if (isStageOnlyAdmin(d, me)) return d.bookings.filter((b) => b.adminId === me.id || Object.values(b.adminWork ?? {}).some((w) => w?.assignee === me.id))
   const p = effectivePerms(d, me)
   // Branch Director: only the client files booked by people in their branches
   if (isBranchScoped(me)) {
@@ -1348,34 +1350,86 @@ function startAdminWork(d: DB, b: Booking, by: string, at: string, prevAdmin?: s
   const fresh = ADMIN_STAGES.filter((s) => !b.adminWork?.[s.id]).map((s) => s.id)
   const handOver = ADMIN_STAGES.filter((s) => { const cur = b.adminWork?.[s.id]; return !!cur && !!prevAdmin && prevAdmin !== b.adminId && cur.assignee === prevAdmin && !ADMIN_DONE.includes(cur.status) }).map((s) => s.id)
   if (!b.adminId) return
-  // the Admin gets the stages they are allowed to do; the others wait for the Operation team to forward them
-  const allowed = [...fresh, ...handOver].filter((s) => adminMayDo(d, b.adminId!, s))
-  assignAdminStages(d, b, by, at, Object.fromEntries(allowed.map((s) => [s, b.adminId!])), fresh.length ? 'Admin assigned' : 'Handed over')
+  // each stage goes straight to the Admin it is given to in Operations Dashboard → Team (else the file's Admin, if
+  // allowed); one nobody handles waits for the Operation team to forward it
+  const routed = [...fresh, ...handOver].map((s) => [s, routeAdminStage(d, b, s)] as const).filter(([, uid]) => uid)
+  assignAdminStages(d, b, by, at, Object.fromEntries(routed), fresh.length ? 'Admin assigned' : 'Handed over')
+  const allowed = routed.map(([s]) => s)
   const w = workflowSettings(d.settings.workflow)
   for (const s of fresh.filter((x) => !allowed.includes(x))) {
     b.adminWork![s] = {
-      status: 'NOT_STARTED', updatedAt: at, updatedBy: by, history: [{ at, by, status: 'NOT_STARTED', note: `${userName(d, b.adminId)} doesn’t handle this document — forward it to an Admin who does` }],
+      status: 'NOT_STARTED', updatedAt: at, updatedBy: by, history: [{ at, by, status: 'NOT_STARTED', note: 'No Admin handles this document — forward it to an Admin (or give it to one in Operations Dashboard → Team)' }],
       ...(s === 'PRECHECK' ? { remindEveryDays: w.precheckDays, nextRemindOn: addDaysYmd(istToday(), w.precheckDays) } : {}),
     }
   }
 }
 
-/** Document types an Admin may handle (Operations Dashboard → Admin document permissions); not set = all five. */
+/**
+ * Document types given to an Admin in Operations Dashboard → Team; not set = all five (an Admin never set up there).
+ * An Admin who is set up there works only on — and sees only — the stages assigned to them (see isStageOnlyAdmin).
+ */
 export const adminStageAccess = (d: DB, userId: string): AdminStageId[] => workflowSettings(d.settings.workflow).adminStageAccess?.[userId] ?? ADMIN_STAGES.map((s) => s.id)
 export const adminMayDo = (d: DB, userId: string, stage: AdminStageId) => adminStageAccess(d, userId).includes(stage)
-export const canSetAdminStageAccess = (me: User) => isMaster(me) || has(me, 'workflow.manage')
-/** Sets which of the five document types one Admin may handle and upload (null = all five, no limit). */
+export { isStageOnlyAdmin }
+const openStage = (w?: { status: AdminWorkStatus }) => !!w && !ADMIN_DONE.includes(w.status) && w.status !== 'NOT_NEEDED'
+/** Open Admin stages (all types) assigned to a person across the active files — to share work out evenly. */
+const openStagesOf = (d: DB, userId: string) => d.bookings.reduce((n, b) => n + Object.values(b.adminWork ?? {}).filter((w) => w?.assignee === userId && openStage(w)).length, 0)
+/**
+ * Who gets a stage on a file: an Admin given that document in Team (the file's own Admin if they are one of them,
+ * else the one with the fewest open stages), else the file's Admin if allowed; undefined = nobody (Operations forwards).
+ */
+function routeAdminStage(d: DB, b: Booking, stage: AdminStageId, except?: string): string | undefined {
+  const access = workflowSettings(d.settings.workflow).adminStageAccess ?? {}
+  const team = usersWithRole(d, 'admin').filter((u) => u.id !== except && access[u.id]?.includes(stage))
+  if (team.length) return team.some((u) => u.id === b.adminId) ? b.adminId : [...team].sort((x, y) => openStagesOf(d, x.id) - openStagesOf(d, y.id))[0]!.id
+  return b.adminId && b.adminId !== except && adminMayDo(d, b.adminId, stage) ? b.adminId : undefined
+}
+/** Super Admin / IT and Admin managers (Workflow settings) — never an Admin limited to their own stages. */
+export const canSetAdminStageAccess = (me: User) => isMaster(me) || (has(me, 'workflow.manage') && !isStageOnlyAdmin(getDb(), me))
+/**
+ * Operations Dashboard → Team: the documents one Admin does. Takes effect at once on the active files — open stages
+ * of the ticked types that have nobody (or someone no longer allowed) go to this Admin; their open stages of the
+ * unticked types go to another Admin given that document, or back to the Operation team to forward. Finished stages
+ * stay as they are. `stages` null = no limit (all five, sees files as before). Answers how many stages moved.
+ */
 export function setAdminStageAccess(me: User, userId: string, stages: AdminStageId[] | null) {
   assert(canSetAdminStageAccess(me), 'Only Admin managers (Workflow settings) or Super Admin can change document permissions.')
-  mutate((d) => {
+  return mutate((d) => {
     const u = d.users.find((x) => x.id === userId)
-    assert(u && rolesOf(u).includes('admin'), 'Pick an Admin.')
+    assert(u && u.active && rolesOf(u).includes('admin'), 'Pick an active Admin.')
     assert(!stages || stages.every((s) => ADMIN_STAGES.some((x) => x.id === s)), 'Unknown document type.')
     const w = workflowSettings(d.settings.workflow)
     const access = { ...(w.adminStageAccess ?? {}) }
     if (stages) access[userId] = ADMIN_STAGES.map((s) => s.id).filter((s) => stages.includes(s)); else delete access[userId]
     d.settings.workflow = { ...w, adminStageAccess: access }
-    audit(d, me.id, 'ADMIN_DOC_ACCESS', `${u.name}: ${stages ? (stages.length ? stages.map((s) => ADMIN_STAGES.find((x) => x.id === s)!.short).join(', ') : 'none') : 'all document types'}`)
+    audit(d, me.id, 'ADMIN_DOC_ACCESS', `${u.name}: ${stages ? (stages.length ? stages.map((s) => ADMIN_STAGES.find((x) => x.id === s)!.short).join(', ') : 'none') : 'all document types (no limit)'}`)
+    if (!stages) return { given: 0, released: 0 }
+    const at = nowIso()
+    let given = 0, released = 0
+    for (const b of d.bookings.filter((x) => x.adminWork && ACTIVE_FILE_STATUSES.includes(x.status))) {
+      const to: Partial<Record<AdminStageId, string>> = {}
+      const before = given + released
+      for (const s of ADMIN_STAGES) {
+        const cur = b.adminWork![s.id]
+        if (!openStage(cur)) continue
+        if (stages.includes(s.id) && (!cur!.assignee || !adminMayDo(d, cur!.assignee, s.id))) { to[s.id] = userId; given++ }
+        else if (!stages.includes(s.id) && cur!.assignee === userId) {
+          const next = routeAdminStage(d, b, s.id, userId)
+          if (next) to[s.id] = next
+          else {
+            // nobody else does it: back to the Operation team to forward
+            cur!.assignee = undefined
+            cur!.history.push({ at, by: me.id, status: cur!.status, note: `${u.name} no longer does ${s.label} (Operations Dashboard → Team) — forward it to an Admin` })
+            cur!.updatedAt = at; cur!.updatedBy = me.id
+            notify(d, [b.opsMemberId], `${b.bookingId}: ${s.label} needs an Admin`, `${b.companyName} — ${u.name} no longer does ${s.label}`, `/bookings/${b.id}?tab=workflow`, 'action')
+          }
+          released++
+        }
+      }
+      if (Object.keys(to).length) assignAdminStages(d, b, me.id, at, to, 'Team assignment')
+      if (given + released > before) b.updatedAt = at
+    }
+    return { given, released }
   })
 }
 /** A stage is submitted / approved / completed only once its file has been uploaded to the CRM entry. */
@@ -1421,7 +1475,7 @@ export function forwardAdminStages(me: User, id: string, to: Partial<Record<Admi
     for (const [stage, uid] of picks) {
       const u = d.users.find((x) => x.id === uid)
       assert(u && u.active && rolesOf(u).includes('admin'), 'Pick active Admins only.')
-      assert(adminMayDo(d, uid, stage), `${u.name} isn’t allowed to handle ${ADMIN_STAGES.find((s) => s.id === stage)!.label} (Admin document permissions).`)
+      assert(adminMayDo(d, uid, stage), `${u.name} isn’t allowed to handle ${ADMIN_STAGES.find((s) => s.id === stage)!.label} (Operations Dashboard → Team).`)
       const cur = b.adminWork?.[stage]
       assert(!cur || !ADMIN_DONE.includes(cur.status) || isMaster(me), `${ADMIN_STAGES.find((s) => s.id === stage)!.label} is already done.`)
     }
@@ -1456,20 +1510,31 @@ export function canWorkAdminStages(d: DB, me: User, b: Booking) {
   return (p.has('bookings.admin') && (b.adminId === me.id || Object.values(b.adminWork ?? {}).some((w) => w?.assignee === me.id)))
     || (p.has('bookings.process') && b.opsMemberId === me.id)
 }
+/** A file's documents someone sees: an Admin set up in Team doesn't see the files of other people's Admin stages. */
+export function visibleDocuments(d: DB, me: User, b: Booking) {
+  if (!isStageOnlyAdmin(d, me)) return b.documents
+  const others = new Set(ADMIN_STAGES.filter((s) => b.adminWork?.[s.id]?.assignee !== me.id).map((s) => s.label))
+  return b.documents.filter((x) => !others.has(x.category))
+}
+/** A file's tasks someone sees: an Admin set up in Team sees only the tasks given to them or added by them. */
+export const visibleTasks = (d: DB, me: User, b: Booking) => (isStageOnlyAdmin(d, me) ? b.tasks.filter((t) => t.assignee === me.id || t.by === me.id) : b.tasks)
+/** One stage: as above, but an Admin set up in Team may change only the stages assigned to them. */
+export const canWorkAdminStage = (d: DB, me: User, b: Booking, stage: AdminStageId) =>
+  canWorkAdminStages(d, me, b) && (!isStageOnlyAdmin(d, me) || b.adminWork?.[stage]?.assignee === me.id)
 /** Update one Admin stage: status (with a note when it goes back or is skipped), due date, or the Admin doing it. */
 export function setAdminWork(me: User, id: string, stage: AdminStageId, patch: { status?: AdminWorkStatus; note?: string; due?: string | null; assignee?: string }) {
   mutate((d) => {
     const b = findB(d, id)
     const w = b.adminWork?.[stage]
     assert(w, 'Assign the file to an Admin first — the Admin stages start then.')
-    assert(canWorkAdminStages(d, me, b), 'Only the file’s Admin and Operations person can update its Admin stages.')
+    assert(canWorkAdminStage(d, me, b, stage), 'Only the Admin this stage is assigned to and the file’s Operations person can update it.')
     assert(!CLOSED_FILE_STATUSES.includes(b.status) || isMaster(me), 'This file is closed.')
     const at = nowIso(), note = patch.note?.trim() ?? ''
     const label = ADMIN_STAGES.find((s) => s.id === stage)!.label
     if (patch.assignee !== undefined && patch.assignee !== w.assignee) {
       const u = d.users.find((x) => x.id === patch.assignee)
       assert(u && u.active && rolesOf(u).includes('admin'), 'Pick an active Admin.')
-      assert(adminMayDo(d, u.id, stage), `${u.name} isn’t allowed to handle ${label} (Admin document permissions).`)
+      assert(adminMayDo(d, u.id, stage), `${u.name} isn’t allowed to handle ${label} (Operations Dashboard → Team).`)
       assignAdminStages(d, b, me.id, at, { [stage]: u.id }, note ? `Reassigned — ${note}` : 'Reassigned')
     }
     if (patch.due !== undefined) w.due = patch.due || undefined
@@ -1502,7 +1567,7 @@ export function logPrecheckFollowUp(me: User, id: string, note: string) {
     const b = findB(d, id)
     const w = b.adminWork?.PRECHECK
     assert(w && precheckPending(b), 'The Pitch Deck is not pending on this file.')
-    assert(canWorkAdminStages(d, me, b), 'Only the file’s Admin and Operations person can record follow-ups.')
+    assert(canWorkAdminStage(d, me, b, 'PRECHECK'), 'Only the Pitch Deck’s Admin and the file’s Operations person can record follow-ups.')
     assert(note.trim().length >= 3, 'Write what was done in the follow-up.')
     const t = istToday(), at = nowIso()
     w.lastFollowUpOn = t
@@ -1518,7 +1583,7 @@ export function setPrecheckInterval(me: User, id: string, days: number) {
     const b = findB(d, id)
     const w = b.adminWork?.PRECHECK
     assert(w, 'This file has no Pitch Deck yet.')
-    assert(canWorkAdminStages(d, me, b) || has(me, 'followup.manage'), 'You can’t change this reminder.')
+    assert(canWorkAdminStage(d, me, b, 'PRECHECK') || has(me, 'followup.manage'), 'You can’t change this reminder.')
     assert(days === 3 || days === 4, 'The Pitch Deck reminder repeats every 3 or 4 days.')
     w.remindEveryDays = days
     if (w.nextRemindOn) w.nextRemindOn = addDaysYmd(w.lastFollowUpOn ?? istToday(), days)

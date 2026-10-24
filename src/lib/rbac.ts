@@ -177,8 +177,21 @@ export function effectivePerms(db: DB, u: User | null | undefined): Set<Perm> {
   for (const [perm, allowed] of Object.entries(RESERVED) as [Perm, Role[]][]) {
     if (s.has(perm) && !roles.some((r) => allowed.includes(r))) s.delete(perm)
   }
+  // their own files only (visibleBookings): "own CRM entries" instead of every file
+  if (isStageOnlyAdmin(db, u)) { for (const p of STAGE_ONLY_ADMIN_DROPS) s.delete(p); s.add('bookings.own') }
   return s
 }
+
+/**
+ * An Admin (and nothing else) given documents in Operations Dashboard → Team: they work on — and see — only the files
+ * and Admin stages assigned to them. The database applies the same rule (app.stage_only_admin()).
+ */
+export const isStageOnlyAdmin = (db: DB, u: User) => {
+  const roles = rolesOf(u)
+  return roles.length === 1 && roles[0] === 'admin' && !!db.settings.workflow?.adminStageAccess?.[u.id]
+}
+/** What such an Admin doesn't get from the Admin role: every file, workflow / form / follow-up settings and reports. */
+export const STAGE_ONLY_ADMIN_DROPS: Perm[] = ['bookings.all', 'workflow.manage', 'forms.manage', 'followup.manage', 'reports.view', 'reports.export', 'documents.forms']
 
 export function canOpenDashboard(u: User, slug: Role) {
   return rolesOf(u).includes(slug) || isMaster(u)

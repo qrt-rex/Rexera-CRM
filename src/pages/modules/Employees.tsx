@@ -122,7 +122,7 @@ export default function Employees() {
                     <div><p className="text-lg font-extrabold">{items.filter((w) => !ADMIN_DONE.includes(w!.status)).length}</p><p className="text-[11px] text-mute">Pending</p></div>
                     <div><p className="text-lg font-extrabold">{items.filter((w) => ADMIN_DONE.includes(w!.status)).length}</p><p className="text-[11px] text-mute">Completed</p></div>
                   </div>
-                  <Link to="/ops-desk" className="mt-2 inline-block text-xs font-semibold text-brand-ink hover:underline">Change on the Operations Dashboard</Link>
+                  <Link to="/ops-desk" className="mt-2 inline-block text-xs font-semibold text-brand-ink hover:underline">Change in Operations Dashboard → Team</Link>
                 </Card>
               )
             })()}

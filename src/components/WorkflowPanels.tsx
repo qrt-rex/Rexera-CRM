@@ -2,13 +2,13 @@ import { useRef, useState } from 'react'
 import { BellRing, CalendarClock, ClipboardCheck, Eye, Forward, Mail, MessageCircle, Pause, Play, RefreshCw, Send, Upload } from 'lucide-react'
 import type { AdminStageId, AdminWorkStatus, Booking, Delivery, FileRef } from '../lib/types'
 import { checkFile, saveFile } from '../lib/files'
-import { isMaster } from '../lib/rbac'
+import { isMaster, isStageOnlyAdmin } from '../lib/rbac'
 import { DOC_ACCEPT } from './DocUploader'
 import { FileLink } from './FileField'
 import { useDb } from '../lib/store'
 import { useAuth, useMe } from '../lib/auth'
 import {
-  addAdminStageFiles, addFollowUpNote, adminMayDo, canForwardAdminStages, stageFiles, canSendWelcome, canUploadAdminStage, canWorkAdminStages, forwardAdminStages, logPrecheckFollowUp, noteWhatsappOpened, requeueWelcome, setAdminWork, setFollowUpSchedule, setPrecheckInterval, userName, usersWithRole,
+  addAdminStageFiles, addFollowUpNote, adminMayDo, canForwardAdminStages, stageFiles, canSendWelcome, canUploadAdminStage, canWorkAdminStage, forwardAdminStages, logPrecheckFollowUp, noteWhatsappOpened, requeueWelcome, setAdminWork, setFollowUpSchedule, setPrecheckInterval, userName, usersWithRole,
 } from '../lib/actions'
 import { deliverWelcome, welcomeContent, whatsappLink } from '../lib/welcome'
 import { requestWelcomeWhatsapp } from '../lib/share'
@@ -169,24 +169,28 @@ export function AdminChecklist({ b }: { b: Booking }) {
   const [fwd, setFwd] = useState<{ to: Partial<Record<AdminStageId, string>>; note: string } | null>(null)
   const [fu, setFu] = useState('')
   const work = b.adminWork
-  const mayWork = canWorkAdminStages(db, me, b)
+  // the Pitch Deck reminder: its Admin and the file's Operations person
+  const mayWork = canWorkAdminStage(db, me, b, 'PRECHECK')
   const mayForward = canForwardAdminStages(db, me, b)
   const admins = usersWithRole(db, 'admin')
   const t = istToday()
-  const eligible = work ? ADMIN_STAGES.filter((s) => work[s.id] && work[s.id]!.status !== 'NOT_NEEDED') : []
+  // an Admin set up in Operations Dashboard → Team sees only the stages assigned to them
+  const limited = isStageOnlyAdmin(db, me)
+  const stages = ADMIN_STAGES.filter((s) => !limited || work?.[s.id]?.assignee === me.id)
+  const eligible = work ? stages.filter((s) => work[s.id] && work[s.id]!.status !== 'NOT_NEEDED') : []
   const done = eligible.filter((s) => ADMIN_DONE.includes(work![s.id]!.status)).length
-  const pc = work?.PRECHECK
+  const pc = !limited || work?.PRECHECK?.assignee === me.id ? work?.PRECHECK : undefined
   const filesOf = (s: (typeof ADMIN_STAGES)[number]) => b.documents.filter((d) => d.category === s.label)
   const openForward = () => setFwd({ to: Object.fromEntries(ADMIN_STAGES.map((s) => [s.id, work?.[s.id]?.assignee ?? ''])), note: '' })
   return (
     <Card className="overflow-hidden xl:col-span-2">
-      <CardHeader title="Admin checklist" subtitle={work ? `${done} of ${eligible.length} stages done · each stage can go to a different Admin` : 'Starts when Operations assigns the file to an Admin'} icon={ClipboardCheck}
+      <CardHeader title={limited ? 'My Admin stages' : 'Admin checklist'} subtitle={limited ? `${done} of ${eligible.length} of your stages done` : work ? `${done} of ${eligible.length} stages done · each stage can go to a different Admin` : 'Starts when Operations assigns the file to an Admin'} icon={ClipboardCheck}
         action={mayForward && <Button size="sm" variant="outline" icon={Forward} onClick={openForward}>Forward stages</Button>} />
       {!work ? <p className="px-5 py-4 text-sm text-mute">No Admin yet.{mayForward && ' Forward the stages to Admins one by one, or assign the whole file with “Assign to Admin”.'}</p> : (
         <>
           <div className="px-5 pt-4"><Progress value={eligible.length ? (done / eligible.length) * 100 : 0} tone={done === eligible.length && eligible.length ? 'green' : 'orange'} /></div>
           <ul className="divide-y divide-line/70">
-            {ADMIN_STAGES.map((s) => {
+            {stages.map((s) => {
               const w = work[s.id]
               if (!w) return null
               const overdue = !!w.due && w.due < t && !ADMIN_DONE.includes(w.status) && w.status !== 'NOT_NEEDED'
@@ -198,7 +202,7 @@ export function AdminChecklist({ b }: { b: Booking }) {
                   {overdue && <Badge tone="red">Overdue</Badge>}
                   <Badge tone={workTone(w.status)}>{adminStatusLabel(w.status)}</Badge>
                   <StageUpload b={b} stage={s.id} />
-                  {mayWork && <Button size="sm" variant="ghost" onClick={() => setEdit({ stage: s.id, status: w.status, note: '', due: w.due ?? '', assignee: w.assignee ?? b.adminId ?? '' })}>Update</Button>}
+                  {canWorkAdminStage(db, me, b, s.id) && <Button size="sm" variant="ghost" onClick={() => setEdit({ stage: s.id, status: w.status, note: '', due: w.due ?? '', assignee: w.assignee ?? b.adminId ?? '' })}>Update</Button>}
                 </li>
               )
             })}

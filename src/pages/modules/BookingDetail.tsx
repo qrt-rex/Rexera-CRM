@@ -12,11 +12,11 @@ import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
 import {
   addComboService, addComment, addComplimentaryService, addDocuments, addPayment, addRefund, commissionNow, deleteRefund, needsPriceSplit, addTask, canEditBooking, canEmailClient, canForwardAdminStages, canRunClientPortal, canMoveStage, deleteDocument, setStageOutcome, deleteTask, invoiceFromBooking, moveStage,
-  PAYMENT_MODES, setCommission, setDeduction, setPaymentTds, setRefundStatus, toggleTask, userName, verifyPayment, visibleBookings,
+  PAYMENT_MODES, setCommission, setDeduction, setPaymentTds, setRefundStatus, toggleTask, userName, verifyPayment, visibleBookings, visibleDocuments, visibleTasks,
 } from '../../lib/actions'
 import { DOC_CATEGORIES, STAGES, STAGE_OUTCOMES, stageLabel } from '../../lib/workflow'
 import { ago, bookingMoney, fmtDate, fmtDateTime, gstSplit, inr, today } from '../../lib/format'
-import { roleLabel } from '../../lib/rbac'
+import { isStageOnlyAdmin, roleLabel } from '../../lib/rbac'
 import type { FileRef, LegacyRow } from '../../lib/types'
 import { DOC_TYPES } from '../../lib/files'
 import { FileField } from '../../components/FileField'
@@ -88,17 +88,17 @@ export default function BookingDetail() {
       <Tabs value={tab} onChange={setTab} className="mb-5 w-fit" tabs={[
         { id: 'overview', label: 'Overview', icon: Building2 },
         ...(b.welcome || b.followUp || b.adminWork || b.clientDocs || b.milestones || canForwardAdminStages(db, me, b) || canRunClientPortal(me, b) ? [{ id: 'workflow' as const, label: 'Workflow', icon: Workflow }] : []),
-        { id: 'processing', label: 'Processing', icon: FolderKanban, count: b.tasks.filter((t) => !t.done).length },
-        { id: 'documents', label: 'Documents', icon: FileText, count: b.documents.length }, { id: 'timeline', label: 'Timeline', icon: History, count: b.comments.length + b.approvals.length + (b.clientEmails?.length ?? 0) },
+        { id: 'processing', label: 'Processing', icon: FolderKanban, count: visibleTasks(db, me, b).filter((t) => !t.done).length },
+        { id: 'documents', label: 'Documents', icon: FileText, count: visibleDocuments(db, me, b).length }, { id: 'timeline', label: 'Timeline', icon: History, count: b.comments.length + b.approvals.length + (b.clientEmails?.length ?? 0) },
         ...(b.legacy ? [{ id: 'legacy' as const, label: 'Old CRM record', icon: Archive }] : []),
       ]} />
       {tab === 'overview' && <Overview id={b.id} />}
       {tab === 'workflow' && (
         <div className="grid gap-6 xl:grid-cols-2">
-          <WelcomeCard b={b} />
-          <FollowUpCard b={b} />
+          {/* an Admin set up in Operations Dashboard → Team sees only their own stages */}
+          {!isStageOnlyAdmin(db, me) && <><WelcomeCard b={b} /><FollowUpCard b={b} /></>}
           <AdminChecklist b={b} />
-          <ClientPortalCard b={b} />
+          {!isStageOnlyAdmin(db, me) && <ClientPortalCard b={b} />}
         </div>
       )}
       {tab === 'processing' && <Processing id={b.id} />}
@@ -420,14 +420,14 @@ function Processing({ id }: { id: string }) {
         <Card className="overflow-hidden">
           <CardHeader title="Tasks & follow-ups" icon={ListTodo} />
           <ul className="divide-y divide-line/70">
-            {b.tasks.map((t) => (
+            {visibleTasks(db, me, b).map((t) => (
               <li key={t.id} className="flex items-center gap-3 px-5 py-2.5">
                 <button aria-label="Toggle task" onClick={() => toggleTask(me, b.id, t.id)} className={cx('grid size-5 place-items-center rounded-md border-2', t.done ? 'border-ok bg-ok text-white' : 'border-line')}>{t.done && <Check className="size-3" />}</button>
                 <span className={cx('flex-1 text-sm', t.done && 'text-mute line-through')}>{t.title}{t.due && <span className={cx('ml-2 text-[11px]', !t.done && t.due < today() ? 'text-bad' : 'text-mute')}>{fmtDate(t.due)}</span>}</span>
                 <button aria-label="Delete task" onClick={() => deleteTask(me, b.id, t.id)} className="text-mute hover:text-bad"><Trash2 className="size-3.5" /></button>
               </li>
             ))}
-            {!b.tasks.length && <li className="px-5 py-4 text-sm text-mute">No tasks yet.</li>}
+            {!visibleTasks(db, me, b).length && <li className="px-5 py-4 text-sm text-mute">No tasks yet.</li>}
           </ul>
           <div className="flex gap-2 border-t border-line p-3">
             <input value={task} onChange={(e) => setTask(e.target.value)} placeholder="New task…" className="h-9 min-w-0 flex-1 rounded-lg border border-line bg-card px-3 text-sm" onKeyDown={(e) => { if (e.key === 'Enter' && task.trim()) { run(() => addTask(me, b.id, task, due || undefined)); setTask('') } }} />
@@ -468,9 +468,9 @@ function Documents({ id }: { id: string }) {
     <Card className="overflow-hidden">
       <CardHeader title="Client documents" subtitle="PAN card, GSTIN, CRM, QT, Agreement, pitch deck, F.R, D.P.R… — stored with uploader, date and time" icon={FileText} />
       <div className="border-b border-line p-5"><DocUploader label="Add documents" value={pending} onChange={setPending} onUpload={async (docs) => !!(await run(() => addDocuments(me, b.id, docs), `${docs.length} document(s) added`))} /></div>
-      {!b.documents.length ? <EmptyState icon={FileText} title="No documents yet" text="Upload KYC, company documents, certificates, pitch deck or financials." /> : (
+      {!visibleDocuments(db, me, b).length ? <EmptyState icon={FileText} title="No documents yet" text="Upload KYC, company documents, certificates, pitch deck or financials." /> : (
         <div className="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-3">
-          {b.documents.map((d) => (
+          {visibleDocuments(db, me, b).map((d) => (
             <div key={d.id} className="flex items-start gap-3 rounded-xl border border-line p-3">
               <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-info-soft text-info"><FileText className="size-5" /></span>
               <div className="min-w-0 flex-1">

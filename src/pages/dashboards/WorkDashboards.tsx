@@ -7,8 +7,8 @@ import {
 import { AdminProgressOverview, AutomationAlerts } from '../../components/OpsAutomation'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
-import { userName, usersWithRole } from '../../lib/actions'
-import { isMaster } from '../../lib/rbac'
+import { userName, usersWithRole, visibleBookings } from '../../lib/actions'
+import { isMaster, isStageOnlyAdmin } from '../../lib/rbac'
 import { monthStart, waitingFor } from '../../lib/metrics'
 import { STAGES } from '../../lib/workflow'
 import { ACTIVE_FILE_STATUSES, ADMIN_DONE, ADMIN_STAGES, adminStatusLabel } from '../../../supabase/workflow-rules.mjs'
@@ -103,14 +103,17 @@ export function AdminDashboard() {
   const db = useDb()
   const me = useMe()
   const sa = isMaster(me)
-  const waiting = waitingFor(db, me).filter((b) => ['WITH_ADMIN', 'ON_HOLD'].includes(b.status))
-  const assigned = db.bookings.filter((b) => b.status === 'WITH_ADMIN' && (sa || b.adminId === me.id))
-  const completed = db.bookings.filter((b) => b.status === 'COMPLETED' && (sa || b.adminId === me.id))
-  const hold = db.bookings.filter((b) => b.status === 'ON_HOLD' && (sa || b.adminId === me.id || b.holdFrom === 'WITH_ADMIN'))
+  // an Admin set up in Operations Dashboard → Team: only the files with work for them
+  const limited = isStageOnlyAdmin(db, me)
+  const files = limited ? visibleBookings(db, me) : db.bookings
+  const waiting = waitingFor(db, me).filter((b) => ['WITH_ADMIN', 'ON_HOLD'].includes(b.status) && (!limited || files.includes(b)))
+  const assigned = files.filter((b) => b.status === 'WITH_ADMIN' && (sa || b.adminId === me.id))
+  const completed = files.filter((b) => b.status === 'COMPLETED' && (sa || b.adminId === me.id))
+  const hold = files.filter((b) => b.status === 'ON_HOLD' && (sa || b.adminId === me.id || (!limited && b.holdFrom === 'WITH_ADMIN')))
   const monthDone = completed.filter((b) => ymd(b.updatedAt) >= monthStart()).length
-  const sentForApproval = db.bookings.filter((b) => b.status === 'OPS_REVIEW' && (sa || b.adminId === me.id)).length
+  const sentForApproval = files.filter((b) => b.status === 'OPS_REVIEW' && (sa || b.adminId === me.id)).length
   // single stages the Operation team forwarded to me (Pitch Deck, Finance, DPR, Certification, Submission)
-  const myStages = db.bookings.filter((b) => ACTIVE_FILE_STATUSES.includes(b.status)).flatMap((b) => ADMIN_STAGES
+  const myStages = files.filter((b) => ACTIVE_FILE_STATUSES.includes(b.status)).flatMap((b) => ADMIN_STAGES
     .filter((s) => { const w = b.adminWork?.[s.id]; return !!w && w.assignee === me.id && !ADMIN_DONE.includes(w.status) && w.status !== 'NOT_NEEDED' })
     .map((s) => ({ b, s, w: b.adminWork![s.id]! })))
     .sort((x, y) => (x.w.due || '9999').localeCompare(y.w.due || '9999'))
@@ -133,8 +136,8 @@ export function AdminDashboard() {
         <Tile to="/bookings?status=COMPLETED" icon={CheckCircle2} label="Complete client work" desc="Finished files" tone="green" />
         <Tile to="/bookings?status=ON_HOLD" icon={PauseCircle} label="On hold client" desc="Waiting on client or issue" tone="amber" badge={hold.length} />
         <Tile to="/leave?new=1" icon={CalendarCheck2} label="Request my leave" tone="violet" />
-        <Tile to="/forms" icon={FileSignature} label="Document Form Builder" desc="Client forms & secure links" tone="violet" />
-        <Tile to="/workflow-settings" icon={Settings2} label="Workflow settings" desc="Reminders, welcome message, alerts" tone="navy" />
+        {!limited && <Tile to="/forms" icon={FileSignature} label="Document Form Builder" desc="Client forms & secure links" tone="violet" />}
+        {!limited && <Tile to="/workflow-settings" icon={Settings2} label="Workflow settings" desc="Reminders, welcome message, alerts" tone="navy" />}
       </TileGrid>
       <Section id="my-stages" title="My Admin stages" subtitle="Stages the Operation team assigned to you — open one to update its status and upload its file" icon={ClipboardCheck} className="mt-6">
         {!myStages.length ? <EmptyState icon={CheckCircle2} title="No open stages" text="Pitch Deck, Finance, DPR, Certification and Submission stages assigned to you appear here." /> : (
@@ -152,7 +155,7 @@ export function AdminDashboard() {
           </ul>
         )}
       </Section>
-      <div className="mt-6"><AutomationAlerts /><AdminProgressOverview /></div>
+      {!limited && <div className="mt-6"><AutomationAlerts /><AdminProgressOverview /></div>}
       <div className="grid gap-6 xl:grid-cols-3">
         <Section title="My client work" subtitle={`Stages: ${STAGES.join(' → ')}`} icon={Inbox} className="xl:col-span-2" action={<ViewAll to="/work" />}>
           {waiting.length ? <ul className="divide-y divide-line/70">{waiting.slice(0, 8).map((b) => <ClientWorkRow key={b.id} b={b} showDocs />)}</ul> : <EmptyState icon={CheckCircle2} title="Nothing waiting" text="Operations will assign files to you." />}

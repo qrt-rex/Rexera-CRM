@@ -1,67 +1,14 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { CheckCircle2, ClipboardList, Clock3, Download, FileClock, FileStack, FileUp, RotateCcw, Save, Search, UserRoundCheck, Users } from 'lucide-react'
+import { CheckCircle2, ClipboardList, Clock3, Download, FileClock, FileUp, RotateCcw, Search, UserRoundCheck, Users } from 'lucide-react'
 import type { AdminStageId, Booking } from '../lib/types'
 import { useDb } from '../lib/store'
 import { useMe } from '../lib/auth'
-import { canRunClientPortal, clientDocState, setClientDocs, visibleBookings } from '../lib/actions'
-import { ADMIN_STAGES, ACTIVE_FILE_STATUSES } from '../../supabase/workflow-rules.mjs'
+import { clientDocState, visibleBookings } from '../lib/actions'
+import { ADMIN_STAGES } from '../../supabase/workflow-rules.mjs'
 import { CLIENT_DOC_STATUS, projectProgress, type ClientDocState } from '../../supabase/portal-rules.mjs'
 import { downloadCsv } from '../lib/format'
-import { Badge, Button, Card, CardHeader, Checkbox, cx, EmptyState, Progress, SearchBox, Select, Stat, Table, Td, Th, useRun } from './ui'
-
-const ALL = ADMIN_STAGES.map((s) => s.id)
-const label = (b: Booking) => `${b.bookingId} · ${b.companyName}`
-
-/**
- * Operations Dashboard → client-wise document assignment: pick a client's CRM entry, tick the documents (Pitch Deck,
- * Finance, DPR, Certification, Submission) they must upload in the portal, Save. Changeable any time; taking one off
- * keeps its history.
- */
-export function ClientDocAssign() {
-  const db = useDb()
-  const me = useMe()
-  const run = useRun()
-  const mine = visibleBookings(db, me).filter((b) => canRunClientPortal(me, b) && (ACTIVE_FILE_STATUSES as readonly string[]).includes(b.status))
-  const [q, setQ] = useState('')
-  const [sel, setSel] = useState('')
-  const [picks, setPicks] = useState<AdminStageId[]>([])
-  const b = mine.find((x) => x.id === sel)
-  const saved = useMemo(() => (b ? ALL.filter((s) => b.clientDocs?.[s] && !b.clientDocs[s]!.removed) : []), [b])
-  useEffect(() => { setPicks(saved) }, [sel]) // eslint-disable-line react-hooks/exhaustive-deps
-  const dirty = !!b && (picks.length !== saved.length || picks.some((p) => !saved.includes(p)))
-  const ql = q.trim().toLowerCase()
-  const options = mine.filter((x) => !ql || `${x.bookingId} ${x.companyName} ${x.contactPerson}`.toLowerCase().includes(ql)).slice(0, 200)
-  if (!mine.length) return null
-  return (
-    <Card className="mb-6 overflow-hidden">
-      <CardHeader title="Client document assignment" icon={FileUp} subtitle="Choose a client, tick the documents they must upload in their portal, and save"
-        action={<Link to="/reports?tab=clients"><Button size="sm" variant="outline" icon={FileStack}>Client report</Button></Link>} />
-      <div className="grid gap-4 p-5 lg:grid-cols-[minmax(0,320px)_1fr_auto] lg:items-end">
-        <div className="grid gap-2">
-          <SearchBox value={q} onChange={setQ} placeholder="Find a client…" />
-          <Select label="Client" value={sel} onChange={(e) => setSel(e.target.value)}>
-            <option value="">— Select a client —</option>
-            {options.map((x) => <option key={x.id} value={x.id}>{label(x)}</option>)}
-          </Select>
-        </div>
-        <div>
-          <p className="mb-1.5 flex items-center gap-3 text-xs font-semibold text-mute">Documents
-            {b && <><button type="button" className="font-semibold text-brand-ink hover:underline" onClick={() => setPicks(ALL)}>All</button><button type="button" className="font-semibold text-mute hover:underline" onClick={() => setPicks([])}>None</button></>}</p>
-          <div className={cx('flex flex-wrap gap-x-5 gap-y-2 rounded-xl border border-line px-4 py-2.5', !b && 'opacity-50')}>
-            {ADMIN_STAGES.map((s) => {
-              const st = b ? clientDocState(b, s.id) : null
-              return <Checkbox key={s.id} disabled={!b} checked={picks.includes(s.id)} onChange={(on) => setPicks((p) => (on ? [...p, s.id] : p.filter((x) => x !== s.id)))}
-                label={<span>{s.short}{st && <span className="ml-1 text-[11px] text-mute">({CLIENT_DOC_STATUS[st].label.toLowerCase()})</span>}</span>} />
-            })}
-          </div>
-          {b && <p className="mt-1.5 text-[11px] text-mute">{(db.clientAccounts ?? []).some((a) => a.bookingIds.includes(b.id)) ? 'The client sees these in their portal.' : 'This client has no portal access yet — the Super Admin invites them from Client Portal.'} <Link to={`/bookings/${b.id}?tab=workflow`} className="font-semibold text-brand-ink hover:underline">Open the entry</Link></p>}
-        </div>
-        <Button icon={Save} disabled={!dirty} onClick={() => run(() => setClientDocs(me, sel, picks), 'Documents assigned to the client')}>Save</Button>
-      </div>
-    </Card>
-  )
-}
+import { Badge, Button, Card, CardHeader, cx, EmptyState, Progress, SearchBox, Select, Stat, Table, Td, Th } from './ui'
 
 type Row = { b: Booking; portal: 'ACTIVE' | 'INVITED' | 'DISABLED' | null; st: Partial<Record<AdminStageId, ClientDocState>>; requested: number; uploaded: number; pending: number; review: number; approved: number; resubmit: number; progress: number | null }
 type Sort = 'pending' | 'review' | 'requested' | 'approved' | 'progress' | 'name'
@@ -132,7 +79,7 @@ export function ClientDocReport() {
             <option value="pending">Most pending</option><option value="review">Most to review</option><option value="requested">Most requested</option><option value="approved">Most approved</option><option value="progress">Highest progress</option><option value="name">Name</option>
           </Select>
         </div>
-        {!shown.length ? <EmptyState icon={Search} title={rows.length ? 'No client matches' : 'No client documents yet'} text={rows.length ? 'Change the search or filters.' : 'Assign documents to clients on the Operations Dashboard.'} /> : (
+        {!shown.length ? <EmptyState icon={Search} title={rows.length ? 'No client matches' : 'No client documents yet'} text={rows.length ? 'Change the search or filters.' : 'Ask a client for documents on their CRM entry (Workflow tab → Client portal).'} /> : (
           <Table>
             <thead><tr><Th>Client</Th><Th>Portal</Th>{ADMIN_STAGES.map((s) => <Th key={s.id} className="text-center">{s.short}</Th>)}<Th className="text-right">Requested</Th><Th className="text-right">Uploaded</Th><Th className="text-right">Pending</Th><Th className="text-right">Approved</Th><Th className="w-32">Progress</Th></tr></thead>
             <tbody>

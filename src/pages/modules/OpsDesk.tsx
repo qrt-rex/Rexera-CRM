@@ -15,8 +15,7 @@ import { Avatar, Badge, Button, Card, CardHeader, Checkbox, cx, EmptyState, Inpu
 import { BookingStatusBadge, DeadlineBadge, DecisionButtons, DecisionModal, PriorityBadge, StageTrack } from '../../components/booking'
 import { StageControls } from '../../components/StageControls'
 import { AdminProgressOverview, AutomationAlerts } from '../../components/OpsAutomation'
-import { AdminDocAccess } from '../../components/AdminDocAccess'
-import { ClientDocAssign } from '../../components/ClientDocs'
+import { AdminTeamAssign } from '../../components/AdminTeam'
 
 type Filter = 'open' | 'active' | 'admin' | 'review' | 'hold' | 'overdue' | 'week' | 'done' | 'all'
 const FILTERS: Filter[] = ['open', 'active', 'admin', 'review', 'hold', 'overdue', 'week', 'done', 'all']
@@ -116,8 +115,6 @@ export default function OpsDesk() {
 
       <AutomationAlerts />
       <AdminProgressOverview />
-      <AdminDocAccess />
-      <ClientDocAssign />
 
       {/* Legal's queue: approved by Accounts, waiting to be assigned */}
       <Card id="assign-queue" className="mb-6 scroll-mt-24 overflow-hidden">
@@ -163,7 +160,7 @@ export default function OpsDesk() {
         </Card>
 
         <Card className="self-start overflow-hidden">
-          <CardHeader title="Team workload" subtitle="Click a person to see their cases" icon={UsersRound} />
+          <CardHeader title="Team" subtitle="Operation team workload — click a person to see their cases" icon={UsersRound} />
           <Table className="[&_table]:min-w-0">
             <thead><tr><Th>Member</Th><Th className="px-2 text-center" >Active</Th><Th className="px-2 text-center">Hold</Th><Th className="px-2 text-center">Late</Th><Th className="px-2 text-center">Tasks</Th></tr></thead>
             <tbody>
@@ -179,6 +176,7 @@ export default function OpsDesk() {
               {!workload.length && <tr><Td colSpan={5} className="text-center text-mute">No Operation team members.</Td></tr>}
             </tbody>
           </Table>
+          <AdminTeamAssign />
         </Card>
       </div>
 
