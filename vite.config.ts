@@ -388,4 +388,6 @@ function formsRelay(mode: string): Plugin {
 export default defineConfig(({ mode }) => ({
   plugins: [react(), tailwindcss(), blutecRelay(mode), mailerRelay(mode), aiRelay(mode), usersRelay(mode), reportRelay(mode), formsRelay(mode)],
   server: { port: 5180 },
+  // the gzip size table costs memory the Render free plan (512 MB) doesn't have
+  build: { reportCompressedSize: false },
 }))

@@ -5,7 +5,8 @@ services:
     name: rexera-crm
     runtime: node
     plan: free
-    buildCommand: npm ci && npm run build
+    # straight to the build script (no npm wrapper): the free plan's build has 512 MB — see scripts/build.mjs
+    buildCommand: npm ci && node scripts/build.mjs
     startCommand: node server.mjs
     pullRequestPreviewsEnabled: false
     envVars:
