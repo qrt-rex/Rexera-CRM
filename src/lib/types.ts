@@ -544,8 +544,8 @@ export interface CandidateForm {
   token: string
   title: string
   kind: 'JOB' | 'INTERNSHIP'
-  /** the position HR is hiring for (JOB_POSITIONS) — chosen for the candidate on the form */
-  position?: string
+  /** the positions HR is hiring for on this form (JOB_POSITIONS, one or more) — the candidate picks one of them */
+  positions?: string[]
   department: string
   description: string
   active: boolean

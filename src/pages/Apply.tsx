@@ -4,7 +4,7 @@ import { Briefcase, CheckCircle2, GraduationCap, MapPin, Send } from 'lucide-rea
 import type { FileRef } from '../lib/types'
 import { useDb } from '../lib/store'
 import { submitApplication, type ApplicationInput } from '../lib/actions'
-import { applicationProblems, CANDIDATE_TYPES, istNowLocal, JOB_BRANCH_INFO, JOB_POSITIONS, jobBranch } from '../../supabase/form-rules.mjs'
+import { applicationProblems, CANDIDATE_TYPES, formPositions, istNowLocal, JOB_BRANCH_INFO, jobBranch } from '../../supabase/form-rules.mjs'
 import { CLOUD } from '../lib/cloud'
 import { RESUME_TYPES } from '../lib/files'
 import { Logo } from '../components/Logo'
@@ -36,8 +36,14 @@ export default function Apply() {
   const set = (p: Partial<ApplicationInput>) => setA((v) => ({ ...v, ...p }))
   const intern = form?.kind === 'INTERNSHIP'
   // the position starts as the role's title (the candidate can change it); an internship form starts as Internship
-  useEffect(() => { if (form) setA((v) => ({ ...v, position: v.position || (form.position && JOB_POSITIONS.includes(form.position) ? form.position : form.kind === 'INTERNSHIP' ? 'Intern' : ''), candidateType: v.candidateType ?? (form.kind === 'INTERNSHIP' ? 'INTERNSHIP' : undefined) })) }, [form])
-  const errs = tried ? applicationProblems(tidy(a) as unknown as Record<string, unknown>) : {}
+  // the positions HR ticked on this form: one is chosen for the candidate, several to pick from
+  const offered = formPositions(form)
+  useEffect(() => {
+    if (!form) return
+    const own = formPositions(form)
+    setA((v) => ({ ...v, position: v.position && own.includes(v.position) ? v.position : own.length === 1 ? own[0] : form.kind === 'INTERNSHIP' && own.includes('Intern') ? 'Intern' : '', candidateType: v.candidateType ?? (form.kind === 'INTERNSHIP' ? 'INTERNSHIP' : undefined) }))
+  }, [form])
+  const errs = tried ? applicationProblems(tidy(a) as unknown as Record<string, unknown>, Date.now(), offered) : {}
   const experienced = a.candidateType === 'EXPERIENCED'
 
   const [busy, setBusy] = useState(false)
@@ -46,7 +52,7 @@ export default function Apply() {
     const out = tidy(a)
     if (!CLOUD) { if (await run(() => submitApplication(token, out, resume))) setDone(true); return }
     // live CRM: the server checks and saves it (and tells HR); "thank you" only once it is really saved
-    const problem = Object.values(applicationProblems(out as unknown as Record<string, unknown>))[0] ?? (!resume ? 'Upload your resume (PDF or Word).' : '')
+    const problem = Object.values(applicationProblems(out as unknown as Record<string, unknown>, Date.now(), offered))[0] ?? (!resume ? 'Upload your resume (PDF or Word).' : '')
     if (problem) { toast('error', problem); return }
     setBusy(true)
     try {
@@ -92,8 +98,8 @@ export default function Apply() {
             <form className="grid gap-4 p-6 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); submit() }}>
               <Input label="Full name" required autoComplete="name" value={a.name} onChange={(e) => set({ name: e.target.value })} className="sm:col-span-2" error={errs.name} />
               <Select label="Position applied for" required value={a.position} onChange={(e) => set({ position: e.target.value })} error={errs.position}>
-                <option value="">— Select the position —</option>
-                {JOB_POSITIONS.map((p) => <option key={p}>{p}</option>)}
+                {offered.length > 1 && <option value="">— Select the position —</option>}
+                {offered.map((p) => <option key={p}>{p}</option>)}
               </Select>
               <Select label="Branch" required value={a.branch} onChange={(e) => set({ branch: e.target.value })} error={errs.branch}>
                 <option value="">— Select the branch —</option>

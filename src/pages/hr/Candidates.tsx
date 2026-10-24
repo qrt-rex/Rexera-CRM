@@ -8,7 +8,7 @@ import { downloadCsv, fmtDate, fmtDateTime, today } from '../../lib/format'
 import { CANDIDATE_TYPES, candidateTypeLabel, JOB_BRANCH_INFO, JOB_POSITIONS, jobBranch } from '../../../supabase/form-rules.mjs'
 import { openFile } from '../../lib/files'
 import { FileLink } from '../../components/FileField'
-import { Badge, Button, Card, CardHeader, Drawer, EmptyState, Input, Modal, PageHeader, SearchBox, Select, Table, Td, Textarea, Th, useConfirm, usePaged, useRun, useToast } from '../../components/ui'
+import { Badge, Button, Card, CardHeader, Checkbox, Drawer, EmptyState, Input, Modal, PageHeader, SearchBox, Select, Table, Td, Textarea, Th, useConfirm, usePaged, useRun, useToast } from '../../components/ui'
 
 const STATUS: Record<CandidateApplication['status'], { label: string; tone: 'blue' | 'violet' | 'red' | 'green' }> = {
   NEW: { label: 'New', tone: 'blue' }, SHORTLISTED: { label: 'Shortlisted', tone: 'violet' }, REJECTED: { label: 'Rejected', tone: 'red' }, HIRED: { label: 'Hired', tone: 'green' },
@@ -21,7 +21,7 @@ export default function Candidates() {
   const run = useRun()
   const toast = useToast()
   const [confirm, confirmNode] = useConfirm()
-  const [edit, setEdit] = useState<{ id?: string; title: string; kind: CandidateForm['kind']; position: string; department: string; description: string } | null>(null)
+  const [edit, setEdit] = useState<{ id?: string; title: string; kind: CandidateForm['kind']; positions: string[]; department: string; description: string } | null>(null)
   const [formFilter, setFormFilter] = useState('')
   const [status, setStatus] = useState('')
   const [branch, setBranch] = useState('')
@@ -40,7 +40,7 @@ export default function Candidates() {
   return (
     <div>
       <PageHeader title="Candidate Forms" subtitle="Create an application form, share its link with interns and new joiners, and review their details and resumes here" icon={ClipboardList}
-        actions={<Button variant="accent" icon={Plus} onClick={() => setEdit({ title: '', kind: 'JOB', position: '', department: '', description: '' })}>New form</Button>} />
+        actions={<Button variant="accent" icon={Plus} onClick={() => setEdit({ title: '', kind: 'JOB', positions: [], department: '', description: '' })}>New form</Button>} />
 
       <div className="mb-5 flex items-start gap-3 rounded-2xl border border-info/30 bg-info-soft px-4 py-3 text-sm">
         <Info className="mt-0.5 size-4 shrink-0 text-info" />
@@ -49,21 +49,21 @@ export default function Candidates() {
 
       <Card className="mb-6 overflow-hidden">
         <CardHeader title="Forms" subtitle={`${db.candidateForms.filter((f) => f.active).length} open`} icon={ClipboardList} />
-        {!db.candidateForms.length ? <EmptyState icon={ClipboardList} title="No forms yet" text="Create one for each role or internship you are hiring for." action={<Button icon={Plus} onClick={() => setEdit({ title: '', kind: 'JOB', position: '', department: '', description: '' })}>New form</Button>} /> : (
+        {!db.candidateForms.length ? <EmptyState icon={ClipboardList} title="No forms yet" text="Create one for each role or internship you are hiring for." action={<Button icon={Plus} onClick={() => setEdit({ title: '', kind: 'JOB', positions: [], department: '', description: '' })}>New form</Button>} /> : (
           <ul className="divide-y divide-line/70">
             {db.candidateForms.map((f) => {
               const n = db.candidates.filter((c) => c.formId === f.id).length
               return (
                 <li key={f.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
                   <div className="min-w-0 flex-1">
-                    <p className="flex flex-wrap items-center gap-2 font-semibold">{f.title}<Badge tone={f.kind === 'INTERNSHIP' ? 'cyan' : 'navy'}>{f.kind === 'INTERNSHIP' ? 'Internship' : 'Job'}</Badge>{f.position && <Badge tone="violet">{f.position}</Badge>}{!f.active && <Badge tone="gray">closed</Badge>}</p>
+                    <p className="flex flex-wrap items-center gap-2 font-semibold">{f.title}<Badge tone={f.kind === 'INTERNSHIP' ? 'cyan' : 'navy'}>{f.kind === 'INTERNSHIP' ? 'Internship' : 'Job'}</Badge>{(f.positions ?? []).slice(0, 3).map((p) => <Badge key={p} tone="violet">{p.replace(/\s*\(.*\)$/, '')}</Badge>)}{(f.positions?.length ?? 0) > 3 && <Badge tone="gray">+{f.positions!.length - 3} more</Badge>}{!f.active && <Badge tone="gray">closed</Badge>}</p>
                     <p className="truncate font-mono text-xs text-mute">{linkFor(f)}</p>
                   </div>
                   <button className="text-xs font-semibold text-brand-ink hover:underline" onClick={() => { setFormFilter(f.id); setStatus('') }}>{n} application{n === 1 ? '' : 's'}</button>
                   <span className="flex gap-1">
                     <Button size="sm" variant="soft" icon={Copy} onClick={() => copy(f)}>Copy link</Button>
                     <Button size="sm" variant="ghost" icon={ExternalLink} aria-label="Open form" title="Open form" onClick={() => window.open(linkFor(f), '_blank', 'noopener')} />
-                    <Button size="sm" variant="ghost" icon={Pencil} aria-label="Edit form" title="Edit" onClick={() => setEdit({ id: f.id, title: f.title, kind: f.kind, position: f.position ?? '', department: f.department, description: f.description })} />
+                    <Button size="sm" variant="ghost" icon={Pencil} aria-label="Edit form" title="Edit" onClick={() => setEdit({ id: f.id, title: f.title, kind: f.kind, positions: f.positions ?? [], department: f.department, description: f.description })} />
                     <Button size="sm" variant="ghost" icon={Power} aria-label={f.active ? 'Close form' : 'Re-open form'} title={f.active ? 'Close (stop accepting)' : 'Re-open'} onClick={() => run(() => setCandidateFormActive(me, f.id, !f.active), f.active ? 'Form closed' : 'Form re-opened')} />
                     {!n && <Button size="sm" variant="ghost" icon={Trash2} aria-label="Delete form" className="text-bad" onClick={async () => { if (await confirm('Delete this form?', f.title, true)) run(() => deleteCandidateForm(me, f.id), 'Form deleted') }} />}
                   </span>
@@ -130,11 +130,23 @@ export default function Candidates() {
           <div className="grid gap-4 sm:grid-cols-2">
             <Input label="Role title" required value={edit.title} onChange={(e) => setEdit({ ...edit, title: e.target.value })} placeholder="e.g. Business Development Executive" className="sm:col-span-2" />
             <Select label="Type" value={edit.kind} onChange={(e) => setEdit({ ...edit, kind: e.target.value as CandidateForm['kind'] })}><option value="JOB">Job (new joiner)</option><option value="INTERNSHIP">Internship</option></Select>
-            <Select label="Position" required value={edit.position} onChange={(e) => setEdit({ ...edit, position: e.target.value, title: edit.title || e.target.value.replace(/\s*\(.*\)$/, '') })}>
-              <option value="">— Select the position —</option>
-              {JOB_POSITIONS.map((p) => <option key={p}>{p}</option>)}
-            </Select>
             <Input label="Department" value={edit.department} onChange={(e) => setEdit({ ...edit, department: e.target.value })} />
+            <fieldset className="sm:col-span-2">
+              <legend className="mb-1.5 flex w-full items-center gap-2 text-xs font-semibold text-mute">
+                <span>Positions <span className="text-bad">*</span> <span className="font-normal">— tick one or more; the candidate picks one of them</span></span>
+                <span className="ml-auto flex gap-2">
+                  <button type="button" className="font-semibold text-brand-ink hover:underline" onClick={() => setEdit({ ...edit, positions: [...JOB_POSITIONS] })}>Select all</button>
+                  <button type="button" className="font-semibold text-mute hover:underline" onClick={() => setEdit({ ...edit, positions: [] })}>Clear</button>
+                </span>
+              </legend>
+              <div className="grid gap-1.5 rounded-xl border border-line p-3 sm:grid-cols-2">
+                {JOB_POSITIONS.map((p) => (
+                  <Checkbox key={p} label={p} checked={edit.positions.includes(p)}
+                    onChange={(on) => setEdit({ ...edit, positions: on ? [...edit.positions, p] : edit.positions.filter((x) => x !== p), title: edit.title || (on ? p.replace(/\s*\(.*\)$/, '') : edit.title) })} />
+                ))}
+              </div>
+              <p className="mt-1 text-[11px] text-mute">{edit.positions.length ? `${edit.positions.length} selected` : 'None selected yet'}</p>
+            </fieldset>
             <Textarea label="About the role (shown on the form)" rows={4} value={edit.description} onChange={(e) => setEdit({ ...edit, description: e.target.value })} className="sm:col-span-2" />
             <p className="text-xs text-mute sm:col-span-2">Candidates fill name, contact details, qualification, experience and expectations, and must upload a resume (PDF or Word, up to 5 MB).</p>
           </div>

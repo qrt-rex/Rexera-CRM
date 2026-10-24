@@ -94,7 +94,7 @@ db.docForms = [{ id: 'frm-1', token: 'tok_ABCDEFGHIJKLMNOPQRSTUV12', name: 'KYC'
 db.formSubmissions = [{ id: 'fs-1', formId: 'frm-1', formVersion: 2, bookingId: bk.id, fields: db.docForms[0].fields, answers: { f2: 'A' }, files: [{ fieldId: 'f1', file: { id: 'f-up', name: 'pan.pdf', type: 'application/pdf', size: 5, at } }], submittedAt: at, status: 'ACCEPTED', reviewedBy: a.id, reviewedAt: at, note: 'ok' }]
 db.services[0].prices = { MULTIPLE: 70000, COMBO12: 60000 }
 // a job application with its branch
-db.candidateForms.push({ id: 'cf-qa', token: 'tok-cf-qa', title: 'BDE', kind: 'JOB', position: 'BDE (Business Development Executive)', department: 'Sales', description: '', active: true, createdAt: at, by: a.id })
+db.candidateForms.push({ id: 'cf-qa', token: 'tok-cf-qa', title: 'BDE', kind: 'JOB', positions: ['BDM (Business Development Manager)', 'BDE (Business Development Executive)'], department: 'Sales', description: '', active: true, createdAt: at, by: a.id })
 db.candidates.push({ id: 'cand-qa', formId: 'cf-qa', name: 'Asha', email: 'asha@x.test', phone: '9876500001', city: 'Ahmedabad', qualification: 'MBA', experience: '1–3 years', branch: 'Ahmedabad (A)', position: 'BDE', candidateType: 'EXPERIENCED', currentCtc: '3,60,000', interviewAt: '2026-10-28T11:30', resume: { id: 'f-cv', name: 'cv.pdf', type: 'application/pdf', size: 9, at }, submittedAt: at, status: 'NEW' })
 // Sales Kit: the seed list (55) plus one edited by the Operation team
 assert.ok(db.salesKit.length >= 50, 'the Sales Kit list is loaded')

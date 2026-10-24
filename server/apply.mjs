@@ -4,7 +4,7 @@
 // (it must exist, and really be a PDF or Word file).
 import { randomBytes } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
-import { applicationProblems, candidateTypeLabel, MAX_UPLOAD_BYTES, normMobile, RESUME_MIME, sniffType } from '../supabase/form-rules.mjs'
+import { applicationProblems, candidateTypeLabel, formPositions, MAX_UPLOAD_BYTES, normMobile, RESUME_MIME, sniffType } from '../supabase/form-rules.mjs'
 
 const BUCKET = 'crm-files'
 const reply = (status, body) => ({ status, body })
@@ -33,13 +33,14 @@ export async function submitJobApplication(env, token, raw, ip, client) {
   const sb = client ?? admin(env)
   if (!sb) return no(503, 'Applications can’t be received right now — please try again later.')
   if (!/^[A-Za-z0-9_-]{6,64}$/.test(token)) return no(404, 'This link is not valid.')
-  const { data: form, error: formErr } = await sb.from('candidate_forms').select('id, title, active').eq('token', token).maybeSingle()
+  // all columns: an older database may not have the positions column yet
+  const { data: form, error: formErr } = await sb.from('candidate_forms').select('*').eq('token', token).maybeSingle()
   if (formErr) throw new Error(formErr.message)
   if (!form) return no(404, 'This link is not valid. Please check it with the person who sent it to you.')
   if (!form.active) return no(410, 'Applications for this role are closed.')
 
   const a = p.application ?? {}
-  const errors = applicationProblems(a)
+  const errors = applicationProblems(a, Date.now(), formPositions(form))
   if (Object.keys(errors).length) return no(422, Object.values(errors)[0], { errors })
   const email = text(a.email, 200).toLowerCase()
   const { data: dup } = await sb.from('candidate_applications').select('id').eq('form_id', form.id).eq('email', email).maybeSingle()

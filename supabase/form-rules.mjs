@@ -50,6 +50,11 @@ export const JOB_POSITIONS = [
   'Admin', 'Operation Team Member', 'HR', 'Accounts Executive', 'Legal Executive', 'Digital Marketing Executive',
   'Graphic Designer', 'IT Support', 'Office Assistant', 'Intern',
 ]
+/** The positions a form offers (what HR ticked; an older form with one position, or none = the whole list). */
+export const formPositions = (f) => {
+  const own = (Array.isArray(f?.positions) ? f.positions : f?.position ? [f.position] : []).filter((p) => JOB_POSITIONS.includes(p))
+  return own.length ? own : JOB_POSITIONS
+}
 /** A resume: PDF or Word only. */
 export const RESUME_MIME = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
 /** How the candidate applies: an experienced employee also gives experience, company, current CTC and notice period. */
@@ -63,10 +68,10 @@ export const istNowLocal = (now = Date.now()) => new Date(now + 5.5 * 3600_000).
  * What's wrong with a job application (field → message), checked the same way in the browser and on the server.
  * LinkedIn and the message are optional; the interview slot must be in the future (India time).
  */
-export function applicationProblems(a, now = Date.now()) {
+export function applicationProblems(a, now = Date.now(), positions = JOB_POSITIONS) {
   const e = {}
   if (String(a?.name ?? '').trim().length < 2) e.name = 'Enter your full name.'
-  if (!JOB_POSITIONS.includes(a?.position)) e.position = 'Choose the position you are applying for.'
+  if (!positions.includes(a?.position)) e.position = 'Choose the position you are applying for.'
   if (!JOB_BRANCHES.includes(a?.branch)) e.branch = 'Choose the branch you are applying for.'
   if (!CANDIDATE_TYPES.some((t) => t.id === a?.candidateType)) e.candidateType = 'Choose Internship, Fresher or Employee (experienced).'
   if (!EMAIL.test(String(a?.email ?? '').trim())) e.email = 'Enter a valid email.'

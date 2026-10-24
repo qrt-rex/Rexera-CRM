@@ -9,7 +9,7 @@ import { BOOKING_TYPES, COMBO_PACKAGES, comboCap, comboMonths, isFundingService 
 import {
   ACTIVE_FILE_STATUSES, ADMIN_DONE, ADMIN_STAGES, ADMIN_WORK_STATUSES, addDays as addDaysYmd, adminStatusLabel, CLOSED_FILE_STATUSES, followUpDue, istToday, nextAfter as nextAfterYmd, precheckDue, precheckPending, schemeAlertDue, workflowSettings,
 } from '../../supabase/workflow-rules.mjs'
-import { applicationProblems, JOB_POSITIONS } from '../../supabase/form-rules.mjs'
+import { applicationProblems, formPositions, JOB_POSITIONS } from '../../supabase/form-rules.mjs'
 import { hashPassword } from './crypto'
 import { CALL_OUTCOMES, FINAL_STAGE, hasLegalDoc, LEAD_STATUS, OPEN_LEAD, STAGE_OUTCOMES, STAGES, stageLabel } from './workflow'
 import { fireAutomation } from './email'
@@ -2381,15 +2381,17 @@ export function logLetter(me: User, kind: string, name: string) {
 // ============================================================ candidate forms (public apply link)
 const randomToken = () => Array.from(crypto.getRandomValues(new Uint8Array(9)), (b) => b.toString(36).padStart(2, '0')).join('').slice(0, 14)
 
-export function saveCandidateForm(me: User, f: Pick<CandidateForm, 'title' | 'kind' | 'department' | 'description'> & { position?: string; id?: string }) {
+export function saveCandidateForm(me: User, f: Pick<CandidateForm, 'title' | 'kind' | 'department' | 'description'> & { positions?: string[]; id?: string }) {
   need(me, 'recruitment.manage')
   assert(f.title.trim().length >= 2, 'Give the role a title.')
-  assert(f.position && JOB_POSITIONS.includes(f.position), 'Choose the position you are hiring for.')
+  // in the list's order, no repeats, only known positions
+  const positions = JOB_POSITIONS.filter((p) => (f.positions ?? []).includes(p))
+  assert(positions.length, 'Tick at least one position you are hiring for.')
   let id = f.id
   mutate((d) => {
-    if (f.id) { const x = d.candidateForms.find((c) => c.id === f.id); assert(x, 'Form not found.'); Object.assign(x, { title: f.title.trim(), kind: f.kind, position: f.position, department: f.department.trim(), description: f.description.trim() }); return }
+    if (f.id) { const x = d.candidateForms.find((c) => c.id === f.id); assert(x, 'Form not found.'); Object.assign(x, { title: f.title.trim(), kind: f.kind, positions, department: f.department.trim(), description: f.description.trim() }); return }
     id = uid('cf-')
-    d.candidateForms.unshift({ id, token: randomToken(), title: f.title.trim(), kind: f.kind, position: f.position, department: f.department.trim(), description: f.description.trim(), active: true, createdAt: nowIso(), by: me.id })
+    d.candidateForms.unshift({ id, token: randomToken(), title: f.title.trim(), kind: f.kind, positions, department: f.department.trim(), description: f.description.trim(), active: true, createdAt: nowIso(), by: me.id })
     audit(d, me.id, 'CANDIDATE_FORM', `Created “${f.title.trim()}”`)
   })
   return id!
@@ -2415,7 +2417,7 @@ export function submitApplication(token: string, a: ApplicationInput, resume: Fi
   const d = getDb()
   const form = d.candidateForms.find((f) => f.token === token)
   assert(form && form.active, 'This application form is closed.')
-  const problem = Object.values(applicationProblems(a as unknown as Record<string, unknown>))[0]
+  const problem = Object.values(applicationProblems(a as unknown as Record<string, unknown>, Date.now(), formPositions(form)))[0]
   assert(!problem, problem ?? '')
   assert(resume, 'Upload your resume (PDF or Word).')
   assert(!d.candidates.some((c) => c.formId === form.id && c.email.toLowerCase() === a.email.trim().toLowerCase()), 'You have already applied for this role with this email.')

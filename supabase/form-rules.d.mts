@@ -16,8 +16,9 @@ export const JOB_BRANCHES: string[]
 export function jobBranch(name?: string): JobBranch | undefined
 export const RESUME_MIME: string[]
 export const JOB_POSITIONS: string[]
+export function formPositions(f?: { positions?: string[]; position?: string | null } | null): string[]
 export const CANDIDATE_TYPES: { id: 'INTERNSHIP' | 'FRESHER' | 'EXPERIENCED'; label: string }[]
 export function candidateTypeLabel(id?: string): string
 export function istNowLocal(now?: number): string
-export function applicationProblems(a: Record<string, unknown>, now?: number): Record<string, string>
+export function applicationProblems(a: Record<string, unknown>, now?: number, positions?: string[]): Record<string, string>
 export function formOpen(f: Pick<DocForm, 'status' | 'expiresOn'>, today: string): boolean

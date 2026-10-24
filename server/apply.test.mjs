@@ -29,7 +29,8 @@ function fake(tables, files) {
 const env = () => ''
 const pdf = Buffer.from('%PDF-1.7\n…cv…'), exe = Buffer.from('MZ\x90\x00 not a cv')
 const base = {
-  candidate_forms: [{ id: 'cf1', token: 'tok-job-1', title: 'BDE', active: true }, { id: 'cf2', token: 'tok-closed', title: 'Old', active: false }],
+  candidate_forms: [{ id: 'cf1', token: 'tok-job-1', title: 'BDE', active: true }, { id: 'cf2', token: 'tok-closed', title: 'Old', active: false },
+    { id: 'cf3', token: 'tok-sales-only', title: 'Sales', active: true, positions: ['BDM (Business Development Manager)', 'Tele-sales Executive'] }],
   candidate_applications: [], notifications: [],
   app_users: [{ id: 'hr1', role: 'hr', active: true }, { id: 'sa', role: 'superadmin', active: true }, { id: 'hr-old', role: 'hr', active: false }],
   user_extra_roles: [],
@@ -72,6 +73,11 @@ r = await send(sb, 'tok-job-1', body({ application: { email: 'meena@example.test
 assert.equal(r.status, 200); assert.equal(sb.t.candidate_applications.at(-1).current_ctc, '8,000 stipend')
 r = await send(sb, 'tok-job-1', body({ application: { email: 'x@example.test', position: 'CEO' } }))
 assert.equal(r.body.errors.position, 'Choose the position you are applying for.', 'only positions from the list')
+// a form with ticked positions takes only those
+r = await send(sb, 'tok-sales-only', body({ application: { email: 'y@example.test' } }))
+assert.equal(r.body.errors.position, 'Choose the position you are applying for.', 'BDE is not on this form')
+r = await send(sb, 'tok-sales-only', body({ application: { email: 'y@example.test', position: 'Tele-sales Executive' } }))
+assert.equal(r.status, 200)
 
 // the new columns aren't in the database yet: the application is still saved, those answers in the message
 sb = fake({ ...base, __noBranch: true }, files)
