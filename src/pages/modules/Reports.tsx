@@ -51,7 +51,7 @@ export default function Reports() {
   return (
     <div>
       <PageHeader title="Reports" subtitle="Analytics across the client pipeline, sales and services" icon={BookOpenCheck} />
-      <Tabs className="mb-5 w-fit" value={tab} onChange={(t) => setParams({ tab: t })} tabs={tabs} />
+      <Tabs className="mb-5 w-fit max-w-full" value={tab} onChange={(t) => setParams({ tab: t })} tabs={tabs} />
 
       {tab === 'overview' && (
         <div className="grid gap-6 xl:grid-cols-3">
