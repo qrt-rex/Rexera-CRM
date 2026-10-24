@@ -9,7 +9,7 @@ import { BOOKING_TYPES, COMBO_PACKAGES, comboCap, comboMonths, isFundingService 
 import {
   ACTIVE_FILE_STATUSES, ADMIN_DONE, ADMIN_STAGES, ADMIN_WORK_STATUSES, addDays as addDaysYmd, adminStatusLabel, CLOSED_FILE_STATUSES, followUpDue, istToday, nextAfter as nextAfterYmd, precheckDue, precheckPending, schemeAlertDue, workflowSettings,
 } from '../../supabase/workflow-rules.mjs'
-import { applicationProblems, JOB_BRANCHES } from '../../supabase/form-rules.mjs'
+import { applicationProblems } from '../../supabase/form-rules.mjs'
 import { hashPassword } from './crypto'
 import { CALL_OUTCOMES, FINAL_STAGE, hasLegalDoc, LEAD_STATUS, OPEN_LEAD, STAGE_OUTCOMES, STAGES, stageLabel } from './workflow'
 import { fireAutomation } from './email'
@@ -2342,7 +2342,6 @@ export function deleteCandidateForm(me: User, id: string) {
 }
 
 export type ApplicationInput = Omit<CandidateApplication, 'id' | 'formId' | 'submittedAt' | 'status' | 'notes' | 'resume'>
-export { JOB_BRANCHES }
 /**
  * Public: anyone with the link can apply while the form is open. Resume and branch are mandatory. This saves in
  * browser mode; the live CRM sends the application to the server instead (server/apply.mjs, same checks).

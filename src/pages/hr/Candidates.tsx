@@ -3,9 +3,9 @@ import { ClipboardList, Copy, ExternalLink, Info, Pencil, Plus, Power, Trash2, U
 import type { CandidateApplication, CandidateForm } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useMe } from '../../lib/auth'
-import { deleteCandidateForm, JOB_BRANCHES, saveCandidateForm, setCandidateFormActive, updateCandidate } from '../../lib/actions'
+import { deleteCandidateForm, saveCandidateForm, setCandidateFormActive, updateCandidate } from '../../lib/actions'
 import { downloadCsv, fmtDate, fmtDateTime, today } from '../../lib/format'
-import { CANDIDATE_TYPES, candidateTypeLabel } from '../../../supabase/form-rules.mjs'
+import { CANDIDATE_TYPES, candidateTypeLabel, JOB_BRANCH_INFO, jobBranch } from '../../../supabase/form-rules.mjs'
 import { openFile } from '../../lib/files'
 import { FileLink } from '../../components/FileField'
 import { Badge, Button, Card, CardHeader, Drawer, EmptyState, Input, Modal, PageHeader, SearchBox, Select, Table, Td, Textarea, Th, useConfirm, usePaged, useRun, useToast } from '../../components/ui'
@@ -79,7 +79,7 @@ export default function Candidates() {
           <SearchBox value={q} onChange={setQ} placeholder="Search name, email, phone, city…" className="min-w-56 flex-1" />
           <select value={formFilter} onChange={(e) => setFormFilter(e.target.value)} className="h-10 rounded-xl border border-line bg-card px-3 text-sm" aria-label="Form"><option value="">All forms</option>{db.candidateForms.map((f) => <option key={f.id} value={f.id}>{f.title}</option>)}</select>
           <select value={status} onChange={(e) => setStatus(e.target.value)} className="h-10 rounded-xl border border-line bg-card px-3 text-sm" aria-label="Status"><option value="">All statuses</option>{Object.entries(STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select>
-          <select value={branch} onChange={(e) => setBranch(e.target.value)} className="h-10 rounded-xl border border-line bg-card px-3 text-sm" aria-label="Branch"><option value="">All branches</option>{JOB_BRANCHES.map((x) => <option key={x}>{x}</option>)}</select>
+          <select value={branch} onChange={(e) => setBranch(e.target.value)} className="h-10 rounded-xl border border-line bg-card px-3 text-sm" aria-label="Branch"><option value="">All branches</option>{JOB_BRANCH_INFO.map((b) => <option key={b.name} value={b.name}>{b.name} — {b.area}</option>)}</select>
           <select value={ctype} onChange={(e) => setCtype(e.target.value)} className="h-10 rounded-xl border border-line bg-card px-3 text-sm" aria-label="Applying as"><option value="">Intern / fresher / experienced</option>{CANDIDATE_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</select>
           <Button variant="outline" disabled={!list.length} onClick={() => downloadCsv(`applications-${today()}.csv`, list.map((c) => ({ form: formName(c.formId), position: c.position ?? '', branch: c.branch ?? '', applying_as: candidateTypeLabel(c.candidateType), preferred_interview: c.interviewAt?.replace('T', ' ') ?? '', current_ctc: c.currentCtc ?? '', name: c.name, email: c.email, phone: c.phone, city: c.city, dob: c.dob ?? '', qualification: c.qualification, college: c.college ?? '', experience: c.experience, current_company: c.currentCompany ?? '', expected: c.expectedSalary ?? '', notice: c.noticePeriod ?? '', linkedin: c.linkedin ?? '', status: STATUS[c.status].label, submitted: c.submittedAt, resume: c.resume.name })))}>Export</Button>
         </div>
@@ -109,7 +109,7 @@ export default function Candidates() {
         {open && (
           <div className="space-y-5">
             <div className="grid grid-cols-2 gap-3 text-sm">
-              {([['Position applied for', open.position], ['Branch', open.branch], ['Applying as', candidateTypeLabel(open.candidateType)], ['Preferred interview', slot(open.interviewAt)], ['Current CTC', open.currentCtc], ['Email', open.email], ['Mobile', open.phone], ['City', open.city], ['Date of birth', open.dob ? fmtDate(open.dob) : ''], ['Qualification', open.qualification], ['College', open.college], ['Experience', open.experience], ['Current company', open.currentCompany], ['Expected', open.expectedSalary], ['Notice period', open.noticePeriod]] as [string, string | undefined][]).filter(([, v]) => v).map(([k, v]) => (
+              {([['Position applied for', open.position], ['Branch', open.branch && `${open.branch}${jobBranch(open.branch) ? ` — ${jobBranch(open.branch)!.address}` : ''}`], ['Applying as', candidateTypeLabel(open.candidateType)], ['Preferred interview', slot(open.interviewAt)], ['Current CTC', open.currentCtc], ['Email', open.email], ['Mobile', open.phone], ['City', open.city], ['Date of birth', open.dob ? fmtDate(open.dob) : ''], ['Qualification', open.qualification], ['College', open.college], ['Experience', open.experience], ['Current company', open.currentCompany], ['Expected', open.expectedSalary], ['Notice period', open.noticePeriod]] as [string, string | undefined][]).filter(([, v]) => v).map(([k, v]) => (
                 <div key={k} className="rounded-xl bg-card2 px-3 py-2"><p className="text-[11px] text-mute">{k}</p><p className="break-words font-semibold">{v}</p></div>
               ))}
             </div>

@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { Briefcase, CheckCircle2, GraduationCap, Send } from 'lucide-react'
+import { Briefcase, CheckCircle2, GraduationCap, MapPin, Send } from 'lucide-react'
 import type { FileRef } from '../lib/types'
 import { useDb } from '../lib/store'
-import { JOB_BRANCHES, submitApplication, type ApplicationInput } from '../lib/actions'
-import { applicationProblems, CANDIDATE_TYPES, istNowLocal } from '../../supabase/form-rules.mjs'
+import { submitApplication, type ApplicationInput } from '../lib/actions'
+import { applicationProblems, CANDIDATE_TYPES, istNowLocal, JOB_BRANCH_INFO, jobBranch } from '../../supabase/form-rules.mjs'
 import { CLOUD } from '../lib/cloud'
 import { RESUME_TYPES } from '../lib/files'
 import { Logo } from '../components/Logo'
+import { SocialLinks } from '../components/SocialLinks'
 import { FileField } from '../components/FileField'
 import { CityInput, PhoneInput } from '../components/fields'
 import { Button, Card, Input, Select, Textarea, useRun, useToast } from '../components/ui'
@@ -59,7 +60,8 @@ export default function Apply() {
   return (
     <div className="min-h-full bg-gradient-to-br from-[#eef2fb] via-white to-[#fff4ea] px-4 py-8 dark:from-[#0f1830] dark:via-[#0b1020] dark:to-[#1a1420]">
       <div className="mx-auto max-w-2xl">
-        <div className="mb-6 flex justify-center"><Logo /></div>
+        {/* the open form carries the logo in its header; the other screens show it here */}
+        {(!form || !form.active || done) && <div className="mb-6 flex justify-center"><Logo /></div>}
         {!form || !form.active ? (
           <Card className="p-8 text-center">
             <h1 className="text-xl font-extrabold">{form ? 'Applications are closed' : 'Form not found'}</h1>
@@ -70,22 +72,33 @@ export default function Apply() {
             <span className="mx-auto mb-4 grid size-16 place-items-center rounded-2xl bg-ok-soft text-ok"><CheckCircle2 className="size-8" /></span>
             <h1 className="text-xl font-extrabold">Thank you, {a.name.split(' ')[0]}!</h1>
             <p className="mt-2 text-sm text-mute">Your application for <b className="text-ink">{a.position || form.title}</b> ({a.branch}) has been received. Our HR team will contact you at {a.email} if your profile is shortlisted.</p>
+            {jobBranch(a.branch) && <p className="mt-4 rounded-xl bg-card2 px-4 py-3 text-xs text-mute"><b className="text-ink">{a.branch} office</b><br />{jobBranch(a.branch)!.address}</p>}
+            <SocialLinks className="mt-5 justify-center" />
           </Card>
         ) : (
           <Card className="overflow-hidden">
             <div className="bg-gradient-to-br from-[#2E3A8C] to-[#4453b5] px-6 py-6 text-white">
-              <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-white/70">{intern ? <GraduationCap className="size-4" /> : <Briefcase className="size-4" />}{intern ? 'Internship application' : 'Job application'}</p>
-              <h1 className="mt-1 text-2xl font-extrabold">{form.title}</h1>
-              <p className="mt-1 text-sm text-white/80">{db.settings.companyName}{form.department ? ` · ${form.department}` : ''}</p>
+              <div className="flex flex-wrap-reverse items-start justify-between gap-4">
+                <div className="min-w-56 flex-1">
+                  <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-white/70">{intern ? <GraduationCap className="size-4" /> : <Briefcase className="size-4" />}{intern ? 'Internship application' : 'Job application'}</p>
+                  <h1 className="mt-1 text-2xl font-extrabold">{form.title}</h1>
+                  <p className="mt-1 text-sm text-white/80">{db.settings.companyName}{form.department ? ` · ${form.department}` : ''}</p>
+                </div>
+                <Logo onDark size="lg" className="shrink-0" />
+              </div>
               {form.description && <p className="mt-3 whitespace-pre-line text-sm text-white/90">{form.description}</p>}
+              <SocialLinks onDark className="mt-4" />
             </div>
             <form className="grid gap-4 p-6 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); submit() }}>
               <Input label="Full name" required autoComplete="name" value={a.name} onChange={(e) => set({ name: e.target.value })} className="sm:col-span-2" error={errs.name} />
               <Input label="Position applied for" required value={a.position} onChange={(e) => set({ position: e.target.value })} error={errs.position} />
               <Select label="Branch" required value={a.branch} onChange={(e) => set({ branch: e.target.value })} error={errs.branch}>
                 <option value="">— Select the branch —</option>
-                {JOB_BRANCHES.map((x) => <option key={x}>{x}</option>)}
+                {JOB_BRANCH_INFO.map((b) => <option key={b.name} value={b.name}>{b.name} — {b.area}</option>)}
               </Select>
+              {jobBranch(a.branch) && (
+                <p className="-mt-2 flex items-start gap-2 rounded-xl bg-card2 px-3 py-2 text-xs text-mute sm:col-span-2"><MapPin className="mt-0.5 size-3.5 shrink-0 text-brand" /><span><b className="text-ink">{a.branch} office:</b> {jobBranch(a.branch)!.address}</span></p>
+              )}
               <Select label="Applying as" required value={a.candidateType ?? ''} error={errs.candidateType}
                 onChange={(e) => set({ candidateType: (e.target.value || undefined) as ApplicationInput['candidateType'], ...(e.target.value === 'EXPERIENCED' && !EXPERIENCE.includes(a.experience) ? { experience: EXPERIENCE[1]! } : {}) })}>
                 <option value="">— Select —</option>

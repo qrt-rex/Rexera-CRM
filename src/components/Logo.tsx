@@ -21,13 +21,16 @@ export function Mark({ className, fixed }: { className?: string; fixed?: boolean
   return <span aria-hidden="true" className="inline-flex"><Art art={MARK} className={className} fixed={fixed} /></span>
 }
 
-/** "R" mark + REXERA wordmark. */
-export function Logo({ className, size = 'md', fixed }: { className?: string; size?: 'sm' | 'md' | 'lg'; fixed?: boolean }) {
+/** "R" mark + REXERA wordmark. `onDark` always uses the cream + gold version (for navy / photo backgrounds). */
+export function Logo({ className, size = 'md', fixed, onDark }: { className?: string; size?: 'sm' | 'md' | 'lg'; fixed?: boolean; onDark?: boolean }) {
   const s = { sm: ['h-7', 'h-[12px]', 'gap-1.5'], md: ['h-9', 'h-[15px]', 'gap-2'], lg: ['h-14', 'h-6', 'gap-3'] }[size]
+  const art = (a: typeof MARK, c: string) => onDark
+    ? <img src={a.dark} alt="" width={a.w} height={a.h} draggable={false} decoding="async" className={cx('inline-block w-auto shrink-0 select-none', c)} />
+    : <Art art={a} className={c} fixed={fixed} />
   return (
     <span role="img" aria-label="Rexera" className={cx('inline-flex select-none items-end', s[2], className)}>
-      <Art art={MARK} className={s[0]} fixed={fixed} />
-      <Art art={WORDMARK} className={cx(s[1], 'mb-px')} fixed={fixed} />
+      {art(MARK, s[0])}
+      {art(WORDMARK, cx(s[1], 'mb-px'))}
     </span>
   )
 }

@@ -36,8 +36,14 @@ export function fileProblem(name, declaredType, size, bytes) {
 }
 
 // ------------------------------------------------------------------ job applications (/apply/<token>)
-/** Offices a candidate can apply for. */
-export const JOB_BRANCHES = ['Ahmedabad - Kargil', 'Ahmedabad - Riverfront (Altimus)', 'Vadodara']
+/** Offices a candidate can apply for (same names as the CRM's branches), with the area and full address shown on the form. */
+export const JOB_BRANCH_INFO = [
+  { name: 'Ahmedabad (A)', area: 'Navrangpura (Altimus)', address: '1408-1409, 14th Floor, Altimus, Navrangpura, Ahmedabad, Gujarat 380009' },
+  { name: 'Ahmedabad (Y)', area: 'Ghatlodia', address: '102 – B Block, D Ganesh Meridian, Opp Kargil Pump, Ghatlodia, Ahmedabad, Gujarat 380061' },
+  { name: 'Vadodara', area: 'Race Course Road', address: '303, 3rd Floor, Everest Onyx, Beside Indraprasth Apartment, Race Course Road, Vadiwadi, Baroda 390021' },
+]
+export const JOB_BRANCHES = JOB_BRANCH_INFO.map((b) => b.name)
+export const jobBranch = (name) => JOB_BRANCH_INFO.find((b) => b.name === name)
 /** A resume: PDF or Word only. */
 export const RESUME_MIME = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
 /** How the candidate applies: an experienced employee also gives experience, company, current CTC and notice period. */

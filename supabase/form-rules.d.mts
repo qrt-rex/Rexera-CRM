@@ -10,7 +10,10 @@ export function fileProblem(name: string, declaredType: string, size: number, by
 export function formProblems(f: Partial<DocForm>): string[]
 export function normMobile(v: unknown): string
 export function checkAnswers(fields: FormField[], answers: Record<string, unknown>, files?: { fieldId: string; name?: string; type?: string; size?: number }[]): { errors: Record<string, string>; clean: Record<string, string | number | boolean> }
+export interface JobBranch { name: string; area: string; address: string }
+export const JOB_BRANCH_INFO: JobBranch[]
 export const JOB_BRANCHES: string[]
+export function jobBranch(name?: string): JobBranch | undefined
 export const RESUME_MIME: string[]
 export const CANDIDATE_TYPES: { id: 'INTERNSHIP' | 'FRESHER' | 'EXPERIENCED'; label: string }[]
 export function candidateTypeLabel(id?: string): string
