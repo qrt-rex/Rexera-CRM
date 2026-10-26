@@ -146,6 +146,7 @@ function pushToCloud(prev: DB, next: DB) {
   const run = cloudSaving.then(async () => {
     const errors = await pushChanges(prev, next)
     if (!errors.length) return
+    console.error('Cloud save failed:', errors)
     const msg = /row-level security|permission/i.test(errors[0]) ? "You don't have access to save that." : errors[0]
     syncListeners.forEach((l) => l(`Not saved: ${msg}`))
     db = await fromCloud(await loadCloud())
