@@ -43,6 +43,19 @@ export async function setPassword(env, authorization, body) {
     const { error: e } = await admin.auth.admin.updateUserById(target.auth_user_id, { password })
     if (e) return reply(400, { success: false, message: e.message })
   } else {
+    // a removed employee's sign-in still holds this email (their row is tagged email#removed-id): hand it over
+    const { data: gone } = await admin.from('app_users').select('id, auth_user_id').eq('active', false).not('auth_user_id', 'is', null)
+      .ilike('email', `${target.email.replace(/[\\%_]/g, '\\$&')}#removed-%`).limit(1).maybeSingle()
+    if (gone) {
+      // first sign the old person out everywhere, or their open session would land in the new account
+      const { error: e0 } = await admin.rpc('portal_revoke_sessions', { uid: gone.auth_user_id })
+      if (e0) return reply(500, { success: false, message: e0.message })
+      const { error: e1 } = await admin.from('app_users').update({ auth_user_id: null }).eq('id', gone.id)
+      const { error: e2 } = e1 ? { error: e1 } : await admin.auth.admin.updateUserById(gone.auth_user_id, { password, user_metadata: { name: target.name, crm_user_id: target.id } })
+      const { error: e3 } = e2 ? { error: e2 } : await admin.from('app_users').update({ auth_user_id: gone.auth_user_id }).eq('id', target.id)
+      if (e3) return reply(500, { success: false, message: e3.message })
+      return reply(200, { success: true })
+    }
     const { data, error: e } = await admin.auth.admin.createUser({ email: target.email, password, email_confirm: true, user_metadata: { name: target.name, crm_user_id: target.id } })
     if (e) return reply(400, { success: false, message: /registered|exists/i.test(e.message) ? `A sign-in account already exists for ${target.email} — link it in Supabase or use another email.` : e.message })
     const { error: e2 } = await admin.from('app_users').update({ auth_user_id: data.user.id }).eq('id', target.id)

@@ -2537,10 +2537,14 @@ export async function createUser(me: User, i: UserInput, password: string, resum
   assert(isPhone(i.phone), 'Enter a valid 10-digit mobile number — the dialer calls it.')
   assert(i.role !== 'superadmin' || isSA(me), 'Only a Super Admin can create a Super Admin.')
   assert(PASSWORD_RULE.test(password), `Password: ${PASSWORD_HINT}`)
-  const d = getDb()
-  assert(!d.users.some((u) => u.username.toLowerCase() === i.username.toLowerCase()), 'Username already taken.')
-  assert(!d.users.some((u) => u.email.toLowerCase() === i.email.toLowerCase()), 'Email already used.')
-  checkBranches(d, i)
+  const holds = (u: User) => u.username.toLowerCase() === i.username.trim().toLowerCase() || u.email.toLowerCase() === i.email.trim().toLowerCase()
+  assert(!getDb().users.some((u) => u.active && holds(u)), 'Username or email already used by an active employee.')
+  checkBranches(getDb(), i)
+  // removed before their name was freed: free it now, saved first so the new row doesn't clash with theirs
+  if (getDb().users.some((u) => !u.active && holds(u))) {
+    mutate((m) => { for (const u of m.users) if (!u.active && holds(u)) { u.username += REMOVED_TAG(u.id); u.email += REMOVED_TAG(u.id) } })
+    if (CLOUD) await saved()
+  }
   const passHash = CLOUD ? '' : await hashPassword(i.username.trim(), password)
   const id = uid('u-')
   mutate((m) => {
@@ -2579,6 +2583,9 @@ export function updateUser(me: User, id: string, patch: Partial<Pick<User, 'name
  * HR removes an employee who left: they can no longer sign in, their last day is recorded and their open leads go back
  * to Unassigned. Nothing is deleted (attendance, payroll, client files stay); Restore brings them back.
  */
+const REMOVED_TAG = (id: string) => `#removed-${id}`
+/** A removed employee's username / email without the #removed tag. */
+export const unremoved = (s: string) => s.replace(/#removed-.*$/, '')
 export function removeEmployee(me: User, id: string, lastDay: string, reason: string) {
   need(me, 'employees.manage', 'access.manage')
   return mutate((d) => {
@@ -2592,6 +2599,8 @@ export function removeEmployee(me: User, id: string, lastDay: string, reason: st
     assert(reason.trim().length >= 3, 'Enter the reason (e.g. resigned, contract ended).')
     u.active = false
     u.exitOn = lastDay
+    // free the username and email for someone new (restore takes them back)
+    u.username += REMOVED_TAG(u.id); u.email += REMOVED_TAG(u.id)
     // their open leads go back for someone else to call
     let freed = 0
     for (const l of d.leads) if (l.assignedTo === u.id && OPEN_LEAD.includes(l.status)) { l.assignedTo = undefined; l.assignedAt = undefined; leadEvent(l, me.id, `Back to Unassigned — ${u.name} left`); freed++ }
@@ -2607,6 +2616,9 @@ export function restoreEmployee(me: User, id: string) {
     const u = d.users.find((x) => x.id === id)
     assert(u && !u.active, 'Employee not found or already active.')
     assert(!rolesOf(u).some((r) => MASTER_ROLES.includes(r)) || isSA(me), 'Only a Super Admin can restore a Super Admin or IT account.')
+    const username = unremoved(u.username), email = unremoved(u.email)
+    assert(!d.users.some((x) => x.id !== u.id && (x.username.toLowerCase() === username.toLowerCase() || x.email.toLowerCase() === email.toLowerCase())), `${username} / ${email} now belongs to someone else — change it on that account first.`)
+    u.username = username; u.email = email
     u.active = true
     u.exitOn = undefined
     audit(d, me.id, 'EMPLOYEE_RESTORE', u.name)
