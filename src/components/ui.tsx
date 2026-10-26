@@ -440,5 +440,5 @@ export function usePaged<T>(items: T[], size: number, deps: unknown[]) {
       </span>
     </div>
   ) : null
-  return { slice, pager }
+  return { slice, pager, offset: p * size }
 }

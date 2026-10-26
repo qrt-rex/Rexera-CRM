@@ -30,7 +30,7 @@ export default function Candidates() {
   const [openId, setOpenId] = useState<string | null>(null)
   const list = useMemo(() => db.candidates.filter((c) => (!formFilter || c.formId === formFilter) && (!status || c.status === status) && (!branch || c.branch === branch) && (!ctype || c.candidateType === ctype)
     && (!q || `${c.name} ${c.email} ${c.phone} ${c.city} ${c.qualification} ${c.branch ?? ''} ${c.position ?? ''}`.toLowerCase().includes(q.toLowerCase()))), [db.candidates, formFilter, status, branch, ctype, q])
-  const { slice, pager } = usePaged(list, 25, [formFilter, status, branch, ctype, q])
+  const { slice, pager, offset } = usePaged(list, 25, [formFilter, status, branch, ctype, q])
   /** "2026-10-28T11:30" → 28 Oct 2026, 11:30 am */
   const slot = (s?: string) => (s ? `${fmtDate(s.slice(0, 10))}, ${new Date(`2000-01-01T${s.slice(11, 16)}:00`).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}` : '')
   const open = openId ? db.candidates.find((c) => c.id === openId) : undefined
@@ -90,7 +90,7 @@ export default function Candidates() {
             <tbody>
               {slice.map((c, idx) => (
                 <tr key={c.id} className="cursor-pointer hover:bg-card2/60" onClick={() => setOpenId(c.id)}>
-                  <Td className="text-center font-semibold text-mute">{idx + 1}</Td>
+                  <Td className="text-center font-semibold text-mute">{offset + idx + 1}</Td>
                   <Td><p className="font-semibold">{c.name}</p><p className="text-xs text-mute">{c.email} · {c.phone}</p></Td>
                   <Td className="max-w-64 text-sm">{c.position || formName(c.formId)}{c.branch && <span className="block text-xs text-mute">{c.branch}{jobBranch(c.branch) && <span className="block text-[11px] leading-snug">{jobBranch(c.branch)!.address}</span>}</span>}</Td>
                   <Td className="text-xs">{candidateTypeLabel(c.candidateType) || c.experience}{c.currentCtc && <span className="block text-mute">CTC {c.currentCtc}</span>}<span className="block text-mute">{c.qualification}</span></Td>
