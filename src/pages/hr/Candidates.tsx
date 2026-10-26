@@ -51,10 +51,11 @@ export default function Candidates() {
         <CardHeader title="Forms" subtitle={`${db.candidateForms.filter((f) => f.active).length} open`} icon={ClipboardList} />
         {!db.candidateForms.length ? <EmptyState icon={ClipboardList} title="No forms yet" text="Create one for each role or internship you are hiring for." action={<Button icon={Plus} onClick={() => setEdit({ title: '', kind: 'JOB', positions: [], department: '', description: '' })}>New form</Button>} /> : (
           <ul className="divide-y divide-line/70">
-            {db.candidateForms.map((f) => {
+            {db.candidateForms.map((f, idx) => {
               const n = db.candidates.filter((c) => c.formId === f.id).length
               return (
                 <li key={f.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
+                  <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-xs font-bold text-brand-ink">{idx + 1}</span>
                   <div className="min-w-0 flex-1">
                     <p className="flex flex-wrap items-center gap-2 font-semibold">{f.title}<Badge tone={f.kind === 'INTERNSHIP' ? 'cyan' : 'navy'}>{f.kind === 'INTERNSHIP' ? 'Internship' : 'Job'}</Badge>{(f.positions ?? []).slice(0, 3).map((p) => <Badge key={p} tone="violet">{p.replace(/\s*\(.*\)$/, '')}</Badge>)}{(f.positions?.length ?? 0) > 3 && <Badge tone="gray">+{f.positions!.length - 3} more</Badge>}{!f.active && <Badge tone="gray">closed</Badge>}</p>
                     <p className="truncate font-mono text-xs text-mute">{linkFor(f)}</p>
@@ -87,8 +88,9 @@ export default function Candidates() {
           <Table>
             <thead><tr><Th>Number</Th><Th>Candidate</Th><Th>Position · branch</Th><Th>Applying as · qualification</Th><Th>Preferred interview</Th><Th>Resume</Th><Th>Status</Th><Th>Submitted</Th></tr></thead>
             <tbody>
-              {slice.map((c) => (
+              {slice.map((c, idx) => (
                 <tr key={c.id} className="cursor-pointer hover:bg-card2/60" onClick={() => setOpenId(c.id)}>
+                  <Td className="text-center font-semibold text-mute">{idx + 1}</Td>
                   <Td><p className="font-semibold">{c.name}</p><p className="text-xs text-mute">{c.email} · {c.phone}</p></Td>
                   <Td className="max-w-64 text-sm">{c.position || formName(c.formId)}{c.branch && <span className="block text-xs text-mute">{c.branch}{jobBranch(c.branch) && <span className="block text-[11px] leading-snug">{jobBranch(c.branch)!.address}</span>}</span>}</Td>
                   <Td className="text-xs">{candidateTypeLabel(c.candidateType) || c.experience}{c.currentCtc && <span className="block text-mute">CTC {c.currentCtc}</span>}<span className="block text-mute">{c.qualification}</span></Td>
