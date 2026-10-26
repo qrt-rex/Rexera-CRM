@@ -6,7 +6,7 @@ import { branchList, branchName } from '../../lib/branches'
 import type { FileRef, Role, User } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
-import { adminStageAccess, createUser, PASSWORD_HINT, PASSWORD_RULE, removeEmployee, restoreEmployee, updateUser, userName, usersWithRole, type UserInput } from '../../lib/actions'
+import { adminStageAccess, createUser, PASSWORD_HINT, PASSWORD_RULE, removeEmployee, restoreEmployee, unremoved, updateUser, userName, usersWithRole, type UserInput } from '../../lib/actions'
 import { collections, dayStatus, monthStart } from '../../lib/metrics'
 import { ROLES, roleColor, roleLabel, rolesOf } from '../../lib/rbac'
 import { fmtDate, inr, today } from '../../lib/format'
@@ -82,7 +82,7 @@ export default function Employees() {
                 <span className={`size-2.5 rounded-full ${st === 'WORKING' ? 'bg-ok' : st === 'ON_LEAVE' ? 'bg-warn' : 'bg-line'}`} title={st} />
               </div>
               <div className="mt-4 space-y-1 text-xs text-mute">
-                <p className="flex items-center gap-2 truncate"><Mail className="size-3.5" />{u.email}</p>
+                <p className="flex items-center gap-2 truncate"><Mail className="size-3.5" />{unremoved(u.email)}</p>
                 <p className="flex items-center gap-2"><Phone className="size-3.5" />{u.phone || '—'}</p>
                 {u.teamLeadId && <p className="flex items-center gap-2"><UsersRound className="size-3.5" />Team of {userName(db, u.teamLeadId)}</p>}
                 {u.branchId && <p className="flex items-center gap-2"><Building2 className="size-3.5" />{branchName(db, u.branchId)}</p>}
