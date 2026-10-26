@@ -1162,7 +1162,8 @@ export type Decision =
   | { kind: 'RESUBMIT'; remark: string }
   | { kind: 'REQUEST_CHANGES'; remark: string }
   | { kind: 'ASSIGN_OPS'; remark: string; opsMemberId: string; maxStage: number; deadline: string }
-  | { kind: 'ASSIGN_ADMIN'; remark: string; adminId: string }
+  /** `stages`: the documents ticked for this Admin (they go straight to them); not given = the usual routing */
+  | { kind: 'ASSIGN_ADMIN'; remark: string; adminId: string; stages?: AdminStageId[] }
   | { kind: 'RETURN_OPS'; remark: string }
   | { kind: 'COMPLETE'; remark: string }
   | { kind: 'APPROVE_DONE'; remark: string }
@@ -1290,10 +1291,19 @@ export function decide(me: User, id: string, dec: Decision) {
       case 'ASSIGN_ADMIN': {
         const ad = d.users.find((u) => u.id === dec.adminId)
         assert(ad && rolesOf(ad).includes('admin'), 'Pick an Admin.')
+        if (dec.stages) {
+          assert(dec.stages.length, 'Tick at least one document for this Admin.')
+          for (const s of dec.stages) {
+            const st = ADMIN_STAGES.find((x) => x.id === s)
+            assert(st, 'Unknown document.')
+            assert(adminMayDo(d, ad.id, s), `${ad.name} doesn’t do ${st.short} (Operations Dashboard → Team).`)
+            assert(!b.adminWork?.[s] || !ADMIN_DONE.includes(b.adminWork[s]!.status), `${st.short} is already done on this file.`)
+          }
+        }
         const prevAdmin = b.adminId
         b.adminId = ad.id
         b.status = 'WITH_ADMIN'
-        startAdminWork(d, b, me.id, at, prevAdmin)
+        startAdminWork(d, b, me.id, at, prevAdmin, dec.stages)
         notify(d, [ad.id], 'Operations assigned a file to you', label, link, 'action')
         break
       }
@@ -1345,14 +1355,20 @@ function startOpsWorkflow(d: DB, b: Booking, by: string, at: string) {
   }
   b.followUp ??= { everyDays: w.fileReminderDays, startedOn: t, nextOn: addDaysYmd(t, w.fileReminderDays), log: [] }
 }
-/** Admin assigned: the five Admin stages are set up (Pitch Deck with its 3-day reminder); a new Admin takes over the open ones. */
-function startAdminWork(d: DB, b: Booking, by: string, at: string, prevAdmin?: string) {
+/**
+ * Admin assigned: the five Admin stages are set up (Pitch Deck with its 3-day reminder); a new Admin takes over the open
+ * ones. `picked` = the documents Operations ticked for this Admin: those go straight to them (even from someone else,
+ * unless done); the others don't go to them.
+ */
+function startAdminWork(d: DB, b: Booking, by: string, at: string, prevAdmin?: string, picked?: AdminStageId[]) {
   const fresh = ADMIN_STAGES.filter((s) => !b.adminWork?.[s.id]).map((s) => s.id)
   const handOver = ADMIN_STAGES.filter((s) => { const cur = b.adminWork?.[s.id]; return !!cur && !!prevAdmin && prevAdmin !== b.adminId && cur.assignee === prevAdmin && !ADMIN_DONE.includes(cur.status) }).map((s) => s.id)
   if (!b.adminId) return
-  // each stage goes straight to the Admin it is given to in Operations Dashboard → Team (else the file's Admin, if
-  // allowed); one nobody handles waits for the Operation team to forward it
-  const routed = [...fresh, ...handOver].map((s) => [s, routeAdminStage(d, b, s)] as const).filter(([, uid]) => uid)
+  const taken = (picked ?? []).filter((s) => !fresh.includes(s) && !handOver.includes(s) && openStage(b.adminWork?.[s]))
+  // ticked: this Admin; otherwise each stage goes straight to the Admin it is given to in Operations Dashboard → Team
+  // (else the file's Admin, if allowed and nothing was ticked); one nobody handles waits for Operations to forward it
+  const target = (s: AdminStageId) => (picked ? (picked.includes(s) ? b.adminId : routeAdminStage(d, b, s, b.adminId)) : routeAdminStage(d, b, s))
+  const routed = [...fresh, ...handOver, ...taken].map((s) => [s, target(s)] as const).filter(([, uid]) => uid)
   assignAdminStages(d, b, by, at, Object.fromEntries(routed), fresh.length ? 'Admin assigned' : 'Handed over')
   const allowed = routed.map(([s]) => s)
   const w = workflowSettings(d.settings.workflow)

@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Check, CheckCircle2, Clock, FilePen, PauseCircle, PlayCircle, RotateCcw, Send, ShieldCheck, UserCog, XCircle, type LucideIcon } from 'lucide-react'
-import type { Booking } from '../lib/types'
+import type { AdminStageId, Booking } from '../lib/types'
+import { ADMIN_DONE, ADMIN_STAGES } from '../../supabase/workflow-rules.mjs'
 import { getDb, useDb } from '../lib/store'
 import { requestWelcomeWhatsapp } from '../lib/share'
 import { useMe } from '../lib/auth'
-import { addDocuments, availableDecisions, decide, userName, usersWithRole, type Decision } from '../lib/actions'
+import { addDocuments, adminMayDo, availableDecisions, decide, userName, usersWithRole, type Decision } from '../lib/actions'
 import { BOOKING_STATUS, CHAIN, hasLegalDoc, HOLD_REASONS, LEGAL_DOC_CATEGORIES, STAGES, stageLabel } from '../lib/workflow'
 import { DocUploader, type PendingDoc } from './DocUploader'
 import { addDays, bookingMoney, fmtDate, inr, ymd } from '../lib/format'
-import { Badge, Button, cx, Input, Modal, Progress, Select, Textarea, useRun, useToast } from './ui'
+import { Badge, Button, Checkbox, cx, Input, Modal, Progress, Select, Textarea, useRun, useToast } from './ui'
 import { deliverWelcome } from '../lib/welcome'
 
 export function BookingStatusBadge({ b }: { b: Booking }) {
@@ -147,6 +148,7 @@ export function DecisionModal({ b, kind, onClose, onDone }: { b: Booking; kind: 
   const [remark, setRemark] = useState('')
   const [ops, setOps] = useState('')
   const [admin, setAdmin] = useState('')
+  const [picks, setPicks] = useState<AdminStageId[]>([])
   const [maxStage, setMaxStage] = useState(6)
   const [deadline, setDeadline] = useState('')
   const [legalDocs, setLegalDocs] = useState<PendingDoc[]>([])
@@ -156,17 +158,21 @@ export function DecisionModal({ b, kind, onClose, onDone }: { b: Booking; kind: 
   const admins = usersWithRole(db, 'admin')
   useEffect(() => {
     if (!kind) return
-    setRemark(''); setOps(b.opsMemberId ?? ''); setAdmin(b.adminId ?? ''); setMaxStage(Math.max(b.maxStage, 6)); setDeadline(b.deadline || '')
+    setRemark(''); setOps(b.opsMemberId ?? ''); setMaxStage(Math.max(b.maxStage, 6)); setDeadline(b.deadline || '')
+    pickAdmin(b.adminId ?? '')
   }, [kind, b])
   if (!kind) return null
   const m = reassign(b, kind) ? { ...DEC_META[kind], label: 'Reassign Operations' } : DEC_META[kind]
   const needsReason = ['REJECT', 'HOLD', 'RETURN_OPS', 'RETURN_ADMIN', 'REQUEST_CHANGES'].includes(kind)
   const load = (id: string) => db.bookings.filter((x) => (x.opsMemberId === id && x.status === 'IN_OPERATIONS') || (x.adminId === id && x.status === 'WITH_ADMIN')).length
+  // a document can be given to the chosen Admin unless it is done or isn't one of their documents (Team)
+  const pickable = (s: AdminStageId, who = admin) => !!who && adminMayDo(db, who, s) && !(b.adminWork?.[s] && ADMIN_DONE.includes(b.adminWork[s]!.status))
+  const pickAdmin = (id: string) => { setAdmin(id); setPicks(ADMIN_STAGES.filter((s) => pickable(s.id, id)).map((s) => s.id)) }
 
   const submit = async () => {
     let dec: Decision
     if (kind === 'ASSIGN_OPS') dec = { kind, remark, opsMemberId: ops, maxStage, deadline }
-    else if (kind === 'ASSIGN_ADMIN') dec = { kind, remark, adminId: admin }
+    else if (kind === 'ASSIGN_ADMIN') dec = { kind, remark, adminId: admin, stages: picks }
     else dec = { kind, remark } as Decision
     const first = kind === 'ASSIGN_OPS' && b.status === 'PENDING_LEGAL'
     const ok = await run(() => decide(me, b.id, dec), `${m.label}: done`)
@@ -186,7 +192,7 @@ export function DecisionModal({ b, kind, onClose, onDone }: { b: Booking; kind: 
 
   return (
     <Modal open onClose={onClose} title={m.label} subtitle={`${b.bookingId} · ${b.companyName} · ${b.serviceName}`}
-      footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button variant={m.variant === 'outline' ? 'primary' : m.variant} icon={m.icon} disabled={needsLegalDoc} onClick={submit}>{m.label}</Button></>}>
+      footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button variant={m.variant === 'outline' ? 'primary' : m.variant} icon={m.icon} disabled={needsLegalDoc || (kind === 'ASSIGN_ADMIN' && (!admin || !picks.length))} onClick={submit}>{m.label}</Button></>}>
       <div className="space-y-4">
         {needsLegalDoc && (
           <div className="space-y-3 rounded-xl border border-warn/40 bg-warn-soft p-3">
@@ -211,10 +217,25 @@ export function DecisionModal({ b, kind, onClose, onDone }: { b: Booking; kind: 
           </>
         )}
         {kind === 'ASSIGN_ADMIN' && (
-          <Select label="Admin" required value={admin} onChange={(e) => setAdmin(e.target.value)}>
-            <option value="">— Select —</option>
-            {admins.map((u) => <option key={u.id} value={u.id}>{u.name} · {load(u.id)} active file(s)</option>)}
-          </Select>
+          <>
+            <Select label="Admin" required value={admin} onChange={(e) => pickAdmin(e.target.value)}>
+              <option value="">— Select —</option>
+              {admins.map((u) => <option key={u.id} value={u.id}>{u.name} · {load(u.id)} active file(s)</option>)}
+            </Select>
+            <div>
+              <p className="mb-1.5 flex items-center gap-3 text-xs font-semibold text-mute">Documents for this Admin <span className="text-red-500">*</span>
+                {admin && <><button type="button" className="font-semibold text-brand-ink hover:underline" onClick={() => setPicks(ADMIN_STAGES.filter((s) => pickable(s.id)).map((s) => s.id))}>All</button><button type="button" className="font-semibold text-mute hover:underline" onClick={() => setPicks([])}>None</button></>}</p>
+              <div className={cx('grid gap-2 rounded-xl border border-line px-4 py-3', !admin && 'opacity-50')}>
+                {ADMIN_STAGES.map((s) => {
+                  const w = b.adminWork?.[s.id]
+                  const why = !admin ? '' : w && ADMIN_DONE.includes(w.status) ? 'done' : !adminMayDo(db, admin, s.id) ? 'not one of their documents (Team)' : w?.assignee && w.assignee !== admin ? `now with ${userName(db, w.assignee)} — moves to this Admin` : ''
+                  return <Checkbox key={s.id} disabled={!admin || !pickable(s.id)} checked={picks.includes(s.id)} onChange={(on) => setPicks((p) => (on ? [...p, s.id] : p.filter((x) => x !== s.id)))}
+                    label={<span>{s.short}{why && <span className="ml-1 text-[11px] text-mute">· {why}</span>}</span>} />
+                })}
+              </div>
+              <p className="mt-1 text-[11px] text-mute">Ticked documents go straight to this Admin on this file. The others stay with whoever has them, or wait for you to forward them.</p>
+            </div>
+          </>
         )}
         {kind === 'HOLD' && (
           <div className="flex flex-wrap gap-2">
