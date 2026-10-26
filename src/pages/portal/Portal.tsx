@@ -212,7 +212,7 @@ function Home() {
         </Card>
       )}
       {!p ? <Card className="p-6 text-sm text-mute">No project is linked to your account yet. Your Rexera contact will add it.</Card> : (
-        <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="grid min-w-0 content-start gap-5">
             <Card className="p-5">
               <p className="text-xs font-semibold uppercase tracking-wide text-mute">{p.code}</p>

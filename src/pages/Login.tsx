@@ -1,16 +1,15 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Eye, EyeOff, KeyRound, Loader2, Lock, Mail, ShieldCheck, User as UserIcon } from 'lucide-react'
+import { Navigate, useNavigate } from 'react-router-dom'
+import { ArrowLeft, Eye, EyeOff, KeyRound, Loader2, Lock, ShieldCheck, User as UserIcon } from 'lucide-react'
 import { useAuth } from '../lib/auth'
 import { useDb } from '../lib/store'
 import { loginStep1, resendCode, verifyCode } from '../lib/actions'
 import { DEMO_PASSWORD, PRESET_USERS } from '../lib/seed'
 import { ROLES } from '../lib/rbac'
-import { isEmail } from '../lib/format'
 import { Logo } from '../components/Logo'
 import { IstClock, LoginShowcase, LoginVideo, useMedia } from '../components/LoginShowcase'
 import { ResetPasswordModal } from '../components/ResetPasswordModal'
-import { Button, Modal, Input, cx } from '../components/ui'
+import { cx } from '../components/ui'
 import { sendOtpEmailClient } from '../lib/emailClient'
 
 const DEV_MODE = import.meta.env.DEV || import.meta.env.VITE_DEMO === '1'
@@ -19,7 +18,6 @@ export default function Login() {
   const { user, signIn } = useAuth()
   const db = useDb()
   const nav = useNavigate()
-  const loc = useLocation()
   const [step, setStep] = useState<'password' | 'code'>('password')
   const [login, setLogin] = useState('')
   const [password, setPassword] = useState('')

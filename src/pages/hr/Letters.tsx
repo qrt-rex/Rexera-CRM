@@ -55,7 +55,7 @@ export default function Letters() {
     <div>
       <PageHeader title="Letters" subtitle="Generate a joining, internship or experience letter on the company letterhead and download it as PDF" icon={FilePen}
         actions={<Tabs value={kind} onChange={(t) => { setParams({ type: t }); setEdited(false) }} tabs={LETTER_KINDS.map((k) => ({ id: k.id, label: k.label }))} />} />
-      <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
+      <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
         <Card className="overflow-hidden">
           <CardHeader title="Details" subtitle="Pick an employee to fill these in, or type them" icon={FilePen} />
           <div className="grid gap-4 p-5 sm:grid-cols-2">

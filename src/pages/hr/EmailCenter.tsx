@@ -86,7 +86,7 @@ function Compose({ onSent }: { onSent: () => void }) {
   const preview = recipients[0] ?? me
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
       <Card className="overflow-hidden">
         <CardHeader title="New email" icon={Send} />
         <div className="space-y-4 p-5">

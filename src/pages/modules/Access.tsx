@@ -51,11 +51,16 @@ function UsersTab() {
             return (
               <tr key={u.id} className={u.active ? '' : 'opacity-60'}>
                 <Td><span className="flex items-center gap-3"><Avatar name={u.name} photo={u.photo} size={34} /><span><span className="block font-semibold">{u.name}{u.id === me.id && <Badge tone="navy" className="ml-2">you</Badge>}{u.id !== me.id && self && <Badge tone="gray" className="ml-2">protected</Badge>}</span><span className="text-xs text-mute">@{u.username} · {u.email}</span></span></span></Td>
-                <Td><select disabled={self} value={u.role} onChange={(e) => run(() => updateUser(me, u.id, { role: e.target.value as Role }), 'Role changed')} className="h-9 rounded-lg border border-line bg-card px-2 text-sm disabled:opacity-60" aria-label="Role">
+                <Td><select disabled={self} value={u.role} onChange={async (e) => { const role = e.target.value as Role; if (await confirm(`Make ${u.name} ${roleLabel(role)}?`, `${u.name}'s access changes at once — from ${roleLabel(u.role)} to ${roleLabel(role)}.`)) run(() => updateUser(me, u.id, { role }), 'Role changed') }} className="h-9 rounded-lg border border-line bg-card px-2 text-sm disabled:opacity-60" aria-label="Role">
                   {ROLES.filter((r) => meSA || r.id !== 'superadmin' || u.role === 'superadmin').map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}</select></Td>
                 <Td className="text-xs">{u.extraRoles.length ? u.extraRoles.map(roleLabel).join(', ') : <span className="text-mute">—</span>}</Td>
                 <Td className="text-xs">{u.grants.length || u.denies.length ? <><Badge tone="green">+{u.grants.length}</Badge> <Badge tone="red">−{u.denies.length}</Badge></> : <span className="text-mute">—</span>}</Td>
-                <Td><Toggle checked={u.active} label="Active" onChange={(v) => !self && run(() => updateUser(me, u.id, { active: v }), v ? 'Activated' : 'Deactivated')} /></Td>
+                <Td><Toggle checked={u.active} label="Active" onChange={async (v) => {
+                  if (self) return
+                  // deactivating signs the person out at once: ask first
+                  if (!v && !(await confirm(`Deactivate ${u.name}?`, `${u.name} is signed out at once and can't sign in until you activate the account again. Their records stay.`, true))) return
+                  run(() => updateUser(me, u.id, { active: v }), v ? 'Activated' : 'Deactivated')
+                }} /></Td>
                 <Td className="text-right"><span className="inline-flex gap-1">
                   <Button size="sm" variant="soft" icon={UserCog} disabled={self} onClick={() => setOpen(u)}>Manage access</Button>
                   <Button size="sm" variant="ghost" icon={RefreshCcw} aria-label="Set a new password" title="Set a new password" disabled={self} onClick={() => setPwFor(u)} />
@@ -168,7 +173,7 @@ function BranchesCard() {
       <div className="grid gap-4 p-5 xl:grid-cols-3">
         {list.map((b, i) => (
           <div key={b.id} className="grid gap-3 rounded-2xl border border-line p-4">
-            <div className="grid grid-cols-[1fr_110px] gap-3">
+            <div className="grid grid-cols-[minmax(0,1fr)_110px] gap-3">
               <Input label="Branch name" value={b.name} onChange={(e) => set(i, { name: e.target.value })} />
               <Input label="Code" value={b.code ?? ''} maxLength={10} placeholder="AMD-A" hint="On dashboards" onChange={(e) => set(i, { code: e.target.value.toUpperCase() })} />
             </div>

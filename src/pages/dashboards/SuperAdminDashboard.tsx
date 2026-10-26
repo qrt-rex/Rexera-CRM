@@ -1,10 +1,6 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import {
-  BarChart3, Bell, Briefcase, Building2, CalendarDays, ChevronRight, Download, Eye, FileBarChart, FileText, Home, IndianRupee, KeyRound,
-  LayoutDashboard, Megaphone, MessageSquare, MessagesSquare, PieChart, Settings, Sparkles, TrendingUp, UserCheck, UserCog, UserPlus,
-  Users, UsersRound, Images, Workflow, Trophy,
-} from 'lucide-react'
+import { BarChart3, Bell, Briefcase, Building2, CalendarDays, ChevronRight, Download, Eye, FileBarChart, FileText, Home, IndianRupee, KeyRound, LayoutDashboard, Megaphone, MessagesSquare, PieChart, Settings, Sparkles, TrendingUp, UserCheck, UserCog, UserPlus, Users, UsersRound, Images, Workflow, Trophy } from 'lucide-react'
 import { useDb } from '../../lib/store'
 import { useMe } from '../../lib/auth'
 import { collections, invoiceSummary, monthStart, presentToday, revenueByMonth, todaySession } from '../../lib/metrics'
@@ -101,7 +97,7 @@ export function SuperAdminDashboard() {
         </div>
       )}
 
-      <div className="grid items-start gap-5 xl:grid-cols-[1fr_280px]">
+      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_280px]">
         {/* left column: tiles, then the charts straight under them (no empty gap beside the taller side column) */}
         <div className="min-w-0 space-y-6">
           <div className="grid content-start gap-4 sm:grid-cols-2">

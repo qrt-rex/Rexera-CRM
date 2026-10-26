@@ -1,20 +1,14 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import {
-  Archive, ArrowLeft, Building2, Layers, Check, CheckCircle2, ChevronRight, CircleDot, Download, FileText, FolderKanban, History, IndianRupee, ListTodo,
-  MessageSquare, Pencil, Plus, Receipt, Send, ShieldCheck, Trash2, Upload, X, Lock, Mail, Gift, Percent, Undo2, Workflow,
-} from 'lucide-react'
+import { Archive, ArrowLeft, Building2, Layers, Check, CheckCircle2, ChevronRight, CircleDot, Download, FileText, FolderKanban, History, IndianRupee, ListTodo, MessageSquare, Pencil, Plus, Receipt, Send, ShieldCheck, Trash2, X, Lock, Mail, Gift, Percent, Undo2, Workflow } from 'lucide-react'
 import { AdminChecklist, FollowUpCard, WelcomeCard } from '../../components/WorkflowPanels'
 import { ClientEmailComposer } from '../../components/ClientEmail'
 import { ClientPortalCard } from '../../components/ClientPortalPanel'
 import { openBookingPdf } from '../../lib/bookingPdf'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
-import {
-  addComboService, addComment, addComplimentaryService, addDocuments, addPayment, addRefund, commissionNow, deleteRefund, needsPriceSplit, addTask, canEditBooking, canEmailClient, canForwardAdminStages, canRunClientPortal, canMoveStage, deleteDocument, setStageOutcome, deleteTask, invoiceFromBooking, moveStage,
-  PAYMENT_MODES, setCommission, setDeduction, setPaymentTds, setRefundStatus, toggleTask, userName, verifyPayment, visibleBookings, visibleDocuments, visibleTasks,
-} from '../../lib/actions'
-import { DOC_CATEGORIES, STAGES, STAGE_OUTCOMES, stageLabel } from '../../lib/workflow'
+import { addComboService, addComment, addComplimentaryService, addDocuments, addPayment, addRefund, commissionNow, deleteRefund, needsPriceSplit, addTask, canEditBooking, canEmailClient, canForwardAdminStages, canRunClientPortal, canMoveStage, deleteDocument, deleteTask, invoiceFromBooking, moveStage, PAYMENT_MODES, setCommission, setDeduction, setPaymentTds, setRefundStatus, toggleTask, userName, verifyPayment, visibleBookings, visibleDocuments, visibleTasks } from '../../lib/actions'
+import { STAGES, STAGE_OUTCOMES, stageLabel } from '../../lib/workflow'
 import { ago, bookingMoney, fmtDate, fmtDateTime, gstSplit, inr, today } from '../../lib/format'
 import { isStageOnlyAdmin, roleLabel } from '../../lib/rbac'
 import type { FileRef, LegacyRow } from '../../lib/types'
@@ -24,9 +18,7 @@ import { DocUploader, type PendingDoc } from '../../components/DocUploader'
 import { DocReview } from '../../components/DocReview'
 import { StageControls, StageText } from '../../components/StageControls'
 import { FileLink } from '../../components/FileField'
-import {
-  Avatar, Badge, Button, Card, CardHeader, Checkbox, cx, EmptyState, FileButton, Input, Modal, Select, Table, Tabs, Td, Textarea, Th, readAsDataUrl, useConfirm, useRun,
-} from '../../components/ui'
+import { Avatar, Badge, Button, Card, CardHeader, Checkbox, cx, EmptyState, Input, Modal, Select, Table, Tabs, Td, Textarea, Th, useConfirm, useRun } from '../../components/ui'
 import { canSee, moduleByKey } from '../../lib/modules'
 import { BookingStatusBadge, ChainStepper, DeadlineBadge, DecisionButtons, PriorityBadge, StageTrack } from '../../components/booking'
 
@@ -460,7 +452,6 @@ function Processing({ id }: { id: string }) {
 function Documents({ id }: { id: string }) {
   const me = useMe()
   const db = useDb()
-  const { can } = useAuth()
   const run = useRun()
   const b = useBooking(id)
   const [pending, setPending] = useState<PendingDoc[]>([])

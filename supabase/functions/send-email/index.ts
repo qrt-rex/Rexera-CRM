@@ -10,7 +10,19 @@
 //   SMTP_FROM = "Rexera CRM" <no-reply@hr.rexera.in>
 
 import nodemailer from 'npm:nodemailer@6.9.16'
+import { createClient } from 'npm:@supabase/supabase-js@2'
 import { checkClientEmail, renderClientEmail } from '../_shared/client-email.mjs'
+
+// Never an open mail relay: the caller's own Supabase sign-in must come with the request (Authorization: Bearer).
+// Login codes go only to the person signing in; client emails only from CRM staff; reset emails are Supabase's own.
+const admin = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '', { auth: { persistSession: false } })
+async function caller(req: Request) {
+  const token = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '')
+  if (!token) return null
+  const { data } = await admin.auth.getUser(token).catch(() => ({ data: { user: null } }))
+  return data.user ?? null
+}
+const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -35,7 +47,16 @@ Deno.serve(async (req) => {
     return json(400, { success: false, message: 'Bad JSON payload' })
   }
 
+  const user = await caller(req)
+  if (!user) return json(401, { success: false, message: 'Sign in again.' })
+  if (body.type === 'reset') return json(410, { success: false, message: 'Password resets are sent by Supabase — use “Forgot password?” on the sign-in page.' })
+  if (body.type === 'otp' && (String(body.email ?? '').trim().toLowerCase() !== (user.email ?? '').toLowerCase() || !/^\d{6}$/.test(String(body.code ?? '')))) {
+    return json(403, { success: false, message: 'A login code can only be sent to the account that is signing in.' })
+  }
+
   if (body.type === 'client') {
+    const { data: staff } = await admin.from('app_users').select('id').eq('auth_user_id', user.id).eq('active', true).maybeSingle()
+    if (!staff) return json(403, { success: false, message: 'Only CRM staff can email clients.' })
     const problem = checkClientEmail(body)
     if (problem) return json(400, { success: false, message: problem })
     const smtpUser = Deno.env.get('SMTP_USER'), smtpPass = Deno.env.get('SMTP_PASS')
@@ -79,7 +100,7 @@ Deno.serve(async (req) => {
       port: smtpPort,
       secure: smtpPort === 465,
       auth: { user: smtpUser, pass: smtpPass },
-      tls: { rejectUnauthorized: false },
+      tls: { rejectUnauthorized: Deno.env.get('SMTP_TLS_STRICT') !== 'false' },
     })
 
     if (body.type === 'otp') {
@@ -94,7 +115,7 @@ Deno.serve(async (req) => {
           <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 32px 24px; background: #ffffff; border: 1px solid #E5E7EB; border-radius: 16px;">
             <h2 style="color: #2E3A8C; margin-top: 0; font-size: 22px;">Rexera CRM · Login Verification</h2>
             <p style="color: #374151; font-size: 15px; line-height: 1.6;">Hello,</p>
-            <p style="color: #374151; font-size: 15px; line-height: 1.6;">Your 6-digit login verification code for <b>${email}</b> is:</p>
+            <p style="color: #374151; font-size: 15px; line-height: 1.6;">Your 6-digit login verification code for <b>${esc(email)}</b> is:</p>
             <div style="margin: 28px 0; text-align: center;">
               <span style="font-family: monospace, Courier; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #F47B20; background: #FFF7ED; padding: 14px 28px; border-radius: 12px; border: 1.5px dashed #F4A12A; display: inline-block;">${code}</span>
             </div>
@@ -121,10 +142,10 @@ Deno.serve(async (req) => {
           <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 540px; margin: 0 auto; padding: 32px 24px; background: #ffffff; border: 1px solid #E5E7EB; border-radius: 16px;">
             <h2 style="color: #2E3A8C; margin-top: 0; font-size: 22px;">Rexera CRM · Reset Password</h2>
             <p style="color: #374151; font-size: 15px; line-height: 1.6;">Hello,</p>
-            <p style="color: #374151; font-size: 15px; line-height: 1.6;">We received a request to reset the password for your Rexera CRM account (<b>${email}</b>).</p>
+            <p style="color: #374151; font-size: 15px; line-height: 1.6;">We received a request to reset the password for your Rexera CRM account (<b>${esc(email)}</b>).</p>
             <p style="color: #374151; font-size: 15px; line-height: 1.6;">Click the button below to verify your email and set your new password:</p>
             <div style="margin: 28px 0; text-align: center;">
-              <a href="${resetLink}" style="background-color: #F47B20; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 10px; font-weight: bold; font-size: 16px; display: inline-block;">Reset Password</a>
+              <a href="${esc(resetLink)}" style="background-color: #F47B20; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 10px; font-weight: bold; font-size: 16px; display: inline-block;">Reset Password</a>
             </div>
             <p style="color: #6B7280; font-size: 13px; line-height: 1.5;">This link will expire in 15 minutes. If you did not request a password reset, you can safely ignore this email.</p>
             <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 24px 0;" />

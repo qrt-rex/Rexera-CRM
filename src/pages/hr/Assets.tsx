@@ -218,7 +218,7 @@ function InventoryTab() {
         <MiniStat label="Low on stock" value={items.filter(lowStock).length} icon={AlertTriangle} tone="red" />
         <MiniStat label="Stock value" value={inr(items.reduce((s, i) => s + i.qty * (i.unitCost ?? 0), 0))} icon={IndianRupee} tone="violet" />
       </div>
-      <div className="grid gap-6 xl:grid-cols-[1fr_340px]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         <Card className="overflow-hidden">
           <div className="flex flex-wrap gap-2 border-b border-line p-4">
             <SearchBox value={q} onChange={setQ} placeholder="Search items…" className="min-w-56 flex-1" />
@@ -343,7 +343,7 @@ function ExpensesTab() {
         <MiniStat label="Entries" value={inMonth.length} icon={Receipt} />
         <MiniStat label="vs last month" value={prev ? `${total(inMonth) >= prev ? '+' : ''}${Math.round(((total(inMonth) - prev) / prev) * 100)}%` : '—'} icon={History} tone={total(inMonth) > prev ? 'red' : 'green'} />
       </div>
-      <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
         <Card className="overflow-hidden">
           <div className="flex flex-wrap gap-2 border-b border-line p-4">
             <input type="month" value={month} max={today().slice(0, 7)} onChange={(e) => e.target.value && setMonth(e.target.value)} aria-label="Month" className="h-10 rounded-xl border border-line bg-card px-3 text-sm" />

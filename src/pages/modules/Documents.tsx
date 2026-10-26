@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { CheckCircle2, CircleDashed, FileCheck2, FilePlus2, FileText, Globe, Save, Upload, UserRound } from 'lucide-react'
 import type { Booking, FileRef } from '../../lib/types'
 import { useDb } from '../../lib/store'
-import { useAuth, useMe } from '../../lib/auth'
+import { useMe } from '../../lib/auth'
 import { addDocuments, updateClientInfo, userName, visibleBookings } from '../../lib/actions'
 import { DocReview } from '../../components/DocReview'
 import { DOC_FORM, KYC_CATEGORIES } from '../../lib/workflow'
@@ -19,7 +19,6 @@ const OTHER = 'Other'
 export default function Documents() {
   const db = useDb()
   const me = useMe()
-  const { can } = useAuth()
   const [params, setParams] = useSearchParams()
   const bookings = useMemo(() => visibleBookings(db, me).filter((b) => b.status !== 'REJECTED'), [db, me])
   const bookingId = params.get('client') ?? ''

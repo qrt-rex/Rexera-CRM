@@ -22,6 +22,7 @@ import { MiniCalendar } from './MiniCalendar'
 import { BreakBanner, BreakReminder } from '../pages/dashboards/widgets'
 import { CommandPalette } from './CommandPalette'
 import { AiAssistant } from '../components/AiAssistant'
+import { ErrorBoundary } from '../components/ErrorBoundary'
 
 export function useUnread() {
   const db = useDb()
@@ -196,7 +197,7 @@ export function Shell() {
               <p className="mt-1 max-w-md text-sm text-mute">Rexera CRM is under maintenance{maintenance.message ? `: ${maintenance.message}` : '.'} Your work is saved — please check back shortly.</p>
               <Button className="mt-5" variant="outline" icon={LogOut} onClick={() => signOut()}>Sign out</Button>
             </div>
-          ) : <Outlet />}
+          ) : <ErrorBoundary resetKey={loc.pathname} home={`/dashboard/${me.role}`}><Outlet /></ErrorBoundary>}
         </main>
       </div>
 

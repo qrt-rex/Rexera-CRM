@@ -25,7 +25,7 @@ export default function Settings() {
   return (
     <div>
       <PageHeader title="Profile Settings" subtitle="Your own account only — role and permissions are managed by a Super Admin" icon={SettingsIcon} />
-      <div className="grid gap-6 lg:grid-cols-[220px_1fr]">
+      <div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
         <Card className="h-fit p-2">
           <p className="px-3 pb-1 pt-2 text-[11px] font-bold uppercase tracking-wider text-mute">General settings</p>
           {items.map((i) => (

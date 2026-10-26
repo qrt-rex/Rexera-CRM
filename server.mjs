@@ -11,6 +11,7 @@ import { receive as receiveBlutecWebhook } from './server/blutecWebhook.mjs'
 import { receiveWebsiteLead, retryWebsiteLead } from './server/websiteLeads.mjs'
 import { getSiteContent } from './server/site.mjs'
 import { portalAdmin, portalClient } from './server/portal.mjs'
+import { checkClientSender, checkOtpRequest, checkResetRequest, escapeHtml } from './server/mailGuard.mjs'
 import { createClient } from '@supabase/supabase-js'
 import { jobsAuthorized, runJobs } from './server/jobs.mjs'
 import { getPublicForm, submitPublicForm } from './server/forms.mjs'
@@ -104,7 +105,9 @@ function createMailer() {
     port: smtpPort,
     secure: smtpPort === 465,
     auth: { user: smtpUser, pass: smtpPass },
-    tls: { rejectUnauthorized: false },
+    // the mail server's certificate is checked (the password can't be read on the way); SMTP_TLS_STRICT=false turns
+    // the check off for a mail host with a broken certificate
+    tls: { rejectUnauthorized: getEnv('SMTP_TLS_STRICT') !== 'false' },
     connectionTimeout: 5000,
     greetingTimeout: 5000,
     socketTimeout: 5000,
@@ -233,19 +236,24 @@ async function handleSendResetEmail(req, res) {
     return sendJson(res, 400, { success: false, message: err.message })
   }
 
-  const { email, resetLink } = body
-  if (!email || !resetLink) {
-    return sendJson(res, 400, { success: false, message: 'Email and resetLink are required' })
+  // never a phishing relay: no reset email from the live (Supabase) server, and only links to this CRM's own page
+  const host = String(req.headers.host || '').replace(/[^\w.:-]/g, '')
+  const origins = [getEnv('APP_URL'), `https://${host}`, `http://${host}`].map((u) => { try { return new URL(u).origin } catch { return '' } }).filter(Boolean)
+  const bad = checkResetRequest(body, { cloud: !!mailAdmin(), origins })
+  if (bad) return sendJson(res, bad.status, { success: false, message: bad.message })
+  const email = String(body.email).trim(), resetLink = String(body.resetLink)
+  if (overLimit(`reset-ip:${clientIp(req)}`, 10, 3600_000) || overLimit(`reset-to:${email.toLowerCase()}`, 3, 3600_000)) {
+    return sendJson(res, 429, { success: false, message: 'Too many reset emails — please try again later.' })
   }
 
   const resetHtml = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 540px; margin: 0 auto; padding: 32px 24px; background: #ffffff; border: 1px solid #E5E7EB; border-radius: 16px;">
       <h2 style="color: #2E3A8C; margin-top: 0; font-size: 22px;">Rexera CRM · Reset Password</h2>
       <p style="color: #374151; font-size: 15px; line-height: 1.6;">Hello,</p>
-      <p style="color: #374151; font-size: 15px; line-height: 1.6;">We received a request to reset the password for your Rexera CRM account (<b>${email}</b>).</p>
+      <p style="color: #374151; font-size: 15px; line-height: 1.6;">We received a request to reset the password for your Rexera CRM account (<b>${escapeHtml(email)}</b>).</p>
       <p style="color: #374151; font-size: 15px; line-height: 1.6;">Click the button below to verify your email and set your new password:</p>
       <div style="margin: 28px 0; text-align: center;">
-        <a href="${resetLink}" style="background-color: #F47B20; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 10px; font-weight: bold; font-size: 16px; display: inline-block;">Reset Password</a>
+        <a href="${escapeHtml(resetLink)}" style="background-color: #F47B20; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 10px; font-weight: bold; font-size: 16px; display: inline-block;">Reset Password</a>
       </div>
       <p style="color: #6B7280; font-size: 13px; line-height: 1.5;">This link will expire in 15 minutes. If you did not request a password reset, you can safely ignore this email.</p>
       <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 24px 0;" />
@@ -309,16 +317,20 @@ async function handleSendOtpEmail(req, res) {
     return sendJson(res, 400, { success: false, message: err.message })
   }
 
-  const { email, code } = body
-  if (!email || !code) {
-    return sendJson(res, 400, { success: false, message: 'Email and code are required' })
+  // only to the person who just signed in (their Supabase sign-in comes with the request), and only a 6-digit code
+  const cloud = !!mailAdmin()
+  const bad = checkOtpRequest(body, { cloud, authEmail: cloud ? await signedInEmail(req.headers.authorization) : null })
+  if (bad) return sendJson(res, bad.status, { success: false, message: bad.message })
+  const email = String(body.email).trim(), code = String(body.code)
+  if (overLimit(`otp-ip:${clientIp(req)}`, 30, 3600_000) || overLimit(`otp-to:${email.toLowerCase()}`, 10, 3600_000)) {
+    return sendJson(res, 429, { success: false, message: 'Too many codes — please wait a few minutes and sign in again.' })
   }
 
   const otpHtml = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 32px 24px; background: #ffffff; border: 1px solid #E5E7EB; border-radius: 16px;">
       <h2 style="color: #2E3A8C; margin-top: 0; font-size: 22px;">Rexera CRM · Login Verification</h2>
       <p style="color: #374151; font-size: 15px; line-height: 1.6;">Hello,</p>
-      <p style="color: #374151; font-size: 15px; line-height: 1.6;">Your 6-digit login verification code for <b>${email}</b> is:</p>
+      <p style="color: #374151; font-size: 15px; line-height: 1.6;">Your 6-digit login verification code for <b>${escapeHtml(email)}</b> is:</p>
       <div style="margin: 28px 0; text-align: center;">
         <span style="font-family: monospace, Courier; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #F47B20; background: #FFF7ED; padding: 14px 28px; border-radius: 12px; border: 1.5px dashed #F4A12A; display: inline-block;">${code}</span>
       </div>
@@ -355,7 +367,7 @@ async function handleSendOtpEmail(req, res) {
   }
 
   try {
-    console.log(`[SMTP] Delivering OTP code ${code} to ${email}...`)
+    console.log(`[SMTP] Delivering a login code to ${email}...`)
     await transporter.sendMail({
       from: smtpFrom,
       to: email,
@@ -378,9 +390,22 @@ async function handleSendOtpEmail(req, res) {
   }
 }
 
-// Client emails (Operation team / Admin → client). The CRM has no server-side login yet, so this endpoint only sends
-// the fixed branded layout built from plain text (escaped), and is rate-limited per caller and per recipient.
+// Client emails (Operation team / Admin → client): only signed-in CRM staff (when the server can check sign-ins); the
+// fixed branded layout built from plain text (escaped), rate-limited per caller and per recipient.
 const sendLog = new Map()
+/** The server's Supabase connection, when it can check sign-ins (the live CRM); else null. */
+function mailAdmin() {
+  const url = getEnv('SUPABASE_URL') || getEnv('VITE_SUPABASE_URL'), secret = getEnv('SUPABASE_SECRET_KEY') || ''
+  return url && secret.startsWith('sb_secret_') ? createClient(url, secret, { auth: { persistSession: false, autoRefreshToken: false } }) : null
+}
+/** The email of the Supabase sign-in sent with a request (Authorization: Bearer …), or null. */
+async function signedInEmail(authorization) {
+  const sb = mailAdmin(), token = String(authorization || '').replace(/^Bearer\s+/i, '')
+  if (!sb || !token) return null
+  const { data } = await sb.auth.getUser(token).catch(() => ({ data: null }))
+  return data?.user?.email ?? null
+}
+const clientIp = (req) => String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '?'
 function overLimit(key, max, windowMs) {
   const now = Date.now()
   const hits = (sendLog.get(key) || []).filter((t) => now - t < windowMs)
@@ -400,7 +425,11 @@ async function handleSendClientEmail(req, res) {
   }
   const problem = checkClientEmail(body)
   if (problem) return sendJson(res, 400, { success: false, message: problem })
-  const ip = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '?'
+  const cloud = !!mailAdmin()
+  const staff = cloud && req.headers.authorization ? !!(await crmUser(getEnv, req.headers.authorization).catch(() => null)) : false
+  const denied = checkClientSender({ cloud, staff })
+  if (denied) return sendJson(res, denied.status, { success: false, message: denied.message })
+  const ip = clientIp(req)
   if (overLimit(`ip:${ip}`, 60, 3600_000) || overLimit(`to:${body.to.toLowerCase()}`, 10, 3600_000)) {
     return sendJson(res, 429, { success: false, message: 'Too many emails in the last hour. Please try again later.' })
   }
@@ -453,6 +482,10 @@ async function handleAiChat(req, res) {
   try { body = await readJsonBody(req) } catch (err) { return sendJson(res, 400, { success: false, message: err.message }) }
   const problem = checkAiRequest(body)
   if (problem) return sendJson(res, 400, { success: false, message: problem })
+  // the AI key is the company's: on the live CRM only signed-in staff may use it
+  if (mailAdmin() && !(req.headers.authorization && await crmUser(getEnv, req.headers.authorization).catch(() => null))) {
+    return sendJson(res, 401, { success: false, message: 'Sign in to the CRM to use the assistant.' })
+  }
   const ip = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '?'
   const limited = aiOverLimit(ip, { hourly: Number(getEnv('AI_HOURLY_LIMIT', '150')), daily: Number(getEnv('AI_DAILY_LIMIT', '1500')) })
   if (limited) return sendJson(res, 429, { success: false, message: limited })

@@ -122,7 +122,7 @@ export default function Messages() {
   return (
     <div>
       <PageHeader title="Messages" subtitle="Internal team chat — share documents too. Tap a photo to see it larger." icon={MessagesSquare} />
-      <Card className="grid h-[calc(100vh-220px)] min-h-[480px] overflow-hidden md:grid-cols-[300px_1fr]">
+      <Card className="grid h-[calc(100vh-220px)] min-h-[480px] overflow-hidden md:grid-cols-[300px_minmax(0,1fr)]">
         <div className={cx('flex min-h-0 flex-col border-r border-line', peer && 'hidden md:flex')}>
           <div className="p-3"><SearchBox value={q} onChange={setQ} placeholder="Search people…" /></div>
           <ul className="min-h-0 flex-1 overflow-y-auto">

@@ -98,7 +98,7 @@ export default function Recruitment() {
           </button>
         </Card>
       ) : (
-        <div className="grid gap-6 xl:grid-cols-[300px_1fr]">
+        <div className="grid gap-6 xl:grid-cols-[300px_minmax(0,1fr)]">
           {/* file list */}
           <Card className="h-fit overflow-hidden">
             <div className="border-b border-line px-4 py-3">

@@ -70,7 +70,6 @@ export function upgradeDb(d: DB): DB {
     for (const u of d.users) {
       if (u.salary == null && u.id.startsWith('u-')) u.salary = SAMPLE_SALARY[u.role]
       if (!d.pfAccounts.some((a) => a.userId === u.id)) {
-        const n = [...u.id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 1e9, 7)
         d.pfAccounts.push({ userId: u.id, uan: sampleUan(u.id), enrolled: true })
       }
     }

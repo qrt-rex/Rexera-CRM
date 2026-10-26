@@ -121,7 +121,7 @@ export default function BookingForm() {
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_330px]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_330px]">
         <div className="space-y-6">
           <Block title="Client company" icon={Building2}>
             <Input label="Company name" required value={f.companyName} error={e.companyName} onChange={(ev) => set('companyName', ev.target.value)} className="sm:col-span-2" />
@@ -178,7 +178,7 @@ export default function BookingForm() {
                   const must = r.s ? needsPriceSplit(r.s) : false
                   const fund = r.s ? isFundingService(r.s) : false
                   return (
-                    <div key={i} className="grid grid-cols-[1fr_150px_auto] items-end gap-2">
+                    <div key={i} className="grid grid-cols-[minmax(0,1fr)_150px_auto] items-end gap-2">
                       <Select label={i === 0 ? 'Service' : undefined} required={i === 0} value={r.serviceId} disabled={!!existing} aria-label={`Service ${i + 1}`}
                         onChange={(ev) => { const s = db.services.find((x) => x.id === ev.target.value); setSvc(i, { serviceId: ev.target.value, price: s ? priceFor(s, f.bookingType) : 0 }) }}>
                         <option value="">— Select a service —</option>

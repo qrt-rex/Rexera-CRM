@@ -34,7 +34,7 @@ export default function TeamProgress() {
           <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} aria-label="To" />
           <Button variant="outline" icon={Download} onClick={() => downloadCsv(`team-progress-${from}-${to}.csv`, rows.map((r) => ({ name: r.u.name, calls: r.calls, talk_minutes: r.talk, interested: r.interested, converted: r.converted, crm_entries: r.bookings, collected: r.coll, target: r.target, achieved_pct: r.pct })))}>CSV</Button>
         </>} />
-      <div className="grid gap-6 xl:grid-cols-[1fr_340px]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         <Card className="overflow-hidden">
           <Table>
             <thead><tr><Th>#</Th><Th>Person</Th><Th className="text-right">Calls</Th><Th className="text-right">Talk</Th><Th className="text-right">Interested</Th><Th className="text-right">Converted</Th><Th className="text-right">CRM entries</Th><Th className="w-40 text-right">Monthly target</Th><Th className="w-48">Collected vs target</Th></tr></thead>

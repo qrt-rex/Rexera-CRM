@@ -21,7 +21,7 @@ export default function Inbox() {
     <div>
       <PageHeader title="Email" subtitle={`Sent to ${me.email}`} icon={InboxIcon}
         actions={unread > 0 && <Button variant="outline" icon={CheckCheck} onClick={() => markEmailRead(me)}>Mark all read</Button>} />
-      <Card className="grid min-h-[60vh] overflow-hidden md:grid-cols-[360px_1fr]">
+      <Card className="grid min-h-[60vh] overflow-hidden md:grid-cols-[360px_minmax(0,1fr)]">
         <div className={cx('flex min-h-0 flex-col border-r border-line', open && 'hidden md:flex')}>
           <div className="p-3"><SearchBox value={q} onChange={setQ} placeholder="Search email…" /></div>
           {!mine.length ? <EmptyState icon={Mail} title="No email yet" text="Messages from HR and automatic emails land here." /> : (

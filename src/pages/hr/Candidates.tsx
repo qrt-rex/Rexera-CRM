@@ -118,7 +118,8 @@ export default function Candidates() {
                 <div key={k} className="rounded-xl bg-card2 px-3 py-2"><p className="text-[11px] text-mute">{k}</p><p className="break-words font-semibold">{v}</p></div>
               ))}
             </div>
-            {open.linkedin && <a href={open.linkedin} target="_blank" rel="noopener noreferrer" className="block truncate text-sm font-semibold text-brand-ink hover:underline">{open.linkedin}</a>}
+            {/* an applicant's link: only real web addresses become links (never javascript: …) */}
+            {open.linkedin && /^https?:\/\//i.test(open.linkedin) && <a href={open.linkedin} target="_blank" rel="noopener noreferrer" className="block truncate text-sm font-semibold text-brand-ink hover:underline">{open.linkedin}</a>}
             {open.message && <p className="whitespace-pre-line rounded-xl bg-card2 p-3 text-sm">{open.message}</p>}
             <div className="rounded-xl border border-line p-3"><p className="mb-1 text-[11px] text-mute">Resume</p><FileLink file={open.resume} /></div>
             <Select label="Status" value={open.status} onChange={(e) => run(() => updateCandidate(me, open.id, { status: e.target.value as CandidateApplication['status'] }), 'Status updated')}>

@@ -64,7 +64,7 @@ export default function Pf() {
         <MiniStat label="Employer share (EPF + EPS)" value={inr(totals.er)} icon={ShieldCheck} tone="green" />
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[360px_1fr]">
+      <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
         <div className="space-y-6">
           <Card className="overflow-hidden">
             <CardHeader title="Salary structure & PF" subtitle={hr ? 'Only HR can change these' : 'Read-only — only HR can change these'} icon={hr ? ShieldCheck : Lock} />

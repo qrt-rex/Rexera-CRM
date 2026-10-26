@@ -1,5 +1,12 @@
-import { cloudConfig } from './supabase'
+import { cloudConfig, getSupabase } from './supabase'
+import { CLOUD } from './cloud'
 import type { ClientEmailRequest } from '../../supabase/functions/_shared/client-email.mjs'
+
+/** The signed-in person's Supabase token: the mail server only sends for someone it can check (never an open relay). */
+async function signInToken(): Promise<string | null> {
+  if (!CLOUD) return null
+  try { return (await (await getSupabase()).auth.getSession()).data.session?.access_token ?? null } catch { return null }
+}
 
 export interface EmailDispatchResult {
   delivered: boolean
@@ -10,9 +17,10 @@ async function trySendViaEndpoint(endpoint: string, payload: unknown, timeoutMs 
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
   try {
+    const token = await signInToken()
     const res = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: JSON.stringify(payload),
       signal: controller.signal,
     })
@@ -54,12 +62,13 @@ async function trySendViaSupabaseEdge(payload: unknown): Promise<{ ok: boolean; 
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), 6000)
   try {
+    const token = await signInToken()
     const res = await fetch(edgeUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         apikey: key,
-        Authorization: `Bearer ${key}`,
+        Authorization: `Bearer ${token ?? key}`,
       },
       body: JSON.stringify(payload),
       signal: controller.signal,

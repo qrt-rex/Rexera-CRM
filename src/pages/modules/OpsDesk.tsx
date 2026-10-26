@@ -134,7 +134,7 @@ export default function OpsDesk() {
         )}
       </Card>
 
-      <div className="grid gap-6 2xl:grid-cols-[1fr_380px]">
+      <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_380px]">
         <Card id="cases" className="scroll-mt-24 overflow-hidden">
           <CardHeader title="Assigned cases" subtitle={`${list.length} shown · most urgent first`} icon={ClipboardList} />
           <div className="space-y-3 border-b border-line p-4">

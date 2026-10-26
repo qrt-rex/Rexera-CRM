@@ -1521,3 +1521,13 @@ on conflict do nothing;
 delete from role_permissions where permission = 'media.manage' and role::text <> 'digitalmedia';
 delete from user_permission_overrides where permission = 'media.manage' and effect = 'allow'
   and user_id in (select id from app_users where role::text not in ('digitalmedia', 'superadmin', 'it'));
+
+-- ##################################################################### 20261026030000_close_direct_applications.sql
+-- =====================================================================================================
+-- Rexera CRM · job applications are saved only by the live server (/api/apply), which checks every answer and the
+-- resume's real content. The old rule letting anyone insert straight into candidate_applications (skipping all of
+-- those checks — e.g. a "javascript:" LinkedIn link) is closed. Safe to run more than once.
+-- (Resumes are still uploaded by the form page itself; the server checks and removes bad ones.)
+-- =====================================================================================================
+drop policy if exists candidate_apps_public_insert on candidate_applications;
+revoke insert on candidate_applications from anon;

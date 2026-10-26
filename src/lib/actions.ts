@@ -2186,6 +2186,9 @@ export function createInvoice(me: User, i: { type: Invoice['type']; client: stri
   assert(i.items.length && i.items.every((x) => x.desc && x.qty > 0 && x.rate >= 0), 'Each line needs a description, quantity and rate.')
   if (i.type === 'TAX') need(me, 'billing.manage')
   return mutate((d) => {
+    // one live invoice of each type per CRM entry (a double click or two people at once must not bill twice)
+    const twin = i.bookingId ? d.invoices.find((x) => x.bookingId === i.bookingId && x.type === i.type && x.status !== 'CANCELLED') : undefined
+    assert(!twin, `This CRM entry already has a ${i.type === 'TAX' ? 'tax' : 'proforma'} invoice (${twin?.number}). Cancel it first to raise a new one.`)
     const fy = (() => { const n = new Date(); const y = n.getMonth() >= 3 ? n.getFullYear() : n.getFullYear() - 1; return `${String(y).slice(2)}-${String(y + 1).slice(2)}` })()
     const inv: Invoice = {
       id: uid('inv-'), number: `${i.type === 'TAX' ? 'RX' : 'PF'}/${fy}/${String(d.counters.invoice++).padStart(4, '0')}`,

@@ -47,7 +47,7 @@ function ContentTab() {
   const [key, setKey] = useState<SiteKey>('hero')
   const s = siteSection(key)
   return (
-    <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
+    <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
       <Card className="self-start overflow-hidden">
         <ul className="divide-y divide-line/70">
           {SITE_SECTIONS.map((x) => {

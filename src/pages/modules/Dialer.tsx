@@ -4,7 +4,7 @@ import { Ban, Briefcase, CircleCheck, CircleDashed, Flame, History, Pause, Phone
 import type { CallOutcome, Lead } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
-import { createLead, logCall, setLeadStatus, userName, visibleLeads } from '../../lib/actions'
+import { createLead, logCall, setLeadStatus, visibleLeads } from '../../lib/actions'
 import { CALL_OUTCOMES, dispositionToStatus, FOLLOW_UP_LEAD, LEAD_STATUS, OPEN_LEAD } from '../../lib/workflow'
 import { addDays, fmtDate, fmtDateTime, fmtTime, inr, normPhone, today, ymd } from '../../lib/format'
 import { blutec, dialerKey, ivrKey, KEYLESS, DialerError, FINAL_STATUSES, isHot, type AgentConnect, type BlutecStatus, type CallStatus, type Ivr, type IvrCall, type IvrStats } from '../../lib/dialer'
@@ -95,7 +95,7 @@ function ConnectionPill({ bt, ivr }: { bt: ReturnType<typeof useBlutec>; ivr: bo
       <Modal open={open && !KEYLESS} onClose={() => setOpen(false)} title="Blutec dialer connection" size="lg" footer={<><Button variant="outline" icon={RefreshCcw} onClick={bt.check}>Check again</Button><Button onClick={() => setOpen(false)}>Close</Button></>}>
         <div className="space-y-3 text-sm">
           <p>Click-to-call: <b className={bt.status?.dialer ? 'text-ok' : 'text-warn'}>{bt.status?.dialer ? 'connected' : 'not set up'}</b> · DND check: <b className={bt.status?.dnc ? 'text-ok' : 'text-warn'}>{bt.status?.dnc ? 'on' : 'not set up'}</b> · IVR: <b className={bt.status?.ivr ? 'text-ok' : 'text-warn'}>{bt.status?.ivr ? 'connected' : 'not set up'}</b>{bt.error ? ` · ${bt.error}` : ''}</p>
-          {!import.meta.env.DEV && <form className="grid items-end gap-2 sm:grid-cols-[1fr_1fr_auto]" onSubmit={(e) => { e.preventDefault(); dialerKey.set(key); ivrKey.set(ivrK); bt.check() }}>
+          {!import.meta.env.DEV && <form className="grid items-end gap-2 sm:grid-cols-[minmax(0,1fr)_1fr_auto]" onSubmit={(e) => { e.preventDefault(); dialerKey.set(key); ivrKey.set(ivrK); bt.check() }}>
             <Input label="Dialer access key (this computer)" type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} hint="DIALER_ACCESS_KEY — for calls" />
             <Input label="IVR access key (Super Admin only)" type="password" autoComplete="off" value={ivrK} onChange={(e) => setIvrK(e.target.value)} hint="IVR_ACCESS_KEY — for IVR campaigns" />
             <Button type="submit">Save</Button>
@@ -383,7 +383,7 @@ function IvrTab({ bt, manage }: { bt: ReturnType<typeof useBlutec>; manage: bool
   return (
     <div className="space-y-6">
       {error && <p className="rounded-xl bg-bad-soft px-4 py-2 text-sm text-bad">{error}</p>}
-      <div className="grid gap-6 xl:grid-cols-[320px_1fr]">
+      <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
         <Card className="overflow-hidden">
           <CardHeader title="IVR campaigns" subtitle={ivrs ? `${ivrs.length} campaign(s)` : 'Loading…'} icon={Radio} action={<Button size="sm" variant="ghost" icon={RefreshCcw} aria-label="Refresh" onClick={load} />} />
           <ul className="max-h-[60vh] overflow-y-auto">

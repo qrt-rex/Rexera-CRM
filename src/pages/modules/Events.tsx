@@ -34,7 +34,7 @@ export default function Events() {
     <div>
       <PageHeader title="Events & Calendar" subtitle="Meetings, trainings, holidays and deadlines" icon={CalendarDays}
         actions={manage && <Button variant="accent" icon={Plus} onClick={() => setEdit({ title: '', date: selected, time: '10:00', kind: 'MEETING', description: '' })}>New event</Button>} />
-      <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card className="p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-extrabold">{cursor.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</h2>

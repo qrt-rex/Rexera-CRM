@@ -9,6 +9,7 @@ import { canOpenDashboard } from './lib/rbac'
 import { moduleByKey, canSee } from './lib/modules'
 import type { Perm, Role } from './lib/types'
 import Login from './pages/Login'
+import { ErrorBoundary } from './components/ErrorBoundary'
 
 const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 const Dashboard = lazy(() => import('./pages/dashboards/Dashboard'))
@@ -220,6 +221,8 @@ export default function App() {
   )
 }
 
+/** Every page: loading placeholder, and an error card (never a blank CRM) if the page fails. */
 function S({ children }: { children: ReactNode }) {
-  return <Suspense fallback={<Loading />}>{children}</Suspense>
+  const loc = useLocation()
+  return <ErrorBoundary resetKey={loc.pathname}><Suspense fallback={<Loading />}>{children}</Suspense></ErrorBoundary>
 }

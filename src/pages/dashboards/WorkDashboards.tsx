@@ -15,7 +15,7 @@ import { ACTIVE_FILE_STATUSES, ADMIN_DONE, ADMIN_STAGES, adminStatusLabel } from
 import { fmtDate, ymd } from '../../lib/format'
 import { EmptyState, Stat } from '../../components/ui'
 import { HBars } from '../../components/charts'
-import { BookingRow, BookingStatusBadge, DeadlineBadge, StageTrack } from '../../components/booking'
+import { BookingRow, BookingStatusBadge } from '../../components/booking'
 import { ClientWorkRow } from '../../components/ClientWork'
 import { TasksPanel } from '../../components/TasksPanel'
 import { WorkProgressPanel } from '../../components/WorkProgressPanel'

@@ -220,7 +220,7 @@ function FormBuilder({ init, id, onClose }: { init: FormInput; id?: string; onCl
         <p className="mb-2 text-sm font-bold">Fields {f.kind === 'UPLOAD' && <span className="font-normal text-mute">— a “Completed document” upload is added automatically</span>}</p>
         <div className="space-y-2">
           {f.fields.map((x, i) => (
-            <div key={x.id} className="grid grid-cols-[1fr_150px_auto] gap-2 rounded-xl border border-line p-3 sm:grid-cols-[1fr_160px_110px_auto]">
+            <div key={x.id} className="grid grid-cols-[minmax(0,1fr)_150px_auto] gap-2 rounded-xl border border-line p-3 sm:grid-cols-[minmax(0,1fr)_160px_110px_auto]">
               <Input aria-label={`Field ${i + 1} label`} placeholder="Label (e.g. Company PAN)" value={x.label} onChange={(e) => setField(i, { label: e.target.value })} />
               <Select aria-label={`Field ${i + 1} type`} value={x.type} onChange={(e) => setField(i, { type: e.target.value as FormField['type'], ...(e.target.value === 'select' && !x.options?.length ? { options: [''] } : {}) })}>
                 {FIELD_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}

@@ -124,7 +124,7 @@ function BranchView({ id }: { id: string }) {
       <ScorecardSection team={team} scopeName={code} />
       <PeopleSection team={team} subtitle={`${code} · this month`} />
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_360px]">
+      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Section title="CRM entries" subtitle={`${files.length} client file${files.length === 1 ? '' : 's'} booked by ${code} · newest first`} icon={ClipboardList}
           action={can('bookings.all', 'bookings.team') ? <Link to="/bookings" className="text-xs font-bold text-brand-ink hover:underline">All CRM entries →</Link> : undefined}>
           {!files.length ? <EmptyState icon={ClipboardList} title="No CRM entries yet" text="Client files booked by this branch's sales people appear here." /> : (
@@ -152,7 +152,7 @@ function BranchView({ id }: { id: string }) {
         </div>
       </div>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_360px]">
+      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Section title="Attendance today" subtitle={`${present} of ${staff.length} signed in`} icon={UserCheck}>
           {!staff.length ? <EmptyState icon={UserCheck} title="Nobody in this branch yet" text="HR sets each person's branch in Employee Details." /> : (
             <div className="grid gap-2 p-4 sm:grid-cols-2">
@@ -240,7 +240,7 @@ function AllBranchesView({ ids, unbranched }: { ids: string[]; unbranched: boole
 
       <ScorecardSection team={team} scopeName={ids.length === 1 && !unbranched ? branchCode(db, ids[0]) : 'All branches'} />
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_340px]">
+      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         <PeopleSection team={team} subtitle="Every branch · this month" showBranch className="mt-0" />
         <Section title="Collections · last 6 months" subtitle="Every branch" icon={TrendingUp} className="self-start"><div className="p-5"><Bars data={trend} format={inrShort} highlightLast height={170} /></div></Section>
       </div>

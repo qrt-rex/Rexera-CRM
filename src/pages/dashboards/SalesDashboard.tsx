@@ -1,9 +1,6 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import {
-  BarChart3, Briefcase, CalendarCheck2, ClipboardCheck, FileText, Images, IndianRupee, Megaphone, Network, Phone, PhoneCall,
-  Sparkles, Target, UserCheck, UserPlus, Users, BellRing, Lightbulb,
-} from 'lucide-react'
+import { BarChart3, Briefcase, CalendarCheck2, ClipboardCheck, FileText, Images, IndianRupee, Megaphone, Network, Phone, PhoneCall, Sparkles, Target, UserCheck, Users, BellRing, Lightbulb } from 'lucide-react'
 import { useDb } from '../../lib/store'
 import { useMe } from '../../lib/auth'
 import { visibleBookings, userName } from '../../lib/actions'

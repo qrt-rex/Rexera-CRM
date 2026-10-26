@@ -4,6 +4,8 @@ import { RotateCcw, Send, Sparkles, Trash2, X } from 'lucide-react'
 import { useDb } from '../lib/store'
 import { useAuth, useMe } from '../lib/auth'
 import { buildAiContext } from '../lib/aiContext'
+import { CLOUD } from '../lib/cloud'
+import { getSupabase } from '../lib/supabase'
 import { Rexy } from './hr/Mascots'
 import { cx } from './ui'
 
@@ -18,7 +20,9 @@ async function ask(messages: Msg[], context: string): Promise<string> {
   try {
     // only the last turns (and no failed ones) go to the server, so requests stay small
     const history = messages.filter((m) => !m.error).slice(-12).map(({ role, content }) => ({ role, content: content.slice(0, 2000) }))
-    const res = await fetch('/api/ai-chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: history, context }), signal: controller.signal })
+    // the live server answers only signed-in staff (the AI key is the company's)
+    const token = CLOUD ? (await (await getSupabase()).auth.getSession()).data.session?.access_token : undefined
+    const res = await fetch('/api/ai-chat', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ messages: history, context }), signal: controller.signal })
     if ((res.headers.get('content-type') || '').includes('text/html')) throw new Error('The assistant needs the live server (server.mjs) — it is not available on this host.')
     const j = await res.json().catch(() => null) as { success?: boolean; reply?: string; message?: string } | null
     if (!res.ok || !j?.success || !j.reply) throw new Error(j?.message || `The assistant could not answer (${res.status}).`)

@@ -291,7 +291,7 @@ export function DetailsModal({ m, onClose, onEdit, run, toast }: { m: MediaItem;
         {manage && !m.submitted && <Button variant="outline" icon={Send} onClick={() => run(() => updateMedia(me, m.id, formOf(m), true), 'Submitted (published)')}>Submit</Button>}
         {manage && <Button icon={Pencil} onClick={onEdit}>Edit</Button>}
       </>}>
-      <div className="grid gap-5 lg:grid-cols-[1fr_300px]">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
         <div className="min-w-0 space-y-4">
           {!m.files.length ? <div className="grid h-48 place-items-center rounded-xl border border-dashed border-line text-sm text-mute">No file uploaded yet</div> : (
             <div className="space-y-3">
@@ -310,7 +310,7 @@ export function DetailsModal({ m, onClose, onEdit, run, toast }: { m: MediaItem;
           {m.notes && <div className="rounded-xl bg-warn-soft px-3 py-2 text-sm"><p className="text-xs font-semibold text-warn">Company notes (never shown to clients)</p><p className="whitespace-pre-line">{m.notes}</p></div>}
         </div>
         <div className="space-y-3 text-sm">
-          <dl className="grid grid-cols-[110px_1fr] gap-x-3 gap-y-2 rounded-xl border border-line p-3">
+          <dl className="grid grid-cols-[110px_minmax(0,1fr)] gap-x-3 gap-y-2 rounded-xl border border-line p-3">
             <dt className="text-mute">Upload</dt><dd><Badge tone={u.tone}>{u.label}</Badge></dd>
             <dt className="text-mute">Work</dt><dd><Badge tone={w.tone}>{w.label}</Badge>{m.completedAt && <span className="ml-1 text-[11px] text-mute">{fmtDateTime(m.completedAt)}</span>}</dd>
             <dt className="text-mute">Published</dt><dd>{m.submitted ? <>{where}{!isLive(m) && <span className="block text-[11px] text-warn">Shows once a file is uploaded</span>}<span className="block text-[11px] text-mute">{fmtDateTime(m.submittedAt!)} by {userName(db, m.submittedBy)}</span></> : <span className="text-mute">Not yet (draft)</span>}</dd>

@@ -11,7 +11,7 @@ import {
   canRunClientPortal, clientDocState, publishClientUpdate, removeClientUpdate, removeMilestone, reviewClientDoc, saveMilestone, setClientDocInternal, setClientDocs, setMilestoneTask, userName,
 } from '../lib/actions'
 import { DOC_TYPES } from '../lib/files'
-import { fmtDate, fmtDateTime } from '../lib/format'
+import { fmtDate, fmtDateTime, today } from '../lib/format'
 import { FileField, FileLink } from './FileField'
 import { Badge, Button, Card, CardHeader, Checkbox, cx, Input, Modal, Progress, Select, Textarea, Toggle, useConfirm, useRun } from './ui'
 
@@ -95,7 +95,7 @@ export function ClientPortalCard({ b }: { b: Booking }) {
                   <Flag className={cx('size-4', m.status === 'DONE' ? 'text-ok' : 'text-mute')} />
                   <b className="min-w-0 flex-1">{m.title}</b>
                   {m.visible ? <Badge tone="blue"><Eye className="size-3" />Client sees it</Badge> : <Badge tone="gray"><EyeOff className="size-3" />Internal</Badge>}
-                  {m.due && <span className={cx('text-xs', m.status !== 'DONE' && m.due < new Date().toISOString().slice(0, 10) ? 'font-semibold text-bad' : 'text-mute')}>due {fmtDate(m.due)}</span>}
+                  {m.due && <span className={cx('text-xs', m.status !== 'DONE' && m.due < today() ? 'font-semibold text-bad' : 'text-mute')}>due {fmtDate(m.due)}</span>}
                   <Badge tone={s.tone}>{s.label}{m.doneAt ? ` · ${fmtDate(m.doneAt)}` : ''}</Badge>
                   {may && <Button size="sm" variant="ghost" icon={Pencil} aria-label={`Edit ${m.title}`} onClick={() => setMs({ id: m.id, title: m.title, due: m.due ?? '', status: m.status, visible: m.visible, note: m.note ?? '', tasks: m.tasks ?? [] })} />}
                   {may && <Button size="sm" variant="ghost" icon={Trash2} aria-label={`Remove ${m.title}`} onClick={async () => { if (await confirm('Remove milestone?', `“${m.title}” and its tasks will be removed.`, true)) run(() => removeMilestone(me, b.id, m.id), 'Milestone removed') }} />}

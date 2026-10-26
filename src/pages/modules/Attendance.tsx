@@ -92,7 +92,7 @@ export default function Attendance() {
           </div>
         </Card>
       ) : (
-        <div className="grid gap-6 xl:grid-cols-[1fr_300px]">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
           <Card className="overflow-hidden">
             <CardHeader title="Daily register" subtitle="P present · L late · H half day · A absent · LV leave · red dot = late from break" icon={CalendarRange}
               action={<select value={days} onChange={(e) => setDays(Number(e.target.value))} className="h-9 rounded-lg border border-line bg-card px-2 text-sm" aria-label="Range"><option value={7}>7 days</option><option value={14}>14 days</option><option value={21}>21 days</option></select>} />

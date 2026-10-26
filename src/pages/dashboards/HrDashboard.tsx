@@ -217,7 +217,7 @@ export function HrDashboard() {
       </div>
 
       {/* 4. quick actions + login card */}
-      <div className="grid gap-6 xl:grid-cols-[1fr_340px]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         <QuickActions />
         <LoginLogoutCard />
       </div>

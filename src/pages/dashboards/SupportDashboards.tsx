@@ -1,15 +1,13 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import {
-  AlertTriangle, Briefcase, CalendarCheck2, Copy, FileText, Headphones, Megaphone, MessageSquare, PauseCircle, Search, Sparkles,
-} from 'lucide-react'
+import { AlertTriangle, Briefcase, CalendarCheck2, FileText, Headphones, Megaphone, MessageSquare, PauseCircle, Search, Sparkles } from 'lucide-react'
 import { useDb } from '../../lib/store'
 import { userName, visibleBookings } from '../../lib/actions'
 import { useMe } from '../../lib/auth'
-import { KYC_CATEGORIES, STAGES, stageLabel } from '../../lib/workflow'
+import { KYC_CATEGORIES, stageLabel } from '../../lib/workflow'
 import { ago, bookingMoney, inr, today } from '../../lib/format'
 import { roleLabel } from '../../lib/rbac'
-import { Button, EmptyState, Stat, useToast } from '../../components/ui'
+import { EmptyState, Stat } from '../../components/ui'
 import { BookingStatusBadge } from '../../components/booking'
 import { Greeting, LoginLogoutCard, Section, Tile, TileGrid, ViewAll } from './widgets'
 import { MESSAGES_ENABLED } from '../../lib/modules'
@@ -17,7 +15,6 @@ import { MESSAGES_ENABLED } from '../../lib/modules'
 export function SupportDashboard() {
   const db = useDb()
   const me = useMe()
-  const toast = useToast()
   const [q, setQ] = useState('')
   const files = visibleBookings(db, me)
   const activeFiles = files.filter((b) => !['COMPLETED', 'REJECTED'].includes(b.status))
