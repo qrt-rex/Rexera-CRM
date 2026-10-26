@@ -10,6 +10,9 @@ import { openFile } from '../../lib/files'
 import { FileLink } from '../../components/FileField'
 import { Badge, Button, Card, CardHeader, Checkbox, Drawer, EmptyState, Input, Modal, PageHeader, SearchBox, Select, Table, Td, Textarea, Th, useConfirm, usePaged, useRun, useToast } from '../../components/ui'
 
+// YYYY-MM-DD dates: full years, one less until this year's birthday
+const ageOn = (dob: string, on: string) => +on.slice(0, 4) - +dob.slice(0, 4) - (on.slice(5) < dob.slice(5) ? 1 : 0)
+
 const STATUS: Record<CandidateApplication['status'], { label: string; tone: 'blue' | 'violet' | 'red' | 'green' }> = {
   NEW: { label: 'New', tone: 'blue' }, SHORTLISTED: { label: 'Shortlisted', tone: 'violet' }, REJECTED: { label: 'Rejected', tone: 'red' }, HIRED: { label: 'Hired', tone: 'green' },
 }
@@ -111,7 +114,7 @@ export default function Candidates() {
         {open && (
           <div className="space-y-5">
             <div className="grid grid-cols-2 gap-3 text-sm">
-              {([['Position applied for', open.position], ['Branch', open.branch && `${open.branch}${jobBranch(open.branch) ? ` — ${jobBranch(open.branch)!.address}` : ''}`], ['Applying as', candidateTypeLabel(open.candidateType)], ['Preferred interview', slot(open.interviewAt)], ['Current CTC', open.currentCtc], ['Email', open.email], ['Mobile', open.phone], ['City', open.city], ['Date of birth', open.dob ? fmtDate(open.dob) : ''], ['Qualification', open.qualification], ['College', open.college], ['Experience', open.experience], ['Current company', open.currentCompany], ['Expected', open.expectedSalary], ['Notice period', open.noticePeriod]] as [string, string | undefined][]).filter(([, v]) => v).map(([k, v]) => (
+              {([['Position applied for', open.position], ['Branch', open.branch && `${open.branch}${jobBranch(open.branch) ? ` — ${jobBranch(open.branch)!.address}` : ''}`], ['Applying as', candidateTypeLabel(open.candidateType)], ['Preferred interview', slot(open.interviewAt)], ['Current CTC', open.currentCtc], ['Email', open.email], ['Mobile', open.phone], ['City', open.city], ['Date of birth', open.dob ? `${fmtDate(open.dob)} (${ageOn(open.dob, today())} yrs)` : ''], ['Qualification', open.qualification], ['College', open.college], ['Experience', open.experience], ['Current company', open.currentCompany], ['Expected', open.expectedSalary], ['Notice period', open.noticePeriod]] as [string, string | undefined][]).filter(([, v]) => v).map(([k, v]) => (
                 <div key={k} className="rounded-xl bg-card2 px-3 py-2"><p className="text-[11px] text-mute">{k}</p><p className="break-words font-semibold">{v}</p></div>
               ))}
             </div>

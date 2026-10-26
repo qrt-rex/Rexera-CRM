@@ -1121,6 +1121,17 @@ create table if not exists site_content_history (
   published_at timestamptz not null default now(),
   published_by text references app_users(id) on delete set null
 );
+-- an older copy of these tables may already exist: give it every column
+alter table site_content add column if not exists draft jsonb;
+alter table site_content add column if not exists published jsonb;
+alter table site_content add column if not exists updated_at timestamptz not null default now();
+alter table site_content add column if not exists updated_by text references app_users(id) on delete set null;
+alter table site_content add column if not exists published_at timestamptz;
+alter table site_content add column if not exists published_by text references app_users(id) on delete set null;
+alter table site_content_history add column if not exists key text;
+alter table site_content_history add column if not exists content jsonb;
+alter table site_content_history add column if not exists published_at timestamptz not null default now();
+alter table site_content_history add column if not exists published_by text references app_users(id) on delete set null;
 create index if not exists site_content_history_idx on site_content_history(published_at desc);
 alter table site_content enable row level security;
 alter table site_content_history enable row level security;

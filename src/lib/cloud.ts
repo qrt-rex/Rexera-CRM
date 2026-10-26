@@ -181,6 +181,14 @@ export async function cloudSetPassword(userId: string, password: string) {
 type Op = () => PromiseLike<{ error: { message: string } | null }>
 const chunk = <T>(a: T[], n: number) => Array.from({ length: Math.ceil(a.length / n) }, (_, i) => a.slice(i * n, i * n + n))
 const EMPTY = Object.fromEntries(SPECS.map((s) => [s.key, []]))
+// not upsert: ON CONFLICT makes Postgres check the read rule on the new row, and nobody can read another person's notification
+async function insertOnce(s: SupabaseClient, table: string, rows: Record<string, unknown>[]) {
+  const r = await s.from(table).insert(rows)
+  if (r.error?.code !== '23505' || rows.length === 1) return r.error?.code === '23505' ? { error: null } : r
+  // a row is already there: retry one by one, skipping the ones that exist
+  const each = await Promise.all(rows.map((row) => s.from(table).insert(row)))
+  return each.find((x) => x.error && x.error.code !== '23505') ?? { error: null }
+}
 /** Table rows for some records of one collection (mapAll needs the whole user list to keep user references,
  *  so for users it maps everyone and the caller picks the changed rows). */
 function rowsFor(next: DB, key: keyof DB, records: unknown[]): Tables {
@@ -213,7 +221,7 @@ export function plan(prev: DB, next: DB, s: SupabaseClient): Op[][] {
       const isNew = (id: string) => !before.has(id)
       const inserts = parentRows.filter((r) => isNew(r[idCol] as string)), updates = parentRows.filter((r) => !isNew(r[idCol] as string))
       steps.push([
-        ...chunk(inserts, 500).map((part) => () => (spec.once ? s.from(spec.table).upsert(part, { onConflict: idCol, ignoreDuplicates: true }) : s.from(spec.table).insert(part))),
+        ...chunk(inserts, 500).map((part) => () => (spec.once ? insertOnce(s, spec.table, part) : s.from(spec.table).insert(part))),
         ...updates.map((r) => () => s.from(spec.table).update(r).eq(idCol, r[idCol] as string)),
       ])
       const childOps: Op[] = []
