@@ -47,7 +47,7 @@ assert.deepEqual(await writes(base, produce(base, (d) => {
 // a reminder with a fixed id may already be in the table (written by another browser): skip it, don't fail the save
 assert.deepEqual(await writes(base, produce(base, (d) => {
   d.notices.unshift({ id: `n-brkstart-2026-10-22-${a.id}`, userId: a.id, title: 'Lunch break has started', at, read: false, kind: 'info' })
-})), ['notifications upsert 1'], 'notification: insert or skip')
+})), ['notifications insert 1'], 'notification: insert or skip (a plain insert — an upsert would need to read other people’s notifications)')
 
 assert.deepEqual(await writes(base, produce(base, (d) => { d.leads.splice(0, 1) })), [`leads delete (id in ("${lead.id}"))`], 'delete a lead')
 
