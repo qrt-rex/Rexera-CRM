@@ -85,7 +85,7 @@ export default function Candidates() {
         </div>
         {!list.length ? <EmptyState icon={Users} title="No applications yet" text="Share a form link — applications appear here with their resumes." /> : (
           <Table>
-            <thead><tr><Th>Candidate</Th><Th>Position · branch</Th><Th>Applying as · qualification</Th><Th>Preferred interview</Th><Th>Resume</Th><Th>Status</Th><Th>Submitted</Th></tr></thead>
+            <thead><tr><Th>Number</Th><Th>Candidate</Th><Th>Position · branch</Th><Th>Applying as · qualification</Th><Th>Preferred interview</Th><Th>Resume</Th><Th>Status</Th><Th>Submitted</Th></tr></thead>
             <tbody>
               {slice.map((c) => (
                 <tr key={c.id} className="cursor-pointer hover:bg-card2/60" onClick={() => setOpenId(c.id)}>
