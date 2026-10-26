@@ -26,6 +26,7 @@ const SalesKit = lazy(() => import('./pages/modules/SalesKit'))
 const Website = lazy(() => import('./pages/modules/Website'))
 const ClientPortal = lazy(() => import('./pages/modules/ClientPortal'))
 const DigitalMedia = lazy(() => import('./pages/modules/DigitalMedia'))
+const MediaGallery = lazy(() => import('./pages/modules/MediaGallery'))
 const Portal = lazy(() => import('./pages/portal/Portal'))
 const Content = lazy(() => import('./pages/modules/Content'))
 const Broadcasts = lazy(() => import('./pages/modules/Broadcasts'))
@@ -170,6 +171,8 @@ export default function App() {
               <Route path="/client-portal" element={<Guard m="client-portal"><S><ClientPortal /></S></Guard>} />
               <Route path="/content" element={<Guard m="content"><S><Content /></S></Guard>} />
               <Route path="/digital-media" element={<Guard m="digital-media"><S><DigitalMedia /></S></Guard>} />
+              <Route path="/media/posts" element={<Guard m="media-posts"><S><MediaGallery kind="POST" /></S></Guard>} />
+              <Route path="/media/flyers" element={<Guard m="media-flyers"><S><MediaGallery kind="FLYER" /></S></Guard>} />
               <Route path="/broadcasts" element={<Guard m="broadcasts"><S><Broadcasts /></S></Guard>} />
               <Route path="/billing" element={<Guard m="billing"><S><Billing /></S></Guard>} />
               <Route path="/refunds" element={<Guard m="refunds"><S><Refunds /></S></Guard>} />

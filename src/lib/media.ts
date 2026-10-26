@@ -14,6 +14,8 @@ import { isLive, mediaFileProblem, mediaProblems, mediaTypeLabel } from '../../s
 function assert(cond: unknown, msg: string): asserts cond { if (!cond) throw new ActionError(msg) }
 const has = (me: User, p: 'media.manage' | 'media.view') => effectivePerms(getDb(), me).has(p)
 export const canManageMedia = (me: User) => has(me, 'media.manage')
+/** Media is assigned only to people who can open the Digital Media section (the Digital Media team, Super Admin / IT). */
+export const mayTakeMedia = (d: DB, u: User) => effectivePerms(d, u).has('media.manage')
 /** The record's own work: managers, or the person it is assigned to. */
 export const canWorkMedia = (me: User, m: MediaItem) => canManageMedia(me) || m.assignedTo === me.id
 
@@ -57,7 +59,7 @@ export function createMedia(me: User, form: MediaForm, files: FileRef[], submit:
   assert(!bad, bad ?? '')
   for (const x of files) { const p = mediaFileProblem(x.name, x.type, x.size); assert(!p, p ?? '') }
   return mutate((d) => {
-    assert(!f.assignedTo || d.users.some((u) => u.id === f.assignedTo && u.active), 'Pick an active team member.')
+    assert(!f.assignedTo || d.users.some((u) => u.id === f.assignedTo && u.active && mayTakeMedia(d, u)), 'Pick an active member of the Digital Media team.')
     d.mediaItems ??= []
     // one more than the counter or the highest serial in use, so a serial is never given twice
     const serial = Math.max(d.counters.media ?? 0, ...d.mediaItems.map((m) => m.serial)) + 1
@@ -90,7 +92,7 @@ export function updateMedia(me: User, id: string, form: MediaForm, submit: boole
     const publish = submit || m.submitted
     const bad = problem(f, publish)
     assert(!bad, bad ?? '')
-    assert(!f.assignedTo || d.users.some((u) => u.id === f.assignedTo && (u.active || u.id === m.assignedTo)), 'Pick an active team member.')
+    assert(!f.assignedTo || f.assignedTo === m.assignedTo || d.users.some((u) => u.id === f.assignedTo && u.active && mayTakeMedia(d, u)), 'Pick an active member of the Digital Media team.')
     const at = nowIso()
     const changed = (Object.keys(f) as (keyof typeof f)[]).filter((k) => JSON.stringify(m[k] ?? null) !== JSON.stringify(f[k] ?? null))
     const reassigned = changed.includes('assignedTo')

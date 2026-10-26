@@ -1512,3 +1512,12 @@ commit;
 insert into role_permissions (role, permission)
 select 'digitalmedia'::app_role, p from unnest(array['broadcasts.view', 'messages.use', 'schemes.view', 'content.view', 'content.manage', 'media.view', 'media.manage']) p
 on conflict do nothing;
+
+-- ##################################################################### 20261026020000_digital_media_section_only.sql
+-- =====================================================================================================
+-- Rexera CRM · the Digital Media section (dashboard, posts, flyers) is the Digital Media team's only: no other role
+-- manages media (Super Admin / IT keep everything). Safe to run more than once.
+-- =====================================================================================================
+delete from role_permissions where permission = 'media.manage' and role::text <> 'digitalmedia';
+delete from user_permission_overrides where permission = 'media.manage' and effect = 'allow'
+  and user_id in (select id from app_users where role::text not in ('digitalmedia', 'superadmin', 'it'));

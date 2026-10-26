@@ -5,7 +5,7 @@ import type { FileRef, MediaItem, MediaWork } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useMe } from '../../lib/auth'
 import { userName, visibleBookings } from '../../lib/actions'
-import { addMediaFiles, canManageMedia, canWorkMedia, createMedia, deleteMedia, removeMediaFile, setMediaWork, unpublishMedia, updateMedia, visibleMedia, type MediaForm } from '../../lib/media'
+import { addMediaFiles, canManageMedia, canWorkMedia, createMedia, deleteMedia, mayTakeMedia, removeMediaFile, setMediaWork, unpublishMedia, updateMedia, visibleMedia, type MediaForm } from '../../lib/media'
 import { deleteFile, fileSize, openFile, saveMediaFile } from '../../lib/files'
 import { ago, fmtDate, fmtDateTime } from '../../lib/format'
 import {
@@ -52,8 +52,8 @@ function useUploads() {
   return { upload, view, busy: list.some((x) => !x.error) }
 }
 
-const emptyForm = (): MediaForm => ({ schemeName: '', title: '', description: '', mediaType: 'POST', internal: true, external: false, clientBookingIds: [], assignDate: '', assignTime: '', assignedTo: '', workStatus: 'PENDING', notes: '' })
-const formOf = (m: MediaItem): MediaForm => ({
+export const emptyForm = (mediaType: MediaForm['mediaType'] = 'POST'): MediaForm => ({ schemeName: '', title: '', description: '', mediaType, internal: true, external: false, clientBookingIds: [], assignDate: '', assignTime: '', assignedTo: '', workStatus: 'PENDING', notes: '' })
+export const formOf = (m: MediaItem): MediaForm => ({
   schemeName: m.schemeName, title: m.title, description: m.description, mediaType: m.mediaType, internal: m.internal, external: m.external, clientBookingIds: m.clientBookingIds ?? [],
   assignDate: m.assignDate ?? '', assignTime: m.assignTime ?? '', assignedTo: m.assignedTo ?? '', workStatus: m.workStatus, notes: m.notes ?? '',
 })
@@ -192,7 +192,7 @@ function Row({ m, now, onDetails }: { m: MediaItem; now: Date; onDetails: () => 
   )
 }
 
-function MediaFormModal({ form, onClose, onSaved }: {
+export function MediaFormModal({ form, onClose, onSaved }: {
   form: { id?: string; data: MediaForm; files: FileRef[]; submitted?: boolean }; onClose: (unsaved: FileRef[]) => void; onSaved: (id: string) => void
 }) {
   const db = useDb()
@@ -206,7 +206,8 @@ function MediaFormModal({ form, onClose, onSaved }: {
   const { upload, view, busy } = useUploads()
   const set = <K extends keyof MediaForm>(k: K, v: MediaForm[K]) => { setD((x) => ({ ...x, [k]: v })); setErrors((x) => ({ ...x, [k]: '', ...(k === 'internal' || k === 'external' ? { publication: '' } : {}) })) }
   const schemes = [...new Set([...db.schemes.map((s) => s.title), ...(db.salesKit ?? []).map((s) => s.name)].filter(Boolean))].sort()
-  const staff = db.users.filter((u) => u.active)
+  // only the Digital Media team (who can open this section) is assigned media
+  const staff = db.users.filter((u) => (u.active && mayTakeMedia(db, u)) || u.id === d.assignedTo)
   const bookings = visibleBookings(db, me)
   const cq = clientQ.trim().toLowerCase()
   const save = async (submit: boolean) => {
@@ -272,7 +273,7 @@ function MediaFormModal({ form, onClose, onSaved }: {
   )
 }
 
-function DetailsModal({ m, onClose, onEdit, run, toast }: { m: MediaItem; onClose: () => void; onEdit: () => void; run: ReturnType<typeof useRun>; toast: ReturnType<typeof useToast> }) {
+export function DetailsModal({ m, onClose, onEdit, run, toast }: { m: MediaItem; onClose: () => void; onEdit: () => void; run: ReturnType<typeof useRun>; toast: ReturnType<typeof useToast> }) {
   const db = useDb()
   const me = useMe()
   const [confirm, confirmNode] = useConfirm()

@@ -58,7 +58,7 @@ export const PERM_GROUPS: { group: string; perms: { id: Perm; label: string }[] 
       { id: 'schemes.manage', label: 'Add / edit schemes (Admin, Operation Team)' },
       { id: 'saleskit.manage', label: 'Edit the Sales Kit (Operation Team only)' },
       { id: 'media.view', label: 'See company (internal) media on dashboards' },
-      { id: 'media.manage', label: 'Digital Media: create, assign, edit and publish media (Admin)' },
+      { id: 'media.manage', label: 'Digital Media section: dashboard, posts, flyers — create, assign, publish (Digital Media only)' },
       { id: 'broadcasts.view', label: 'View broadcasts' },
       { id: 'broadcasts.manage', label: 'Publish broadcasts' },
       { id: 'documents.forms', label: 'Client document forms' },
@@ -115,7 +115,7 @@ const common: Perm[] = ['broadcasts.view', 'messages.use', 'schemes.view', 'cont
 
 export const DEFAULT_ROLE_PERMS: Record<Role, Perm[]> = {
   superadmin: [...ALL_PERMS],
-  admin: [...common, 'bookings.all', 'bookings.admin', 'content.manage', 'media.manage', 'salesinfo.manage', 'schemes.manage', 'employees.view', 'documents.forms', 'reports.view', 'followup.manage', 'forms.manage', 'workflow.manage'],
+  admin: [...common, 'bookings.all', 'bookings.admin', 'content.manage', 'salesinfo.manage', 'schemes.manage', 'employees.view', 'documents.forms', 'reports.view', 'followup.manage', 'forms.manage', 'workflow.manage'],
   accounts: [...common, 'bookings.all', 'bookings.accounts', 'billing.create', 'billing.manage', 'refunds.manage', 'reports.view', 'reports.export'],
   legal: [...common, 'bookings.all', 'bookings.legal', 'documents.forms', 'leave.approve', 'reports.view'],
   operations: [...common, 'bookings.all', 'bookings.process', 'content.manage', 'salesinfo.manage', 'schemes.manage', 'employees.view', 'documents.forms', 'reports.view', 'events.manage', 'forms.manage', 'saleskit.manage'],
@@ -160,6 +160,8 @@ export const RESERVED: Partial<Record<Perm, Role[]>> = {
   // the Sales Kit everyone reads is edited by the Operation team only
   'saleskit.manage': ['superadmin', 'operations'],
   'content.manage': ['superadmin', 'admin', 'operations', 'digitalmedia'],
+  // the Digital Media section (dashboard, posts, flyers) belongs to the Digital Media team only
+  'media.manage': ['superadmin', 'digitalmedia'],
   'salesinfo.manage': ['superadmin', 'admin', 'operations', 'teamlead'],
 }
 

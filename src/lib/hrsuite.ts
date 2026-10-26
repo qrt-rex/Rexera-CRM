@@ -236,9 +236,8 @@ export function upgradeDb(d: DB): DB {
   }
   d.mediaItems ??= []
   if (!d.upgrades.includes('digital-media-1')) {
-    // Digital Media: everyone sees company media, Admins manage it (the live CRM gets this from its migration)
+    // Digital Media: everyone sees company media; only the Digital Media team manages it (the live CRM gets this from its migration)
     for (const r of Object.keys(d.rolePerms) as (keyof typeof d.rolePerms)[]) d.rolePerms[r] = [...new Set([...(d.rolePerms[r] ?? []), 'media.view' as Perm])]
-    if (d.rolePerms.admin) d.rolePerms.admin = [...new Set([...d.rolePerms.admin, 'media.manage' as Perm])]
     d.upgrades.push('digital-media-1')
   }
   return d

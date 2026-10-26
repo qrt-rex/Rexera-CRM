@@ -15,7 +15,7 @@ export interface ModuleDef {
   tone: Tone
   /** visible when the user has ANY of these (empty = everyone signed in) */
   perms: Perm[]
-  group: 'Sales' | 'Client files' | 'Content' | 'People' | 'Finance' | 'Workspace' | 'Admin'
+  group: 'Sales' | 'Client files' | 'Content' | 'Digital Media' | 'People' | 'Finance' | 'Workspace' | 'Admin'
   /** listed only in the HR sidebar (still searchable with Ctrl K) */
   hrOnly?: boolean
 }
@@ -37,9 +37,12 @@ export const MODULES: ModuleDef[] = [
   { key: 'services', path: '/services', label: 'Services & Combo Packages', desc: 'Prices for single, multiple and combo (3/6/9/12 months) bookings', icon: Layers, tone: 'violet', perms: ['bookings.create', 'bookings.all', 'schemes.manage', 'billing.manage'], group: 'Content' },
   { key: 'schemes', path: '/schemes', label: 'Schemes', desc: 'Government schemes and offers', icon: Sparkles, tone: 'green', perms: ['schemes.view', 'schemes.manage'], group: 'Content' },
   { key: 'sales-kit', path: '/sales-kit', label: 'Sales Kit', desc: 'Every scheme: benefits, eligibility, last date and our charge', icon: BookMarked, tone: 'orange', perms: [], group: 'Content' },
-  { key: 'digital-media', path: '/digital-media', label: 'Digital Media Dashboard', desc: 'Media Function: posts, flyers, posters, videos — assign, upload, publish', icon: Clapperboard, tone: 'pink', perms: ['media.manage', 'media.view'], group: 'Content' },
   { key: 'content', path: '/content', label: 'Flyers, Posts & Sales Info', desc: 'Marketing material and sales scripts', icon: Images, tone: 'orange', perms: ['content.view', 'content.manage'], group: 'Content' },
   { key: 'broadcasts', path: '/broadcasts', label: 'Broadcasts', desc: 'Company updates with acknowledgement', icon: Megaphone, tone: 'red', perms: ['broadcasts.view', 'broadcasts.manage'], group: 'Content' },
+  // the Digital Media section: only the Digital Media team (and Super Admin / IT)
+  { key: 'digital-media', path: '/digital-media', label: 'Digital Media Dashboard', desc: 'Media Function: posts, flyers, posters, videos — assign, upload, publish', icon: Clapperboard, tone: 'pink', perms: ['media.manage'], group: 'Digital Media' },
+  { key: 'media-posts', path: '/media/posts', label: 'Posts', desc: 'Every post created in Digital Media', icon: Megaphone, tone: 'violet', perms: ['media.manage'], group: 'Digital Media' },
+  { key: 'media-flyers', path: '/media/flyers', label: 'Flyers', desc: 'Every flyer and poster created in Digital Media', icon: Images, tone: 'orange', perms: ['media.manage'], group: 'Digital Media' },
   { key: 'billing', path: '/billing', label: 'Invoice / Bill', desc: 'GST invoices, proforma and receivables', icon: IndianRupee, tone: 'amber', perms: ['billing.own', 'billing.create', 'billing.manage'], group: 'Finance' },
   { key: 'refunds', path: '/refunds', label: 'Refunds', desc: 'Refund entries — paid back to the client or not', icon: Undo2, tone: 'red', perms: ['refunds.manage'], group: 'Finance' },
   { key: 'commission', path: '/commission', label: 'Commission', desc: 'CA / DSA commission — owed and paid, with PDF export', icon: BadgePercent, tone: 'violet', perms: ['bookings.accounts'], group: 'Finance' },
