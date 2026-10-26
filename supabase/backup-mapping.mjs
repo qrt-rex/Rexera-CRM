@@ -137,6 +137,12 @@ export function mapAll(backup) {
   t.site_content_history = (d.siteHistory ?? []).map((x) => ({ id: x.id, key: x.key, content: x.content ?? null, published_at: x.at, published_by: uref(x.by) }))
   t.client_accounts = (d.clientAccounts ?? []).map((x) => ({ id: x.id, auth_user_id: s(x.authUserId), email: x.email, name: x.name, phone: s(x.phone), booking_ids: x.bookingIds ?? [], status: x.status, invited_at: x.invitedAt, invited_by: uref(x.invitedBy), activated_at: s(x.activatedAt), last_login_at: s(x.lastLoginAt), assigned_to: uref(x.assignedTo), disabled_at: s(x.disabledAt) }))
   t.client_activity = (d.clientActivity ?? []).map((x) => ({ id: x.id, account_id: x.accountId, booking_id: s(x.bookingId), at: x.at, action: x.action, detail: s(x.detail), by_user: uref(x.by) }))
+  t.media_items = (d.mediaItems ?? []).map((x) => ({
+    id: x.id, serial: x.serial, scheme_name: x.schemeName, title: x.title, description: x.description ?? '', media_type: x.mediaType, files: x.files ?? [],
+    internal: !!x.internal, external: !!x.external, client_booking_ids: x.clientBookingIds ?? [], assign_date: s(x.assignDate), assign_time: s(x.assignTime),
+    assigned_to: uref(x.assignedTo), work_status: x.workStatus, notes: s(x.notes), submitted: !!x.submitted, submitted_at: s(x.submittedAt), submitted_by: uref(x.submittedBy),
+    completed_at: s(x.completedAt), created_at: x.createdAt, created_by: uref(x.createdBy), updated_at: x.updatedAt, updated_by: uref(x.updatedBy), history: x.history ?? [],
+  }))
   t.website_lead_log = (d.webLeadLog ?? []).map((x) => ({ id: x.id, at: x.at, status: x.status, form: s(x.form), name: s(x.name), phone: s(x.phone), email: s(x.email), error: s(x.error), lead_id: s(x.leadId), fields: x.fields ?? null, retried_at: s(x.retriedAt), retried_by: uref(x.retriedBy) }))
   t.recruitment_datasets = (backup.imports ?? []).map((x) => ({ id: x.id, name: x.name, file_name: x.fileName, sheet: s(x.sheet), kind: x.kind, columns: x.columns, imported_at: x.importedAt, imported_by: uref(x.importedBy), bytes: x.bytes ?? 0 }))
   t.recruitment_rows = (backup.imports ?? []).flatMap((x) => x.rows.map((cells, i) => ({ dataset_id: x.id, row_no: i + 1, cells })))
@@ -157,7 +163,7 @@ export const ORDER = [
   ['company_assets', 'id'], ['stock_items', 'id'], ['company_expenses', 'id'], ['legacy_files', 'path'],
   ['doc_forms', 'id'], ['doc_form_submissions', 'id'], ['sales_kit', 'id'],
   ['site_content', 'key'], ['site_content_history', 'id'], ['website_lead_log', 'id'],
-  ['client_accounts', 'id'], ['client_activity', 'id'], ['client_doc_uploads', 'id'],
+  ['client_accounts', 'id'], ['client_activity', 'id'], ['client_doc_uploads', 'id'], ['media_items', 'id'],
 ]
 export const APPEND_ONLY = ['payroll_history', 'audit_log', 'asset_events', 'stock_moves']   // identity ids: only copied into an empty table
 
@@ -316,6 +322,12 @@ export function rowsToDb(input) {
     siteHistory: rows('site_content_history').map((x) => ({ id: x.id, key: x.key, content: x.content ?? null, at: x.published_at, by: x.published_by ?? '' })),
     clientAccounts: rows('client_accounts').map((x) => opt({ id: x.id, authUserId: u(x.auth_user_id), email: x.email, name: x.name, phone: u(x.phone), bookingIds: x.booking_ids ?? [], status: x.status, invitedAt: x.invited_at, invitedBy: x.invited_by ?? '', activatedAt: u(x.activated_at), lastLoginAt: u(x.last_login_at), assignedTo: u(x.assigned_to), disabledAt: u(x.disabled_at) })),
     clientActivity: rows('client_activity').map((x) => opt({ id: x.id, accountId: x.account_id, bookingId: u(x.booking_id), at: x.at, action: x.action, detail: u(x.detail), by: u(x.by_user) })),
+    mediaItems: rows('media_items').map((x) => opt({
+      id: x.id, serial: x.serial, schemeName: x.scheme_name, title: x.title, description: x.description ?? '', mediaType: x.media_type, files: x.files ?? [],
+      internal: !!x.internal, external: !!x.external, clientBookingIds: x.client_booking_ids?.length ? x.client_booking_ids : undefined, assignDate: u(x.assign_date), assignTime: u(x.assign_time),
+      assignedTo: u(x.assigned_to), workStatus: x.work_status, notes: u(x.notes), submitted: !!x.submitted, submittedAt: u(x.submitted_at), submittedBy: u(x.submitted_by),
+      completedAt: u(x.completed_at), createdAt: x.created_at, createdBy: x.created_by ?? '', updatedAt: x.updated_at, updatedBy: x.updated_by ?? '', history: x.history ?? [],
+    })),
     webLeadLog: rows('website_lead_log').map((x) => opt({ id: x.id, at: x.at, status: x.status, form: u(x.form), name: u(x.name), phone: u(x.phone), email: u(x.email), error: u(x.error), leadId: u(x.lead_id), fields: u(x.fields), retriedAt: u(x.retried_at), retriedBy: u(x.retried_by) })),
     salesKit: rows('sales_kit').map((x) => opt({
       id: x.id, category: x.category, position: x.position, name: x.name, benefits: x.benefits ?? '', sectors: x.sectors ?? '', eligibility: x.eligibility ?? '', lastDate: x.last_date ?? '',

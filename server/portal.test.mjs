@@ -76,6 +76,12 @@ const sb = fakeSb({
   ],
   client_accounts: [], client_activity: [], client_doc_uploads: [{ id: 'cu-ravi000000001', booking_id: 'b2', category: 'DPR', file: { id: 'file-ravi000001', name: 'ravi-dpr.pdf', type: 'application/pdf', size: 9, at: '2026-10-21T00:00:00.000Z' }, at: '2026-10-21T00:00:00.000Z', account_id: 'other' }],
   notifications: [], audit_log: [],
+  media_items: [
+    { id: 'med-all', title: 'Seed Fund flyer', description: 'For every client', scheme_name: 'Seed Fund', media_type: 'FLYER', files: [{ id: 'media-flyer00001', name: 'flyer.png', type: 'image/png', size: 9 }], internal: true, external: true, submitted: true, submitted_at: '2026-10-24T00:00:00.000Z', client_booking_ids: [], notes: 'COMPANY-NOTE price may change' },
+    { id: 'med-ravi', title: 'RAVI-ONLY poster', scheme_name: 'PMEGP', media_type: 'POSTER', files: [{ id: 'media-ravi000001', name: 'ravi.pdf', type: 'application/pdf', size: 9 }], internal: false, external: true, submitted: true, submitted_at: '2026-10-24T00:00:00.000Z', client_booking_ids: ['b2'] },
+    { id: 'med-int', title: 'INTERNAL-ONLY deck', scheme_name: 'Seed Fund', media_type: 'PDF', files: [{ id: 'media-int0000001', name: 'int.pdf', type: 'application/pdf', size: 9 }], internal: true, external: false, submitted: true, submitted_at: '2026-10-24T00:00:00.000Z', client_booking_ids: [] },
+    { id: 'med-draft', title: 'DRAFT-NOT-PUBLISHED', scheme_name: 'Seed Fund', media_type: 'POST', files: [{ id: 'media-draft00001', name: 'd.png', type: 'image/png', size: 9 }], internal: true, external: true, submitted: false, client_booking_ids: [] },
+  ],
 }, {
   'tok-sa': { id: 'auth-sa' }, 'tok-ops': { id: 'auth-ops' }, 'tok-asha': { id: 'auth-asha@client.test' }, 'tok-ravi': { id: 'auth-ravi@client.test' },
 })
@@ -124,6 +130,12 @@ const p1 = r.body.projects[0]
 assert.equal(p1.progress, 75); assert.deepEqual(p1.milestones.map((m) => m.title), ['Kick-off', 'DPR ready'])
 assert.deepEqual(p1.docs.map((d) => [d.category, d.status, d.canUpload]), [['FINANCE', 'UNDER_REVIEW', false], ['DPR', 'PENDING_UPLOAD', true]])
 assert.equal(p1.contact.name, 'Priya Ops')
+// Digital Media: published external media meant for this client only; no company notes, internal media or drafts
+assert.deepEqual(r.body.media.map((m) => m.title), ['Seed Fund flyer'])
+assert.ok(!view.includes('COMPANY-NOTE') && !view.includes('RAVI-ONLY') && !view.includes('INTERNAL-ONLY') && !view.includes('DRAFT-NOT-PUBLISHED'), 'only external, published media meant for them')
+assert.equal((await client('tok-asha', 'file', { id: 'media-flyer00001' })).status, 200, 'their media file opens')
+assert.equal((await client('tok-asha', 'file', { id: 'media-ravi000001' })).status, 404, 'media meant for another client does not')
+assert.equal((await client('tok-asha', 'file', { id: 'media-int0000001' })).status, 404, 'internal media never reaches a client')
 assert.ok(r.body.notices.some((n) => /upload your DPR/.test(n.text)))
 
 const pdf = Buffer.from('%PDF-1.4 portal test').toString('base64')

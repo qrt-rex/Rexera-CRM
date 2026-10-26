@@ -18,6 +18,8 @@ interface PProject { id: string; code: string; company: string; service: string;
 interface Me {
   account: { name: string; email: string; phone: string | null; status: string; lastLoginAt: string | null }
   contact: PPerson | null; projects: PProject[]; notices: { at: string; tone: 'amber' | 'red' | 'green' | 'blue'; text: string }[]; activity: { at: string; text: string; detail: string | null }[]
+  /** posts, flyers, videos the Rexera team published for clients (Digital Media → External) */
+  media: { id: string; title: string; description: string | null; scheme: string; type: string; at: string; files: (PFile & { type: string })[] }[]
 }
 
 class SignedOut extends Error {}
@@ -224,6 +226,7 @@ function Home() {
             <Documents p={p} onChange={load} toast={toast} />
             <Milestones p={p} />
             <Updates p={p} toast={toast} />
+            <FromRexera media={me.media ?? []} toast={toast} />
           </div>
           <div className="grid content-start gap-5">
             <ContactCard person={p.contact ?? me.contact} />
@@ -321,6 +324,24 @@ function Updates({ p, toast }: { p: PProject; toast: Toast }) {
           <li key={u.id} className="px-5 py-3 text-sm"><p className="flex flex-wrap items-baseline gap-2"><b>{u.title}</b><span className="text-xs text-mute">{fmtDateTime(u.at)}</span></p>
             <p className="mt-1 whitespace-pre-line text-ink/85">{u.text}</p>
             {u.file && <button type="button" onClick={() => openPortalFile(u.file!.id, toast)} className="mt-1 text-xs font-semibold text-brand-ink hover:underline">{u.file.name}</button>}</li>
+        ))}
+      </ul>
+    </Card>
+  )
+}
+
+function FromRexera({ media, toast }: { media: Me['media']; toast: Toast }) {
+  if (!media.length) return null
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader title="From Rexera" icon={Megaphone} subtitle="Posts, flyers and videos for you" />
+      <ul className="divide-y divide-line/70">
+        {media.map((m) => (
+          <li key={m.id} className="px-5 py-3 text-sm">
+            <p className="flex flex-wrap items-baseline gap-2"><b>{m.title}</b><span className="text-xs text-mute">{m.scheme} · {fmtDate(m.at)}</span></p>
+            {m.description && <p className="mt-1 whitespace-pre-line text-ink/85">{m.description}</p>}
+            <span className="mt-1 flex flex-wrap gap-x-3">{m.files.map((f) => <button key={f.id} type="button" onClick={() => openPortalFile(f.id, toast)} className="text-xs font-semibold text-brand-ink hover:underline">{f.name} <span className="font-normal text-mute">· {fileSize(f.size)}</span></button>)}</span>
+          </li>
         ))}
       </ul>
     </Card>

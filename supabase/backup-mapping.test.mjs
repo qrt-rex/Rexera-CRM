@@ -123,6 +123,12 @@ Object.assign(bk, {
 })
 db.clientAccounts = [{ id: 'ca-1', authUserId: '00000000-0000-0000-0000-000000000001', email: 'client@example.com', name: 'Client', phone: '9876500001', bookingIds: [bk.id], status: 'ACTIVE', invitedAt: at, invitedBy: a.id, activatedAt: at, lastLoginAt: at, assignedTo: b.id }]
 db.clientActivity = [{ id: 'cact-1', accountId: 'ca-1', bookingId: bk.id, at, action: 'UPLOADED', detail: 'DPR: dpr.pdf' }, { id: 'cact-2', accountId: 'ca-1', at, action: 'INVITED', by: a.id }]
+// Digital Media: one published flyer for one client, one draft assigned to a team member
+db.mediaItems = [
+  { id: 'med-1', serial: 1, schemeName: 'Seed Fund', title: 'Diwali flyer', description: 'Offer', mediaType: 'FLYER', files: [{ id: 'media-1', name: 'f.png', type: 'image/png', size: 9, at }], internal: true, external: true, clientBookingIds: [bk.id], assignDate: '2026-10-26', assignTime: '15:00', assignedTo: b.id, workStatus: 'COMPLETED', notes: 'company only', submitted: true, submittedAt: at, submittedBy: a.id, completedAt: at, createdAt: at, createdBy: a.id, updatedAt: at, updatedBy: b.id, history: [{ at, by: a.id, action: 'Created and submitted (published)' }] },
+  { id: 'med-2', serial: 2, schemeName: 'PMEGP', title: 'Reel', description: '', mediaType: 'VIDEO', files: [], internal: false, external: false, workStatus: 'ON_HOLD', submitted: false, createdAt: at, createdBy: a.id, updatedAt: at, updatedBy: a.id, history: [] },
+]
+db.counters.media = 2
 check('demo data', db)
 
 const file = process.argv[2]

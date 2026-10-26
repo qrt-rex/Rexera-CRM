@@ -1997,7 +1997,7 @@ export function setDeduction(me: User, id: string, amount: number) {
   })
 }
 
-const commentKind: Record<Role, string> = { superadmin: 'Super Admin', admin: 'Admin', accounts: 'Accounts', legal: 'Legal', operations: 'Operations', teamlead: 'Team Leader', sales: 'BDE', hr: 'HR', it: 'IT', support: 'Customer Support', branchdirector: 'Branch Director' }
+const commentKind: Record<Role, string> = { superadmin: 'Super Admin', admin: 'Admin', accounts: 'Accounts', legal: 'Legal', operations: 'Operations', teamlead: 'Team Leader', sales: 'BDE', hr: 'HR', it: 'IT', support: 'Customer Support', branchdirector: 'Branch Director', digitalmedia: 'Digital Media' }
 /** The Operation team and Admin (and Super Admin / IT) email clients from the file. */
 export function canEmailClient(d: DB, me: User, b: Booking) {
   if (!visibleBookings(d, me).some((x) => x.id === b.id)) return false

@@ -1,5 +1,5 @@
 import {
-  BarChart3, BellRing, BookOpenCheck, Briefcase, CalendarDays, Cloud, ClipboardCheck, Coffee, FileText, Package, FolderKanban, Images, IndianRupee,
+  BarChart3, BellRing, BookOpenCheck, Briefcase, CalendarDays, Clapperboard, Cloud, ClipboardCheck, Coffee, FileText, Package, FolderKanban, Images, IndianRupee,
   BookMarked, Globe, UserRoundCheck, KeyRound, Megaphone, MessagesSquare, Phone, Settings, ShieldCheck, Sparkles, UserCheck, UserCog, UserPlus, Users, UsersRound,
   CalendarCheck2, Network, ScrollText, Wallet, Receipt, Landmark, Trophy, SlidersHorizontal, Gauge, KeySquare, DatabaseBackup, DatabaseZap, MailPlus, ClipboardList, FilePen, Inbox, Undo2, BadgeCheck, BadgePercent, Layers, FileSignature, Settings2, type LucideIcon,
 } from 'lucide-react'
@@ -37,6 +37,7 @@ export const MODULES: ModuleDef[] = [
   { key: 'services', path: '/services', label: 'Services & Combo Packages', desc: 'Prices for single, multiple and combo (3/6/9/12 months) bookings', icon: Layers, tone: 'violet', perms: ['bookings.create', 'bookings.all', 'schemes.manage', 'billing.manage'], group: 'Content' },
   { key: 'schemes', path: '/schemes', label: 'Schemes', desc: 'Government schemes and offers', icon: Sparkles, tone: 'green', perms: ['schemes.view', 'schemes.manage'], group: 'Content' },
   { key: 'sales-kit', path: '/sales-kit', label: 'Sales Kit', desc: 'Every scheme: benefits, eligibility, last date and our charge', icon: BookMarked, tone: 'orange', perms: [], group: 'Content' },
+  { key: 'digital-media', path: '/digital-media', label: 'Digital Media Dashboard', desc: 'Media Function: posts, flyers, posters, videos — assign, upload, publish', icon: Clapperboard, tone: 'pink', perms: ['media.manage', 'media.view'], group: 'Content' },
   { key: 'content', path: '/content', label: 'Flyers, Posts & Sales Info', desc: 'Marketing material and sales scripts', icon: Images, tone: 'orange', perms: ['content.view', 'content.manage'], group: 'Content' },
   { key: 'broadcasts', path: '/broadcasts', label: 'Broadcasts', desc: 'Company updates with acknowledgement', icon: Megaphone, tone: 'red', perms: ['broadcasts.view', 'broadcasts.manage'], group: 'Content' },
   { key: 'billing', path: '/billing', label: 'Invoice / Bill', desc: 'GST invoices, proforma and receivables', icon: IndianRupee, tone: 'amber', perms: ['billing.own', 'billing.create', 'billing.manage'], group: 'Finance' },

@@ -8,6 +8,9 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 const url = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim() || ''
 const key = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined)?.trim() || ''
 
+/** The publishable key (safe in the browser) — for requests made without the library, e.g. uploads with progress. */
+export const supabaseKey = () => key
+
 export type CloudState = { status: 'not-configured' } | { status: 'unsafe-key' } | { status: 'ready'; url: string }
 
 export function cloudConfig(): CloudState {

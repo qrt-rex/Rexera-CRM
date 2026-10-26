@@ -12,6 +12,7 @@ export const ROLES: { id: Role; label: string; short: string; color: string; des
   { id: 'it', label: 'IT Support', short: 'IT', color: '#475569', desc: 'Master access: users & access, API keys, backups, system tools' },
   { id: 'support', label: 'Customer Support', short: 'CS', color: '#0D9488', desc: 'Answers client queries, follows up documents and status' },
   { id: 'branchdirector', label: 'Branch Director', short: 'BD', color: '#0369A1', desc: 'Runs a branch: branch-wise progress, every sales person, assigns clients' },
+  { id: 'digitalmedia', label: 'Digital Media', short: 'DM', color: '#BE185D', desc: 'Posts, flyers, posters and videos: creates, assigns and publishes media' },
 ]
 
 export const roleLabel = (r: Role) => ROLES.find((x) => x.id === r)?.label ?? r
@@ -56,6 +57,8 @@ export const PERM_GROUPS: { group: string; perms: { id: Perm; label: string }[] 
       { id: 'schemes.view', label: 'View schemes' },
       { id: 'schemes.manage', label: 'Add / edit schemes (Admin, Operation Team)' },
       { id: 'saleskit.manage', label: 'Edit the Sales Kit (Operation Team only)' },
+      { id: 'media.view', label: 'See company (internal) media on dashboards' },
+      { id: 'media.manage', label: 'Digital Media: create, assign, edit and publish media (Admin)' },
       { id: 'broadcasts.view', label: 'View broadcasts' },
       { id: 'broadcasts.manage', label: 'Publish broadcasts' },
       { id: 'documents.forms', label: 'Client document forms' },
@@ -108,11 +111,11 @@ export const PERM_GROUPS: { group: string; perms: { id: Perm; label: string }[] 
 
 export const ALL_PERMS: Perm[] = PERM_GROUPS.flatMap((g) => g.perms.map((p) => p.id))
 
-const common: Perm[] = ['broadcasts.view', 'messages.use', 'schemes.view', 'content.view']
+const common: Perm[] = ['broadcasts.view', 'messages.use', 'schemes.view', 'content.view', 'media.view']
 
 export const DEFAULT_ROLE_PERMS: Record<Role, Perm[]> = {
   superadmin: [...ALL_PERMS],
-  admin: [...common, 'bookings.all', 'bookings.admin', 'content.manage', 'salesinfo.manage', 'schemes.manage', 'employees.view', 'documents.forms', 'reports.view', 'followup.manage', 'forms.manage', 'workflow.manage'],
+  admin: [...common, 'bookings.all', 'bookings.admin', 'content.manage', 'media.manage', 'salesinfo.manage', 'schemes.manage', 'employees.view', 'documents.forms', 'reports.view', 'followup.manage', 'forms.manage', 'workflow.manage'],
   accounts: [...common, 'bookings.all', 'bookings.accounts', 'billing.create', 'billing.manage', 'refunds.manage', 'reports.view', 'reports.export'],
   legal: [...common, 'bookings.all', 'bookings.legal', 'documents.forms', 'leave.approve', 'reports.view'],
   operations: [...common, 'bookings.all', 'bookings.process', 'content.manage', 'salesinfo.manage', 'schemes.manage', 'employees.view', 'documents.forms', 'reports.view', 'events.manage', 'forms.manage', 'saleskit.manage'],
@@ -129,6 +132,8 @@ export const DEFAULT_ROLE_PERMS: Record<Role, Perm[]> = {
   it: [...ALL_PERMS],
   support: [...common, 'bookings.all', 'documents.forms', 'templates.manage'],
   // starting set — the Super Admin changes it in Access Management → Roles
+  // Digital Media Dashboard: media, and the Flyers & Posts it feeds
+  digitalmedia: [...common, 'media.manage', 'content.manage'],
   branchdirector: [...common, 'leads.manage', 'leads.assign', 'team.progress', 'team.assign', 'bookings.all', 'attendance.all', 'employees.view', 'reports.view', 'reports.export'],
 }
 
@@ -154,7 +159,7 @@ export const RESERVED: Partial<Record<Perm, Role[]>> = {
   'schemes.manage': ['superadmin', 'admin', 'operations'],
   // the Sales Kit everyone reads is edited by the Operation team only
   'saleskit.manage': ['superadmin', 'operations'],
-  'content.manage': ['superadmin', 'admin', 'operations'],
+  'content.manage': ['superadmin', 'admin', 'operations', 'digitalmedia'],
   'salesinfo.manage': ['superadmin', 'admin', 'operations', 'teamlead'],
 }
 
@@ -191,7 +196,7 @@ export const isStageOnlyAdmin = (db: DB, u: User) => {
   return roles.length === 1 && roles[0] === 'admin' && !!db.settings.workflow?.adminStageAccess?.[u.id]
 }
 /** What such an Admin doesn't get from the Admin role: every file, workflow / form / follow-up settings and reports. */
-export const STAGE_ONLY_ADMIN_DROPS: Perm[] = ['bookings.all', 'workflow.manage', 'forms.manage', 'followup.manage', 'reports.view', 'reports.export', 'documents.forms']
+export const STAGE_ONLY_ADMIN_DROPS: Perm[] = ['bookings.all', 'workflow.manage', 'forms.manage', 'followup.manage', 'reports.view', 'reports.export', 'documents.forms', 'media.manage']
 
 export function canOpenDashboard(u: User, slug: Role) {
   return rolesOf(u).includes(slug) || isMaster(u)

@@ -1,4 +1,4 @@
-export type Role = 'superadmin' | 'admin' | 'accounts' | 'legal' | 'operations' | 'teamlead' | 'sales' | 'hr' | 'it' | 'support' | 'branchdirector'
+export type Role = 'superadmin' | 'admin' | 'accounts' | 'legal' | 'operations' | 'teamlead' | 'sales' | 'hr' | 'it' | 'support' | 'branchdirector' | 'digitalmedia'
 
 export type Perm =
   | 'leads.own' | 'leads.manage' | 'leads.assign' | 'leads.admin' | 'dialer.use'
@@ -16,6 +16,7 @@ export type Perm =
   | 'access.manage' | 'audit.view'
   | 'payroll.view' | 'payroll.manage' | 'incentives.manage' | 'recruitment.manage' | 'performance.view'
   | 'email.send' | 'assets.manage'
+  | 'media.view' | 'media.manage'
 
 export interface Address { line: string; city: string; state: string; pin: string; country: string }
 
@@ -432,6 +433,44 @@ export interface InvoiceShare {
   /** SENT = accepted by the mail server / Interakt */
   status: 'SENT' | 'FAILED' | 'NOT_CONFIGURED' | 'NO_CONTACT'
   error?: string; messageId?: string
+}
+
+// ------------------------------------------------------------------ Digital Media Dashboard (Media Function)
+export type MediaType = 'POST' | 'FLYER' | 'POSTER' | 'VIDEO' | 'IMAGE' | 'PDF' | 'OTHER'
+/** Stored work status; "Late" is worked out from the deadline (supabase/media-rules.mjs). */
+export type MediaWork = 'PENDING' | 'ON_HOLD' | 'COMPLETED'
+/** One media record: a single source shown wherever it is published (company dashboards and / or client portals). */
+export interface MediaItem {
+  id: string
+  /** 1, 2, 3 … (never reused) */
+  serial: number
+  schemeName: string
+  title: string
+  description: string
+  mediaType: MediaType
+  /** in the private "media-files" storage (ids start with media-) */
+  files: FileRef[]
+  /** published for the company (staff dashboards) and / or clients (client portal) */
+  internal: boolean
+  external: boolean
+  /** external: only these clients (CRM entry ids); empty = every client with portal access */
+  clientBookingIds?: string[]
+  assignDate?: string
+  assignTime?: string
+  assignedTo?: string
+  workStatus: MediaWork
+  /** company notes — never shown to clients */
+  notes?: string
+  /** submitted = published (shows once it has a file); saved only = draft */
+  submitted: boolean
+  submittedAt?: string
+  submittedBy?: string
+  completedAt?: string
+  createdAt: string
+  createdBy: string
+  updatedAt: string
+  updatedBy: string
+  history: { at: string; by: string; action: string; note?: string }[]
 }
 
 // ------------------------------------------------------------------ client portal
@@ -871,7 +910,7 @@ export interface DB {
   audit: Audit[]
   rolePerms: Record<Role, Perm[]>
   settings: Settings
-  counters: { booking: number; lead: number; invoice: number }
+  counters: { booking: number; lead: number; invoice: number; media?: number }
   loginFails: Record<string, { count: number; until?: string }>
   payrollRuns: PayrollRun[]
   pfSettings: PfSettings
@@ -896,6 +935,7 @@ export interface DB {
   salesKit?: SalesKitItem[]
   clientAccounts?: ClientAccount[]
   clientActivity?: ClientActivity[]
+  mediaItems?: MediaItem[]
   siteContent?: SiteContent[]
   siteHistory?: SiteHistory[]
   webLeadLog?: WebLeadLog[]

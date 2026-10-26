@@ -1,7 +1,7 @@
 import type { FileRef } from './types'
 import { nowIso, uid } from './format'
 import { CLOUD } from './cloud'
-import { getSupabase } from './supabase'
+import { cloudConfig, getSupabase, supabaseKey } from './supabase'
 
 /**
  * Uploaded files (resumes, leave attachments, candidate CVs, payment proofs, client documents) live in their own
@@ -10,7 +10,10 @@ import { getSupabase } from './supabase'
  * signed in can open it on any computer; this browser keeps a copy.
  */
 const BUCKET = 'crm-files'
-const bucket = async () => (await getSupabase()).storage.from(BUCKET)
+/** Digital Media files (ids start with media-) have their own private bucket: bigger files, videos. */
+const MEDIA_BUCKET = 'media-files'
+const bucketFor = (id: string) => (id.startsWith('media-') ? MEDIA_BUCKET : BUCKET)
+const bucket = async (id = '') => (await getSupabase()).storage.from(bucketFor(id))
 const DB_NAME = 'rexera-files', STORE = 'files'
 
 export const DOC_TYPES = 'application/pdf,image/png,image/jpeg,image/webp'
@@ -56,13 +59,45 @@ export async function getFile(id: string): Promise<Blob | undefined> {
   const row = await tx<{ blob: Blob } | undefined>('readonly', (s) => s.get(id) as IDBRequest<{ blob: Blob } | undefined>)
   if (row?.blob || !CLOUD) return row?.blob
   // added on another computer: fetch it once and keep a copy here
-  const { data } = await (await bucket()).download(id)
+  const { data } = await (await bucket(id)).download(id)
   if (data) await tx('readwrite', (s) => { s.put({ id, blob: data }) }).catch(() => undefined)
   return data ?? undefined
 }
 export async function deleteFile(id: string) {
   await tx('readwrite', (s) => { s.delete(id) })
-  if (CLOUD) await (await bucket()).remove([id]).catch(() => undefined)
+  if (CLOUD) await (await bucket(id)).remove([id]).catch(() => undefined)
+}
+
+/**
+ * A Digital Media file (image, video, PDF, Word, PowerPoint — up to 50 MB): stored in the private media bucket with
+ * `onProgress(0…1)` as it uploads (the browser's own upload events), and kept in this browser too.
+ */
+export async function saveMediaFile(f: File, type: string, onProgress?: (share: number) => void): Promise<FileRef> {
+  const ref: FileRef = { id: uid('media-'), name: f.name, type, size: f.size, at: nowIso() }
+  if (CLOUD) {
+    const sb = await getSupabase()
+    const { data: { session } } = await sb.auth.getSession()
+    const url = `${cloudConfig().status === 'ready' ? (cloudConfig() as { url: string }).url : ''}/storage/v1/object/${MEDIA_BUCKET}/${encodeURIComponent(ref.id)}`
+    await new Promise<void>((ok, fail) => {
+      const x = new XMLHttpRequest()
+      x.open('POST', url)
+      x.setRequestHeader('Authorization', `Bearer ${session?.access_token ?? ''}`)
+      x.setRequestHeader('apikey', supabaseKey())
+      x.setRequestHeader('Content-Type', type)
+      x.setRequestHeader('x-upsert', 'false')
+      x.upload.onprogress = (e) => { if (e.lengthComputable) onProgress?.(e.loaded / e.total) }
+      x.onload = () => {
+        if (x.status >= 200 && x.status < 300) return ok()
+        let msg = x.statusText
+        try { msg = JSON.parse(x.responseText).message || msg } catch { /* not JSON */ }
+        fail(new Error(`Could not upload ${f.name}: ${x.status === 413 ? 'the file is too large' : msg}`))
+      }
+      x.onerror = () => fail(new Error(`Could not upload ${f.name}: the connection was lost — try again.`))
+      x.send(f)
+    })
+  } else onProgress?.(1)
+  await tx('readwrite', (s) => { s.put({ ...ref, blob: f }) })
+  return ref
 }
 
 /** Opens the file in a new tab (PDF / image) or downloads it. */

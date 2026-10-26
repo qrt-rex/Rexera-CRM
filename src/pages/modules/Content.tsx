@@ -1,6 +1,10 @@
 import { useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { Copy, Download, FileDown, ImageDown, Images, Lightbulb, Megaphone, Pencil, Pin, Plus, Trash2 } from 'lucide-react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { Clapperboard, Copy, Download, FileDown, ImageDown, Images, Lightbulb, Megaphone, Pencil, Pin, Plus, Trash2 } from 'lucide-react'
+import { companyMedia } from '../../lib/media'
+import { openFile } from '../../lib/files'
+import { mediaTypeLabel } from '../../../supabase/media-rules.mjs'
+import { MediaPreview } from '../../components/MediaPreview'
 import type { Post } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
@@ -31,6 +35,11 @@ export default function Content() {
   const kinds = (['FLYER', 'POST', 'SALES_INFO'] as Kind[]).filter(canKind)
   const [edit, setEdit] = useState<(Omit<Post, 'id' | 'createdAt' | 'by'> & { id?: string }) | null>(null)
   const list = db.posts.filter((p) => p.kind === tab).sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || b.createdAt.localeCompare(a.createdAt))
+  // published company media from the Digital Media Dashboard, shown here from the same record (flyers & posters
+  // under Flyers, the rest under Posts) — nothing to upload twice
+  const media = companyMedia(db, me)
+  const mediaOf = (k: Kind) => (k === 'SALES_INFO' ? [] : media.filter((m) => (m.mediaType === 'FLYER' || m.mediaType === 'POSTER') === (k === 'FLYER')))
+  const fromMedia = mediaOf(tab)
 
   const share = (p: Post) => { navigator.clipboard?.writeText(`${p.title}\n\n${p.body}\n\n— Rexera Financial Services`).then(() => toast('success', 'Copied — paste it into WhatsApp or email'), () => toast('error', 'Copy blocked by the browser')) }
   return (
@@ -39,11 +48,34 @@ export default function Content() {
         subtitle={manage ? 'Create material — sales teams are notified' : tab === 'SALES_INFO' ? 'Sales information is added by Team Leaders, Admin and the Operation team' : 'Flyers and posts are made by Admin and the Operation team'}
         actions={<>{manage && <Button variant="accent" icon={Plus} onClick={() => setEdit({ kind: tab, title: '', body: '', theme: 'navy', pinned: false })}>New {tab === 'SALES_INFO' ? 'sales info' : tab.toLowerCase()}</Button>}</>} />
       <Tabs className="mb-5 w-fit" value={tab} onChange={(t) => setParams({ tab: t })} tabs={[
-        { id: 'FLYER', label: 'Flyers', icon: Images, count: db.posts.filter((p) => p.kind === 'FLYER').length },
-        { id: 'POST', label: 'Posts', icon: Megaphone, count: db.posts.filter((p) => p.kind === 'POST').length },
+        { id: 'FLYER', label: 'Flyers', icon: Images, count: db.posts.filter((p) => p.kind === 'FLYER').length + mediaOf('FLYER').length },
+        { id: 'POST', label: 'Posts', icon: Megaphone, count: db.posts.filter((p) => p.kind === 'POST').length + mediaOf('POST').length },
         { id: 'SALES_INFO', label: 'Sales information', icon: Lightbulb, count: db.posts.filter((p) => p.kind === 'SALES_INFO').length },
       ]} />
-      {!list.length ? <Card><EmptyState icon={Images} title="Nothing here yet" /></Card> : tab === 'SALES_INFO' ? (
+      {fromMedia.length > 0 && (
+        <div className="mb-6">
+          <p className="mb-3 flex items-center gap-2 text-sm font-bold"><Clapperboard className="size-4 text-accent" />From the Digital Media Dashboard
+            {can('media.manage') && <Link to="/digital-media" className="text-xs font-semibold text-brand-ink hover:underline">Manage media</Link>}</p>
+          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+            {fromMedia.map((m) => (
+              <Card key={m.id} className="overflow-hidden">
+                <MediaPreview file={m.files[0]!} className="aspect-square w-full rounded-none border-0" />
+                <div className="p-4">
+                  <p className="truncate font-bold">{m.title}</p>
+                  <p className="truncate text-xs text-mute">{m.schemeName} · {mediaTypeLabel(m.mediaType)} · {ago(m.submittedAt ?? m.createdAt)}</p>
+                  {m.description && <p className="mt-1 line-clamp-2 text-sm">{m.description}</p>}
+                  <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+                    {m.files.map((f) => <button key={f.id} type="button" className="inline-flex items-center gap-1 font-semibold text-brand-ink hover:underline" onClick={() => openFile(f, true).catch((e) => toast('error', e.message))}><Download className="size-3" />{m.files.length > 1 ? f.name : 'Download'}</button>)}
+                    {can('media.manage') && <Link to={`/digital-media?open=${m.id}`} className="ml-auto font-semibold text-mute hover:text-ink">Details</Link>}
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+          {list.length > 0 && <p className="mt-6 mb-3 text-sm font-bold">{tab === 'FLYER' ? 'Flyers' : 'Posts'} made here</p>}
+        </div>
+      )}
+      {!list.length ? (!fromMedia.length && <Card><EmptyState icon={Images} title="Nothing here yet" /></Card>) : tab === 'SALES_INFO' ? (
         <div className="grid gap-4 lg:grid-cols-2">
           {list.map((p) => (
             <Card key={p.id} className="p-5">

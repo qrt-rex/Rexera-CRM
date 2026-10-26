@@ -97,7 +97,7 @@ export async function buildSeed(): Promise<DB> {
   const designations: Record<Role, string> = {
     superadmin: 'Director', admin: 'Admin Executive', accounts: 'Accounts Manager', legal: 'Legal Head',
     operations: 'Operations Executive', teamlead: 'Sales Team Leader', sales: 'Business Development Executive', hr: 'HR Manager',
-    it: 'IT Support Engineer', support: 'Customer Support Executive', branchdirector: 'Branch Director',
+    it: 'IT Support Engineer', support: 'Customer Support Executive', branchdirector: 'Branch Director', digitalmedia: 'Digital Media Executive',
   }
   const users: User[] = []
   for (const [i, [id, name, username, role, dept, tl]] of people.entries()) {

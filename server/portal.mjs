@@ -10,6 +10,7 @@ import { createClient } from '@supabase/supabase-js'
 import { ADMIN_STAGES } from '../supabase/workflow-rules.mjs'
 import { fileProblem } from '../supabase/form-rules.mjs'
 import { clientMayUpload, docStatus, projectProgress } from '../supabase/portal-rules.mjs'
+import { forClient } from '../supabase/media-rules.mjs'
 
 const BUCKET = 'crm-files'
 const reply = (status, body) => ({ status, body })
@@ -278,10 +279,11 @@ export async function portalClient(env, authorization, action, body, ip, deps = 
 /** Everything the client may see, from their own linked entries only. */
 export async function clientView(sb, acct, at) {
   const ids = acct.booking_ids ?? []
-  const [bookings, uploads, acts] = await Promise.all([
+  const [bookings, uploads, acts, media] = await Promise.all([
     rowsIn(sb, 'bookings', 'id', ids, 'id, booking_code, company_name, service_name, booking_date, created_at, client_docs, milestones, client_updates, ops_member_id'),
     rowsIn(sb, 'client_doc_uploads', 'booking_id', ids, 'id, booking_id, category, file, at, note'),
     rows(sb.from('client_activity').select('id, at, action, detail, booking_id').eq('account_id', acct.id)),
+    clientMedia(sb, ids),
   ])
   const staff = await rowsIn(sb, 'app_users', 'id', [...new Set([acct.assigned_to, ...bookings.map((b) => b.ops_member_id)].filter(Boolean))], 'id, name, email, phone')
   const person = (uid) => { const u = staff.find((x) => x.id === uid); return u ? { name: u.name, email: u.email || null, phone: u.phone || null } : null }
@@ -306,11 +308,14 @@ export async function clientView(sb, acct, at) {
     for (const u of updates) if (recent(u.at)) notices.push({ at: u.at, tone: 'blue', text: `New update: ${u.title}` })
     return { id: b.id, code: b.booking_code, company: b.company_name, service: b.service_name, since: b.booking_date ?? b.created_at, contact: person(acct.assigned_to) ?? person(b.ops_member_id), progress: projectProgress(b.milestones, true), docs, milestones, updates }
   })
+  for (const m of media) if (m.submitted_at && recent(m.submitted_at)) notices.push({ at: m.submitted_at, tone: 'blue', text: `New from Rexera: ${m.title}` })
   return {
     account: { name: acct.name, email: acct.email, phone: acct.phone ?? null, status: acct.status, lastLoginAt: acct.last_login_at ?? null },
     contact: person(acct.assigned_to),
     projects,
     notices: notices.sort((x, y) => String(y.at).localeCompare(String(x.at))),
+    // Digital Media published for clients (External): what it is and its files only — never company notes or staff
+    media: media.map((m) => ({ id: m.id, title: m.title, description: m.description || null, scheme: m.scheme_name, type: m.media_type, at: m.submitted_at, files: (m.files ?? []).map((f) => ({ id: f.id, name: f.name, size: f.size, type: f.type })) })),
     activity: acts.filter((a) => CLIENT_SEES[a.action]).sort((x, y) => y.at.localeCompare(x.at)).slice(0, 50)
       .map((a) => ({ at: a.at, text: CLIENT_SEES[a.action], detail: a.action === 'UPLOADED' || a.action === 'REQUEST' ? a.detail : null })),
   }
@@ -348,8 +353,21 @@ async function upload(sb, acct, p, at) {
   return reply(200, { success: true, status: 'SUBMITTED', message: 'Uploaded — the team will review it.' })
 }
 
-/** A short-lived link to one of the client's own files (their uploads, or a file in an update to them). */
+/** Published external Digital Media meant for a client with these CRM entries (all clients, or one of theirs), newest first. */
+async function clientMedia(sb, bookingIds) {
+  const list = await rows(sb.from('media_items').select('id, title, description, scheme_name, media_type, files, external, submitted, submitted_at, client_booking_ids').eq('external', true).eq('submitted', true))
+  return list.filter((m) => forClient({ ...m, clientBookingIds: m.client_booking_ids }, bookingIds)).sort((a, b) => String(b.submitted_at).localeCompare(String(a.submitted_at)))
+}
+
+/** A short-lived link to one of the client's own files (their uploads, a file in an update to them, or media for them). */
 async function openFile(sb, acct, fileId) {
+  if (/^media-[A-Za-z0-9_-]{6,40}$/.test(fileId)) {
+    const ref = (await clientMedia(sb, acct.booking_ids ?? [])).flatMap((m) => m.files ?? []).find((f) => f?.id === fileId)
+    if (!ref) return fail(404, 'File not found.')
+    const { data, error } = await sb.storage.from('media-files').createSignedUrl(ref.id, 300, { download: ref.name })
+    if (error || !data?.signedUrl) return fail(502, 'The file could not be opened — please try again.')
+    return reply(200, { success: true, url: data.signedUrl, name: ref.name })
+  }
   if (!/^file-[A-Za-z0-9_-]{6,40}$/.test(fileId)) return fail(404, 'File not found.')
   const ids = acct.booking_ids ?? []
   const [ups, bookings] = await Promise.all([rowsIn(sb, 'client_doc_uploads', 'booking_id', ids, 'file'), rowsIn(sb, 'bookings', 'id', ids, 'client_updates')])

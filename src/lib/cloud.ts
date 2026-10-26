@@ -88,6 +88,7 @@ const SPECS: Spec[] = [
   // client portal accounts and their activity: written by the server only (/api/portal-admin, /api/portal)
   { key: 'clientAccounts', table: 'client_accounts', order: ['invited_at', false] },
   { key: 'clientActivity', table: 'client_activity', order: ['at', false], limit: 2000 },
+  { key: 'mediaItems', table: 'media_items', order: ['serial', false] },
 ]
 /** Tables that aren't one array of the document. The audit log loads its newest 1000 entries (the app keeps 1000). */
 const OTHER_TABLES: [string, [string, boolean], number?][] = [
