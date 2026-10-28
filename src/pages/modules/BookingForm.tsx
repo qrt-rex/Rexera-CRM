@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { AlertTriangle, Briefcase, Building2, ClipboardList, Calculator, CreditCard, FileText, IndianRupee, Layers, MessageSquareText, Package, Plus, Save, Send, Trash2, Wallet } from 'lucide-react'
+import { AlertTriangle, Briefcase, Building2, ClipboardList, Calculator, FileText, IndianRupee, Layers, MessageSquareText, Package, Plus, Save, Send, Trash2, Wallet } from 'lucide-react'
 import type { BookingType, FileRef } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useMe } from '../../lib/auth'
@@ -138,13 +138,14 @@ function BookingFormBody() {
       )}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_330px]">
-        <div className="space-y-6">
-          <Block title="Client company" icon={Building2}>
+        <div className="space-y-4">
+          {/* client and payment contact in one block, three fields a row on wide screens (less scrolling) */}
+          <Block title="Client company & payment contact" icon={Building2}>
             <Input label="Company name" required value={f.companyName} error={e.companyName} onChange={(ev) => set('companyName', ev.target.value)} className="sm:col-span-2" />
-            <Textarea label="Company address" required rows={2} value={f.companyAddress} error={e.companyAddress} onChange={(ev) => set('companyAddress', ev.target.value)} className="sm:col-span-2" placeholder="Building, street, area" />
+            <Input label="Contact person" required value={f.contactPerson} error={e.contactPerson} onChange={(ev) => set('contactPerson', ev.target.value)} />
+            <Textarea label="Company address" required rows={1} value={f.companyAddress} error={e.companyAddress} onChange={(ev) => set('companyAddress', ev.target.value)} className="sm:col-span-2" placeholder="Building, street, area" />
             <CityInput label="City" required value={f.city} onChange={(v) => set('city', v)} onState={(s) => set('state', s)} />
             <StateSelect label="Company state" required value={f.state} onChange={(v) => set('state', v)} />
-            <Input label="Contact person" required value={f.contactPerson} error={e.contactPerson} onChange={(ev) => set('contactPerson', ev.target.value)} />
             <PhoneInput label="Company mobile" required value={f.mobile} onChange={(v) => set('mobile', v)} />
             <Input label="Company email" required type="email" value={f.email} error={e.email} onChange={(ev) => set('email', ev.target.value)} />
             <div className="grid gap-2">
@@ -157,16 +158,13 @@ function BookingFormBody() {
             </div>
             <Input label="Company PAN" required value={f.pan} error={e.pan} onChange={(ev) => set('pan', ev.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))} maxLength={10} />
             <Input label="GST" value={f.gstin} error={e.gstin} onChange={(ev) => set('gstin', ev.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15))} maxLength={15} hint={f.state === db.settings.supplierState ? 'Same state: CGST + SGST' : 'Other state: IGST'} />
-          </Block>
-
-          <Block title="Payment contact" icon={CreditCard}>
-            <PhoneInput label="Payment contact" required value={f.paymentContact} onChange={(v) => set('paymentContact', v)} hint="Who pays — can be different from the company mobile" />
+            <PhoneInput label="Payment contact" required value={f.paymentContact} onChange={(v) => set('paymentContact', v)} hint="Who pays — can differ from the company mobile" />
             <Input label="Payment email" type="email" value={f.paymentEmail} onChange={(ev) => set('paymentEmail', ev.target.value)} error={tried && f.paymentEmail && !isEmail(f.paymentEmail) ? 'Not a valid email' : undefined} />
           </Block>
 
           <Card className="overflow-hidden">
             <CardHeader title="Booking type & services" subtitle="Price bifurcation is compulsory for loans, certificates and other services · funding: one price is enough, the others can be 0" icon={Layers} />
-            <div className="space-y-4 p-5">
+            <div className="space-y-3 p-4">
               {!existing && (
                 <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Booking type">
                   {BOOKING_TYPES.map((t) => (
@@ -210,7 +208,8 @@ function BookingFormBody() {
                 {!existing && f.bookingType !== 'SINGLE' && (!pkg || f.services.length < comboCap(pkg)) && <Button type="button" size="sm" variant="soft" icon={Plus} onClick={() => set('services', [...f.services, { serviceId: '', price: 0 }])}>Add service</Button>}
                 {fundingUnpriced && <p className="text-xs text-warn">Enter the price of at least one funding service — the other funding services can stay 0.</p>}
               </div>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <Input label="Booking date" required type="date" max={today()} value={f.bookingDate} onChange={(ev) => set('bookingDate', ev.target.value)} />
                 <Select label="Mode" required value={f.mode} onChange={(ev) => set('mode', ev.target.value as BookingInput['mode'])}><option>Refundable</option><option>Non-Refundable</option></Select>
                 <div>
                   <span className="mb-1.5 block text-xs font-semibold text-mute">After discount success fee <span className="text-bad">*</span></span>
@@ -229,21 +228,20 @@ function BookingFormBody() {
           </Card>
 
           <Card className="overflow-hidden">
-            <CardHeader title="Booking & payments" subtitle="Payment part 1 is the advance — it is the total quoted on this entry. Later parts are balance payments (Accounts can add them too)." icon={Wallet} />
-            <div className="space-y-4 p-5">
-              <Input label="Booking date" required type="date" max={today()} value={f.bookingDate} onChange={(ev) => set('bookingDate', ev.target.value)} className="sm:max-w-xs" />
+            <CardHeader title="Payment received" subtitle="Payment part 1 is the advance — it is the total quoted on this entry. Later parts are balance payments (Accounts adds them)." icon={Wallet} />
+            <div className="space-y-3 p-4">
               {!existing && f.payments.map((p, i) => (
-                <div key={i} className="rounded-2xl border border-line p-4">
-                  <div className="mb-3 flex items-center justify-between">
+                <div key={i} className="rounded-2xl border border-line p-3">
+                  <div className="mb-2 flex items-center justify-between">
                     <p className="text-sm font-bold">{i === 0 ? 'Payment part 1 · advance' : `Payment part ${i + 1}`}{i === 0 && <span className="text-bad"> *</span>}</p>
                     {i > 0 && <Button type="button" size="sm" variant="ghost" icon={Trash2} aria-label={`Remove part ${i + 1}`} onClick={() => set('payments', f.payments.filter((_, j) => j !== i))} />}
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-[1fr_1fr_1fr_1.4fr]">
                     <Input label="Amount (before GST)" required type="number" inputMode="decimal" min={0} value={p.amount || ''} onChange={(ev) => setPay(i, { amount: Number(ev.target.value) })}
                       hint={p.amount ? `With GST ${inr(withGst(p.amount))}` : undefined} error={tried && !(p.amount > 0) ? 'Required' : undefined} />
                     <Input label="Date" required type="date" value={p.date} onChange={(ev) => setPay(i, { date: ev.target.value })} hint="Counts in this month's scorecard" />
                     <Select label="Mode" value={p.mode} onChange={(ev) => setPay(i, { mode: ev.target.value })}>{PAYMENT_MODES.map((m) => <option key={m}>{m}</option>)}</Select>
-                    <div className="sm:col-span-3">
+                    <div className="sm:col-span-3 xl:col-span-1">
                       <FileField label={i === 0 ? 'Attachment of receiving the payment' : 'Payment proof (optional)'} required={i === 0} accept={DOC_TYPES} acceptLabel="Screenshot or PDF"
                         value={p.proof} onChange={(proof) => setPay(i, { proof })} error={tried && i === 0 && !p.proof ? 'Attach the payment proof' : undefined} />
                     </div>
@@ -255,17 +253,20 @@ function BookingFormBody() {
             </div>
           </Card>
 
-          <Block title="Closing & remarks" icon={MessageSquareText}>
-            <Input label="Lead closed by" value={f.closedBy === me.id ? `${me.name} (me)` : userName(db, f.closedBy)} readOnly disabled />
-            <Textarea label="Remarks" required rows={3} value={f.remarks} error={e.remarks} onChange={(ev) => set('remarks', ev.target.value)} className="sm:col-span-2" placeholder="What was agreed with the client, special conditions, next steps…" />
-            {!existing && <Textarea label="Notes for Accounts" rows={2} value={f.note ?? ''} onChange={(ev) => set('note', ev.target.value)} className="sm:col-span-2" />}
+          <Block title="Remarks" icon={MessageSquareText} cols="sm:grid-cols-2">
+            <Textarea label="Remarks" required rows={2} value={f.remarks} error={e.remarks} onChange={(ev) => set('remarks', ev.target.value)} className={cx(existing && 'sm:col-span-2')} placeholder="What was agreed with the client, special conditions, next steps…" />
+            {!existing && <Textarea label="Notes for Accounts" rows={2} value={f.note ?? ''} onChange={(ev) => set('note', ev.target.value)} />}
           </Block>
 
+          {/* optional, so folded away until needed (the files stay picked while it is closed) */}
           {!existing && (
-            <Card className="overflow-hidden">
-              <CardHeader title="Company documents" subtitle="Optional — company PAN card, GSTIN, CRM / QT / Agreement" icon={FileText} />
-              <div className="p-5"><DocUploader value={docs} onChange={setDocs} categories={COMPANY_DOCS} label="Documents" /></div>
-            </Card>
+            <details className="group overflow-hidden rounded-2xl border border-line bg-card shadow-card">
+              <summary className="flex cursor-pointer list-none items-center gap-3 px-5 py-4 text-sm font-bold">
+                <FileText className="size-5 text-brand-ink" />Company documents <span className="font-normal text-mute">— optional: PAN card, GSTIN, CRM / QT / Agreement{docs.length ? ` · ${docs.length} added` : ''}</span>
+                <span className="ml-auto text-xs font-semibold text-brand-ink group-open:hidden">Add</span>
+              </summary>
+              <div className="border-t border-line p-5"><DocUploader value={docs} onChange={setDocs} categories={COMPANY_DOCS} label="Documents" /></div>
+            </details>
           )}
         </div>
 
@@ -273,6 +274,7 @@ function BookingFormBody() {
           <Card className="overflow-hidden">
             <CardHeader title="Summary" icon={Calculator} />
             <div className="space-y-2.5 p-5 text-sm">
+              <Row k="Lead closed by" v={f.closedBy === me.id ? `${me.name} (me)` : userName(db, f.closedBy)} />
               <Row k="Booking type" v={<b>{BOOKING_TYPES.find((t) => t.id === f.bookingType)?.label}</b>} />
               {rows.filter((r) => r.s).map((r, i) => <Row key={i} k={r.s!.name} v={r.price ? inr(r.price) : <span className="text-mute">0</span>} />)}
               {rows.filter((r) => r.s).length > 1 && <Row k="Services total" v={inr(sumPrices)} />}
@@ -330,8 +332,8 @@ function PickClientEntry() {
   )
 }
 
-function Block({ title, icon, children }: { title: string; icon: typeof Briefcase; children: ReactNode }) {
-  return <Card className="overflow-hidden"><CardHeader title={title} icon={icon} /><div className="grid gap-4 p-5 sm:grid-cols-2">{children}</div></Card>
+function Block({ title, icon, cols = 'sm:grid-cols-2 xl:grid-cols-3', children }: { title: string; icon: typeof Briefcase; cols?: string; children: ReactNode }) {
+  return <Card className="overflow-hidden"><CardHeader title={title} icon={icon} /><div className={cx('grid gap-3 p-4', cols)}>{children}</div></Card>
 }
 function Row({ k, v }: { k: string; v: ReactNode }) {
   return <div className="flex items-center justify-between gap-3"><span className="min-w-0 truncate text-mute">{k}</span><span className="shrink-0 text-right">{v}</span></div>
