@@ -61,7 +61,9 @@ export function mapAll(backup) {
   t.client_doc_uploads = d.bookings.flatMap((b) => (b.clientUploads ?? []).map((x) => ({ id: x.id, booking_id: b.id, category: x.category, file: x.file, at: x.at, account_id: s(x.accountId), note: s(x.note) })))
   t.booking_tasks = d.bookings.flatMap((b) => b.tasks.map((x) => ({ id: x.id, booking_id: b.id, title: x.title, done: x.done, due_on: s(x.due), created_by: uref(x.by), assignee_id: uref(x.assignee), remind_every_days: x.remindEveryDays ?? null, last_reminded_at: s(x.lastRemindedAt), created_at: x.createdAt ?? b.createdAt })))
 
-  t.invoices = d.invoices.map((i) => ({ id: i.id, number: i.number, type: i.type, booking_id: s(i.bookingId), client: i.client, gstin: i.gstin ?? '', state: i.state, paid: i.paid, status: i.status, issued_on: i.date, due_on: i.due, sales_person: uref(i.salesPerson), created_by: uref(i.createdBy), branch_id: s(i.branchId), client_address: s(i.clientAddress), client_pan: s(i.clientPan) }))
+  t.invoices = d.invoices.map((i) => ({ id: i.id, number: i.number, type: i.type, booking_id: s(i.bookingId), client: i.client, gstin: i.gstin ?? '', state: i.state, paid: i.paid, status: i.status, issued_on: i.date, due_on: i.due, sales_person: uref(i.salesPerson), created_by: uref(i.createdBy), branch_id: s(i.branchId), client_address: s(i.clientAddress), client_pan: s(i.clientPan),
+    // sent only when set, so invoices keep saving before the remarks column's migration is run
+    ...(i.remarks ? { remarks: i.remarks } : {}) }))
   t.invoice_items = d.invoices.flatMap((i) => i.items.map((it, n) => ({ invoice_id: i.id, position: n + 1, description: it.desc, sac: it.sac ?? '', qty: it.qty, rate: it.rate, gst_rate: it.gstRate })))
   t.invoice_shares = d.invoices.flatMap((i) => (i.shares ?? []).map((x) => ({ id: x.id, invoice_id: i.id, sent_at: x.at, sent_by: uref(x.by), channel: x.channel, to_addr: x.to, status: x.status, error: s(x.error), message_id: s(x.messageId) })))
 
@@ -253,7 +255,7 @@ export function rowsToDb(input) {
   const itemsOf = group('invoice_items', 'invoice_id'), sharesOf = group('invoice_shares', 'invoice_id')
   const invoices = rows('invoices').map((r) => opt({
     id: r.id, number: r.number, type: r.type, bookingId: u(r.booking_id), client: r.client, gstin: r.gstin ?? '', state: r.state, paid: r.paid, status: r.status,
-    date: r.issued_on, due: r.due_on, salesPerson: u(r.sales_person), createdBy: r.created_by ?? '', branchId: u(r.branch_id), clientAddress: u(r.client_address), clientPan: u(r.client_pan),
+    date: r.issued_on, due: r.due_on, salesPerson: u(r.sales_person), createdBy: r.created_by ?? '', branchId: u(r.branch_id), clientAddress: u(r.client_address), clientPan: u(r.client_pan), remarks: u(r.remarks),
     items: [...itemsOf(r.id)].sort((a, b) => a.position - b.position).map((it) => ({ desc: it.description, sac: it.sac ?? '', qty: it.qty, rate: it.rate, gstRate: it.gst_rate })),
     shares: [...sharesOf(r.id)].sort((a, b) => String(b.sent_at).localeCompare(String(a.sent_at))).map((x) => opt({ id: x.id, at: x.sent_at, by: x.sent_by ?? '', channel: x.channel, to: x.to_addr ?? '', status: x.status, error: u(x.error), messageId: u(x.message_id) })),
   }))

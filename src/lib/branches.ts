@@ -1,4 +1,4 @@
-import type { Booking, DB, Lead, User } from './types'
+import type { Booking, DB, Invoice, Lead, User } from './types'
 import { rolesOf, isMaster } from './rbac'
 import { OPEN_LEAD } from './workflow'
 import { bookingMoney, today, ymd } from './format'
@@ -19,6 +19,14 @@ export const branchCode = (db: DB, id?: string) => {
 export const branchLabel = (db: DB, id?: string) => {
   const b = id && id !== NO_BRANCH ? branchList(db).find((x) => x.id === id) : undefined
   return b ? (b.code?.trim() && b.code.trim() !== b.name ? `${b.code.trim()} · ${b.name}` : b.name) : branchName(db, id)
+}
+/**
+ * The branch an invoice is issued from: the one saved on it (the creator's branch when it was made), else the
+ * creator's branch now — never picked by hand. Its address, GSTIN and bank print on the invoice.
+ */
+export const invoiceBranch = (db: DB, inv: Pick<Invoice, 'branchId' | 'createdBy'>) => {
+  const id = inv.branchId ?? db.users.find((u) => u.id === inv.createdBy)?.branchId
+  return id ? branchList(db).find((b) => b.id === id) : undefined
 }
 const monthStart = () => { const d = new Date(); return ymd(new Date(d.getFullYear(), d.getMonth(), 1)) }
 

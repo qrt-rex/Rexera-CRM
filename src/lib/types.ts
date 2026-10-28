@@ -423,10 +423,12 @@ export interface Invoice {
   due: string
   salesPerson?: string
   createdBy: string
-  /** branch the invoice is issued from (Accounts chooses it before printing a tax invoice) */
+  /** branch the invoice is issued from: the branch of the person who created it (older invoices: see invoiceBranch) */
   branchId?: string
   clientAddress?: string
   clientPan?: string
+  /** printed on the invoice (preview, print and PDF) */
+  remarks?: string
   /** each time the PDF was sent to the client (written by the live server only — the provider's answer, never assumed) */
   shares?: InvoiceShare[]
 }

@@ -2,6 +2,7 @@ import type { DB, Invoice, InvoiceShare, User } from './types'
 import type { ClientEmailRequest } from '../../supabase/functions/_shared/client-email.mjs'
 import { fmtDate, inr, invoiceTotals, isEmail } from './format'
 import { invoiceFileName, invoicePdf } from './invoicePdf'
+import { invoiceBranch } from './branches'
 import { serverPost } from './serverApi'
 
 /**
@@ -30,7 +31,7 @@ const blobBase64 = (b: Blob) => new Promise<string>((ok, fail) => {
 })
 /** The words used in the email and in the WhatsApp template ({{1}} client, {{2}} document, {{3}} amount, {{4}} company). */
 export function invoiceShareText(db: DB, inv: Invoice) {
-  const branch = (db.settings.branches ?? []).find((x) => x.id === inv.branchId)
+  const branch = invoiceBranch(db, inv)
   const t = invoiceTotals(inv, branch?.state || db.settings.supplierState)
   const kind = inv.type === 'TAX' ? 'Tax invoice' : 'Proforma invoice', company = db.settings.companyName || 'Rexera'
   const booking = inv.bookingId ? db.bookings.find((x) => x.id === inv.bookingId) : undefined

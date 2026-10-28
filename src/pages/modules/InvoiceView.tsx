@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Ban, Download, IndianRupee, Mail, MessageCircle, Printer, Receipt, Send } from 'lucide-react'
+import { ArrowLeft, Ban, Download, IndianRupee, Mail, MessageCircle, Pencil, Printer, Receipt, Send } from 'lucide-react'
 import type { Invoice } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
-import { cancelInvoice, recordInvoicePayment, setInvoiceBranch, userName, visibleInvoices } from '../../lib/actions'
+import { cancelInvoice, recordInvoicePayment, setInvoiceRemarks, userName, visibleInvoices } from '../../lib/actions'
+import { invoiceBranch } from '../../lib/branches'
 import { fmtDate, fmtDateTime, gstSplit, inr, invoiceTotals, isEmail, isPhone, rupeesInWords } from '../../lib/format'
 import { CLOUD } from '../../lib/cloud'
 import { invoiceFileName, invoicePdf } from '../../lib/invoicePdf'
@@ -94,10 +95,11 @@ export default function InvoiceView() {
   const [payOpen, setPayOpen] = useState(false)
   const [sendOpen, setSendOpen] = useState(false)
   const [amt, setAmt] = useState(0)
+  const [remarks, setRemarks] = useState<string | null>(null)
   const inv = visibleInvoices(db, me).find((x) => x.id === id)
   if (!inv) return <Card><EmptyState icon={Receipt} title="Invoice not found" action={<Link to="/billing"><Button>All invoices</Button></Link>} /></Card>
-  const branches = db.settings.branches ?? []
-  const branch = branches.find((x) => x.id === inv.branchId)
+  // the branch of the person who created the invoice (never chosen by hand)
+  const branch = invoiceBranch(db, inv)
   const st = branch?.state || db.settings.supplierState
   const t = invoiceTotals(inv, st)
   const booking = inv.bookingId ? db.bookings.find((x) => x.id === inv.bookingId) : undefined
@@ -117,22 +119,17 @@ export default function InvoiceView() {
         <Link to="/billing" className="mr-auto flex items-center gap-1.5 text-sm text-mute hover:text-ink"><ArrowLeft className="size-4" />All invoices</Link>
         {can('billing.manage') && inv.status !== 'CANCELLED' && inv.status !== 'PAID' && <Button variant="success" icon={IndianRupee} onClick={() => { setAmt(t.balance); setPayOpen(true) }}>Record payment</Button>}
         {can('billing.manage') && inv.status !== 'CANCELLED' && <Button variant="outline" icon={Ban} onClick={async () => { if (await confirm('Cancel invoice?', `${inv.number} will stay in the register as cancelled.`, true)) run(() => cancelInvoice(me, inv.id), 'Invoice cancelled') }}>Cancel</Button>}
-        {can('billing.manage', 'billing.create') && inv.status !== 'CANCELLED' && (
-          <select aria-label="Branch" value={inv.branchId ?? ''} onChange={(e) => run(() => setInvoiceBranch(me, inv.id, e.target.value), 'Branch set')}
-            className={`h-10 rounded-xl border bg-card px-3 text-sm font-semibold ${needBranch ? 'border-warn ring-2 ring-warn/20' : 'border-line'}`}>
-            <option value="">Choose branch…</option>{branches.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
-          </select>
-        )}
-        <Button icon={Printer} variant="outline" disabled={needBranch} title={needBranch ? 'Choose the branch first' : undefined} onClick={() => window.print()}>Print</Button>
-        <Button icon={Download} variant="outline" disabled={needBranch} title={needBranch ? 'Choose the branch first' : 'The PDF exactly as the client receives it'}
+        {can('billing.manage') && inv.status !== 'CANCELLED' && <Button variant="outline" icon={Pencil} onClick={() => setRemarks(inv.remarks ?? '')}>Remarks</Button>}
+        <Button icon={Printer} variant="outline" disabled={needBranch} title={needBranch ? 'The creator’s branch is not set' : undefined} onClick={() => window.print()}>Print</Button>
+        <Button icon={Download} variant="outline" disabled={needBranch} title={needBranch ? 'The creator’s branch is not set' : 'The PDF exactly as the client receives it'}
           onClick={() => run(async () => { const url = URL.createObjectURL(await invoicePdf(db, inv)); const a = document.createElement('a'); a.href = url; a.download = invoiceFileName(inv); a.click(); setTimeout(() => URL.revokeObjectURL(url), 60_000) })}>PDF</Button>
         {inv.status !== 'CANCELLED' && <>
-          {CLOUD && can('billing.manage', 'billing.create') && <Button icon={Send} disabled={needBranch} title={needBranch ? 'Choose the branch first' : 'Email the PDF and / or send it on WhatsApp'} onClick={() => setSendOpen(true)}>Send to client</Button>}
+          {CLOUD && can('billing.manage', 'billing.create') && <Button icon={Send} disabled={needBranch} title={needBranch ? 'The creator’s branch is not set' : 'Email the PDF and / or send it on WhatsApp'} onClick={() => setSendOpen(true)}>Send to client</Button>}
           <a href={share.mail} className={needBranch ? 'pointer-events-none opacity-50' : ''} title="Opens your email app with the invoice details — attach the PDF yourself"><Button variant="outline" icon={Mail} disabled={needBranch}>{CLOUD ? 'Mail app' : 'Email'}</Button></a>
           <a href={share.whatsapp} target="_blank" rel="noreferrer" className={needBranch ? 'pointer-events-none opacity-50' : ''} title={share.phone ? `WhatsApp ${share.phone} from your phone / WhatsApp Web` : 'Opens WhatsApp — pick the client'}><Button variant="outline" icon={MessageCircle} disabled={needBranch}>{CLOUD ? 'WhatsApp chat' : 'WhatsApp'}</Button></a>
         </>}
       </div>
-      {needBranch && <p className="no-print mb-3 rounded-xl bg-warn-soft px-4 py-2 text-sm text-warn">Choose the branch this tax invoice is issued from — its address and GSTIN print on the invoice.</p>}
+      {needBranch && <p className="no-print mb-3 rounded-xl bg-warn-soft px-4 py-2 text-sm text-warn">A tax invoice prints the address and GSTIN of the branch of the person who created it — {creator?.name ?? 'the creator'} has no branch set. HR sets it in Employee Details.</p>}
       {branch && (!branch.address || !branch.bank) && <p className="no-print mb-3 rounded-xl bg-warn-soft px-4 py-2 text-sm text-warn">The {branch.name} {!branch.address && !branch.bank ? 'address and bank details aren’t' : !branch.address ? 'address isn’t' : 'bank details aren’t'} filled in yet — Super Admin / IT can add them under Access → Settings → Invoice branches.</p>}
       <Card className="print-area overflow-hidden bg-white text-[#111827]">
         <div className="flex flex-wrap items-start justify-between gap-4 border-b-4 border-[#F47B20] p-8">
@@ -172,6 +169,7 @@ export default function InvoiceView() {
         </div>
         <div className="grid gap-6 p-8 sm:grid-cols-2">
           <div><p className="text-[11px] font-bold uppercase tracking-wider text-[#6B7280]">Amount in words</p><p className="mt-1 text-sm font-semibold">{rupeesInWords(t.grand)}</p>
+            {inv.remarks && <><p className="mt-5 text-[11px] font-bold uppercase tracking-wider text-[#6B7280]">Remarks</p><p className="mt-1 whitespace-pre-line text-sm">{inv.remarks}</p></>}
             <p className="mt-6 text-[11px] text-[#6B7280]">{branch?.bank ? <>Bank: {branch.bank}<br /></> : null}This is a computer-generated invoice.</p>
             <p className="mt-2 text-[11px] text-[#6B7280]">Generated by: <b className="text-[#111827]">{creator ? `${creator.name} (@${creator.username})` : '—'}</b>{branch ? ` · Branch: ${branch.name}` : ''}</p></div>
           <div className="space-y-1.5 text-sm">
@@ -201,6 +199,10 @@ export default function InvoiceView() {
       <Modal open={payOpen} onClose={() => setPayOpen(false)} title="Record payment" size="sm"
         footer={<><Button variant="outline" onClick={() => setPayOpen(false)}>Cancel</Button><Button onClick={async () => { if (await run(() => recordInvoicePayment(me, inv.id, amt, t.grand), 'Payment recorded')) setPayOpen(false) }}>Save</Button></>}>
         <Input label="Amount received (₹)" type="number" min={0} value={amt || ''} onChange={(e) => setAmt(Number(e.target.value))} hint={`Balance ${inr(t.balance)}`} />
+      </Modal>
+      <Modal open={remarks !== null} onClose={() => setRemarks(null)} title="Remarks" subtitle="Printed on the invoice and its PDF"
+        footer={<><Button variant="outline" onClick={() => setRemarks(null)}>Cancel</Button><Button onClick={async () => { if (await run(() => setInvoiceRemarks(me, inv.id, remarks ?? ''), 'Remarks saved')) setRemarks(null) }}>Save</Button></>}>
+        <Textarea label="Remarks" rows={4} maxLength={1000} value={remarks ?? ''} onChange={(e) => setRemarks(e.target.value)} placeholder="e.g. Payment against advance for the Seed Fund application" />
       </Modal>
       {node}
     </div>

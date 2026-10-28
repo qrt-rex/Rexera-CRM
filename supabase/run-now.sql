@@ -1632,3 +1632,10 @@ drop policy if exists calls_update on lead_calls;
 create policy calls_update on lead_calls for update to authenticated
   using (app.can_see_lead(lead_id) and (called_by = app.me() or called_by is null))
   with check (app.can_see_lead(lead_id) and called_by = app.me());
+
+-- ##################################################################### 20261029010000_invoice_remarks.sql
+-- =====================================================================================================
+-- Rexera CRM · invoice remarks, printed on the invoice (preview, print and PDF). Safe to run more than once.
+-- An invoice is issued from the branch of the person who creates it (set by the app; no branch is picked by hand).
+-- =====================================================================================================
+alter table invoices add column if not exists remarks text check (remarks is null or length(remarks) <= 1000);

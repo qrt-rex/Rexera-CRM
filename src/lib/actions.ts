@@ -2198,7 +2198,7 @@ export function visibleInvoices(d: DB, me: User) {
 /** The only service text on a proforma invoice. */
 export const PROFORMA_SERVICE = 'Consultancy services'
 
-export function createInvoice(me: User, i: { type: Invoice['type']; client: string; gstin: string; state: string; items: InvoiceItem[]; bookingId?: string; salesPerson?: string; due: string; clientAddress?: string; clientPan?: string; branchId?: string }) {
+export function createInvoice(me: User, i: { type: Invoice['type']; client: string; gstin: string; state: string; items: InvoiceItem[]; bookingId?: string; salesPerson?: string; due: string; clientAddress?: string; clientPan?: string; remarks?: string }) {
   need(me, 'billing.create', 'billing.manage')
   // a proforma invoice always reads "Consultancy services" — the line can't be renamed
   if (i.type === 'PROFORMA') i = { ...i, items: i.items.map((x) => ({ ...x, desc: PROFORMA_SERVICE, sac: x.sac || '998311' })) }
@@ -2215,7 +2215,9 @@ export function createInvoice(me: User, i: { type: Invoice['type']; client: stri
       id: uid('inv-'), number: `${i.type === 'TAX' ? 'RX' : 'PF'}/${fy}/${String(d.counters.invoice++).padStart(4, '0')}`,
       type: i.type, bookingId: i.bookingId, client: i.client.trim(), gstin: i.gstin.toUpperCase(), state: i.state, items: i.items,
       paid: 0, status: 'ISSUED', date: today(), due: i.due, salesPerson: i.salesPerson ?? me.id, createdBy: me.id,
-      clientAddress: i.clientAddress?.trim() || undefined, clientPan: i.clientPan?.trim().toUpperCase() || undefined, branchId: i.branchId,
+      clientAddress: i.clientAddress?.trim() || undefined, clientPan: i.clientPan?.trim().toUpperCase() || undefined, remarks: i.remarks?.trim() || undefined,
+      // issued from the branch of the person creating it (no branch picked by hand)
+      branchId: me.branchId && d.settings.branches?.some((b) => b.id === me.branchId) ? me.branchId : undefined,
     }
     d.invoices.unshift(inv)
     audit(d, me.id, 'INVOICE_CREATE', inv.number)
@@ -2254,13 +2256,15 @@ export function recordInvoicePayment(me: User, id: string, amount: number, grand
   })
 }
 /** Accounts chooses the branch an invoice is issued from (its address and GSTIN print on the invoice). */
-export function setInvoiceBranch(me: User, id: string, branchId: string) {
-  need(me, 'billing.manage', 'billing.create')
+/** Remarks printed on the invoice (Accounts can change them until it is cancelled). */
+export function setInvoiceRemarks(me: User, id: string, remarks: string) {
+  need(me, 'billing.manage')
+  assert(remarks.length <= 1000, 'Keep the remarks under 1000 characters.')
   mutate((d) => {
     const inv = d.invoices.find((x) => x.id === id)
     assert(inv, 'Invoice not found.')
-    assert(d.settings.branches?.some((b) => b.id === branchId), 'Pick a branch.')
-    inv.branchId = branchId
+    assert(inv.status !== 'CANCELLED', 'This invoice is cancelled.')
+    inv.remarks = remarks.trim() || undefined
   })
 }
 export function saveBranches(me: User, branches: Branch[]) {
