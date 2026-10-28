@@ -94,4 +94,14 @@ assert.deepEqual(await writes(base, produce(base, (d) => {
   d.leads[0].assignedTo = b.id; (d.leads[0].chain ??= []).push({ to: b.id, by: a.id, at, kind: 'FORWARDED', note: 'x' })
 })), [`leads update 1 (id=${lead.id})`], 'forward a lead')
 
+// client entry: one insert; converting it writes the new CRM entry before the entry that points at it
+const entry = { id: 'ce-1', date: '2026-10-28', clientName: 'Asha', companyName: 'Asha Foods', phone: '9876500002', serviceId: base.services[0].id, scheme: base.services[0].name, pitchedPrice: 45000, status: 'HOT', requirement: 'Seed fund', note: 'Call after lunch', followUps: [], leadId: lead.id, ownerId: a.id, createdAt: at, updatedAt: at }
+assert.deepEqual(await writes(base, produce(base, (d) => { d.clientEntries = [entry] })), ['client_entries insert 1'], 'save a client entry')
+const withEntry = produce(base, (d) => { d.clientEntries = [entry] })
+const converted = await writes(withEntry, produce(withEntry, (d) => {
+  d.bookings.unshift({ ...structuredClone(booking), id: 'bk-ce', bookingId: 'RX-2026-999998' })
+  Object.assign(d.clientEntries[0], { status: 'CONVERTED', bookingId: 'bk-ce', convertedAt: at })
+}))
+assert.ok(converted.indexOf('bookings insert 1') < converted.indexOf('client_entries update 1 (id=ce-1)') && converted.indexOf('bookings insert 1') === 0, 'convert: the CRM entry first, then the client entry')
+
 console.log('✓ cloud sync writes only what changed')

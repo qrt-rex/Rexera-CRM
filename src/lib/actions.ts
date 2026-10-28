@@ -15,6 +15,7 @@ import { serverPost } from './serverApi'
 import { hashPassword } from './crypto'
 import { CALL_OUTCOMES, FINAL_STAGE, hasLegalDoc, LEAD_STATUS, OPEN_LEAD, STAGE_OUTCOMES, STAGES, stageLabel } from './workflow'
 import { fireAutomation } from './email'
+import { convertibleEntries, markConverted, startsFromClientEntry } from './clientEntries'
 import { addDays, daysBetween, fmtDate, isEmail, isGstin, isPan, isPhone, normPhone, nowIso, round2, today, uid, ymd } from './format'
 
 // ============================================================ helpers
@@ -960,6 +961,8 @@ export type BookingInput = {
   note?: string
   priority: Booking['priority']; teamLeadId?: string; leadId?: string
   documents?: { file: FileRef; category: string }[]
+  /** the client entry this CRM entry is made from (required for sales people and team leaders) */
+  clientEntryId?: string
 }
 
 export function findDuplicates(d: DB, i: Partial<BookingInput>, excludeId?: string) {
@@ -1028,6 +1031,9 @@ const serviceTitle = (names: string[], combo?: number) => (combo ? `Combo ${comb
 export function createBooking(me: User, i: BookingInput) {
   need(me, 'bookings.create')
   const svcs = checkBooking(getDb(), i, true)
+  // sales person → dialer → client entry → follow-ups → CRM entry: sales people and team leaders convert a client entry
+  if (startsFromClientEntry(me)) assert(i.clientEntryId, 'Make the CRM entry from a client entry: fill the client entry in the dialer first, then convert it once the payment is received.')
+  if (i.clientEntryId) assert(convertibleEntries(getDb(), me).some((e) => e.id === i.clientEntryId), 'That client entry is not yours to convert, or it is already a CRM entry.')
   return mutate((d) => {
     const first = svcs[0]!.s
     const gstRate = Math.max(...svcs.map((x) => x.s.gstRate))
@@ -1068,6 +1074,7 @@ export function createBooking(me: User, i: BookingInput) {
     }
     d.bookings.unshift(b)
     if (i.leadId) { const l = d.leads.find((x) => x.id === i.leadId); if (l) l.status = 'CONVERTED' }
+    if (i.clientEntryId) markConverted(d, me, i.clientEntryId, b.id)
     notify(d, usersWithRole(d, 'accounts').map((u) => u.id), 'New file for accounts', `${b.bookingId} · ${b.companyName} by ${me.name}`, `/bookings/${b.id}`, 'action')
     if (tl && tl !== me.id) notify(d, [tl], 'Your team booked a client', `${b.bookingId} · ${b.companyName} by ${me.name} — sent to Accounts`, `/bookings/${b.id}`, 'info')
     audit(d, me.id, 'BOOKING_CREATE', `${b.bookingId} ${b.companyName} · ${b.serviceName}`)

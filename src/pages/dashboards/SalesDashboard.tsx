@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { BarChart3, Briefcase, CalendarCheck2, ClipboardCheck, FileText, Images, IndianRupee, Megaphone, Network, Phone, PhoneCall, Sparkles, Target, UserCheck, Users, BellRing, Lightbulb } from 'lucide-react'
+import { BarChart3, Briefcase, CalendarCheck2, ClipboardCheck, ClipboardList, FileText, Images, IndianRupee, Megaphone, Network, Phone, PhoneCall, Sparkles, Target, UserCheck, Users, BellRing, Lightbulb } from 'lucide-react'
 import { useDb } from '../../lib/store'
 import { useMe } from '../../lib/auth'
 import { visibleBookings, userName } from '../../lib/actions'
@@ -9,6 +9,8 @@ import { inr, inrShort } from '../../lib/format'
 import { EmptyState } from '../../components/ui'
 import { Ring } from '../../components/charts'
 import { BookingRow, BookingStatusBadge, ChainStepper } from '../../components/booking'
+import { ClientEntriesPanel } from '../../components/ClientEntry'
+import { followUpDue, visibleClientEntries } from '../../lib/clientEntries'
 import { Greeting, LoginLogoutCard, MiniStat, Section, Tile, TileGrid, UpcomingEvents, ViewAll } from './widgets'
 
 export function SalesDashboard({ lead }: { lead: boolean }) {
@@ -24,6 +26,7 @@ export function SalesDashboard({ lead }: { lead: boolean }) {
   const waiting = waitingFor(db, me)
   const unacked = db.broadcasts.filter((b) => (b.audience === 'ALL' || b.audience.includes(me.role)) && !b.acks.includes(me.id)).length
   const newPosts = db.posts.filter((p) => Date.now() - new Date(p.createdAt).getTime() < 3 * 86400000).length
+  const entriesDue = visibleClientEntries(db, me).filter((e) => followUpDue(e)).length
 
   return (
     <div>
@@ -55,7 +58,7 @@ export function SalesDashboard({ lead }: { lead: boolean }) {
         <Tile to="/schemes" icon={Sparkles} label="Schemes" desc="Government schemes & offers" tone="green" />
         <Tile to="/billing" icon={IndianRupee} label="Invoice / Bill" desc="Proforma & my invoices" tone="amber" />
         <Tile to="/content?tab=SALES_INFO" icon={Lightbulb} label="Sales Information" desc="Pitches, price list, objections" tone="violet" />
-        <Tile to="/bookings/new" icon={Briefcase} label="CRM Entry" desc="Book a client with advance" tone="violet" />
+        <Tile onClick={() => document.getElementById('client-entries')?.scrollIntoView({ behavior: 'smooth' })} icon={ClipboardList} label="Client Entries" desc="Follow up · convert to CRM entry after payment" tone="violet" badge={entriesDue || undefined} />
         <Tile to="/broadcasts" icon={Megaphone} label="Broadcast" desc="Company updates" tone="red" badge={unacked || undefined} />
         {lead ? (
           <>
@@ -71,6 +74,11 @@ export function SalesDashboard({ lead }: { lead: boolean }) {
         <Tile to="/notifications" icon={BellRing} label="Notifications" desc="Approvals and updates" tone="orange" />
       </TileGrid>
 
+      {/* sales person → dialer → client entry → follow-ups → CRM entry */}
+      <Section id="client-entries" className="mt-6" title={lead ? 'Client entries · me and my team' : 'My client entries'} subtitle="Filled in the dialer during the call — follow up, then convert to a CRM entry once the payment is received" icon={ClipboardList}>
+        <ClientEntriesPanel lead={lead} />
+      </Section>
+
       <div className="mt-6 grid gap-6 xl:grid-cols-3">
         <div className="space-y-6">
           <LoginLogoutCard />
@@ -83,7 +91,7 @@ export function SalesDashboard({ lead }: { lead: boolean }) {
             </Section>
           )}
           <Section title={lead ? 'Team CRM entries' : 'My CRM entries'} subtitle="Track every file through the approval chain" icon={Briefcase} action={<ViewAll to="/bookings" />}>
-            {!mine.length ? <EmptyState icon={Briefcase} title="No CRM entries yet" text="Book your first client from a converted lead." /> : (
+            {!mine.length ? <EmptyState icon={Briefcase} title="No CRM entries yet" text="Convert a client entry once the payment is received." /> : (
               <ul className="divide-y divide-line/70">
                 {mine.slice(0, 5).map((b) => (
                   <li key={b.id} className="px-5 py-4">

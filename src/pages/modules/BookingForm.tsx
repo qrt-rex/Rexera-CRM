@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { AlertTriangle, Briefcase, Building2, Calculator, CreditCard, FileText, IndianRupee, Layers, MessageSquareText, Package, Plus, Save, Send, Trash2, Wallet } from 'lucide-react'
+import { AlertTriangle, Briefcase, Building2, ClipboardList, Calculator, CreditCard, FileText, IndianRupee, Layers, MessageSquareText, Package, Plus, Save, Send, Trash2, Wallet } from 'lucide-react'
 import type { BookingType, FileRef } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useMe } from '../../lib/auth'
@@ -11,6 +11,7 @@ import { addDays, fmtDate, inr, isEmail, isGstin, isPan, round2, today, ymd } fr
 import { rolesOf } from '../../lib/rbac'
 import { stateForCity } from '../../lib/india'
 import { Button, Card, CardHeader, cx, Input, PageHeader, Select, Textarea, useRun } from '../../components/ui'
+import { CLIENT_ENTRY_STATUS, convertibleEntries, startsFromClientEntry } from '../../lib/clientEntries'
 import { CityInput, PhoneInput, StateSelect } from '../../components/fields'
 import { FileField } from '../../components/FileField'
 import { DocUploader, type PendingDoc } from '../../components/DocUploader'
@@ -19,7 +20,13 @@ const COMPANY_DOCS = ['Company PAN card', 'GST certificate', 'Certificate of Inc
 const OTHER = '__other__'
 type Pay = PaymentPartInput & { proof?: FileRef }
 
+/** A new form for each client entry / lead it is filled from (the picker links here with ?entry=…). */
 export default function BookingForm() {
+  const [params] = useSearchParams()
+  return <BookingFormBody key={params.get('entry') ?? params.get('lead') ?? ''} />
+}
+
+function BookingFormBody() {
   const db = useDb()
   const me = useMe()
   const run = useRun()
@@ -27,8 +34,11 @@ export default function BookingForm() {
   const { id } = useParams()
   const [params] = useSearchParams()
   const existing = id ? db.bookings.find((b) => b.id === id) : undefined
-  const lead = params.get('lead') ? db.leads.find((l) => l.id === params.get('lead')) : undefined
-  const svcFromLead = lead ? db.services.find((s) => s.name === lead.service) : undefined
+  // sales person → dialer → client entry → follow-ups → CRM entry: the client entry fills the form in
+  const entry = params.get('entry') ? convertibleEntries(db, me).find((e) => e.id === params.get('entry')) : undefined
+  const leadId = params.get('lead') ?? entry?.leadId
+  const lead = leadId ? db.leads.find((l) => l.id === leadId) : undefined
+  const svcFromLead = entry ? db.services.find((s) => s.id === entry.serviceId) : lead ? db.services.find((s) => s.name === lead.service) : undefined
 
   const [f, setF] = useState<BookingInput>(() => existing ? {
     companyName: existing.companyName, companyAddress: existing.address ?? '', city: existing.city, state: existing.state, industry: existing.industry,
@@ -41,13 +51,14 @@ export default function BookingForm() {
     successFee: existing.successFee ?? { type: 'PCT', value: existing.successFeePct || 0 }, remarks: existing.remarks ?? '', priority: existing.priority, teamLeadId: existing.teamLeadId,
   } : {
     // a hot lead fills itself in; the sales person can change everything
-    companyName: lead?.company || lead?.name || '', companyAddress: '', city: lead?.city ?? '', state: lead?.state || (lead?.city ? stateForCity(lead.city) ?? '' : '') || 'Gujarat', industry: lead?.industry ?? '',
-    contactPerson: lead?.name ?? '', mobile: lead?.phone ?? '', email: lead?.email ?? '', pan: '', gstin: '',
-    paymentContact: lead?.phone ?? '', paymentEmail: '',
-    services: [{ serviceId: svcFromLead?.id ?? '', price: lead?.price ?? svcFromLead?.price ?? 0 }],
+    companyName: entry?.companyName || lead?.company || lead?.name || '', companyAddress: '', city: lead?.city ?? '', state: lead?.state || (lead?.city ? stateForCity(lead.city) ?? '' : '') || 'Gujarat', industry: lead?.industry ?? '',
+    contactPerson: entry?.clientName ?? lead?.name ?? '', mobile: entry?.phone ?? lead?.phone ?? '', email: lead?.email ?? '', pan: '', gstin: '',
+    paymentContact: entry?.phone ?? lead?.phone ?? '', paymentEmail: '',
+    services: [{ serviceId: svcFromLead?.id ?? '', price: entry?.pitchedPrice ?? lead?.price ?? svcFromLead?.price ?? 0 }],
     bookingType: 'SINGLE', mode: 'Refundable', bookingDate: today(),
     payments: [{ amount: 0, date: today(), mode: 'UPI' }], closedBy: me.id,
-    successFee: { type: 'PCT', value: 0 }, remarks: '', note: '', priority: 'MEDIUM', teamLeadId: me.teamLeadId, leadId: lead?.id,
+    successFee: { type: 'PCT', value: 0 }, remarks: entry?.requirement ?? '', note: entry?.note ?? '', priority: 'MEDIUM', teamLeadId: me.teamLeadId, leadId: lead?.id,
+    clientEntryId: entry?.id,
   })
   const [docs, setDocs] = useState<PendingDoc[]>([])
   const [tried, setTried] = useState(false)
@@ -108,9 +119,14 @@ export default function BookingForm() {
     if (typeof newId === 'string') nav(`/bookings/${newId}`)
   }
 
+  // sales people and team leaders convert a client entry (filled in the dialer) once the payment is received
+  if (!existing && !entry && startsFromClientEntry(me)) return <PickClientEntry />
+
   return (
     <div className="mx-auto max-w-6xl">
-      <PageHeader title={existing ? `Edit ${existing.bookingId}` : 'New CRM Entry'} subtitle={lead ? `Filled in from lead ${lead.code} · ${lead.name} — change anything you need` : 'Fields marked * are required. The date and time of entry are saved automatically.'} icon={Briefcase}
+      <PageHeader title={existing ? `Edit ${existing.bookingId}` : 'New CRM Entry'}
+        subtitle={entry ? `Converting the client entry of ${fmtDate(entry.date)} · ${entry.clientName} (${entry.companyName}) — add the payment received and change anything you need`
+          : lead ? `Filled in from lead ${lead.code} · ${lead.name} — change anything you need` : 'Fields marked * are required. The date and time of entry are saved automatically.'} icon={Briefcase}
         actions={<Link to={existing ? `/bookings/${existing.id}` : '/bookings'}><Button variant="outline">Cancel</Button></Link>} />
 
       {dups.length > 0 && (
@@ -277,6 +293,39 @@ export default function BookingForm() {
           {!existing && <p className="mt-3 flex items-center gap-1.5 px-1 text-[11px] text-mute"><IndianRupee className="size-3" />Deadline {fmtDate(months ? comboEnd : ymd(addDays(new Date(), 30)))} · saved with today's date and time</p>}
         </aside>
       </div>
+    </div>
+  )
+}
+
+/** For sales people and team leaders: the CRM entry is made from one of their client entries. */
+function PickClientEntry() {
+  const db = useDb()
+  const me = useMe()
+  const list = convertibleEntries(db, me).slice().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+  return (
+    <div className="mx-auto max-w-4xl">
+      <PageHeader title="New CRM Entry" subtitle="Pick the client entry to convert — once the payment is received" icon={Briefcase}
+        actions={<Link to="/"><Button variant="outline">Back to dashboard</Button></Link>} />
+      <Card className="overflow-hidden">
+        <CardHeader title="My client entries" subtitle="Sales person → dialer → client entry → follow-ups → CRM entry" icon={ClipboardList} />
+        {!list.length ? (
+          <div className="p-6 text-sm text-mute">
+            <p>You have no open client entries. Fill the client entry in the <Link to="/dialer" className="font-semibold text-brand-ink underline">dialer</Link> while you are on the call; once the payment is received, convert it here or from your dashboard.</p>
+          </div>
+        ) : (
+          <ul className="divide-y divide-line/70">
+            {list.map((e) => (
+              <li key={e.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
+                <span className="min-w-0 flex-1">
+                  <span className="block font-semibold">{e.clientName} · {e.companyName}</span>
+                  <span className="block text-xs text-mute">{fmtDate(e.date)} · {e.scheme} · pitched {inr(e.pitchedPrice)} · {CLIENT_ENTRY_STATUS[e.status].label}</span>
+                </span>
+                <Link to={`/bookings/new?entry=${e.id}`}><Button size="sm" variant="soft" icon={Briefcase}>Convert to CRM entry</Button></Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
     </div>
   )
 }

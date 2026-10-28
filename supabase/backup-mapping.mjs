@@ -143,6 +143,11 @@ export function mapAll(backup) {
     assigned_to: uref(x.assignedTo), work_status: x.workStatus, notes: s(x.notes), submitted: !!x.submitted, submitted_at: s(x.submittedAt), submitted_by: uref(x.submittedBy),
     completed_at: s(x.completedAt), created_at: x.createdAt, created_by: uref(x.createdBy), updated_at: x.updatedAt, updated_by: uref(x.updatedBy), history: x.history ?? [],
   }))
+  t.client_entries = (d.clientEntries ?? []).map((x) => ({
+    id: x.id, entry_date: x.date, client_name: x.clientName, company_name: x.companyName, phone: x.phone, service_id: s(x.serviceId), scheme: x.scheme,
+    pitched_price: x.pitchedPrice, status: x.status, requirement: x.requirement, note: x.note, follow_up: s(x.followUp), follow_ups: x.followUps ?? [],
+    lead_id: s(x.leadId), owner_id: uref(x.ownerId), created_at: x.createdAt, updated_at: x.updatedAt, booking_id: s(x.bookingId), converted_at: s(x.convertedAt),
+  }))
   t.website_lead_log = (d.webLeadLog ?? []).map((x) => ({ id: x.id, at: x.at, status: x.status, form: s(x.form), name: s(x.name), phone: s(x.phone), email: s(x.email), error: s(x.error), lead_id: s(x.leadId), fields: x.fields ?? null, retried_at: s(x.retriedAt), retried_by: uref(x.retriedBy) }))
   t.recruitment_datasets = (backup.imports ?? []).map((x) => ({ id: x.id, name: x.name, file_name: x.fileName, sheet: s(x.sheet), kind: x.kind, columns: x.columns, imported_at: x.importedAt, imported_by: uref(x.importedBy), bytes: x.bytes ?? 0 }))
   t.recruitment_rows = (backup.imports ?? []).flatMap((x) => x.rows.map((cells, i) => ({ dataset_id: x.id, row_no: i + 1, cells })))
@@ -163,7 +168,7 @@ export const ORDER = [
   ['company_assets', 'id'], ['stock_items', 'id'], ['company_expenses', 'id'], ['legacy_files', 'path'],
   ['doc_forms', 'id'], ['doc_form_submissions', 'id'], ['sales_kit', 'id'],
   ['site_content', 'key'], ['site_content_history', 'id'], ['website_lead_log', 'id'],
-  ['client_accounts', 'id'], ['client_activity', 'id'], ['client_doc_uploads', 'id'], ['media_items', 'id'],
+  ['client_accounts', 'id'], ['client_activity', 'id'], ['client_doc_uploads', 'id'], ['media_items', 'id'], ['client_entries', 'id'],
 ]
 export const APPEND_ONLY = ['payroll_history', 'audit_log', 'asset_events', 'stock_moves']   // identity ids: only copied into an empty table
 
@@ -327,6 +332,11 @@ export function rowsToDb(input) {
       internal: !!x.internal, external: !!x.external, clientBookingIds: x.client_booking_ids?.length ? x.client_booking_ids : undefined, assignDate: u(x.assign_date), assignTime: u(x.assign_time),
       assignedTo: u(x.assigned_to), workStatus: x.work_status, notes: u(x.notes), submitted: !!x.submitted, submittedAt: u(x.submitted_at), submittedBy: u(x.submitted_by),
       completedAt: u(x.completed_at), createdAt: x.created_at, createdBy: x.created_by ?? '', updatedAt: x.updated_at, updatedBy: x.updated_by ?? '', history: x.history ?? [],
+    })),
+    clientEntries: rows('client_entries').map((x) => opt({
+      id: x.id, date: x.entry_date, clientName: x.client_name, companyName: x.company_name, phone: x.phone, serviceId: x.service_id ?? '', scheme: x.scheme,
+      pitchedPrice: Number(x.pitched_price), status: x.status, requirement: x.requirement, note: x.note, followUp: u(x.follow_up), followUps: x.follow_ups ?? [],
+      leadId: u(x.lead_id), ownerId: x.owner_id ?? '', createdAt: x.created_at, updatedAt: x.updated_at, bookingId: u(x.booking_id), convertedAt: u(x.converted_at),
     })),
     webLeadLog: rows('website_lead_log').map((x) => opt({ id: x.id, at: x.at, status: x.status, form: u(x.form), name: u(x.name), phone: u(x.phone), email: u(x.email), error: u(x.error), leadId: u(x.lead_id), fields: u(x.fields), retriedAt: u(x.retried_at), retriedBy: u(x.retried_by) })),
     salesKit: rows('sales_kit').map((x) => opt({

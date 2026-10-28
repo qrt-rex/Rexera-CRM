@@ -41,6 +41,8 @@ const SPECS: Spec[] = [
     // files the client uploaded in the portal: written by the server only, the CRM reads them
     { prop: 'clientUploads', table: 'client_doc_uploads', fk: 'booking_id', mode: 'id', order: ['at', true] },
   ] },
+  // client entries (pre-CRM entries) point at the lead and the CRM entry made from them
+  { key: 'clientEntries', table: 'client_entries', order: ['created_at', false] },
   { key: 'invoices', table: 'invoices', order: ['issued_on', false], children: [
     { prop: 'items', table: 'invoice_items', fk: 'invoice_id', mode: 'replace', order: ['position', true] },
     // written only by the live server (sends to the client); the CRM reads it and never changes it

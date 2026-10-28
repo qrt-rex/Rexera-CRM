@@ -129,6 +129,11 @@ db.mediaItems = [
   { id: 'med-2', serial: 2, schemeName: 'PMEGP', title: 'Reel', description: '', mediaType: 'VIDEO', files: [], internal: false, external: false, workStatus: 'ON_HOLD', submitted: false, createdAt: at, createdBy: a.id, updatedAt: at, updatedBy: a.id, history: [] },
 ]
 db.counters.media = 2
+// client entries: one converted to the CRM entry above (with a follow-up), one still open with a follow-up date
+db.clientEntries = [
+  { id: 'ce-1', date: '2026-10-27', clientName: 'Asha Patel', companyName: 'Patel Foods', phone: '9876500002', serviceId: db.services[0].id, scheme: db.services[0].name, pitchedPrice: 45000, status: 'CONVERTED', requirement: 'Seed funding', note: 'Wants a call after Diwali', followUps: [{ id: 'cf-1', at, by: a.id, date: '2026-10-28', status: 'PAYMENT_PENDING', note: 'Payment tomorrow' }], leadId: db.leads[0].id, ownerId: a.id, createdAt: at, updatedAt: at, bookingId: bk.id, convertedAt: at },
+  { id: 'ce-2', date: '2026-10-28', clientName: 'Ravi', companyName: 'Ravi Tech', phone: '9876500003', serviceId: db.services[1].id, scheme: db.services[1].name, pitchedPrice: 12500.5, status: 'CALL_BACK', requirement: 'ISO certificate', note: 'Busy this week', followUp: '2026-11-02', followUps: [], ownerId: b.id, createdAt: at, updatedAt: at },
+]
 check('demo data', db)
 
 const file = process.argv[2]

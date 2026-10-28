@@ -435,6 +435,41 @@ export interface InvoiceShare {
   error?: string; messageId?: string
 }
 
+// ------------------------------------------------------------------ client entry (pre-CRM entry)
+/** What the sales person sets; Converted is set when the CRM entry is made from it. */
+export type ClientEntryStatus = 'INTERESTED' | 'HOT' | 'CALL_BACK' | 'PAYMENT_PENDING' | 'NOT_INTERESTED' | 'CONVERTED'
+export interface ClientFollowUp { id: string; at: string; by: string; date: string; status: ClientEntryStatus; note: string }
+/**
+ * What the sales person fills while the dialer call is on (sales person → dialer → client entry → follow-ups → CRM
+ * entry). A CRM entry for a sales person or team leader is made from one of these, once the payment is received;
+ * only then does it count as a CRM entry. Seen only by its owner and their team leader.
+ */
+export interface ClientEntry {
+  id: string
+  date: string
+  clientName: string
+  companyName: string
+  phone: string
+  /** the scheme picked from the Services list (its id, and its name as it was) */
+  serviceId: string
+  scheme: string
+  pitchedPrice: number
+  status: ClientEntryStatus
+  requirement: string
+  note: string
+  /** next follow-up date (optional) */
+  followUp?: string
+  /** newest first */
+  followUps: ClientFollowUp[]
+  leadId?: string
+  ownerId: string
+  createdAt: string
+  updatedAt: string
+  /** the CRM entry made from it */
+  bookingId?: string
+  convertedAt?: string
+}
+
 // ------------------------------------------------------------------ Digital Media Dashboard (Media Function)
 export type MediaType = 'POST' | 'FLYER' | 'POSTER' | 'VIDEO' | 'IMAGE' | 'PDF' | 'OTHER'
 /** Stored work status; "Late" is worked out from the deadline (supabase/media-rules.mjs). */
@@ -936,6 +971,7 @@ export interface DB {
   clientAccounts?: ClientAccount[]
   clientActivity?: ClientActivity[]
   mediaItems?: MediaItem[]
+  clientEntries?: ClientEntry[]
   siteContent?: SiteContent[]
   siteHistory?: SiteHistory[]
   webLeadLog?: WebLeadLog[]
