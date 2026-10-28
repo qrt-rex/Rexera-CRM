@@ -7,6 +7,7 @@ import { deleteScheme, upsertScheme, userName } from '../../lib/actions'
 import { fmtDate, fmtDateTime, inr } from '../../lib/format'
 import { istToday, schemeDaysLeft, schemeDuration, schemeState, type SchemeState } from '../../../supabase/workflow-rules.mjs'
 import { Badge, Button, Card, EmptyState, Input, Modal, PageHeader, SearchBox, Tabs, Textarea, Toggle, useConfirm, useRun } from '../../components/ui'
+import { byPrice, inPriceBand, OptionFilter, PriceFilter, type PriceBand, type PriceSort } from '../../components/CatalogFilters'
 
 type Edit = Omit<Scheme, 'id' | 'createdAt' | 'by' | 'updatedAt' | 'updatedBy'> & { id?: string }
 const blank: Edit = { title: '', category: 'Grant', summary: '', benefit: '', eligibility: '', active: true, price: undefined, startDate: '', endDate: '' }
@@ -28,13 +29,20 @@ export default function Schemes() {
   const manage = can('schemes.manage')
   const t = istToday()
   const [q, setQ] = useState('')
+  // price-wise and scheme-wise (category)
+  const [band, setBand] = useState<PriceBand>('all')
+  const [sort, setSort] = useState<PriceSort>('')
+  const [cat, setCat] = useState('')
+  const cats = [...new Set(db.schemes.map((s) => s.category.trim()).filter(Boolean))].sort()
   const [tab, setTab] = useState<'live' | 'EXPIRED' | 'all'>('live')
   const [edit, setEdit] = useState<Edit | null>(null)
   const live = (s: Scheme) => ['ACTIVE', 'UPCOMING', 'NO_DATES'].includes(schemeState(s, t))
-  const list = db.schemes
+  const list = byPrice(db.schemes
     .filter((s) => (manage ? (tab === 'all' || (tab === 'live' ? live(s) : schemeState(s, t) === 'EXPIRED')) : live(s)))
+    .filter((s) => !cat || s.category.trim() === cat)
+    .filter((s) => inPriceBand(s.price, band))
     .filter((s) => !q || `${s.title} ${s.summary} ${s.category}`.toLowerCase().includes(q.toLowerCase()))
-    .sort((a, b) => (a.endDate ?? '9999').localeCompare(b.endDate ?? '9999'))
+    .sort((a, b) => (a.endDate ?? '9999').localeCompare(b.endDate ?? '9999')), (s) => s.price, sort)
   const days = edit?.startDate && edit.endDate && edit.endDate >= edit.startDate ? schemeDuration(edit) : null
 
   return (
@@ -43,6 +51,8 @@ export default function Schemes() {
         actions={<>{manage && <Button variant="accent" icon={Plus} onClick={() => setEdit({ ...blank })}>Add scheme</Button>}</>} />
       <div className="mb-5 flex flex-wrap items-center gap-3">
         <SearchBox value={q} onChange={setQ} placeholder="Search schemes…" className="max-w-md flex-1" />
+        <OptionFilter label="Scheme category" all="All categories" value={cat} options={cats} onChange={setCat} />
+        <PriceFilter band={band} sort={sort} onBand={setBand} onSort={setSort} />
         {manage && <Tabs value={tab} onChange={setTab} tabs={[
           { id: 'live', label: 'Active & upcoming', count: db.schemes.filter(live).length },
           { id: 'EXPIRED', label: 'Expired', count: db.schemes.filter((s) => schemeState(s, t) === 'EXPIRED').length },

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Clapperboard, Copy, Download, FileDown, ImageDown, Images, Lightbulb, Megaphone, Pencil, Pin, Plus, Trash2 } from 'lucide-react'
 import { companyMedia } from '../../lib/media'
@@ -12,6 +12,7 @@ import { deletePost, upsertPost, userName } from '../../lib/actions'
 import { ago } from '../../lib/format'
 import { Button, Card, cx, EmptyState, Input, Menu, MenuItem, Modal, PageHeader, Select, Tabs, Textarea, useConfirm, useRun, useToast, Checkbox } from '../../components/ui'
 import { downloadFlyerJpeg, downloadFlyerPdf } from '../../lib/flyer'
+import { byPrice, inPriceBand, OptionFilter, PriceFilter, schemeIn, schemePrice, type PriceBand, type PriceSort } from '../../components/CatalogFilters'
 import { Mark } from '../../components/Logo'
 
 const THEMES: Record<string, string> = {
@@ -34,12 +35,22 @@ export default function Content() {
   const manage = canKind(tab)
   const kinds = (['FLYER', 'POST', 'SALES_INFO'] as Kind[]).filter(canKind)
   const [edit, setEdit] = useState<(Omit<Post, 'id' | 'createdAt' | 'by'> & { id?: string }) | null>(null)
-  const list = db.posts.filter((p) => p.kind === tab).sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || b.createdAt.localeCompare(a.createdAt))
+  // flyers and posts: scheme-wise (the scheme a flyer is about) and price-wise (that scheme's price)
+  const [scheme, setScheme] = useState('')
+  useEffect(() => { setScheme('') }, [tab])
+  const [band, setBand] = useState<PriceBand>('all')
+  const [sort, setSort] = useState<PriceSort>('')
+  const filtered = tab !== 'SALES_INFO'
+  const postScheme = (p: Post) => schemeIn(db, `${p.title} ${p.body}`)
+  const keep = (name?: string) => !filtered || ((!scheme || name?.toLowerCase() === scheme.toLowerCase()) && inPriceBand(schemePrice(db, name), band))
+  const allPosts = db.posts.filter((p) => p.kind === tab)
+  const list = byPrice(allPosts.filter((p) => keep(postScheme(p))).sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || b.createdAt.localeCompare(a.createdAt)), (p) => schemePrice(db, postScheme(p)), filtered ? sort : '')
   // published company media from the Digital Media Dashboard, shown here from the same record (flyers & posters
   // under Flyers, the rest under Posts) — nothing to upload twice
   const media = companyMedia(db, me)
   const mediaOf = (k: Kind) => (k === 'SALES_INFO' ? [] : media.filter((m) => (m.mediaType === 'FLYER' || m.mediaType === 'POSTER') === (k === 'FLYER')))
-  const fromMedia = mediaOf(tab)
+  const fromMedia = byPrice(mediaOf(tab).filter((m) => keep(m.schemeName)), (m) => schemePrice(db, m.schemeName), filtered ? sort : '')
+  const schemeOptions = [...new Map([...allPosts.map(postScheme), ...mediaOf(tab).map((m) => m.schemeName)].filter((n): n is string => !!n?.trim()).map((n) => [n.trim().toLowerCase(), n.trim()])).values()].sort()
 
   const share = (p: Post) => { navigator.clipboard?.writeText(`${p.title}\n\n${p.body}\n\n— Rexera Financial Services`).then(() => toast('success', 'Copied — paste it into WhatsApp or email'), () => toast('error', 'Copy blocked by the browser')) }
   return (
@@ -52,6 +63,14 @@ export default function Content() {
         { id: 'POST', label: 'Posts', icon: Megaphone, count: db.posts.filter((p) => p.kind === 'POST').length + mediaOf('POST').length },
         { id: 'SALES_INFO', label: 'Sales information', icon: Lightbulb, count: db.posts.filter((p) => p.kind === 'SALES_INFO').length },
       ]} />
+      {filtered && (
+        <div className="mb-5 flex flex-wrap items-center gap-3">
+          <OptionFilter label="Scheme" all="All schemes" value={scheme} options={schemeOptions} onChange={setScheme} />
+          <PriceFilter band={band} sort={sort} onBand={setBand} onSort={setSort} />
+          {(scheme || band !== 'all') && <Button size="sm" variant="ghost" onClick={() => { setScheme(''); setBand('all') }}>Clear filters</Button>}
+          <p className="w-full text-xs text-mute">The scheme is the one a flyer names (or its Digital Media scheme); the price is that scheme's price in Schemes / Sales Kit.</p>
+        </div>
+      )}
       {fromMedia.length > 0 && (
         <div className="mb-6">
           <p className="mb-3 flex items-center gap-2 text-sm font-bold"><Clapperboard className="size-4 text-accent" />From the Digital Media Dashboard
@@ -75,7 +94,7 @@ export default function Content() {
           {list.length > 0 && <p className="mt-6 mb-3 text-sm font-bold">{tab === 'FLYER' ? 'Flyers' : 'Posts'} made here</p>}
         </div>
       )}
-      {!list.length ? (!fromMedia.length && <Card><EmptyState icon={Images} title="Nothing here yet" /></Card>) : tab === 'SALES_INFO' ? (
+      {!list.length ? (!fromMedia.length && <Card><EmptyState icon={Images} title={allPosts.length || mediaOf(tab).length ? 'Nothing matches the filters' : 'Nothing here yet'} /></Card>) : tab === 'SALES_INFO' ? (
         <div className="grid gap-4 lg:grid-cols-2">
           {list.map((p) => (
             <Card key={p.id} className="p-5">
