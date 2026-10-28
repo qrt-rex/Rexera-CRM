@@ -1,6 +1,6 @@
 /**
  * Blutec Dialer + IVR relay (docs: https://docs.dialer.blutec.ai). Runs server-side only — in the local dev server
- * (vite.config.ts) and in the Supabase Edge Function `blutec` — because requests are signed with a secret that must
+ * (vite.config.ts) and in the live server (server.mjs) — because requests are signed with a secret that must
  * never reach a browser, and Blutec does not accept browser (CORS) calls.
  *
  * Click-to-call (`/api/v1`) uses key_id + api_key + HMAC-SHA256 signing. The DND list uses the dialer's long-lived

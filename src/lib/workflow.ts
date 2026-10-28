@@ -105,14 +105,6 @@ export function dispositionToStatus(text?: string | null): LeadStatus | undefine
   return ALIAS[k]
 }
 
-export const SERVICE_CATEGORIES = [
-  'Government Grants & Schemes',
-  'Certifications & Registrations',
-  'Funding & Investment',
-  'Company Services',
-  'Digital Services',
-]
-
 /** The client document checklist on Document Forms (one upload slot each). */
 export const DOC_FORM: { cat: string; short: string; hint: string }[] = [
   { cat: 'Certificate of Incorporation (COI)', short: 'COI', hint: 'Company incorporation certificate' },

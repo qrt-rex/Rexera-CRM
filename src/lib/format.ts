@@ -53,7 +53,6 @@ export const isPhone = (p: string) => /^[6-9]\d{9}$/.test(normPhone(p))
 export const isEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e)
 export const isPan = (p: string) => /^[A-Z]{5}\d{4}[A-Z]$/.test(p.toUpperCase())
 export const isGstin = (g: string) => /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(g.toUpperCase())
-export const isPin = (p: string) => /^[1-9]\d{5}$/.test(p)
 
 // ---------- GST & booking money ----------
 export function gstSplit(amount: number, rate: number, clientState: string, supplierState: string) {
@@ -117,13 +116,6 @@ export function downloadCsv(filename: string, rows: Record<string, unknown>[]) {
   a.download = filename
   a.click()
   setTimeout(() => URL.revokeObjectURL(a.href), 1000)
-}
-
-export function parseCsv(text: string): Record<string, string>[] {
-  const [head, ...body] = parseCsvRows(text)
-  if (!head) return []
-  const keys = head.map((h) => h.trim().toLowerCase())
-  return body.map((r) => Object.fromEntries(keys.map((k, i) => [k, (r[i] ?? '').trim()])))
 }
 
 /** Raw CSV (or other single-character delimiter) → rows of cells; blank lines dropped. */

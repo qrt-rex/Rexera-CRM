@@ -109,10 +109,6 @@ const toneCls: Record<Tone, string> = {
   cyan: 'bg-cyan-500/12 text-cyan-700 dark:text-cyan-300',
   pink: 'bg-pink-500/12 text-pink-600 dark:text-pink-300',
 }
-export const toneText: Record<Tone, string> = {
-  navy: 'text-brand-ink', orange: 'text-accent', green: 'text-ok', red: 'text-bad', amber: 'text-warn', blue: 'text-info',
-  violet: 'text-violet-600 dark:text-violet-300', gray: 'text-mute', cyan: 'text-cyan-700 dark:text-cyan-300', pink: 'text-pink-600 dark:text-pink-300',
-}
 export function Badge({ tone = 'gray', children, dot, className }: { tone?: Tone; children: ReactNode; dot?: boolean; className?: string }) {
   return (
     <span className={cx('inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold whitespace-nowrap', toneCls[tone], className)}>
@@ -396,27 +392,6 @@ export function SearchBox({ value, onChange, placeholder = 'Search…', classNam
         className="h-10 w-full rounded-xl border border-line bg-card pl-9 pr-3 text-sm outline-none focus:border-brand focus:ring-4 focus:ring-brand/10" />
     </div>
   )
-}
-
-export function FileButton({ accept, onFile, children, maxBytes = 5 * 1024 * 1024 }: { accept?: string; onFile: (f: File) => void; children: ReactNode; maxBytes?: number }) {
-  const ref = useRef<HTMLInputElement>(null)
-  const toast = useToast()
-  return (
-    <>
-      <input ref={ref} type="file" accept={accept} className="hidden" onChange={(e) => {
-        const f = e.target.files?.[0]
-        e.target.value = ''
-        if (!f) return
-        if (f.size > maxBytes) { toast('error', `File too large (max ${Math.round(maxBytes / 1024)} KB).`); return }
-        onFile(f)
-      }} />
-      <span onClick={() => ref.current?.click()}>{children}</span>
-    </>
-  )
-}
-
-export function readAsDataUrl(f: File) {
-  return new Promise<string>((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = rej; r.readAsDataURL(f) })
 }
 
 /** Page through long lists: `const { slice, pager } = usePaged(list, 50, [filters…])`. Resets to page 1 when `deps` change. */

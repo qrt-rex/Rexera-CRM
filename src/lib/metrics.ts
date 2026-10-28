@@ -1,7 +1,7 @@
 import type { DB, User } from './types'
 import { availableDecisions, visibleBookings, visibleLeads } from './actions'
 import { OPEN_LEAD } from './workflow'
-import { addDays, bookingMoney, invoiceTotals, today, ymd } from './format'
+import { bookingMoney, invoiceTotals, today, ymd } from './format'
 
 export const monthStart = () => { const d = new Date(); return ymd(new Date(d.getFullYear(), d.getMonth(), 1)) }
 
@@ -89,16 +89,3 @@ export function pipelineTotals(db: DB, list = db.bookings) {
   return { quoted: Math.round(quoted), collected: Math.round(collected), outstanding: Math.round(outstanding) }
 }
 
-export function attendanceWeek(db: DB) {
-  const out: { label: string; present: number; leave: number; absent: number }[] = []
-  const total = db.users.filter((u) => u.active).length
-  for (let i = 6; i >= 0; i--) {
-    const d = addDays(new Date(), -i)
-    const k = ymd(d)
-    if (d.getDay() === 0) continue
-    const present = new Set(db.sessions.filter((s) => s.date === k).map((s) => s.userId)).size
-    const leave = db.leaves.filter((l) => l.status === 'APPROVED' && l.from <= k && l.to >= k).length
-    out.push({ label: d.toLocaleDateString('en-IN', { weekday: 'short' }), present, leave, absent: Math.max(0, total - present - leave) })
-  }
-  return out
-}

@@ -115,7 +115,6 @@ export function deleteAsset(me: User, id: string) {
 }
 
 export const warrantyEndingSoon = (a: Asset, days = 30) => !!a.warrantyUntil && a.status !== 'RETIRED' && a.warrantyUntil >= today() && a.warrantyUntil <= ymd(addDays(new Date(), days))
-export const assetsOf = (d: DB, userId: string) => (d.assets ?? []).filter((a) => a.assignedTo === userId && a.status === 'ASSIGNED')
 
 // ------------------------------------------------------------------ inventory
 export type StockInput = Pick<StockItem, 'name' | 'category' | 'unit' | 'minQty'> & { unitCost?: number; location?: string; openingQty?: number }

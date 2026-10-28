@@ -12,7 +12,6 @@ export const BOOKING_TYPES: { id: BookingType; label: string; short: string }[] 
   { id: 'COMBO9', label: 'Combo · 9 months', short: 'Combo 9M' },
   { id: 'COMBO12', label: 'Combo · 12 months', short: 'Combo 12M' },
 ]
-export const bookingTypeLabel = (t?: BookingType) => BOOKING_TYPES.find((x) => x.id === t)?.label ?? 'Single booking'
 
 export interface ComboPackage {
   months: 3 | 6 | 9 | 12

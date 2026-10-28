@@ -42,7 +42,6 @@ export function directorBranches(db: DB, me: User): string[] {
 }
 /** Only Super Admin / IT also see people who have no branch yet (so nobody is missed). */
 export const seesUnbranched = (me: User) => isMaster(me)
-export const canSeeBranch = (db: DB, me: User, id: string) => directorBranches(db, me).includes(id)
 /** Branch Directors are scoped to their branches everywhere (leads, CRM entries); people with wider roles are not. */
 export const isBranchScoped = (me: User) => me.role === 'branchdirector' && !isMaster(me)
 

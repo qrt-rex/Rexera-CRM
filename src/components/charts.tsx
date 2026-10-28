@@ -77,22 +77,6 @@ export function Ring({ value, size = 64, stroke = 8, color = 'var(--ok)', childr
   )
 }
 
-/** Smooth area sparkline. */
-export function Spark({ values, height = 48, color = 'var(--brand)' }: { values: number[]; height?: number; color?: string }) {
-  if (values.length < 2) return null
-  const w = 200, max = Math.max(1, ...values), min = Math.min(0, ...values)
-  const pts = values.map((v, i) => [(i / (values.length - 1)) * w, height - 4 - ((v - min) / (max - min || 1)) * (height - 8)] as const)
-  const d = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ')
-  const id = 'g' + Math.abs(values.reduce((a, b) => a * 31 + b, 7) | 0)
-  return (
-    <svg viewBox={`0 0 ${w} ${height}`} preserveAspectRatio="none" className="w-full" style={{ height }}>
-      <defs><linearGradient id={id} x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor={color} stopOpacity=".25" /><stop offset="1" stopColor={color} stopOpacity="0" /></linearGradient></defs>
-      <path d={`${d} L${w} ${height} L0 ${height}Z`} fill={`url(#${id})`} />
-      <path d={d} fill="none" stroke={color} strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
-    </svg>
-  )
-}
-
 /** Horizontal bars (funnel / ranking). */
 export function HBars({ data, format = (n: number) => String(n) }: { data: { label: string; value: number; color?: string; sub?: string }[]; format?: (n: number) => string }) {
   const max = Math.max(1, ...data.map((d) => d.value))

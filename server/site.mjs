@@ -24,5 +24,3 @@ export async function getSiteContent(env, { client, now = Date.now(), fresh = fa
   cache = { at: now, body }
   return { status: 200, body }
 }
-/** After a publish the next read is fresh. */
-export const clearSiteCache = () => { cache = { at: 0, body: null } }

@@ -155,44 +155,6 @@ export async function changePassword(me: User, next: string, again: string) {
   })
 }
 
-// ------------------------------------------------------------ forgotten password: one-time code to the account's email
-const resets = new Map<string, Pending>()
-/** Sends a 6-digit code to the account's email. Always answers the same way, so it doesn't reveal which emails exist. */
-export function requestPasswordReset(email: string) {
-  assert(isEmail(email), 'Enter a valid email.')
-  const u = getDb().users.find((x) => x.email.toLowerCase() === email.trim().toLowerCase() && x.active)
-  const token = uid('rst-')
-  const code = genCode()
-  if (u) {
-    resets.set(token, { userId: u.id, code, expires: Date.now() + 10 * 60000, attempts: 0, resends: 0 })
-    mutate((d) => audit(d, u.id, 'PASSWORD_RESET_REQUEST', `Reset code sent to ${u.email}`))
-  }
-  // no mail server in this build: the code is returned so the screen can show it (like the sign-in code)
-  return { token, devCode: u ? code : undefined }
-}
-export async function resetPasswordWithCode(token: string, code: string, next: string, again: string) {
-  const p = resets.get(token)
-  assert(p, 'That code is not valid. Request a new one.')
-  if (Date.now() > p.expires) { resets.delete(token); throw new ActionError('The code expired. Request a new one.') }
-  p.attempts += 1
-  if (p.code !== code.trim()) {
-    if (p.attempts >= 5) { resets.delete(token); throw new ActionError('Too many wrong codes. Request a new one.') }
-    throw new ActionError(`Wrong code. ${5 - p.attempts} attempts left.`)
-  }
-  assert(PASSWORD_RULE.test(next), `Use ${PASSWORD_HINT}`)
-  assert(next === again, 'The two passwords do not match.')
-  const u = getDb().users.find((x) => x.id === p.userId)!
-  const h = await hashPassword(u.username, next)
-  resets.delete(token)
-  mutate((d) => {
-    const x = d.users.find((y) => y.id === u.id)!
-    x.passHash = h
-    delete x.needsPasswordReset
-    delete d.loginFails[u.username.toLowerCase()]; delete d.loginFails[u.email.toLowerCase()]
-    audit(d, u.id, 'PASSWORD', 'Reset password with an emailed code')
-  })
-}
-
 const RESET_TOKENS_STORAGE_KEY = 'rexera-link-resets'
 
 type StoredResetInfo = { email: string; userId?: string; expires: number }
@@ -496,8 +458,6 @@ export function workedMs(s: DaySession | undefined, now = Date.now()) {
 }
 /** Is the 'no sign-in after Logout until tomorrow' rule on? (Access → Settings; off while testing.) */
 export const dayLockOn = (d: DB) => d.settings.dayLock === true
-/** Ended the day (and not re-opened by HR/IT): no new sign-in until tomorrow. */
-export const dayEnded = (d: DB, userId: string) => !!d.sessions.find((x) => x.userId === userId && x.date === today())?.logoutAt
 
 export function startDay(me: User) {
   mutate((d) => {
@@ -2051,16 +2011,6 @@ export function addComment(me: User, id: string, text: string) {
   })
 }
 
-export function addDocument(me: User, id: string, doc: Omit<BDoc, 'id' | 'at' | 'by' | 'status'>) {
-  mutate((d) => {
-    const b = findB(d, id)
-    assert(visibleBookings(d, me).some((x) => x.id === id), 'Not found.')
-    assert(doc.size <= 5 * 1024 * 1024, 'Files must be 5 MB or smaller.')
-    b.documents.push({ ...doc, id: uid('doc-'), at: nowIso(), by: me.id, status: 'PENDING' })
-    b.updatedAt = nowIso()
-    audit(d, me.id, 'DOC_UPLOAD', `${b.bookingId}: ${doc.name}`)
-  })
-}
 /** Several documents at once, each with its own type (files are already in the browser file store). */
 export function addDocuments(me: User, id: string, docs: { file: FileRef; category: string; note?: string }[]) {
   assert(docs.length, 'Add at least one document.')
@@ -2152,11 +2102,6 @@ export function toggleTask(_me: User, id: string, taskId: string) {
 }
 export function deleteTask(_me: User, id: string, taskId: string) {
   mutate((d) => { const b = findB(d, id); b.tasks = b.tasks.filter((t) => t.id !== taskId) })
-}
-
-export function setPriority(me: User, id: string, priority: Booking['priority'], deadline?: string) {
-  need(me, 'bookings.legal', 'bookings.process', 'bookings.approve_tl', 'bookings.accounts')
-  mutate((d) => { const b = findB(d, id); b.priority = priority; if (deadline) b.deadline = deadline })
 }
 
 /** Team leader moves a client (CRM entry) to another sales person in the team. */
