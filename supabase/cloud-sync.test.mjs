@@ -42,7 +42,7 @@ assert.deepEqual(await writes(base, produce(base, (d) => { d.leads[0].name = 'Re
 
 assert.deepEqual(await writes(base, produce(base, (d) => {
   d.leads[0].calls.unshift({ id: 'c-new', at, by: a.id, outcome: 'BUSY', note: '', durationSec: 0 })
-})), [`leads update 1 (id=${lead.id})`, 'lead_calls insert 1'], 'log a call')
+})), [`leads update 1 (id=${lead.id})`, 'lead_calls upsert 1'], 'log a call (merged into the row the Blutec webhook may have filed)')
 
 // a reminder with a fixed id may already be in the table (written by another browser): skip it, don't fail the save
 assert.deepEqual(await writes(base, produce(base, (d) => {

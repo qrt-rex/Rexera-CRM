@@ -33,7 +33,9 @@ export function mapAll(backup) {
     upload_id: l.uploadId && uploadIds.has(l.uploadId) ? l.uploadId : null, chain: l.chain?.length ? l.chain : null, assigned_at: s(l.assignedAt), seen_at: s(l.seenAt),
     history: l.history?.length ? l.history : null,
   }))
-  t.lead_calls = d.leads.flatMap((l) => l.calls.map((c) => ({ id: c.id, lead_id: l.id, called_at: c.at, called_by: uref(c.by), outcome: c.outcome, note: c.note ?? '', duration_sec: c.durationSec ?? 0 })))
+  t.lead_calls = d.leads.flatMap((l) => l.calls.map((c) => ({ id: c.id, lead_id: l.id, called_at: c.at, called_by: uref(c.by), outcome: c.outcome, note: c.note ?? '', duration_sec: c.durationSec ?? 0,
+    // the dialer-dashboard columns are only sent when set, so call logging keeps working before their migration is run
+    ...(c.totalSec != null ? { total_sec: c.totalSec } : {}), ...(c.callStatus ? { call_status: c.callStatus } : {}), ...(c.wrapSec != null ? { wrap_sec: c.wrapSec } : {}) })))
 
   t.bookings = d.bookings.map((b) => ({
     id: b.id, booking_code: b.bookingId, company_name: b.companyName, contact_person: b.contactPerson, mobile: b.mobile, email: s(b.email),
@@ -103,6 +105,7 @@ export function mapAll(backup) {
     { key: 'leadAssign', value: d.settings.leadAssign ?? null },
     { key: 'workflow', value: d.settings.workflow ?? null },
     { key: 'jobs', value: d.settings.jobs ?? null },
+    { key: 'dialerCampaigns', value: d.settings.dialerCampaigns ?? null },
     { key: 'counters', value: d.counters },
     { key: 'meta', value: { version: d.version, upgrades: d.upgrades ?? [] } },
   ]
@@ -218,7 +221,7 @@ export function rowsToDb(input) {
     altPhone: u(r.alt_phone), location: u(r.location), industry: u(r.industry), businessType: u(r.business_type), turnover: u(r.turnover),
     fundingAmount: u(r.funding_amount), fundingCategory: u(r.funding_category), requirement: u(r.requirement), formAt: u(r.form_at), extra: u(r.extra),
     uploadId: u(r.upload_id), chain: u(r.chain), assignedAt: u(r.assigned_at), seenAt: u(r.seen_at), history: u(r.history),
-    calls: callsOf(r.id).map((c) => ({ id: c.id, at: c.called_at, by: c.called_by ?? '', outcome: c.outcome, note: c.note ?? '', durationSec: c.duration_sec ?? 0 })),
+    calls: callsOf(r.id).map((c) => opt({ id: c.id, at: c.called_at, by: c.called_by ?? '', outcome: c.outcome, note: c.note ?? '', durationSec: c.duration_sec ?? 0, totalSec: u(c.total_sec), callStatus: u(c.call_status), wrapSec: u(c.wrap_sec) })),
   }))
 
   const payOf = group('booking_payments', 'booking_id'), apprOf = group('booking_approvals', 'booking_id'), stageOf = group('booking_stage_moves', 'booking_id')
@@ -280,7 +283,7 @@ export function rowsToDb(input) {
       sessionMinutes: session.minutes, supplierState: company.supplierState, companyName: company.name, companyGstin: company.gstin,
       maintenance: maintenance && (maintenance.on || maintenance.message || maintenance.by) ? maintenance : undefined,
       sessionsValidAfter: u(session.validAfter), dayLock: setting('attendance')?.dayLock || undefined,
-      branches: setting('branches')?.length ? setting('branches') : undefined, breakPolicy: u(setting('breaks')), leadAssign: u(setting('leadAssign')), workflow: u(setting('workflow')), jobs: u(setting('jobs')),
+      branches: setting('branches')?.length ? setting('branches') : undefined, breakPolicy: u(setting('breaks')), leadAssign: u(setting('leadAssign')), workflow: u(setting('workflow')), jobs: u(setting('jobs')), dialerCampaigns: u(setting('dialerCampaigns')),
     }),
     counters: setting('counters') ?? { booking: 0, lead: 0, invoice: 0 },
     loginFails: Object.fromEntries(rows('login_attempts').map((r) => [r.login, opt({ count: r.failures, until: u(r.locked_until) })])),

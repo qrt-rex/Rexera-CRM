@@ -543,8 +543,13 @@ function serveStaticFile(req, res, pathname) {
 // instead each staff computer is set up once with DIALER_ACCESS_KEY (IVR campaigns need IVR_ACCESS_KEY).
 // ponytail: shared keys, per-user checks once CRM sign-in moves to Supabase Auth
 // -------------------------------------------------------------
-// IVR campaigns and the dialer webhook setup: Super Admin / IT (or the IVR access key until the Supabase switch)
-const IVR_ACTIONS = ['ivrList', 'ivrStats', 'ivrControl', 'ivrConnects', 'ivrCalls', 'ivrGet']
+// IVR campaigns and the company's whole campaign list: Super Admin / IT (or the IVR access key until the Supabase switch)
+const IVR_ACTIONS = ['ivrList', 'ivrStats', 'ivrControl', 'ivrConnects', 'ivrCalls', 'ivrGet', 'campaigns', 'campaignLeads', 'campaignsByIds']
+/** The Blutec dialer campaigns the Super Admin gave this person (app_settings "dialerCampaigns": campaign id → user ids). */
+async function campaignsOf(userId) {
+  const { data } = await mailAdmin()?.from('app_settings').select('value').eq('key', 'dialerCampaigns').maybeSingle() ?? { data: null }
+  return Object.entries(data?.value ?? {}).filter(([, users]) => Array.isArray(users) && users.includes(userId)).map(([id]) => Number(id))
+}
 const sameKey = (given, expected) => !!expected && crypto.timingSafeEqual(
   crypto.createHash('sha256').update(String(given)).digest(), crypto.createHash('sha256').update(expected).digest())
 
@@ -558,6 +563,8 @@ async function handleBlutecRelay(req, res) {
     // calls always ring the signed-in person's own agent phone
     if (body.action === 'call') { body.agentEmail = who.email; body.userId = who.id }
     if (body.action === 'agent') body.email = who.email
+    // "Your campaigns": only the ones given to the signed-in person, never ids sent by the browser
+    if (body.action === 'myCampaigns') body = { action: 'campaignsByIds', ids: await campaignsOf(who.id) }
     const r = await handleBlutec(body, blutecEnv({ ...fileEnv, ...process.env }))
     return sendJson(res, r.status, r.body)
   }
@@ -571,6 +578,8 @@ async function handleBlutecRelay(req, res) {
   let body
   try { body = await readJsonBody(req) } catch { return sendJson(res, 400, { success: false, message: 'Bad JSON' }) }
   if (IVR_ACTIONS.includes(body.action) && !ivrOk) return sendJson(res, 403, { success: false, message: 'IVR campaigns need the IVR access key: open the connection button (top right of the Dialer) and enter it under “IVR access key”.' })
+  // ponytail: with shared access keys the server can't tell who is asking, so the browser names the assigned ids
+  if (body.action === 'myCampaigns') body = { action: 'campaignsByIds', ids: body.ids }
 
   const r = await handleBlutec(body, blutecEnv({ ...fileEnv, ...process.env }))
   sendJson(res, r.status, r.body)
@@ -652,13 +661,9 @@ const server = http.createServer(async (req, res) => {
     return handleSetPassword(req, res).catch((err) => sendJson(res, 502, { success: false, message: err.message }))
   }
 
-  // the dialer call webhook was removed: Blutec may still send to it, so say "received" (stops its retries) and drop it
-  if (pathname === '/api/blutec/webhook/calls' && req.method === 'POST') {
-    req.resume()
-    return sendJson(res, 200, { success: true, ignored: true })
-  }
-  if (pathname === '/api/blutec/webhook/ivr' && req.method === 'POST') {
-    return handleBlutecWebhook(req, res, 'ivr')
+  // Blutec webhooks: IVR "interested" leads, and dialer call.completed (the finished call in the lead's history)
+  if ((pathname === '/api/blutec/webhook/ivr' || pathname === '/api/blutec/webhook/calls') && req.method === 'POST') {
+    return handleBlutecWebhook(req, res, pathname.endsWith('/ivr') ? 'ivr' : 'calls')
   }
 
   // public job applications (no sign-in): the server checks and saves them, and tells HR

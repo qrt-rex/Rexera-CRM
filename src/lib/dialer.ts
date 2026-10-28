@@ -69,6 +69,8 @@ export const blutec = {
   dncAdd: (phone: string, reason: string) => call<unknown>({ action: 'dncAdd', phone, reason }),
   callStatus: (refId: string) => call<CallStatus>({ action: 'callStatus', refId }),
   campaigns: () => call<BlutecCampaign[]>({ action: 'campaigns' }),
+  /** the campaigns given to the signed-in person (the server decides; `ids` only counts with shared access keys) */
+  myCampaigns: (ids: number[]) => call<BlutecCampaign[]>({ action: 'myCampaigns', ids }),
   campaignLeads: (id: number) => call<BlutecLead[]>({ action: 'campaignLeads', id }),
   ivrList: () => call<Ivr[]>({ action: 'ivrList' }),
   /** The campaign's key rules as digit → disposition name (1 → INTERESTED), how Blutec labels its call log. */

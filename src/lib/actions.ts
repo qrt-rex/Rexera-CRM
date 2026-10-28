@@ -1,5 +1,5 @@
 import type {
-  AdminStageId, AdminWorkStatus, Booking, BookingStatus, BookingType, BDoc, Delivery, Service, WorkflowSettings, Branch, BreakPolicy, CallOutcome, ClientEmailLog, Shift, CandidateApplication, CandidateForm, DaySession, DB, EventItem, FileRef, Invoice, InvoiceItem, Lead, LeaveType, Milestone, Perm, Post, Role, SalesKitItem, Scheme, User,
+  AdminStageId, AdminWorkStatus, Booking, BookingStatus, BookingType, BDoc, Delivery, Service, WorkflowSettings, Branch, BreakPolicy, Call, CallOutcome, ClientEmailLog, Shift, CandidateApplication, CandidateForm, DaySession, DB, EventItem, FileRef, Invoice, InvoiceItem, Lead, LeaveType, Milestone, Perm, Post, Role, SalesKitItem, Scheme, User,
 } from './types'
 import { effectivePerms, isMaster, isStageOnlyAdmin, MASTER_ROLES, rolesOf, roleLabel } from './rbac'
 import { clearCloudDb, getDb, mutate, reloadFromCloud, saved } from './store'
@@ -639,6 +639,19 @@ export function roundRobin(d: DB, userIds: string[], start: number, count: numbe
   const last = order[(k + count - 1) % order.length]!
   return { to, next: (last.i + 1) % n, skipped: userIds.filter((id) => !order.some((x) => x.id === id)) }
 }
+/** Super Admin / IT: who works a Blutec dialer campaign — it shows under "Your campaigns" on their dialer dashboard. */
+export function setCampaignAgents(me: User, campaignId: number, userIds: string[]) {
+  assert(isMaster(me), 'Only the Super Admin or IT can give campaigns to sales people.')
+  const ids = [...new Set(userIds)].filter((id) => leadTakers(getDb()).some((u) => u.id === id))
+  mutate((d) => {
+    const map = { ...(d.settings.dialerCampaigns ?? {}) }
+    if (ids.length) map[String(campaignId)] = ids
+    else delete map[String(campaignId)]
+    d.settings.dialerCampaigns = map
+    audit(d, me.id, 'DIALER_CAMPAIGN_AGENTS', `Campaign ${campaignId} · ${ids.length} people`)
+  })
+}
+
 /** Super Admin: switch automatic assignment on / off and choose who takes part (in this order). */
 export function saveLeadAssign(me: User, on: boolean, userIds: string[]) {
   need(me, 'leads.admin')
@@ -827,15 +840,16 @@ export function setLeadStatus(me: User, id: string, status: Lead['status'], note
 }
 
 /** `refId`: the Blutec call this was (click-to-call) — the call webhook files it under the same id, so both become one. */
-export function logCall(me: User, leadId: string, outcome: CallOutcome, note: string, followUp?: string, durationSec = 0, refId?: string) {
+export function logCall(me: User, leadId: string, outcome: CallOutcome, note: string, followUp?: string, durationSec = 0, refId?: string, extra: Pick<Call, 'totalSec' | 'callStatus' | 'wrapSec'> = {}) {
   need(me, 'dialer.use', 'leads.manage')
   mutate((d) => {
     const l = d.leads.find((x) => x.id === leadId)
     assert(l, 'Lead not found.')
     const id = refId ? `bt-${refId}` : uid('call-')
     const filed = l.calls.find((c) => c.id === id)
-    if (filed) Object.assign(filed, { by: me.id, outcome, note: [note, filed.note].filter(Boolean).join(' · '), durationSec: durationSec || filed.durationSec })
-    else l.calls.unshift({ id, at: nowIso(), by: me.id, outcome, note, durationSec })
+    const known = Object.fromEntries(Object.entries(extra).filter(([, v]) => v !== undefined && v !== ''))
+    if (filed) Object.assign(filed, { by: me.id, outcome, note: [note, filed.note].filter(Boolean).join(' · '), durationSec: durationSec || filed.durationSec, ...known })
+    else l.calls.unshift({ id, at: nowIso(), by: me.id, outcome, note, durationSec, ...known })
     l.status = CALL_OUTCOMES.find((o) => o.id === outcome)!.to
     if (followUp) l.followUp = followUp
     else if (!OPEN_LEAD.includes(l.status)) l.followUp = undefined

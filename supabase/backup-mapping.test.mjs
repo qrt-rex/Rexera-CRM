@@ -129,6 +129,9 @@ db.mediaItems = [
   { id: 'med-2', serial: 2, schemeName: 'PMEGP', title: 'Reel', description: '', mediaType: 'VIDEO', files: [], internal: false, external: false, workStatus: 'ON_HOLD', submitted: false, createdAt: at, createdBy: a.id, updatedAt: at, updatedBy: a.id, history: [] },
 ]
 db.counters.media = 2
+// a Blutec click-to-call with the dialer-dashboard fields (whole call, final status, wrap-up time)
+db.leads[0].calls.unshift({ id: 'bt-ref-1', at, by: a.id, outcome: 'HOT_PROSPECT', note: 'Blutec call', durationSec: 95, totalSec: 120, callStatus: 'completed', wrapSec: 14 })
+db.settings.dialerCampaigns = { 12: [a.id], 15: [a.id, b.id] }
 // client entries: one converted to the CRM entry above (with a follow-up), one still open with a follow-up date
 db.clientEntries = [
   { id: 'ce-1', date: '2026-10-27', clientName: 'Asha Patel', companyName: 'Patel Foods', phone: '9876500002', serviceId: db.services[0].id, scheme: db.services[0].name, pitchedPrice: 45000, status: 'CONVERTED', requirement: 'Seed funding', note: 'Wants a call after Diwali', followUps: [{ id: 'cf-1', at, by: a.id, date: '2026-10-28', status: 'PAYMENT_PENDING', note: 'Payment tomorrow' }], leadId: db.leads[0].id, ownerId: a.id, createdAt: at, updatedAt: at, bookingId: bk.id, convertedAt: at },

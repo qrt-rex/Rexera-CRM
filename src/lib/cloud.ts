@@ -14,7 +14,8 @@ import { mapAll, rowsToDb, type Row, type Tables } from '../../supabase/backup-m
 export const CLOUD = import.meta.env.VITE_DATA_BACKEND === 'supabase' && cloudConfig().status === 'ready'
 
 type Mode = 'id' | 'replace' | 'append' | 'insertNew'
-interface Child { prop: string | string[]; table: string; fk: string; mode: Mode; order: [string, boolean]; newestFirst?: boolean }
+/** upsert: a new row may already be in the table under the same id (written by the server), and is merged into */
+interface Child { prop: string | string[]; table: string; fk: string; mode: Mode; order: [string, boolean]; newestFirst?: boolean; upsert?: boolean }
 /** once: rows are written once under a fixed id (e.g. one break reminder per person per day); an id already in the table is skipped, not an error */
 interface Spec { key: keyof DB; table: string; idProp?: string; idCol?: string; order: [string, boolean]; limit?: number; children?: Child[]; once?: boolean }
 
@@ -27,7 +28,8 @@ const SPECS: Spec[] = [
   { key: 'services', table: 'services', order: ['name', true] },
   { key: 'leadUploads', table: 'lead_uploads', order: ['uploaded_at', false] },
   { key: 'leads', table: 'leads', order: ['created_at', false], children: [
-    { prop: 'calls', table: 'lead_calls', fk: 'lead_id', mode: 'id', order: ['called_at', false] },
+    // the Blutec call webhook may have filed the call first (same bt-<ref> id)
+    { prop: 'calls', table: 'lead_calls', fk: 'lead_id', mode: 'id', order: ['called_at', false], upsert: true },
   ] },
   { key: 'bookings', table: 'bookings', order: ['created_at', false], children: [
     { prop: 'payments', table: 'booking_payments', fk: 'booking_id', mode: 'id', order: ['part', true] },
@@ -262,7 +264,8 @@ export function plan(prev: DB, next: DB, s: SupabaseClient): Op[][] {
             const add = curList.filter((x) => !oldById.has(x.id)).map((x) => rowById.get(x.id)).filter(Boolean) as Row[]
             const upd = curList.filter((x) => oldById.has(x.id) && oldById.get(x.id) !== x).map((x) => rowById.get(x.id)).filter(Boolean) as Row[]
             const gone = oldList.filter((x) => !curIds.has(x.id)).map((x) => x.id)
-            if (add.length) childOps.push(() => s.from(c.table).insert(add))
+            // missing columns keep what the row has (defaultToNull: false)
+            if (add.length) childOps.push(() => (c.upsert ? s.from(c.table).upsert(add, { onConflict: 'id', defaultToNull: false }) : s.from(c.table).insert(add)))
             for (const r of upd) childOps.push(() => s.from(c.table).update(r).eq('id', r.id as string))
             if (gone.length) childOps.push(() => s.from(c.table).delete().in('id', gone))
           }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Ban, Briefcase, CircleCheck, CircleDashed, ClipboardList, Flame, History, Pause, Phone, PhoneCall, PhoneOff, Play, Radio, RefreshCcw, Settings2, SkipForward, Square, Timer, UserPlus } from 'lucide-react'
+import { Ban, Briefcase, CircleCheck, CircleDashed, ClipboardList, Flame, History, LayoutDashboard, Pause, Phone, PhoneCall, PhoneOff, Play, Radio, RefreshCcw, Settings2, SkipForward, Square, Timer, UserPlus } from 'lucide-react'
 import type { CallOutcome, Lead } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
@@ -8,12 +8,14 @@ import { createLead, logCall, setLeadStatus, visibleLeads } from '../../lib/acti
 import { CALL_OUTCOMES, dispositionToStatus, FOLLOW_UP_LEAD, LEAD_STATUS, OPEN_LEAD } from '../../lib/workflow'
 import { addDays, fmtDate, fmtDateTime, fmtTime, inr, normPhone, today, ymd } from '../../lib/format'
 import { blutec, dialerKey, ivrKey, KEYLESS, DialerError, FINAL_STATUSES, isHot, type AgentConnect, type BlutecStatus, type CallStatus, type Ivr, type IvrCall, type IvrStats } from '../../lib/dialer'
-import { rolesOf } from '../../lib/rbac'
+import { isMaster, rolesOf } from '../../lib/rbac'
 import { Badge, Button, Card, CardHeader, cx, EmptyState, Input, Modal, PageHeader, Table, Tabs, Td, Textarea, Th, useConfirm, useRun, useToast } from '../../components/ui'
 import { DialerCampaigns } from '../../components/DialerCampaigns'
 import { salesNumbers } from '../../lib/metrics'
 import { MiniStat } from '../dashboards/widgets'
 import { CallWindow } from '../../components/CallWindow'
+import { DialerDashboard } from '../../components/DialerDashboard'
+import type { LiveCall } from '../../lib/callStats'
 import { ClientEntryForLead } from '../../components/ClientEntry'
 import { CLIENT_ENTRY_STATUS, openEntryForLead } from '../../lib/clientEntries'
 
@@ -28,7 +30,10 @@ function useBlutec() {
   return { ...state, check }
 }
 
-export function CallLogger({ lead, seconds = 0, suggested, refId, onDone }: { lead: Lead; seconds?: number; suggested?: CallOutcome; refId?: string; onDone?: (outcome: CallOutcome) => void }) {
+/** `totalSec` / `callStatus`: what Blutec reported for the call; `endedAt`: when it ended (the time until Save is wrap-up). */
+export function CallLogger({ lead, seconds = 0, suggested, refId, totalSec, callStatus, endedAt, onDone }: {
+  lead: Lead; seconds?: number; suggested?: CallOutcome; refId?: string; totalSec?: number; callStatus?: string; endedAt?: number; onDone?: (outcome: CallOutcome) => void
+}) {
   const me = useMe()
   const run = useRun()
   const [outcome, setOutcome] = useState<CallOutcome | null>(null)
@@ -39,7 +44,8 @@ export function CallLogger({ lead, seconds = 0, suggested, refId, onDone }: { le
   const needsFollow = !!outcome && FOLLOW_UP_LEAD.includes(outcome)
   const save = async () => {
     if (!outcome) return
-    const ok = await run(() => logCall(me, lead.id, outcome, note, needsFollow ? follow || ymd(addDays(new Date(), 1)) : undefined, seconds, refId), 'Call logged')
+    const wrapSec = endedAt ? Math.max(0, Math.round((Date.now() - endedAt) / 1000)) : undefined
+    const ok = await run(() => logCall(me, lead.id, outcome, note, needsFollow ? follow || ymd(addDays(new Date(), 1)) : undefined, seconds, refId, { totalSec, callStatus, wrapSec }), 'Call logged')
     if (ok) { const o = outcome; setOutcome(null); setNote(''); setFollow(''); onDone?.(o) }
   }
   return (
@@ -59,25 +65,38 @@ export function CallLogger({ lead, seconds = 0, suggested, refId, onDone }: { le
 
 export default function Dialer() {
   const me = useMe()
+  const { can } = useAuth()
   const [params, setParams] = useSearchParams()
   const roles = rolesOf(me)
-  // Calls are for sales people (sales / team leader); IVR campaigns are for Super Admin only
+  // Calls are for sales people (sales / team leader); IVR campaigns are for Super Admin only; the dashboard is for
+  // sales people (their own) and anyone who may see other people's calls
   const showCalls = roles.some((r) => r === 'sales' || r === 'teamlead')
   const showIvr = roles.includes('superadmin')
-  const tab = showIvr && (!showCalls || params.get('tab') === 'ivr') ? 'ivr' : showCalls ? 'calls' : null
+  const showDash = showCalls || isMaster(me) || can('leads.manage', 'team.progress')
+  const tabs = [
+    ...(showCalls ? [{ id: 'calls', label: 'Calls', icon: PhoneCall }] : []),
+    ...(showIvr ? [{ id: 'ivr', label: 'IVR campaigns', icon: Radio }] : []),
+    ...(showDash ? [{ id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard }] : []),
+  ]
+  const tab = tabs.find((x) => x.id === params.get('tab'))?.id ?? tabs[0]?.id ?? null
   const bt = useBlutec()
+  /** the call on this computer (for the dashboard's status), and a lead the dashboard asked to open */
+  const [live, setLive] = useState<LiveCall | null>(null)
+  const [focus, setFocus] = useState<{ id: string; at: number } | null>(null)
   return (
     <div>
       <PageHeader title={tab === 'ivr' && !showCalls ? 'IVR' : 'Dialer'} icon={tab === 'ivr' ? Radio : Phone}
-        subtitle={tab === 'ivr' ? 'IVR campaigns through Blutec: live stats and hot prospects' : 'Click-to-call through Blutec — follow-ups due come first, then new leads'}
+        subtitle={tab === 'ivr' ? 'IVR campaigns through Blutec: live stats and hot prospects' : tab === 'dashboard' ? 'Today’s calls, outcomes, campaigns, callbacks and time in each state'
+          : 'Click-to-call through Blutec — follow-ups due come first, then new leads'}
         actions={tab && <>
-          <ConnectionPill bt={bt} ivr={tab === 'ivr'} />
-          {showCalls && showIvr && <Tabs value={tab} onChange={(t) => setParams(t === 'calls' ? {} : { tab: t })} tabs={[{ id: 'calls', label: 'Calls', icon: PhoneCall }, { id: 'ivr', label: 'IVR campaigns', icon: Radio }]} />}
+          {tab !== 'dashboard' && <ConnectionPill bt={bt} ivr={tab === 'ivr'} />}
+          {tabs.length > 1 && <Tabs value={tab} onChange={(t) => setParams(t === tabs[0]!.id ? {} : { tab: t })} tabs={tabs} />}
         </>} />
-      {tab === 'calls' ? <CallsTab bt={bt} /> : tab === 'ivr' ? <IvrTab bt={bt} manage /> : (
-        <Card><EmptyState icon={Phone} title="Dialer is for sales people" text="Calls are used by sales people and team leaders; IVR campaigns are run by the Super Admin." /></Card>
-      )}
-      {tab === 'ivr' && <DialerCampaigns />}
+      {/* the calls stay mounted on the other tabs, so a call in progress (and its window) carries on */}
+      {showCalls && <div hidden={tab !== 'calls'}><CallsTab bt={bt} onLive={setLive} focus={focus} /></div>}
+      {tab === 'ivr' && <><IvrTab bt={bt} manage /><DialerCampaigns /></>}
+      {tab === 'dashboard' && <DialerDashboard live={live} onOpenLead={showCalls ? (l) => { setFocus({ id: l.id, at: Date.now() }); setParams({}) } : undefined} />}
+      {!tab && <Card><EmptyState icon={Phone} title="Dialer is for sales people" text="Calls are used by sales people and team leaders; IVR campaigns are run by the Super Admin." /></Card>}
     </div>
   )
 }
@@ -116,7 +135,7 @@ function ConnectionPill({ bt, ivr }: { bt: ReturnType<typeof useBlutec>; ivr: bo
   )
 }
 
-function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
+function CallsTab({ bt, onLive, focus }: { bt: ReturnType<typeof useBlutec>; onLive: (l: LiveCall | null) => void; focus: { id: string; at: number } | null }) {
   const db = useDb()
   const me = useMe()
   const run = useRun()
@@ -134,6 +153,7 @@ function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
   const [params] = useSearchParams()
   const [currentId, setCurrentId] = useState<string | null>(() => params.get('lead'))
   const current = queue.find((l) => l.id === currentId) ?? queue[0]
+  useEffect(() => { if (focus) setCurrentId(focus.id) }, [focus])
   /** The call in progress (Blutec click-to-call, or the person's own phone): drives the floating call window. */
   const [call, setCall] = useState<{ leadId: string; startedAt: number; endedAt?: number; phone: boolean } | null>(null)
   const [winHidden, setWinHidden] = useState(false)
@@ -152,9 +172,14 @@ function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
   const ended = (!!live && FINAL_STATUSES.includes(live.status)) || !!call?.endedAt
   // Blutec reported the end: stop the window's clock
   useEffect(() => { if (live && FINAL_STATUSES.includes(live.status)) setCall((c) => c && !c.endedAt ? { ...c, endedAt: Date.now() } : c) }, [live])
+  // the dialer dashboard's status: on a call until it ends, then wrap-up until the outcome is saved
+  const liveKey = !call ? '' : ended ? `w${call.endedAt ?? ''}` : `c${call.startedAt}`
+  useEffect(() => { onLive(!call ? null : ended ? { state: 'WRAP_UP', since: call.endedAt ?? Date.now() } : { state: 'ON_CALL', since: call.startedAt }) }, [liveKey]) // eslint-disable-line react-hooks/exhaustive-deps
   const elapsed = call ? Math.max(0, Math.floor(((call.endedAt ?? Date.now()) - call.startedAt) / 1000)) : 0
   const secs = live?.info?.talk_duration_seconds ?? live?.info?.duration_seconds ?? elapsed
   const clock = `${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`
+  /** what Blutec reported once the call ended (whole length, final status) and when it ended */
+  const callExtras = { endedAt: call?.endedAt, totalSec: ended ? live?.info?.duration_seconds : undefined, callStatus: ended && live && FINAL_STATUSES.includes(live.status) ? live.status : undefined }
   // Blutec's disposition when it names one of ours (Not Pickup, Intro…), else hot / not picked up from the call record
   const blutecOutcome = dispositionToStatus(live?.info?.disposition)
   const suggested: CallOutcome | undefined = ended && live ? (blutecOutcome && blutecOutcome !== 'NEW' ? blutecOutcome : isHot(live.info?.disposition) ? 'HOT_PROSPECT' : !live.info?.answer_time ? 'NOT_PICKUP' : undefined) : undefined
@@ -280,7 +305,8 @@ function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
             {!(windowOpen && call?.leadId === current.id) && (
               <div className="mt-6 border-t border-line pt-5">
                 <h4 className="mb-3 font-bold">Outcome</h4>
-                <CallLogger lead={current} seconds={call?.leadId === current.id ? secs : 0} suggested={suggested} refId={call?.leadId === current.id ? live?.refId || undefined : undefined} onDone={afterSave} />
+                <CallLogger lead={current} seconds={call?.leadId === current.id ? secs : 0} suggested={suggested} refId={call?.leadId === current.id ? live?.refId || undefined : undefined} onDone={afterSave}
+                  {...(call?.leadId === current.id ? callExtras : {})} />
               </div>
             )}
           </Card>
@@ -306,7 +332,7 @@ function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
             <Tabs className="mb-3" value={winTab} onChange={setWinTab} tabs={[{ id: 'entry', label: openEntryForLead(db, callLead.id) ? 'Follow-up' : 'Client entry', icon: ClipboardList }, { id: 'outcome', label: 'Outcome', icon: PhoneCall }]} />
             {winTab === 'entry'
               ? <ClientEntryForLead lead={callLead} compact onSaved={() => setWinTab('outcome')} />
-              : <CallLogger lead={callLead} seconds={secs} suggested={suggested} refId={live?.refId || undefined} onDone={afterSave} />}
+              : <CallLogger lead={callLead} seconds={secs} suggested={suggested} refId={live?.refId || undefined} onDone={afterSave} {...callExtras} />}
             <div className="mt-3 flex gap-2 border-t border-line pt-3">
               <Button size="sm" variant="ghost" icon={Ban} className="flex-1" onClick={() => markDnd(callLead)}>Do not call</Button>
             </div>

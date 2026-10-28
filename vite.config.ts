@@ -264,7 +264,7 @@ function mailerRelay(mode: string): Plugin {
 
 /**
  * Local relay for the Blutec dialer/IVR: POST /api/blutec. Reads BLUTEC_* from .env on this computer —
- * never VITE_-prefixed, so the keys stay out of the browser bundle. (The live site uses the Supabase function instead.)
+ * never VITE_-prefixed, so the keys stay out of the browser bundle. (The live site uses server.mjs instead.)
  */
 function blutecRelay(mode: string): Plugin {
   return {
@@ -278,6 +278,8 @@ function blutecRelay(mode: string): Plugin {
         req.on('end', async () => {
           let body: BlutecRequest
           try { body = JSON.parse(raw || '{}') } catch { res.statusCode = 400; res.end('{"success":false,"message":"Bad JSON"}'); return }
+          // no sign-ins on this computer: "Your campaigns" are the ids the page names
+          if ((body as { action: string }).action === 'myCampaigns') body = { action: 'campaignsByIds', ids: (body as unknown as { ids?: number[] }).ids ?? [] }
           const r = await handleBlutec(body, env)
           res.statusCode = r.status
           res.setHeader('Content-Type', 'application/json')

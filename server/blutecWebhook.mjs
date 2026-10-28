@@ -63,6 +63,9 @@ export function completedCall(p) {
     id: `bt-${ref}`, lead_id: String(ids.crm_lead_id), called_at: c.start_time ?? c.end_time ?? new Date().toISOString(), called_by: ids.crm_user_id ? String(ids.crm_user_id) : null,
     outcome, note: [`Blutec call · ${String(c.status ?? 'completed').replace(/_/g, ' ')}`, c.hangup_cause && String(c.hangup_cause).replace(/_/g, ' ').toLowerCase(), c.disposition].filter(Boolean).join(' · '),
     duration_sec: Math.max(0, Math.round(Number(c.talk_duration_seconds ?? c.duration_seconds ?? 0)) || 0),
+    // the whole call and its final status, for the dialer dashboard (only when Blutec sends them)
+    ...(c.duration_seconds != null && Number.isFinite(Number(c.duration_seconds)) ? { total_sec: Math.max(0, Math.round(Number(c.duration_seconds))) } : {}),
+    ...(c.status ? { call_status: String(c.status) } : {}),
   }
 }
 
@@ -116,9 +119,16 @@ async function store(sb, kind, p) {
     const { data: lead } = await sb.from('leads').select('id').eq('id', row.lead_id).maybeSingle()
     if (!lead) return
     if (row.called_by) { const { data: u } = await sb.from('app_users').select('id').eq('id', row.called_by).maybeSingle(); if (!u) row.called_by = null }
-    // the agent may have saved this call already (same id): theirs is kept
-    const { error: e } = await sb.from('lead_calls').upsert(row, { onConflict: 'id', ignoreDuplicates: true })
-    if (e) throw new Error(`saving the call: ${e.message}`)
+    // the agent may have saved this call already (same id): theirs is kept, Blutec only fills in what it lacks
+    const { data: saved } = await sb.from('lead_calls').select('id, duration_sec, total_sec, call_status').eq('id', row.id).maybeSingle()
+    const fill = saved && Object.fromEntries([
+      ['duration_sec', !saved.duration_sec && row.duration_sec ? row.duration_sec : undefined],
+      ['total_sec', saved.total_sec == null ? row.total_sec : undefined], ['call_status', !saved.call_status ? row.call_status : undefined],
+    ].filter(([, v]) => v !== undefined))
+    const { error: e } = !saved ? await sb.from('lead_calls').insert(row)
+      : Object.keys(fill).length ? await sb.from('lead_calls').update(fill).eq('id', row.id) : { error: null }
+    // the agent's save landed between the check and the insert: theirs is kept
+    if (e && e.code !== '23505') throw new Error(`saving the call: ${e.message}`)
   }
 }
 

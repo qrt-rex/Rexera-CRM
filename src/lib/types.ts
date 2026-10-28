@@ -70,7 +70,9 @@ export type LeadStatus =
 /** A call ends with a disposition (any status but New). */
 export type CallOutcome = Exclude<LeadStatus, 'NEW'>
 
-export interface Call { id: string; at: string; by: string; outcome: CallOutcome; note: string; durationSec: number }
+/** `durationSec` is the talk time. Blutec click-to-calls also carry the whole call's length (ringing included) and its
+ *  final status; `wrapSec` is the time from the end of the call until the outcome was saved. */
+export interface Call { id: string; at: string; by: string; outcome: CallOutcome; note: string; durationSec: number; totalSec?: number; callStatus?: string; wrapSec?: number }
 
 export interface Lead {
   id: string
@@ -752,6 +754,8 @@ export interface Settings {
   workflow?: WorkflowSettings
   /** written by the live server's scheduled job each time it runs (read-only in the app) */
   jobs?: { lastRunAt: string; summary?: string }
+  /** Blutec dialer campaigns given to sales people (campaign id → user ids): their "Your campaigns" (Super Admin sets it) */
+  dialerCampaigns?: Record<string, string[]>
 }
 /** Round robin: `next` is the position in `userIds` that gets the next lead (wraps back to the first person). */
 export interface LeadAssign { on: boolean; userIds: string[]; next: number }
