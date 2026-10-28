@@ -77,7 +77,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     const all: Item[] = []
     const dashRoles = isMaster(me) ? ROLES.map((r) => r.id) : rolesOf(me)
     for (const r of dashRoles) { const sc = scoreOf(s, '', roleLabel(r), 'dashboard'); if (sc) all.push({ id: 'd-' + r, label: `${roleLabel(r)} Dashboard`, sub: 'Dashboard', icon: LayoutDashboard, to: `/dashboard/${r}`, group: 'Pages', score: sc }) }
-    for (const m of MODULES) { if (!canSee(m, can)) continue; const sc = scoreOf(s, '', m.label, m.desc); if (sc) all.push({ id: m.key, label: m.label, sub: m.desc, icon: m.icon, to: m.path, group: 'Pages', score: sc }) }
+    for (const m of MODULES) { if (!canSee(m, can, me)) continue; const sc = scoreOf(s, '', m.label, m.desc); if (sc) all.push({ id: m.key, label: m.label, sub: m.desc, icon: m.icon, to: m.path, group: 'Pages', score: sc }) }
     if (s.length >= 2 || digits.length >= 3) {
       for (const b of visibleBookings(db, me)) { const sc = scoreOf(s, digits, b.companyName, b.bookingId, b.contactPerson, b.mobile, b.serviceName, b.email, b.pan, b.gstin); if (sc) all.push({ id: b.id, label: b.companyName, sub: `${b.bookingId} · ${b.contactPerson} · ${b.mobile}`, icon: Briefcase, to: `/bookings/${b.id}`, group: 'Clients', score: sc, badge: BOOKING_STATUS[b.status]?.label }) }
       for (const l of visibleLeads(db, me)) { const sc = scoreOf(s, digits, l.name, l.company, l.phone, l.code, l.email); if (sc) all.push({ id: l.id, label: l.name + (l.company ? ` · ${l.company}` : ''), sub: `${l.code} · ${l.phone}`, icon: UserPlus, to: can('leads.admin') ? `/leads?open=${l.id}` : `/dialer?lead=${l.id}`, group: 'Leads', score: sc, badge: l.status.replace('_', ' ').toLowerCase() }) }

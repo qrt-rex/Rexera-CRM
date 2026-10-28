@@ -238,7 +238,7 @@ function Sidebar({ mini, onExpand }: { mini: boolean; onExpand: () => void }) {
     try { localStorage.setItem('rexera-nav', JSON.stringify(n)) } catch { /* ignore */ }
     return n
   })
-  const visible = MODULES.filter((m) => canSee(m, can) && !m.hrOnly && !['attendance', 'notifications', 'security', 'users', 'system', 'inbox'].includes(m.key))
+  const visible = MODULES.filter((m) => canSee(m, can, me) && !m.hrOnly && !['attendance', 'notifications', 'security', 'users', 'system', 'inbox'].includes(m.key))
   const groups = [...new Set(visible.map((m) => m.group))]
   const item = cx('relative flex items-center gap-3 rounded-xl py-2 text-sm font-semibold transition', mini ? 'justify-center px-0' : 'px-3')
   const active = 'bg-brand-soft text-brand-ink'

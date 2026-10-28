@@ -1,12 +1,12 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Briefcase, CalendarClock, ClipboardList, History, Save, Search } from 'lucide-react'
+import { Briefcase, CalendarClock, ClipboardList, Download, History, Save, Search } from 'lucide-react'
 import type { ClientEntry, ClientEntryStatus, Lead } from '../lib/types'
 import { useDb } from '../lib/store'
 import { useAuth, useMe } from '../lib/auth'
 import { userName } from '../lib/actions'
 import { addClientFollowUp, CLIENT_ENTRY_STATUS, createClientEntry, emptyEntry, ENTRY_STATUSES, entryProblems, followUpDue, openEntryForLead, visibleClientEntries, type ClientEntryForm } from '../lib/clientEntries'
-import { fmtDate, fmtDateTime, inr, today } from '../lib/format'
+import { downloadCsv, fmtDate, fmtDateTime, fmtTime, inr, today, ymd } from '../lib/format'
 import { Badge, Button, cx, EmptyState, Input, Modal, Select, Table, Tabs, Td, Textarea, Th, useConfirm, useRun } from './ui'
 import { PhoneInput } from './fields'
 
@@ -133,16 +133,19 @@ function EntryDetails({ entry }: { entry: ClientEntry }) {
 type View = 'open' | 'due' | 'converted' | 'all'
 /**
  * Client entries on the sales person's and team leader's dashboard: follow them up, and convert them into the CRM
- * entry once the payment is received (only the person who made the entry converts it).
+ * entry once the payment is received (only the person who made the entry converts it). `full`: the Client Entries
+ * page — every field in its own column, when it was entered, a date filter and a CSV download.
  */
-export function ClientEntriesPanel({ lead }: { lead: boolean }) {
+export function ClientEntriesPanel({ lead, full }: { lead: boolean; full?: boolean }) {
   const db = useDb()
   const me = useMe()
   const { can } = useAuth()
   const nav = useNavigate()
   const [confirm, confirmNode] = useConfirm()
-  const [view, setView] = useState<View>('open')
+  const [view, setView] = useState<View>(full ? 'all' : 'open')
   const [q, setQ] = useState('')
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
   const [open, setOpen] = useState<{ id: string; follow: boolean } | null>(null)
   const t = today()
   const all = useMemo(() => visibleClientEntries(db, me).slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)), [db, me])
@@ -151,25 +154,73 @@ export function ClientEntriesPanel({ lead }: { lead: boolean }) {
   const ql = q.trim().toLowerCase()
   const rows = all
     .filter((e) => view === 'all' || (view === 'open' ? isOpen(e) : view === 'due' ? followUpDue(e, t) : e.status === 'CONVERTED'))
-    .filter((e) => !ql || `${e.clientName} ${e.companyName} ${e.phone} ${e.scheme}`.toLowerCase().includes(ql))
+    .filter((e) => !ql || `${e.clientName} ${e.companyName} ${e.phone} ${e.scheme} ${e.requirement} ${e.note}`.toLowerCase().includes(ql))
+    // entered between these days (the day it was saved)
+    .filter((e) => (!from || ymd(e.createdAt) >= from) && (!to || ymd(e.createdAt) <= to))
+  const download = () => downloadCsv(`client-entries-${today()}.csv`, rows.map((e) => ({
+    'Entered on': fmtDateTime(e.createdAt), Date: e.date, 'Client name': e.clientName, 'Company name': e.companyName, Number: e.phone, Scheme: e.scheme,
+    'Pitched price': e.pitchedPrice, Status: CLIENT_ENTRY_STATUS[e.status].label, Requirement: e.requirement, Note: e.note, 'Next follow-up': e.followUp ?? '',
+    'Follow-ups done': e.followUps.length, 'Last follow-up': e.followUps[0]?.note ?? '', 'Sales person': userName(db, e.ownerId),
+  })))
   const cur = open ? all.find((e) => e.id === open.id) : undefined
   const convert = async (e: ClientEntry) => {
     if (await confirm('Payment received — convert to CRM entry?', `${e.clientName} (${e.companyName}) is filled in on the CRM entry form from this client entry. Add the payment you received and its proof there; it counts as a CRM entry once saved.`)) nav(`/bookings/new?entry=${e.id}`)
   }
+  const RowActions = ({ e }: { e: ClientEntry }) => (
+    <span className="inline-flex gap-1">
+      {e.status === 'CONVERTED'
+        ? e.bookingId && <Button size="sm" variant="ghost" icon={Briefcase} onClick={() => nav(`/bookings/${e.bookingId}`)}>CRM entry</Button>
+        : <>
+          <Button size="sm" variant="ghost" icon={CalendarClock} onClick={() => setOpen({ id: e.id, follow: true })}>Follow-up</Button>
+          {e.ownerId === me.id && e.status !== 'NOT_INTERESTED' && can('bookings.create') && <Button size="sm" variant="soft" icon={Briefcase} onClick={() => convert(e)}>Convert to CRM entry</Button>}
+        </>}
+    </span>
+  )
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2 border-b border-line px-5 py-3">
+      <div className="flex flex-wrap items-end gap-2 border-b border-line px-5 py-3">
         <Tabs value={view} onChange={setView} tabs={[
           { id: 'open', label: 'Open', count: counts.open }, { id: 'due', label: 'Follow-ups due', count: counts.due },
           { id: 'converted', label: 'Converted', count: counts.converted }, { id: 'all', label: 'All', count: counts.all },
         ]} />
+        {full && <span className="flex items-end gap-2">
+          <Input label="Entered from" type="date" value={from} max={to || today()} onChange={(e) => setFrom(e.target.value)} />
+          <Input label="to" type="date" value={to} min={from} max={today()} onChange={(e) => setTo(e.target.value)} />
+        </span>}
         <label className="relative ml-auto w-full sm:w-56">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-mute" />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search client, company, number" aria-label="Search client entries"
             className="h-9 w-full rounded-xl border border-line bg-card pl-9 pr-3 text-sm outline-none focus:border-brand" />
         </label>
+        {full && <Button size="sm" variant="outline" icon={Download} disabled={!rows.length} onClick={download}>Download CSV</Button>}
       </div>
-      {!rows.length ? <EmptyState icon={ClipboardList} title={all.length ? 'Nothing here' : 'No client entries yet'} text={all.length ? undefined : 'Fill the client entry in the dialer while you are on the call.'} /> : (
+      {!rows.length ? <EmptyState icon={ClipboardList} title={all.length ? 'Nothing here' : 'No client entries yet'} text={all.length ? undefined : 'Fill the client entry in the dialer while you are on the call.'} /> : full ? (
+        <Table>
+          <thead><tr>
+            <Th>Entered on</Th><Th>Date</Th><Th>Client name</Th><Th>Company name</Th><Th>Number</Th><Th>Scheme</Th><Th className="text-right">Pitched price</Th>
+            <Th>Status</Th><Th>Requirement</Th><Th>Note</Th><Th>Follow-up</Th>{lead && <Th>Sales person</Th>}<Th className="text-right">Actions</Th>
+          </tr></thead>
+          <tbody>
+            {rows.map((e) => (
+              <tr key={e.id} className="align-top">
+                <Td className="whitespace-nowrap text-xs">{fmtDate(e.createdAt)}<span className="block text-mute">{fmtTime(e.createdAt)}</span></Td>
+                <Td className="whitespace-nowrap text-xs">{fmtDate(e.date)}</Td>
+                <Td className="whitespace-nowrap"><button onClick={() => setOpen({ id: e.id, follow: false })} className="text-left font-semibold hover:underline">{e.clientName}</button></Td>
+                <Td className="whitespace-nowrap text-sm">{e.companyName}</Td>
+                <Td className="whitespace-nowrap font-mono text-xs">{e.phone}</Td>
+                <Td className="text-xs"><div className="w-40">{e.scheme}</div></Td>
+                <Td className="whitespace-nowrap text-right tabular-nums">{inr(e.pitchedPrice)}</Td>
+                <Td className="whitespace-nowrap"><Badge tone={CLIENT_ENTRY_STATUS[e.status].tone}>{CLIENT_ENTRY_STATUS[e.status].label}</Badge></Td>
+                <Td className="text-xs"><div className="w-60 whitespace-pre-line">{e.requirement}</div></Td>
+                <Td className="text-xs"><div className="w-64 whitespace-pre-line">{e.note}{e.followUps[0] && <span className="mt-1 block text-mute">Last follow-up: {e.followUps[0].note}</span>}</div></Td>
+                <Td className="whitespace-nowrap text-xs">{e.followUp ? <span className={cx(followUpDue(e, t) && 'font-bold text-bad')}>{fmtDate(e.followUp)}</span> : <span className="text-mute">—</span>}{e.followUps.length > 0 && <span className="block text-mute">{e.followUps.length} done</span>}</Td>
+                {lead && <Td className="whitespace-nowrap text-xs">{e.ownerId === me.id ? 'Me' : userName(db, e.ownerId)}</Td>}
+                <Td className="whitespace-nowrap text-right"><RowActions e={e} /></Td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      ) : (
         <Table>
           <thead><tr><Th>Date</Th><Th>Client</Th><Th>Number</Th><Th>Scheme</Th><Th className="text-right">Pitched</Th><Th>Status</Th><Th>Follow-up</Th>{lead && <Th>Sales person</Th>}<Th className="text-right">Actions</Th></tr></thead>
           <tbody>
@@ -183,14 +234,7 @@ export function ClientEntriesPanel({ lead }: { lead: boolean }) {
                 <Td><Badge tone={CLIENT_ENTRY_STATUS[e.status].tone}>{CLIENT_ENTRY_STATUS[e.status].label}</Badge></Td>
                 <Td className="whitespace-nowrap text-xs">{e.followUp ? <span className={cx(followUpDue(e, t) && 'font-bold text-bad')}>{fmtDate(e.followUp)}</span> : <span className="text-mute">—</span>}{e.followUps.length > 0 && <span className="block text-mute">{e.followUps.length} done</span>}</Td>
                 {lead && <Td className="text-xs">{e.ownerId === me.id ? 'Me' : userName(db, e.ownerId)}</Td>}
-                <Td className="text-right"><span className="inline-flex gap-1">
-                  {e.status === 'CONVERTED'
-                    ? e.bookingId && <Button size="sm" variant="ghost" icon={Briefcase} onClick={() => nav(`/bookings/${e.bookingId}`)}>CRM entry</Button>
-                    : <>
-                      <Button size="sm" variant="ghost" icon={CalendarClock} onClick={() => setOpen({ id: e.id, follow: true })}>Follow-up</Button>
-                      {e.ownerId === me.id && e.status !== 'NOT_INTERESTED' && can('bookings.create') && <Button size="sm" variant="soft" icon={Briefcase} onClick={() => convert(e)}>Convert to CRM entry</Button>}
-                    </>}
-                </span></Td>
+                <Td className="text-right"><RowActions e={e} /></Td>
               </tr>
             ))}
           </tbody>

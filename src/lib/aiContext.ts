@@ -18,7 +18,7 @@ export function buildAiContext(db: DB, me: User): string {
 
   ctx.me = { name: me.name, role: roleLabel(me.role), department: me.department, designation: me.designation, email: me.email }
   ctx.now = { date: fmtDate(t), time: fmtTime(new Date().toISOString()), weekday: new Date().toLocaleDateString('en-IN', { weekday: 'long' }) }
-  ctx.pages = [{ label: 'My dashboard', path: `/dashboard/${me.role}` }, ...MODULES.filter((m) => canSee(m, can)).map((m) => ({ label: m.label, path: m.path }))]
+  ctx.pages = [{ label: 'My dashboard', path: `/dashboard/${me.role}` }, ...MODULES.filter((m) => canSee(m, can, me)).map((m) => ({ label: m.label, path: m.path }))]
 
   // ---- my day
   const s = todaySession(db, me.id)

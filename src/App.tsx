@@ -27,6 +27,7 @@ const SalesKit = lazy(() => import('./pages/modules/SalesKit'))
 const Website = lazy(() => import('./pages/modules/Website'))
 const ClientPortal = lazy(() => import('./pages/modules/ClientPortal'))
 const DigitalMedia = lazy(() => import('./pages/modules/DigitalMedia'))
+const ClientEntries = lazy(() => import('./pages/modules/ClientEntries'))
 const MediaGallery = lazy(() => import('./pages/modules/MediaGallery'))
 const Portal = lazy(() => import('./pages/portal/Portal'))
 const Content = lazy(() => import('./pages/modules/Content'))
@@ -80,8 +81,8 @@ function RequireAuth({ children }: { children: ReactNode }) {
 }
 
 function Guard({ m, perm, children }: { m: string; perm?: Perm; children: ReactNode }) {
-  const { can } = useAuth()
-  return canSee(moduleByKey(m), can) && (!perm || can(perm)) ? <>{children}</> : <NotFound />
+  const { can, user } = useAuth()
+  return canSee(moduleByKey(m), can, user) && (!perm || can(perm)) ? <>{children}</> : <NotFound />
 }
 
 function DashboardRoute() {
@@ -157,6 +158,7 @@ export default function App() {
               <Route path="/branches/:id" element={<S><BranchRoute /></S>} />
               <Route path="/leads" element={<Guard m="leads"><S><Leads /></S></Guard>} />
               <Route path="/dialer" element={<Guard m="dialer"><S><Dialer /></S></Guard>} />
+              <Route path="/client-entries" element={<Guard m="client-entries"><S><ClientEntries /></S></Guard>} />
               <Route path="/team" element={<Guard m="team"><S><TeamProgress /></S></Guard>} />
               <Route path="/assign" element={<Guard m="assign"><S><Assign /></S></Guard>} />
               <Route path="/bookings" element={<Guard m="bookings"><S><Bookings /></S></Guard>} />

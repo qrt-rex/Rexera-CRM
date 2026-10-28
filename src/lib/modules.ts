@@ -3,7 +3,8 @@ import {
   BookMarked, Globe, UserRoundCheck, KeyRound, Megaphone, MessagesSquare, Phone, Settings, ShieldCheck, Sparkles, UserCheck, UserCog, UserPlus, Users, UsersRound,
   CalendarCheck2, Network, ScrollText, Wallet, Receipt, Landmark, Trophy, SlidersHorizontal, Gauge, KeySquare, DatabaseBackup, DatabaseZap, MailPlus, ClipboardList, FilePen, Inbox, Undo2, BadgeCheck, BadgePercent, Layers, FileSignature, Settings2, type LucideIcon,
 } from 'lucide-react'
-import type { Perm, User } from './types'
+import type { Perm, Role, User } from './types'
+import { rolesOf } from './rbac'
 import type { Tone } from './workflow'
 
 export interface ModuleDef {
@@ -18,11 +19,15 @@ export interface ModuleDef {
   group: 'Sales' | 'Client files' | 'Content' | 'Digital Media' | 'People' | 'Finance' | 'Workspace' | 'Admin'
   /** listed only in the HR sidebar (still searchable with Ctrl K) */
   hrOnly?: boolean
+  /** only for people with one of these roles (on top of `perms`) */
+  roles?: Role[]
 }
 
 export const MODULES: ModuleDef[] = [
   { key: 'leads', path: '/leads', label: 'CRM Leads', desc: 'Manual, website and CSV leads, auto-assign, lead source', icon: UserPlus, tone: 'navy', perms: ['leads.admin'], group: 'Sales' },
   { key: 'dialer', path: '/dialer', label: 'Dialer', desc: 'Power-dial your queue and log outcomes', icon: Phone, tone: 'orange', perms: ['dialer.use'], group: 'Sales' },
+  // client entries filled in the dialer: the sales person's own, and a team leader's team's
+  { key: 'client-entries', path: '/client-entries', label: 'Client Entries', desc: 'Client entries from the dialer: follow-ups, convert to CRM entry', icon: ClipboardList, tone: 'violet', perms: ['dialer.use'], roles: ['sales', 'teamlead'], group: 'Sales' },
   { key: 'team', path: '/team', label: 'Sales Team Progress', desc: 'Calls, conversions and collections by person', icon: BarChart3, tone: 'green', perms: ['team.progress'], group: 'Sales' },
   { key: 'assign', path: '/assign', label: 'Client Assignment', desc: 'Who owns which client, reassign within team', icon: Network, tone: 'pink', perms: ['team.assign', 'bookings.create', 'leads.assign'], group: 'Sales' },
   { key: 'bookings', path: '/bookings', label: 'CRM Entries', desc: 'Client bookings, approvals and payments', icon: Briefcase, tone: 'violet', perms: ['bookings.own', 'bookings.team', 'bookings.all'], group: 'Client files' },
@@ -81,7 +86,8 @@ export const MODULES: ModuleDef[] = [
 export const moduleByKey = (k: string) => MODULES.find((m) => m.key === k)!
 /** Messages is switched off for now (the code stays); set to true to bring the module back everywhere. */
 export const MESSAGES_ENABLED = false
-export const canSee = (m: ModuleDef, has: (...p: Perm[]) => boolean) => (m.key !== 'messages' || MESSAGES_ENABLED) && (!m.perms.length || has(...m.perms))
+export const canSee = (m: ModuleDef, has: (...p: Perm[]) => boolean, me?: User | null) =>
+  (m.key !== 'messages' || MESSAGES_ENABLED) && (!m.perms.length || has(...m.perms)) && (!m.roles || (!!me && rolesOf(me).some((r) => m.roles!.includes(r))))
 
 /** The Super Admin only runs IVR campaigns there (calls are for sales people), so for them the Dialer is called IVR. */
 export const moduleLabel = (m: { key: string; label: string }, me: User) =>
