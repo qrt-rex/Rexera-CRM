@@ -84,6 +84,7 @@ const SPECS: Spec[] = [
   { key: 'expenses', table: 'company_expenses', order: ['created_at', false] },
   { key: 'docForms', table: 'doc_forms', order: ['created_at', false] },
   { key: 'salesKit', table: 'sales_kit', order: ['position', true] },
+  { key: 'eligibilitySchemes', table: 'eligibility_schemes', order: ['position', true] },
   { key: 'siteContent', table: 'site_content', idProp: 'key', idCol: 'key', order: ['key', true] },
   { key: 'siteHistory', table: 'site_content_history', order: ['published_at', false], limit: 300 },
   // written by the server only (each website form submission); the CRM reads it

@@ -7,7 +7,7 @@ export type Perm =
   | 'content.view' | 'content.manage' | 'salesinfo.manage' | 'schemes.view' | 'schemes.manage'
   | 'broadcasts.view' | 'broadcasts.manage'
   | 'billing.own' | 'billing.create' | 'billing.manage' | 'refunds.manage'
-  | 'workflow.manage' | 'forms.manage' | 'followup.manage' | 'saleskit.manage' | 'website.manage' | 'portal.manage'
+  | 'workflow.manage' | 'forms.manage' | 'followup.manage' | 'saleskit.manage' | 'eligibility.manage' | 'website.manage' | 'portal.manage'
   | 'team.progress' | 'team.assign'
   | 'attendance.all' | 'leave.approve'
   | 'employees.view' | 'employees.manage'
@@ -606,6 +606,58 @@ export interface Branch {
   bank?: string
 }
 
+/** One rule of the Scheme Checker: field op value(s) — e.g. projectCost lte 5000000 (money in ₹, ages in years). */
+export interface EligibilityRule {
+  field: string
+  op: 'in' | 'not_in' | 'is' | 'lte' | 'lt' | 'gte' | 'gt' | 'between'
+  /** in / not_in */
+  values?: string[]
+  /** is: true / false; numbers: the limit (between: the lower one) */
+  value?: number | boolean
+  /** between: the upper limit */
+  value2?: number
+}
+/** A condition of a scheme: the rule, when it applies, and what a mismatch means. Texts may use {value}. */
+export interface EligibilityCondition extends EligibilityRule {
+  id: string
+  label: string
+  /** only checked when all of these hold (e.g. only for manufacturing) */
+  when?: EligibilityRule[]
+  /** a mismatch makes the client not eligible, or leaves it to confirm */
+  otherwise: 'fail' | 'unknown'
+  pass?: string; fail?: string; ask?: string
+}
+/**
+ * A government scheme in Rexy's Scheme Checker. Edited by Super Admin and the Operation team (Scheme Checker Rules);
+ * until anything is saved the built-in set (supabase/eligibility-rules.mjs) is used.
+ */
+export interface EligibilityScheme {
+  id: string
+  position: number
+  active: boolean
+  name: string
+  kind: string
+  agency: string
+  url: string
+  /** a word that finds the matching Rexera service (e.g. "pmegp") */
+  serviceMatch: string
+  /** e.g. "confirm the scheme is still open" */
+  statusNote: string
+  summary: string
+  benefits: string[]
+  documents: string[]
+  process: string[]
+  conditions: EligibilityCondition[]
+  /** subsidy estimate: % of an amount, by general / special category and urban / rural */
+  subsidy?: { field: string; generalUrban: number; generalRural: number; specialUrban: number; specialRural: number }
+  /** named bands of an amount, e.g. Mudra Shishu / Kishore / Tarun */
+  bands?: { field: string; items: { max: number; label: string }[] }
+  /** when the rules were last checked against the official guidelines (YYYY-MM-DD) */
+  verifiedOn: string
+  updatedAt?: string
+  updatedBy?: string
+}
+
 export interface Scheme {
   id: string; title: string; category: string; summary: string; benefit: string; eligibility: string; active: boolean; createdAt: string; by: string
   /** price (₹) shown to sales */
@@ -974,6 +1026,8 @@ export interface DB {
   /** Document Form Builder: forms sent to clients by secure link, and what came back */
   docForms?: DocForm[]
   salesKit?: SalesKitItem[]
+  /** Rexy's Scheme Checker (empty = the built-in schemes) */
+  eligibilitySchemes?: EligibilityScheme[]
   clientAccounts?: ClientAccount[]
   clientActivity?: ClientActivity[]
   mediaItems?: MediaItem[]

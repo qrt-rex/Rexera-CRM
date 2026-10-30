@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
 import { createServer } from 'vite'
 import { mapAll, rowsToDb } from './backup-mapping.mjs'
+import { DEFAULT_SCHEMES } from './eligibility-rules.mjs'
 
 // the app's seed is TypeScript: let Vite load it
 const vite = await createServer({ server: { middlewareMode: true }, appType: 'custom', logLevel: 'error' })
@@ -99,6 +100,10 @@ db.candidates.push({ id: 'cand-qa', formId: 'cf-qa', name: 'Asha', email: 'asha@
 // Sales Kit: the seed list (55) plus one edited by the Operation team
 assert.ok(db.salesKit.length >= 50, 'the Sales Kit list is loaded')
 Object.assign(db.salesKit[0], { registrationCharge: 'Govt fee extra', updatedAt: at, updatedBy: a.id })
+// Scheme Checker rules: the built-in set saved, one edited (subsidy, bands, when-rules) and one hidden
+db.eligibilitySchemes = structuredClone(DEFAULT_SCHEMES).map((s) => ({ ...s, updatedAt: at, updatedBy: a.id }))
+db.eligibilitySchemes[0].active = false
+db.eligibilitySchemes[0].statusNote = 'Paused by the Operation team'
 db.settings.leadAssign = { on: true, userIds: [a.id, b.id], next: 1 }
 db.users.push({ ...b, id: 'u-left', username: 'left.person', email: 'left@example.com', active: false, exitOn: '2026-10-15' })
 db.payrollRuns.push({ id: 'pr-x', month: '2026-09', status: 'PAID', provisional: false, calculatedAt: at, calculatedBy: a.id, history: [],

@@ -41,6 +41,8 @@ export const MODULES: ModuleDef[] = [
   { key: 'documents', path: '/documents', label: 'Document Forms', desc: 'Collect and verify client documents', icon: FileText, tone: 'blue', perms: ['documents.forms'], group: 'Client files' },
   { key: 'services', path: '/services', label: 'Services & Combo Packages', desc: 'Prices for single, multiple and combo (3/6/9/12 months) bookings', icon: Layers, tone: 'violet', perms: ['bookings.create', 'bookings.all', 'schemes.manage', 'billing.manage'], group: 'Content' },
   { key: 'schemes', path: '/schemes', label: 'Schemes', desc: 'Government schemes and offers', icon: Sparkles, tone: 'green', perms: ['schemes.view', 'schemes.manage'], group: 'Content' },
+  // Rexy's Scheme Checker rules: Super Admin and the Operation team only (not IT)
+  { key: 'scheme-rules', path: '/scheme-rules', label: 'Scheme Checker Rules', desc: 'Government schemes, eligibility conditions, documents — what Rexy checks', icon: BadgeCheck, tone: 'green', perms: ['eligibility.manage'], roles: ['superadmin', 'operations'], group: 'Content' },
   { key: 'sales-kit', path: '/sales-kit', label: 'Sales Kit', desc: 'Every scheme: benefits, eligibility, last date and our charge', icon: BookMarked, tone: 'orange', perms: [], group: 'Content' },
   { key: 'content', path: '/content', label: 'Flyers, Posts & Sales Info', desc: 'Marketing material and sales scripts', icon: Images, tone: 'orange', perms: ['content.view', 'content.manage'], group: 'Content' },
   { key: 'broadcasts', path: '/broadcasts', label: 'Broadcasts', desc: 'Company updates with acknowledgement', icon: Megaphone, tone: 'red', perms: ['broadcasts.view', 'broadcasts.manage'], group: 'Content' },

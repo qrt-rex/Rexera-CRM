@@ -139,6 +139,11 @@ export function mapAll(backup) {
     updated_at: s(x.updatedAt), updated_by: uref(x.updatedBy),
   }))
   t.site_content = (d.siteContent ?? []).map((x) => ({ key: x.key, draft: x.draft ?? null, published: x.published ?? null, updated_at: x.updatedAt, updated_by: uref(x.updatedBy), published_at: s(x.publishedAt), published_by: uref(x.publishedBy) }))
+  t.eligibility_schemes = (d.eligibilitySchemes ?? []).map((x) => ({
+    id: x.id, position: x.position, active: x.active !== false, name: x.name, kind: x.kind ?? '', agency: x.agency ?? '', url: x.url ?? '', service_match: x.serviceMatch ?? '',
+    status_note: x.statusNote ?? '', summary: x.summary ?? '', benefits: x.benefits ?? [], documents: x.documents ?? [], process: x.process ?? [], conditions: x.conditions ?? [],
+    subsidy: x.subsidy ?? null, bands: x.bands ?? null, verified_on: x.verifiedOn, updated_at: s(x.updatedAt), updated_by: uref(x.updatedBy),
+  }))
   t.site_content_history = (d.siteHistory ?? []).map((x) => ({ id: x.id, key: x.key, content: x.content ?? null, published_at: x.at, published_by: uref(x.by) }))
   t.client_accounts = (d.clientAccounts ?? []).map((x) => ({ id: x.id, auth_user_id: s(x.authUserId), email: x.email, name: x.name, phone: s(x.phone), booking_ids: x.bookingIds ?? [], status: x.status, invited_at: x.invitedAt, invited_by: uref(x.invitedBy), activated_at: s(x.activatedAt), last_login_at: s(x.lastLoginAt), assigned_to: uref(x.assignedTo), disabled_at: s(x.disabledAt) }))
   t.client_activity = (d.clientActivity ?? []).map((x) => ({ id: x.id, account_id: x.accountId, booking_id: s(x.bookingId), at: x.at, action: x.action, detail: s(x.detail), by_user: uref(x.by) }))
@@ -171,7 +176,7 @@ export const ORDER = [
   ['message_templates', 'id'], ['emails', 'id'], ['email_automations', 'key'], ['app_settings', 'key'], ['api_keys', 'id'],
   ['backup_log', 'id'], ['candidate_forms', 'id'], ['candidate_applications', 'id'], ['recruitment_datasets', 'id'], ['recruitment_rows', 'dataset_id,row_no'],
   ['company_assets', 'id'], ['stock_items', 'id'], ['company_expenses', 'id'], ['legacy_files', 'path'],
-  ['doc_forms', 'id'], ['doc_form_submissions', 'id'], ['sales_kit', 'id'],
+  ['doc_forms', 'id'], ['doc_form_submissions', 'id'], ['sales_kit', 'id'], ['eligibility_schemes', 'id'],
   ['site_content', 'key'], ['site_content_history', 'id'], ['website_lead_log', 'id'],
   ['client_accounts', 'id'], ['client_activity', 'id'], ['client_doc_uploads', 'id'], ['media_items', 'id'], ['client_entries', 'id'],
 ]
@@ -344,6 +349,11 @@ export function rowsToDb(input) {
       leadId: u(x.lead_id), ownerId: x.owner_id ?? '', createdAt: x.created_at, updatedAt: x.updated_at, bookingId: u(x.booking_id), convertedAt: u(x.converted_at),
     })),
     webLeadLog: rows('website_lead_log').map((x) => opt({ id: x.id, at: x.at, status: x.status, form: u(x.form), name: u(x.name), phone: u(x.phone), email: u(x.email), error: u(x.error), leadId: u(x.lead_id), fields: u(x.fields), retriedAt: u(x.retried_at), retriedBy: u(x.retried_by) })),
+    eligibilitySchemes: rows('eligibility_schemes').map((x) => opt({
+      id: x.id, position: x.position, active: x.active !== false, name: x.name, kind: x.kind ?? '', agency: x.agency ?? '', url: x.url ?? '', serviceMatch: x.service_match ?? '',
+      statusNote: x.status_note ?? '', summary: x.summary ?? '', benefits: x.benefits ?? [], documents: x.documents ?? [], process: x.process ?? [], conditions: x.conditions ?? [],
+      subsidy: u(x.subsidy), bands: u(x.bands), verifiedOn: x.verified_on, updatedAt: u(x.updated_at), updatedBy: u(x.updated_by),
+    })),
     salesKit: rows('sales_kit').map((x) => opt({
       id: x.id, category: x.category, position: x.position, name: x.name, benefits: x.benefits ?? '', sectors: x.sectors ?? '', eligibility: x.eligibility ?? '', lastDate: x.last_date ?? '',
       organisation: x.organisation ?? '', schemeType: x.scheme_type ?? '', applicableFor: x.applicable_for ?? '', minCharge: x.min_charge ?? '', registrationCharge: u(x.registration_charge),

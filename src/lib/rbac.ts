@@ -57,6 +57,7 @@ export const PERM_GROUPS: { group: string; perms: { id: Perm; label: string }[] 
       { id: 'schemes.view', label: 'View schemes' },
       { id: 'schemes.manage', label: 'Add / edit schemes (Admin, Operation Team)' },
       { id: 'saleskit.manage', label: 'Edit the Sales Kit (Operation Team only)' },
+      { id: 'eligibility.manage', label: 'Edit the Scheme Checker rules — schemes, conditions, documents (Super Admin & Operation Team only)' },
       { id: 'media.view', label: 'See company (internal) media on dashboards' },
       { id: 'media.manage', label: 'Digital Media section: dashboard, posts, flyers — create, assign, publish (Digital Media only)' },
       { id: 'broadcasts.view', label: 'View broadcasts' },
@@ -118,7 +119,7 @@ export const DEFAULT_ROLE_PERMS: Record<Role, Perm[]> = {
   admin: [...common, 'bookings.all', 'bookings.admin', 'content.manage', 'salesinfo.manage', 'schemes.manage', 'employees.view', 'documents.forms', 'reports.view', 'followup.manage', 'forms.manage', 'workflow.manage'],
   accounts: [...common, 'bookings.all', 'bookings.accounts', 'billing.create', 'billing.manage', 'refunds.manage', 'reports.view', 'reports.export'],
   legal: [...common, 'bookings.all', 'bookings.legal', 'documents.forms', 'leave.approve', 'reports.view'],
-  operations: [...common, 'bookings.all', 'bookings.process', 'content.manage', 'salesinfo.manage', 'schemes.manage', 'employees.view', 'documents.forms', 'reports.view', 'events.manage', 'forms.manage', 'saleskit.manage'],
+  operations: [...common, 'bookings.all', 'bookings.process', 'content.manage', 'salesinfo.manage', 'schemes.manage', 'employees.view', 'documents.forms', 'reports.view', 'events.manage', 'forms.manage', 'saleskit.manage', 'eligibility.manage'],
   teamlead: [
     ...common, 'salesinfo.manage', 'leads.own', 'leads.assign', 'dialer.use', 'bookings.create', 'bookings.own', 'bookings.team', 'bookings.approve_tl',
     'billing.own', 'billing.create', 'team.progress', 'team.assign', 'documents.forms', 'leave.approve', 'reports.view',
@@ -159,6 +160,8 @@ export const RESERVED: Partial<Record<Perm, Role[]>> = {
   'schemes.manage': ['superadmin', 'admin', 'operations'],
   // the Sales Kit everyone reads is edited by the Operation team only
   'saleskit.manage': ['superadmin', 'operations'],
+  // Rexy's Scheme Checker rules: Super Admin and the Operation team — not IT (see canEditSchemeRules)
+  'eligibility.manage': ['superadmin', 'operations'],
   'content.manage': ['superadmin', 'admin', 'operations', 'digitalmedia'],
   // the Digital Media section (dashboard, posts, flyers) belongs to the Digital Media team only
   'media.manage': ['superadmin', 'digitalmedia'],
@@ -172,6 +175,15 @@ export function rolesOf(u: User): Role[] {
 /** Super Admin and IT Support hold every permission and can open every dashboard. */
 export const MASTER_ROLES: Role[] = ['superadmin', 'it']
 export const isMaster = (u: User) => rolesOf(u).some((r) => MASTER_ROLES.includes(r))
+
+/**
+ * Who edits the Scheme Checker rules: Super Admin, and the Operation team while they hold eligibility.manage. IT
+ * Support holds every permission but is left out on purpose (the database applies the same rule).
+ */
+export const canEditSchemeRules = (db: DB, u: User) => {
+  const roles = rolesOf(u)
+  return roles.includes('superadmin') || (roles.includes('operations') && effectivePerms(db, u).has('eligibility.manage'))
+}
 
 export function effectivePerms(db: DB, u: User | null | undefined): Set<Perm> {
   if (!u) return new Set()
