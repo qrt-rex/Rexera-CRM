@@ -24,6 +24,7 @@ import { BreakBanner, BreakReminder } from '../pages/dashboards/widgets'
 import { BreakPrompt } from '../components/BreakPrompt'
 import { CommandPalette } from './CommandPalette'
 import { AiAssistant } from '../components/AiAssistant'
+import { QuickRail } from '../components/QuickRail'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 
 export function useUnread() {
@@ -222,6 +223,7 @@ export function Shell() {
       <NotificationBubble />
       <BreakReminder />
       <AiAssistant />
+      <QuickRail />
       {warnIn !== null && (
         <div className="anim-pop fixed bottom-6 left-1/2 z-[95] flex -translate-x-1/2 items-center gap-3 rounded-2xl border border-line bg-card px-5 py-3 shadow-pop">
           <span className="text-sm">You'll be signed out in <b>{Math.ceil(warnIn / 1000)}s</b> for inactivity.</span>
