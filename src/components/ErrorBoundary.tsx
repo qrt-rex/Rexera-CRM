@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { AlertTriangle, Home, RefreshCw } from 'lucide-react'
+import { track } from '../lib/activity'
 
 /** A page's code file is missing — the CRM was updated while this tab was open (or the connection dropped). */
 const isChunkError = (e: unknown) => /dynamically imported module|Importing a module script failed|error loading dynamically imported|ChunkLoadError|Loading chunk/i.test(e instanceof Error ? e.message : String(e))
@@ -19,6 +20,8 @@ export class ErrorBoundary extends Component<{ children: ReactNode; resetKey?: s
     // where it broke, for the person to pass on: the page address and the code files it went through
     const files = [...new Set([...(info.componentStack ?? '').matchAll(/\/assets\/([\w.-]+)\.js/g)].map((m) => m[1]!.replace(/-[\w]{6,}$/, '')))].slice(0, 4)
     this.setState({ where: `${location.pathname}${location.search}${files.length ? ` · ${files.join(' › ')}` : ''}` })
+    // IT Support sees every screen error in the user activity log
+    track('error', error instanceof Error ? error.message : String(error), { detail: files.join(' › ') || undefined, ok: false })
     if (isChunkError(error)) {
       // reload at most once a minute, so a real outage doesn't loop
       let last = 0

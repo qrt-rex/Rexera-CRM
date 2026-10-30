@@ -9,9 +9,10 @@ import type { Perm, User } from '../lib/types'
 import { Rexy } from '../components/hr/Mascots'
 import { getDb, useDb } from '../lib/store'
 import { builtinOn, runScheduledRules, startAutomations } from '../lib/automation'
+import { startActivity, stopActivity, track } from '../lib/activity'
 import { applyTheme, getTheme, useAuth, useMe, type Theme } from '../lib/auth'
 import { MESSAGES_ENABLED, MODULES, canSee, moduleLabel } from '../lib/modules'
-import { isMaster, ROLES, roleLabel } from '../lib/rbac'
+import { canOpenDashboard, isMaster, ROLES, roleLabel } from '../lib/rbac'
 import { CLOUD } from '../lib/cloud'
 import { markRead, overdueLeadsOf, runBreakMonitor, runComboReminders, runFollowUpReminders, runPrecheckReminders, runSchemeAlerts, runTaskReminders, unseenLeadsOf } from '../lib/actions'
 import { runScheduledAutomations } from '../lib/email'
@@ -85,6 +86,9 @@ export function Shell() {
   }, [companyJobs])
   // event rules: run in this browser right after the change that starts them
   useEffect(() => { startAutomations() }, [])
+  // user activity (IT Support → User activity): every page and click of the signed-in person
+  useEffect(() => { startActivity(me); return () => stopActivity() }, [me.id, me.role])  // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { track('page', title || loc.pathname, { path: `${loc.pathname}${loc.search}` }) }, [loc.pathname, loc.search])  // eslint-disable-line react-hooks/exhaustive-deps
   // a new day starts at midnight even when the CRM was left open: redraw every page so dates, "today" and the
   // login / logout card move to the new day (checked every 30 s; nothing re-renders while the day is the same)
   const [, setDay] = useState(today)
@@ -195,7 +199,7 @@ export function Shell() {
           {maintenance?.on && isMaster(me) && (
             <div className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-warn/40 bg-warn-soft px-4 py-3 text-sm text-warn">
               <Wrench className="size-4" /><b>Maintenance mode is on</b><span className="text-ink/70">Only IT Support and Super Admin can use the app.{maintenance.message ? ` Message: “${maintenance.message}”` : ''}</span>
-              <Link to="/dashboard/it" className="ml-auto font-semibold underline">Manage</Link>
+              {canOpenDashboard(me, 'it') && <Link to="/dashboard/it" className="ml-auto font-semibold underline">Manage</Link>}
             </div>
           )}
           {maintenance?.on && !isMaster(me) ? (
@@ -290,7 +294,7 @@ function Sidebar({ mini, onExpand }: { mini: boolean; onExpand: () => void }) {
         <NavLink to="/attendance" className={({ isActive }) => cx(item, isActive ? active : idle)}><UserCheck className="size-[18px]" />Attendance Board</NavLink>
         {isMaster(me) && (
           <SideGroup label="All dashboards" open={openGroups['dash'] ?? false} onToggle={() => toggle('dash')} icon={LayoutGrid}>
-            {ROLES.map((r) => (
+            {ROLES.filter((r) => canOpenDashboard(me, r.id)).map((r) => (
               <NavLink key={r.id} to={`/dashboard/${r.id}`} className={({ isActive }) => cx(item, 'py-1.5 pl-9 text-[13px]', isActive ? active : idle)}>
                 <span className="size-2 rounded-full" style={{ background: r.color }} />{r.label}
               </NavLink>

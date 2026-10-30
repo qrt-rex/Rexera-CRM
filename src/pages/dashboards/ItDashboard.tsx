@@ -17,6 +17,7 @@ import {
 import { ago, downloadCsv, fmtDateTime, today } from '../../lib/format'
 import { Avatar, Badge, Button, Card, Checkbox, cx, Input, Modal, Select, Textarea, Toggle, useConfirm, useRun, useToast } from '../../components/ui'
 import { Greeting, LoginLogoutCard, Section, ViewAll } from './widgets'
+import { UserActivity } from '../../components/UserActivity'
 
 type Tone = 'navy' | 'green' | 'orange' | 'red' | 'violet' | 'blue' | 'amber' | 'gray' | 'cyan'
 const chip: Record<Tone, string> = {
@@ -124,6 +125,9 @@ export function ItDashboard() {
         <Action icon={LayoutGrid} tone="navy" label="Access management" hint="Permission matrix, users, settings" to="/access" />
         <Action icon={DatabaseZap} tone="violet" label="Import from old CRM" hint="Old PHP CRM .sql dump · verified before saving" to="/legacy-import" />
       </div>
+
+      {/* every page, click and action of every person — the IT team's alone */}
+      <UserActivity />
 
       <div className="grid gap-6 xl:grid-cols-3">
         <Section title="Health check" subtitle={health ? `${health.length} checks · ${warnings} to review` : 'Running…'} icon={Stethoscope} className="xl:col-span-2"

@@ -7,6 +7,7 @@ import { Link } from 'react-router-dom'
 import { AlertTriangle, CheckCircle2, Info, Loader2, X, XCircle, type LucideIcon } from 'lucide-react'
 import type { Tone } from '../lib/workflow'
 import { initials } from '../lib/format'
+import { trackAction } from '../lib/activity'
 
 export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ')
 
@@ -404,9 +405,12 @@ export function useRun() {
     try {
       const r = await fn()
       if (ok) toast('success', ok)
+      trackAction(true, ok)
       return (r ?? true) as Exclude<T, void> | true
     } catch (e) {
-      toast('error', e instanceof Error ? e.message : 'Something went wrong.')
+      const msg = e instanceof Error ? e.message : 'Something went wrong.'
+      toast('error', msg)
+      trackAction(false, msg)
       return undefined
     }
   }, [toast])

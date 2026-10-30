@@ -213,5 +213,7 @@ export const isStageOnlyAdmin = (db: DB, u: User) => {
 export const STAGE_ONLY_ADMIN_DROPS: Perm[] = ['bookings.all', 'workflow.manage', 'forms.manage', 'followup.manage', 'reports.view', 'reports.export', 'documents.forms', 'media.manage']
 
 export function canOpenDashboard(u: User, slug: Role) {
+  // the IT Support dashboard (user activity, system tools) is the IT team's alone — not even Super Admin's
+  if (slug === 'it') return rolesOf(u).includes('it')
   return rolesOf(u).includes(slug) || isMaster(u)
 }

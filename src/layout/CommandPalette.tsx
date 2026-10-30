@@ -6,7 +6,7 @@ import { useDb } from '../lib/store'
 import { useAuth, useMe } from '../lib/auth'
 import { MODULES, canSee } from '../lib/modules'
 import { visibleBookings, visibleLeads } from '../lib/actions'
-import { isMaster, roleLabel, rolesOf, ROLES } from '../lib/rbac'
+import { canOpenDashboard, isMaster, roleLabel, rolesOf, ROLES } from '../lib/rbac'
 import { BOOKING_STATUS } from '../lib/workflow'
 import { cx } from '../components/ui'
 
@@ -75,7 +75,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       return { items: [...recent, ...actions], counts }
     }
     const all: Item[] = []
-    const dashRoles = isMaster(me) ? ROLES.map((r) => r.id) : rolesOf(me)
+    const dashRoles = (isMaster(me) ? ROLES.map((r) => r.id) : rolesOf(me)).filter((r) => canOpenDashboard(me, r))
     for (const r of dashRoles) { const sc = scoreOf(s, '', roleLabel(r), 'dashboard'); if (sc) all.push({ id: 'd-' + r, label: `${roleLabel(r)} Dashboard`, sub: 'Dashboard', icon: LayoutDashboard, to: `/dashboard/${r}`, group: 'Pages', score: sc }) }
     for (const m of MODULES) { if (!canSee(m, can, me)) continue; const sc = scoreOf(s, '', m.label, m.desc); if (sc) all.push({ id: m.key, label: m.label, sub: m.desc, icon: m.icon, to: m.path, group: 'Pages', score: sc }) }
     if (s.length >= 2 || digits.length >= 3) {
