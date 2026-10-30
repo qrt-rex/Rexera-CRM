@@ -7,7 +7,7 @@ export type Perm =
   | 'content.view' | 'content.manage' | 'salesinfo.manage' | 'schemes.view' | 'schemes.manage'
   | 'broadcasts.view' | 'broadcasts.manage'
   | 'billing.own' | 'billing.create' | 'billing.manage' | 'refunds.manage'
-  | 'workflow.manage' | 'forms.manage' | 'followup.manage' | 'saleskit.manage' | 'website.manage' | 'portal.manage'
+  | 'workflow.manage' | 'forms.manage' | 'followup.manage' | 'saleskit.manage' | 'eligibility.manage' | 'website.manage' | 'portal.manage'
   | 'team.progress' | 'team.assign'
   | 'attendance.all' | 'leave.approve'
   | 'employees.view' | 'employees.manage'
@@ -70,7 +70,9 @@ export type LeadStatus =
 /** A call ends with a disposition (any status but New). */
 export type CallOutcome = Exclude<LeadStatus, 'NEW'>
 
-export interface Call { id: string; at: string; by: string; outcome: CallOutcome; note: string; durationSec: number }
+/** `durationSec` is the talk time. Blutec click-to-calls also carry the whole call's length (ringing included) and its
+ *  final status; `wrapSec` is the time from the end of the call until the outcome was saved. */
+export interface Call { id: string; at: string; by: string; outcome: CallOutcome; note: string; durationSec: number; totalSec?: number; callStatus?: string; wrapSec?: number }
 
 export interface Lead {
   id: string
@@ -421,10 +423,12 @@ export interface Invoice {
   due: string
   salesPerson?: string
   createdBy: string
-  /** branch the invoice is issued from (Accounts chooses it before printing a tax invoice) */
+  /** branch the invoice is issued from: the branch of the person who created it (older invoices: see invoiceBranch) */
   branchId?: string
   clientAddress?: string
   clientPan?: string
+  /** printed on the invoice (preview, print and PDF) */
+  remarks?: string
   /** each time the PDF was sent to the client (written by the live server only — the provider's answer, never assumed) */
   shares?: InvoiceShare[]
 }
@@ -433,6 +437,41 @@ export interface InvoiceShare {
   /** SENT = accepted by the mail server / Interakt */
   status: 'SENT' | 'FAILED' | 'NOT_CONFIGURED' | 'NO_CONTACT'
   error?: string; messageId?: string
+}
+
+// ------------------------------------------------------------------ client entry (pre-CRM entry)
+/** What the sales person sets; Converted is set when the CRM entry is made from it. */
+export type ClientEntryStatus = 'INTERESTED' | 'HOT' | 'CALL_BACK' | 'PAYMENT_PENDING' | 'NOT_INTERESTED' | 'CONVERTED'
+export interface ClientFollowUp { id: string; at: string; by: string; date: string; status: ClientEntryStatus; note: string }
+/**
+ * What the sales person fills while the dialer call is on (sales person → dialer → client entry → follow-ups → CRM
+ * entry). A CRM entry for a sales person or team leader is made from one of these, once the payment is received;
+ * only then does it count as a CRM entry. Seen only by its owner and their team leader.
+ */
+export interface ClientEntry {
+  id: string
+  date: string
+  clientName: string
+  companyName: string
+  phone: string
+  /** the scheme picked from the Services list (its id, and its name as it was) */
+  serviceId: string
+  scheme: string
+  pitchedPrice: number
+  status: ClientEntryStatus
+  requirement: string
+  note: string
+  /** next follow-up date (optional) */
+  followUp?: string
+  /** newest first */
+  followUps: ClientFollowUp[]
+  leadId?: string
+  ownerId: string
+  createdAt: string
+  updatedAt: string
+  /** the CRM entry made from it */
+  bookingId?: string
+  convertedAt?: string
 }
 
 // ------------------------------------------------------------------ Digital Media Dashboard (Media Function)
@@ -565,6 +604,105 @@ export interface Branch {
   id: string; name: string; /** short code shown on dashboards, e.g. AMD-A */ code?: string; address: string; city: string; state: string; pin: string; gstin: string; phone: string; email: string
   /** bank details printed on its invoices, e.g. "HDFC Bank · A/c 5020… · IFSC HDFC0001234" (nothing printed when empty) */
   bank?: string
+}
+
+/** Automation Center: "field op value" on a record's facts (see supabase/automation-rules.mjs). */
+export interface AutomationCondition { field: string; op: string; value?: string | number | boolean; values?: string[] }
+export interface AutomationRecipient { kind: 'owner' | 'teamlead' | 'ops' | 'admin' | 'role' | 'user'; role?: Role; userId?: string }
+export interface AutomationAction {
+  type: 'notify' | 'email' | 'task' | 'comment' | 'priority'
+  to?: AutomationRecipient[]
+  /** notify / task */
+  title?: string
+  /** notify / email */
+  body?: string
+  subject?: string
+  /** comment */
+  text?: string
+  /** task: due this many days after the rule runs */
+  dueInDays?: number
+  /** priority */
+  value?: 'LOW' | 'MEDIUM' | 'HIGH'
+}
+/**
+ * An automation of the Automation Center. Custom rules: when `trigger` happens (or, for a daily check, for every
+ * `entity` record) and the conditions hold, the actions run. Built-in automations are rows with id "builtin:<key>"
+ * that only carry the on / off switch. Only IT Support edits them.
+ */
+export interface AutomationRule {
+  id: string
+  name: string
+  description?: string
+  enabled: boolean
+  position: number
+  trigger: string
+  /** daily check: which records it looks at */
+  entity?: string
+  match?: 'all' | 'any'
+  conditions: AutomationCondition[]
+  actions: AutomationAction[]
+  /** daily check: 0 = once per record, n = again every n days while the record still matches */
+  repeatDays?: number
+  createdAt?: string
+  updatedAt?: string
+  updatedBy?: string
+}
+/** One time a rule ran for one record (event rules: one per event; daily checks: one per record and period). */
+export interface AutomationRun {
+  id: string; ruleId: string; ruleName: string; at: string; by?: string; trigger: string
+  recordType: string; recordId: string; recordLabel: string; ok: boolean; detail: string
+}
+
+/** One rule of the Scheme Checker: field op value(s) — e.g. projectCost lte 5000000 (money in ₹, ages in years). */
+export interface EligibilityRule {
+  field: string
+  op: 'in' | 'not_in' | 'is' | 'lte' | 'lt' | 'gte' | 'gt' | 'between'
+  /** in / not_in */
+  values?: string[]
+  /** is: true / false; numbers: the limit (between: the lower one) */
+  value?: number | boolean
+  /** between: the upper limit */
+  value2?: number
+}
+/** A condition of a scheme: the rule, when it applies, and what a mismatch means. Texts may use {value}. */
+export interface EligibilityCondition extends EligibilityRule {
+  id: string
+  label: string
+  /** only checked when all of these hold (e.g. only for manufacturing) */
+  when?: EligibilityRule[]
+  /** a mismatch makes the client not eligible, or leaves it to confirm */
+  otherwise: 'fail' | 'unknown'
+  pass?: string; fail?: string; ask?: string
+}
+/**
+ * A government scheme in Rexy's Scheme Checker. Edited by Super Admin and the Operation team (Scheme Checker Rules);
+ * until anything is saved the built-in set (supabase/eligibility-rules.mjs) is used.
+ */
+export interface EligibilityScheme {
+  id: string
+  position: number
+  active: boolean
+  name: string
+  kind: string
+  agency: string
+  url: string
+  /** a word that finds the matching Rexera service (e.g. "pmegp") */
+  serviceMatch: string
+  /** e.g. "confirm the scheme is still open" */
+  statusNote: string
+  summary: string
+  benefits: string[]
+  documents: string[]
+  process: string[]
+  conditions: EligibilityCondition[]
+  /** subsidy estimate: % of an amount, by general / special category and urban / rural */
+  subsidy?: { field: string; generalUrban: number; generalRural: number; specialUrban: number; specialRural: number }
+  /** named bands of an amount, e.g. Mudra Shishu / Kishore / Tarun */
+  bands?: { field: string; items: { max: number; label: string }[] }
+  /** when the rules were last checked against the official guidelines (YYYY-MM-DD) */
+  verifiedOn: string
+  updatedAt?: string
+  updatedBy?: string
 }
 
 export interface Scheme {
@@ -717,6 +855,8 @@ export interface Settings {
   workflow?: WorkflowSettings
   /** written by the live server's scheduled job each time it runs (read-only in the app) */
   jobs?: { lastRunAt: string; summary?: string }
+  /** Blutec dialer campaigns given to sales people (campaign id → user ids): their "Your campaigns" (Super Admin sets it) */
+  dialerCampaigns?: Record<string, string[]>
 }
 /** Round robin: `next` is the position in `userIds` that gets the next lead (wraps back to the first person). */
 export interface LeadAssign { on: boolean; userIds: string[]; next: number }
@@ -933,9 +1073,16 @@ export interface DB {
   /** Document Form Builder: forms sent to clients by secure link, and what came back */
   docForms?: DocForm[]
   salesKit?: SalesKitItem[]
+  /** Rexy's Scheme Checker (empty = the built-in schemes) */
+  eligibilitySchemes?: EligibilityScheme[]
+  /** Automation Center: custom rules and the built-in on / off switches (IT Support edits) */
+  automationRules?: AutomationRule[]
+  /** what the automations did, newest first */
+  automationRuns?: AutomationRun[]
   clientAccounts?: ClientAccount[]
   clientActivity?: ClientActivity[]
   mediaItems?: MediaItem[]
+  clientEntries?: ClientEntry[]
   siteContent?: SiteContent[]
   siteHistory?: SiteHistory[]
   webLeadLog?: WebLeadLog[]

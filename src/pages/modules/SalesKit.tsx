@@ -7,6 +7,7 @@ import { deleteSalesKitItem, saveSalesKitItem, userName, type SalesKitInput } fr
 import { fmtDateTime } from '../../lib/format'
 import { daysBetween, istToday } from '../../../supabase/workflow-rules.mjs'
 import { Badge, Button, Card, cx, EmptyState, Input, Modal, PageHeader, SearchBox, Select, Tabs, Textarea, useConfirm, useRun } from '../../components/ui'
+import { byPrice, inPriceBand, OptionFilter, PriceFilter, priceFromText, type PriceBand, type PriceSort } from '../../components/CatalogFilters'
 
 const CATEGORIES = ['Grant', 'Grant + Debt + Equity', 'Debt + Equity', 'Equity', 'Loan', 'Loan + Subsidy', 'Certification / GeM / Award']
 const blank: SalesKitInput = { category: 'Grant', name: '', benefits: '', sectors: '', eligibility: '', lastDate: 'Rolling basis', organisation: '', schemeType: '', applicableFor: 'Pan India', minCharge: '' }
@@ -29,13 +30,20 @@ export default function SalesKit() {
   const cats = useMemo(() => [...new Set([...CATEGORIES, ...items.map((x) => x.category)])].filter((c) => items.some((x) => x.category === c)), [items])
   const [cat, setCat] = useState('all')
   const [q, setQ] = useState('')
+  // price-wise (our charge) and scheme-wise (type of scheme)
+  const [band, setBand] = useState<PriceBand>('all')
+  const [sort, setSort] = useState<PriceSort>('')
+  const [type, setType] = useState('')
+  const types = useMemo(() => [...new Map(items.map((x) => x.schemeType.trim()).filter(Boolean).map((v) => [v.toLowerCase(), v])).values()].sort(), [items])
   const [open, setOpen] = useState<string | null>(null)
   const [edit, setEdit] = useState<{ id?: string; v: SalesKitInput } | null>(null)
   const t = istToday()
-  const list = items
+  const list = byPrice(items
     .filter((x) => cat === 'all' || x.category === cat)
+    .filter((x) => !type || x.schemeType.trim().toLowerCase() === type.toLowerCase())
+    .filter((x) => inPriceBand(priceFromText(x.minCharge), band))
     .filter((x) => !q || `${x.name} ${x.benefits} ${x.sectors} ${x.eligibility} ${x.organisation} ${x.applicableFor} ${x.schemeType}`.toLowerCase().includes(q.toLowerCase()))
-    .sort((a, b) => cats.indexOf(a.category) - cats.indexOf(b.category) || a.position - b.position)
+    .sort((a, b) => cats.indexOf(a.category) - cats.indexOf(b.category) || a.position - b.position), (x) => priceFromText(x.minCharge), sort)
 
   const closing = (x: SalesKitItem) => {
     const d = ymdOf(x.lastDate)
@@ -51,8 +59,10 @@ export default function SalesKit() {
       <div className="mb-5 flex flex-wrap items-center gap-3">
         <Tabs value={cat} onChange={setCat} tabs={[{ id: 'all', label: 'All', count: items.length }, ...cats.map((c) => ({ id: c, label: c, count: items.filter((x) => x.category === c).length }))]} />
         <SearchBox value={q} onChange={setQ} placeholder="Search scheme, sector, state, eligibility…" className="min-w-60 flex-1" />
+        <OptionFilter label="Type of scheme" all="All scheme types" value={type} options={types} onChange={setType} />
+        <PriceFilter band={band} sort={sort} onBand={setBand} onSort={setSort} />
       </div>
-      {!list.length ? <Card><EmptyState icon={BookMarked} title={items.length ? 'No schemes match' : 'The Sales Kit is empty'} text={items.length ? 'Try another search or category.' : manage ? 'Add the first scheme.' : 'The Operation team adds schemes here.'} /></Card> : (
+      {!list.length ? <Card><EmptyState icon={BookMarked} title={items.length ? 'No schemes match' : 'The Sales Kit is empty'} text={items.length ? 'Try another search, category, scheme type or price.' : manage ? 'Add the first scheme.' : 'The Operation team adds schemes here.'} /></Card> : (
         <div className="space-y-3">
           {list.map((x) => {
             const isOpen = open === x.id, c = closing(x)

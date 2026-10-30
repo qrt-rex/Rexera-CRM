@@ -34,6 +34,8 @@ assert.match(ivr.note, /Pressed 1 \(Interested\) in “Diwali blast” · 18s ca
 // a finished CRM call → the lead's call history
 const done = completedCall({ event: 'call.completed', payload: { ref_id: 'abc-123', call: { status: 'completed', start_time: '2026-10-14T05:00:00.000Z', answer_time: '2026-10-14T05:00:10.000Z', talk_duration_seconds: 95, disposition: 'Hot Prospect' }, custom_identifier: { crm_lead_id: 'lead-9', crm_user_id: 'u-s1' } } })
 assert.deepEqual([done.id, done.lead_id, done.called_by, done.outcome, done.duration_sec], ['bt-abc-123', 'lead-9', 'u-s1', 'HOT_PROSPECT', 95])
+assert.deepEqual([done.call_status, done.total_sec], ['completed', undefined], 'status kept; no whole-call length when Blutec sends none')
+assert.equal(completedCall({ payload: { ref_id: 'y', call: { status: 'completed', duration_seconds: 120, talk_duration_seconds: 95 }, custom_identifier: { crm_lead_id: 'l' } } }).total_sec, 120, 'whole call incl. ringing')
 assert.equal(completedCall({ payload: { ref_id: 'x', call: { status: 'failed' }, custom_identifier: { crm_lead_id: 'l' } } }).outcome, 'NOT_PICKUP', 'never answered')
 assert.equal(completedCall({ payload: { ref_id: 'x', call: {} } }), null, 'not a CRM lead call')
 console.log('✓ Blutec webhooks: signature, IVR lead, finished call')

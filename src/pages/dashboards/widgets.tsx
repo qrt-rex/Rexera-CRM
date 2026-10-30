@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
-import { ArrowRight, CalendarDays, ChevronRight, Clock, LogIn, LogOut, Pause, Play, Square, type LucideIcon } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { ArrowRight, CalendarDays, ChevronDown, ChevronRight, Clock, LogIn, LogOut, Pause, Play, Square, type LucideIcon } from 'lucide-react'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
 import { breakFor, breakLabel, breakLeftMs, breakMinutes, breakReview, breakUsedMs, breakWindow, clock, dayLockOn, endDay, inBreakWindow, remindBreak, onBreak, pauseDay, resumeDay, startDay, userName, workedMs } from '../../lib/actions'
@@ -16,14 +16,18 @@ const chip: Record<Tone, string> = {
   gray: 'bg-card2 text-mute', cyan: 'bg-cyan-500/12 text-cyan-700 dark:text-cyan-300', pink: 'bg-pink-500/12 text-pink-600 dark:text-pink-300',
 }
 
+export interface TileSubAction { label: string; to?: string; onClick?: () => void; icon?: LucideIcon }
+
 export function Greeting({ subtitle, right }: { subtitle?: string; right?: ReactNode }) {
   const me = useMe()
   const h = new Date().getHours()
   const hello = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
   return (
-    <div className="relative mb-6 overflow-hidden rounded-3xl bg-gradient-to-br from-[#2E3A8C] via-[#33408F] to-[#4453b5] p-6 text-white shadow-lg shadow-brand/20 anim-fade-up sm:p-7">
-      <div className="pointer-events-none absolute -right-10 -top-16 size-64 rounded-full bg-white/10" />
+    <div className="relative mb-6 overflow-hidden rounded-3xl bg-gradient-to-br from-[#2E3A8C] via-[#33408F] to-[#4453b5] p-6 text-white shadow-xl shadow-brand/25 anim-fade-up sm:p-7">
+      {/* decorative blobs */}
+      <div className="pointer-events-none absolute -right-10 -top-16 size-64 rounded-full bg-white/10 blur-sm" />
       <div className="pointer-events-none absolute -bottom-20 right-40 size-48 rounded-full bg-[#F47B20]/25 blur-2xl" />
+      <div className="pointer-events-none absolute left-1/3 -top-8 size-32 rounded-full bg-white/5 blur-xl" />
       <div className="relative flex flex-wrap items-center gap-5">
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/70">{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
@@ -36,25 +40,109 @@ export function Greeting({ subtitle, right }: { subtitle?: string; right?: React
   )
 }
 
-export function Tile({ to, onClick, icon: Icon, label, desc, tone = 'navy', badge, highlight, className }: {
-  to?: string; onClick?: () => void; icon: LucideIcon; label: string; desc?: string; tone?: Tone; badge?: number | string; highlight?: boolean; className?: string
+export function Tile({ to, onClick, icon: Icon, label, desc, tone = 'navy', badge, highlight, className, subActions }: {
+  to?: string; onClick?: () => void; icon: LucideIcon; label: string; desc?: string; tone?: Tone; badge?: number | string; highlight?: boolean; className?: string; subActions?: TileSubAction[]
 }) {
-  const inner = (
-    <>
-      <span className={cx('grid size-12 shrink-0 place-items-center rounded-2xl transition group-hover:scale-105', highlight ? 'bg-accent text-white' : chip[tone])}><Icon className="size-6" /></span>
-      <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-2">
-          <span className="truncate text-[15px] font-bold">{label}</span>
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const navigate = useNavigate()
+
+  // close dropdown on click outside
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const handleChevronClick = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setOpen((v) => !v)
+  }, [])
+
+  const handleTileClick = useCallback(() => {
+    if (onClick) onClick()
+    else if (to) navigate(to)
+  }, [onClick, to, navigate])
+
+  return (
+    <div ref={ref} className="relative">
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={handleTileClick}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleTileClick() } }}
+        className={cx(
+          'group flex cursor-pointer items-center gap-4 rounded-2xl border border-line bg-card p-4 text-left transition-all duration-200',
+          'shadow-card hover:shadow-lg hover:-translate-y-1 hover:border-line/80 active:translate-y-0 active:shadow-card select-none',
+          className,
+        )}
+      >
+        <span className={cx('grid size-12 shrink-0 place-items-center rounded-2xl transition-all duration-200 group-hover:scale-110 group-hover:shadow-md', highlight ? 'bg-accent text-white shadow-accent/30' : chip[tone])}>
+          <Icon className="size-6" />
         </span>
-        {desc && <span className="block truncate text-xs text-mute">{desc}</span>}
-      </span>
-      {badge !== undefined && badge !== 0 && <span className="grid h-6 min-w-6 place-items-center rounded-full bg-accent px-2 text-[11px] font-bold text-white">{badge}</span>}
-      <ChevronRight className="size-5 shrink-0 text-mute transition group-hover:translate-x-0.5 group-hover:text-ink" />
-    </>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-2">
+            <span className="truncate text-[15px] font-bold">{label}</span>
+          </span>
+          {desc && <span className="block truncate text-xs text-mute">{desc}</span>}
+        </span>
+        {badge !== undefined && badge !== 0 && (
+          <span className="grid h-6 min-w-6 place-items-center rounded-full bg-accent px-2 text-[11px] font-bold text-white shadow-sm shadow-accent/30">
+            {badge}
+          </span>
+        )}
+        {subActions && subActions.length > 0 ? (
+          <button
+            type="button"
+            onClick={handleChevronClick}
+            aria-label="More options"
+            aria-expanded={open}
+            className="grid size-8 shrink-0 place-items-center rounded-xl text-mute transition-all duration-200 hover:bg-card2 hover:text-ink hover:shadow-sm"
+          >
+            {open ? <ChevronDown className="size-5 text-accent" /> : <ChevronRight className="size-5" />}
+          </button>
+        ) : (
+          <span className="grid size-8 shrink-0 place-items-center text-mute transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-ink">
+            <ChevronRight className="size-5" />
+          </span>
+        )}
+      </div>
+
+      {/* dropdown sub-actions */}
+      {open && subActions && subActions.length > 0 && (
+        <div className="absolute right-2 top-full z-40 mt-1 min-w-[210px] overflow-hidden rounded-2xl border border-line bg-card py-1.5 shadow-2xl backdrop-blur anim-fade-up">
+          {subActions.map((a, i) => {
+            const actionCls = 'flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-medium transition-colors hover:bg-card2 hover:text-accent cursor-pointer'
+            const content = (
+              <>
+                {a.icon && <a.icon className="size-4 shrink-0 text-mute" />}
+                <span className="truncate">{a.label}</span>
+              </>
+            )
+            return a.to ? (
+              <Link key={i} to={a.to} className={actionCls} onClick={() => setOpen(false)}>
+                {content}
+              </Link>
+            ) : (
+              <button
+                key={i}
+                type="button"
+                className={actionCls}
+                onClick={() => {
+                  setOpen(false)
+                  a.onClick?.()
+                }}
+              >
+                {content}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
   )
-  // every tile looks the same (no heavy outline); a highlighted tile only gets the orange icon
-  const cls = cx('group flex items-center gap-4 rounded-2xl border border-line bg-card p-4 text-left shadow-card transition hover:-translate-y-0.5 hover:shadow-pop', className)
-  return to ? <Link to={to} className={cls}>{inner}</Link> : <button onClick={onClick} className={cls}>{inner}</button>
 }
 
 export function TileGrid({ children, cols = 3 }: { children: ReactNode; cols?: 2 | 3 | 4 }) {
@@ -129,7 +217,10 @@ export function LoginLogoutCard({ className }: { className?: string }) {
           : <>
             {paused
               ? <Button size="sm" variant="success" icon={Play} onClick={() => run(() => resumeDay(me), 'Welcome back — day resumed')}>Resume</Button>
-              : <Button size="sm" variant="soft" icon={Pause} disabled={!inBreakWindow(now, bp) || left <= 0} title={`Lunch break: ${breakLabel(bp)}`} onClick={() => run(() => pauseDay(me), `Day paused · ${mmss(left)} of break left`)}>{inBreakWindow(now, bp) ? (left <= 0 ? 'Break used' : 'Pause') : 'Break'}</Button>}
+              // the break button turns on at the start of the lunch window (1:00 pm); one click starts the break
+              : inBreakWindow(now, bp) && left > 0
+                ? <Button size="sm" variant="accent" icon={Pause} title={`Lunch break: ${breakLabel(bp)}`} onClick={() => run(() => pauseDay(me), `Break started · ${mmss(left)} of break left`)}>Start break</Button>
+                : <Button size="sm" variant="soft" icon={Pause} disabled title={`Lunch break: ${breakLabel(bp)}`}>{inBreakWindow(now, bp) ? 'Break used' : now < breakWindow(now, bp).start ? `Break at ${clock(breakWindow(now, bp).start, bp.timeZone)}` : 'Break over'}</Button>}
             <Button size="sm" variant="outline" icon={Square} onClick={logout}>End my day</Button>
           </>}
       </div>
@@ -244,8 +335,8 @@ export function RecentActivity({ limit = 6, userIds }: { limit?: number; userIds
 
 export function MiniStat({ label, value, tone = 'navy', icon: Icon }: { label: string; value: ReactNode; tone?: Tone; icon: LucideIcon }) {
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-line bg-card p-3 shadow-card">
-      <span className={cx('grid size-10 place-items-center rounded-xl', chip[tone])}><Icon className="size-5" /></span>
+    <div className="flex items-center gap-3 rounded-2xl border border-line bg-card p-3 shadow-card transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 hover:border-line/80 cursor-default">
+      <span className={cx('grid size-10 place-items-center rounded-xl transition-transform duration-200 hover:scale-110', chip[tone])}><Icon className="size-5" /></span>
       <div className="min-w-0"><p className="truncate text-[11px] font-semibold text-mute">{label}</p><p className="text-lg font-extrabold tabular-nums">{value}</p></div>
     </div>
   )

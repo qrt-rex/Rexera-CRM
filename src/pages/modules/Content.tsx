@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Clapperboard, Copy, Download, FileDown, ImageDown, Images, Lightbulb, Megaphone, Pencil, Pin, Plus, Trash2 } from 'lucide-react'
 import { companyMedia } from '../../lib/media'
@@ -12,8 +12,11 @@ import { deletePost, upsertPost, userName } from '../../lib/actions'
 import { ago } from '../../lib/format'
 import { Button, Card, cx, EmptyState, Input, Menu, MenuItem, Modal, PageHeader, Select, Tabs, Textarea, useConfirm, useRun, useToast, Checkbox } from '../../components/ui'
 import { downloadFlyerJpeg, downloadFlyerPdf } from '../../lib/flyer'
+import { byPrice, inPriceBand, OptionFilter, PriceFilter, schemeIn, schemePrice, type PriceBand, type PriceSort } from '../../components/CatalogFilters'
 import { Mark } from '../../components/Logo'
 
+/** Compact flyer / post cards: two a row on phones, up to five on wide screens. */
+const CARD_GRID = 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5'
 const THEMES: Record<string, string> = {
   navy: 'from-[#2E3A8C] to-[#4b5bc4] text-white', orange: 'from-[#F47B20] to-[#F4A12A] text-white', violet: 'from-[#6D28D9] to-[#a855f7] text-white',
   green: 'from-[#047857] to-[#10b981] text-white', gray: 'from-[#1f2937] to-[#4b5563] text-white',
@@ -34,12 +37,22 @@ export default function Content() {
   const manage = canKind(tab)
   const kinds = (['FLYER', 'POST', 'SALES_INFO'] as Kind[]).filter(canKind)
   const [edit, setEdit] = useState<(Omit<Post, 'id' | 'createdAt' | 'by'> & { id?: string }) | null>(null)
-  const list = db.posts.filter((p) => p.kind === tab).sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || b.createdAt.localeCompare(a.createdAt))
+  // flyers and posts: scheme-wise (the scheme a flyer is about) and price-wise (that scheme's price)
+  const [scheme, setScheme] = useState('')
+  useEffect(() => { setScheme('') }, [tab])
+  const [band, setBand] = useState<PriceBand>('all')
+  const [sort, setSort] = useState<PriceSort>('')
+  const filtered = tab !== 'SALES_INFO'
+  const postScheme = (p: Post) => schemeIn(db, `${p.title} ${p.body}`)
+  const keep = (name?: string) => !filtered || ((!scheme || name?.toLowerCase() === scheme.toLowerCase()) && inPriceBand(schemePrice(db, name), band))
+  const allPosts = db.posts.filter((p) => p.kind === tab)
+  const list = byPrice(allPosts.filter((p) => keep(postScheme(p))).sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || b.createdAt.localeCompare(a.createdAt)), (p) => schemePrice(db, postScheme(p)), filtered ? sort : '')
   // published company media from the Digital Media Dashboard, shown here from the same record (flyers & posters
   // under Flyers, the rest under Posts) — nothing to upload twice
   const media = companyMedia(db, me)
   const mediaOf = (k: Kind) => (k === 'SALES_INFO' ? [] : media.filter((m) => (m.mediaType === 'FLYER' || m.mediaType === 'POSTER') === (k === 'FLYER')))
-  const fromMedia = mediaOf(tab)
+  const fromMedia = byPrice(mediaOf(tab).filter((m) => keep(m.schemeName)), (m) => schemePrice(db, m.schemeName), filtered ? sort : '')
+  const schemeOptions = [...new Map([...allPosts.map(postScheme), ...mediaOf(tab).map((m) => m.schemeName)].filter((n): n is string => !!n?.trim()).map((n) => [n.trim().toLowerCase(), n.trim()])).values()].sort()
 
   const share = (p: Post) => { navigator.clipboard?.writeText(`${p.title}\n\n${p.body}\n\n— Rexera Financial Services`).then(() => toast('success', 'Copied — paste it into WhatsApp or email'), () => toast('error', 'Copy blocked by the browser')) }
   return (
@@ -52,19 +65,27 @@ export default function Content() {
         { id: 'POST', label: 'Posts', icon: Megaphone, count: db.posts.filter((p) => p.kind === 'POST').length + mediaOf('POST').length },
         { id: 'SALES_INFO', label: 'Sales information', icon: Lightbulb, count: db.posts.filter((p) => p.kind === 'SALES_INFO').length },
       ]} />
+      {filtered && (
+        <div className="mb-5 flex flex-wrap items-center gap-3">
+          <OptionFilter label="Scheme" all="All schemes" value={scheme} options={schemeOptions} onChange={setScheme} />
+          <PriceFilter band={band} sort={sort} onBand={setBand} onSort={setSort} />
+          {(scheme || band !== 'all') && <Button size="sm" variant="ghost" onClick={() => { setScheme(''); setBand('all') }}>Clear filters</Button>}
+          <p className="w-full text-xs text-mute">The scheme is the one a flyer names (or its Digital Media scheme); the price is that scheme's price in Schemes / Sales Kit.</p>
+        </div>
+      )}
       {fromMedia.length > 0 && (
         <div className="mb-6">
           <p className="mb-3 flex items-center gap-2 text-sm font-bold"><Clapperboard className="size-4 text-accent" />From the Digital Media Dashboard
             {can('media.manage') && <Link to="/digital-media" className="text-xs font-semibold text-brand-ink hover:underline">Manage media</Link>}</p>
-          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          <div className={CARD_GRID}>
             {fromMedia.map((m) => (
-              <Card key={m.id} className="overflow-hidden">
-                <MediaPreview file={m.files[0]!} className="aspect-square w-full rounded-none border-0" />
-                <div className="p-4">
-                  <p className="truncate font-bold">{m.title}</p>
-                  <p className="truncate text-xs text-mute">{m.schemeName} · {mediaTypeLabel(m.mediaType)} · {ago(m.submittedAt ?? m.createdAt)}</p>
-                  {m.description && <p className="mt-1 line-clamp-2 text-sm">{m.description}</p>}
-                  <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+              <Card key={m.id} className="flex flex-col overflow-hidden transition hover:-translate-y-0.5 hover:shadow-lg">
+                <MediaPreview file={m.files[0]!} className="aspect-[4/3] w-full rounded-none border-0" />
+                <div className="flex flex-1 flex-col p-3">
+                  <p className="truncate text-sm font-bold" title={m.title}>{m.title}</p>
+                  <p className="truncate text-[11px] text-mute">{m.schemeName} · {mediaTypeLabel(m.mediaType)} · {ago(m.submittedAt ?? m.createdAt)}</p>
+                  {m.description && <p className="mt-1 line-clamp-2 text-xs">{m.description}</p>}
+                  <div className="mt-auto flex flex-wrap items-center gap-2 pt-2 text-[11px]">
                     {m.files.map((f) => <button key={f.id} type="button" className="inline-flex items-center gap-1 font-semibold text-brand-ink hover:underline" onClick={() => openFile(f, true).catch((e) => toast('error', e.message))}><Download className="size-3" />{m.files.length > 1 ? f.name : 'Download'}</button>)}
                     {can('media.manage') && <Link to={`/digital-media?open=${m.id}`} className="ml-auto font-semibold text-mute hover:text-ink">Details</Link>}
                   </div>
@@ -75,7 +96,7 @@ export default function Content() {
           {list.length > 0 && <p className="mt-6 mb-3 text-sm font-bold">{tab === 'FLYER' ? 'Flyers' : 'Posts'} made here</p>}
         </div>
       )}
-      {!list.length ? (!fromMedia.length && <Card><EmptyState icon={Images} title="Nothing here yet" /></Card>) : tab === 'SALES_INFO' ? (
+      {!list.length ? (!fromMedia.length && <Card><EmptyState icon={Images} title={allPosts.length || mediaOf(tab).length ? 'Nothing matches the filters' : 'Nothing here yet'} /></Card>) : tab === 'SALES_INFO' ? (
         <div className="grid gap-4 lg:grid-cols-2">
           {list.map((p) => (
             <Card key={p.id} className="p-5">
@@ -89,19 +110,19 @@ export default function Content() {
           ))}
         </div>
       ) : (
-        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        <div className={CARD_GRID}>
           {list.map((p) => (
-            <Card key={p.id} className="overflow-hidden">
-              <div className={cx('relative aspect-square bg-gradient-to-br p-6', THEMES[p.theme] ?? THEMES.navy)}>
-                <div className="pointer-events-none absolute -right-10 -top-10 size-40 rounded-full bg-white/10" />
-                <p className="flex items-center gap-2 text-xs font-bold tracking-[0.3em] opacity-90"><span className="grid size-7 place-items-center rounded-lg bg-white"><Mark className="h-4" fixed /></span>REXERA</p>
-                <h3 className="mt-6 text-2xl font-extrabold leading-tight">{p.title}</h3>
-                <p className="mt-3 text-sm opacity-90">{p.body}</p>
-                <p className="absolute bottom-5 left-6 text-[11px] opacity-75">rexera.co.in</p>
-                {p.pinned && <Pin className="absolute right-4 top-4 size-4" />}
+            <Card key={p.id} className="overflow-hidden transition hover:-translate-y-0.5 hover:shadow-lg">
+              <div className={cx('relative aspect-[4/3] overflow-hidden bg-gradient-to-br p-4', THEMES[p.theme] ?? THEMES.navy)}>
+                <div className="pointer-events-none absolute -right-8 -top-8 size-24 rounded-full bg-white/10" />
+                <p className="flex items-center gap-1.5 text-[10px] font-bold tracking-[0.25em] opacity-90"><span className="grid size-5 place-items-center rounded-md bg-white"><Mark className="h-3" fixed /></span>REXERA</p>
+                <h3 className="mt-3 line-clamp-2 text-base font-extrabold leading-snug" title={p.title}>{p.title}</h3>
+                <p className="mt-1.5 line-clamp-3 text-xs opacity-90">{p.body}</p>
+                <p className="absolute bottom-2.5 left-4 text-[10px] opacity-75">rexera.co.in</p>
+                {p.pinned && <Pin className="absolute right-3 top-3 size-3.5" />}
               </div>
-              <div className="flex items-center gap-2 p-4">
-                <p className="min-w-0 flex-1 truncate text-xs text-mute">{userName(db, p.by)} · {ago(p.createdAt)}</p>
+              <div className="flex flex-wrap items-center justify-end gap-x-1 px-3 py-2">
+                <p className="w-full truncate text-[11px] text-mute">{userName(db, p.by)} · {ago(p.createdAt)}</p>
                 <Menu width="w-48" trigger={(o) => <Button size="sm" variant="ghost" icon={Download} aria-label="Download" aria-expanded={o} />}>
                   {(close) => <>
                     <MenuItem icon={ImageDown} onClick={() => { close(); run(() => downloadFlyerJpeg(p), 'JPEG downloaded') }}>Download JPEG</MenuItem>

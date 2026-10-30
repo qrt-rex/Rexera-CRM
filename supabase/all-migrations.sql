@@ -2946,3 +2946,318 @@ delete from user_permission_overrides where permission = 'media.manage' and effe
 -- =====================================================================================================
 drop policy if exists candidate_apps_public_insert on candidate_applications;
 revoke insert on candidate_applications from anon;
+
+-- ##################################################################### 20261028000000_client_entries.sql
+-- =====================================================================================================
+-- Rexera CRM · client entries (pre-CRM entries). Safe to run more than once.
+--  * The flow is now: sales person → dialer → client entry → follow-ups (if needed) → CRM entry. While the dialer
+--    call is on, the sales person fills the client entry (date, client name, company name, number, scheme, pitched
+--    price, status, requirement and note are compulsory; the follow-up date is not). Once the payment is received
+--    they convert it into the CRM entry, and only that counts as a CRM entry.
+--  * Seen only by the sales person who made it and their team leader (Super Admin / IT keep access for backups).
+--  * Converting it is checked here too: the CRM entry must exist and belong to the entry's owner, and a converted
+--    entry can no longer be changed (except by Super Admin / IT).
+-- =====================================================================================================
+create table if not exists client_entries (
+  id            text primary key,
+  entry_date    date not null,
+  client_name   text not null check (length(trim(client_name)) >= 2),
+  company_name  text not null check (length(trim(company_name)) >= 2),
+  phone         text not null check (phone ~ '^[6-9][0-9]{9}$'),
+  service_id    text references services(id) on delete set null,
+  scheme        text not null check (length(trim(scheme)) >= 1),
+  pitched_price numeric(14,2) not null check (pitched_price > 0),
+  status        text not null check (status in ('INTERESTED', 'HOT', 'CALL_BACK', 'PAYMENT_PENDING', 'NOT_INTERESTED', 'CONVERTED')),
+  requirement   text not null check (length(trim(requirement)) >= 3),
+  note          text not null check (length(trim(note)) >= 3),
+  follow_up     date,
+  follow_ups    jsonb not null default '[]'::jsonb,
+  lead_id       text references leads(id) on delete set null,
+  owner_id      text references app_users(id) on delete set null,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now(),
+  booking_id    text references bookings(id) on delete set null,
+  converted_at  timestamptz
+);
+create index if not exists client_entries_owner_idx on client_entries(owner_id);
+create index if not exists client_entries_lead_idx on client_entries(lead_id);
+
+create or replace function app.can_see_client_entry(owner text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select app.is_staff() and (owner = app.me() or app.is_master()
+    or exists (select 1 from app_users u where u.id = owner and u.team_lead_id = app.me()))
+$$;
+grant execute on function app.can_see_client_entry(text) to authenticated, service_role;
+
+alter table client_entries enable row level security;
+drop policy if exists client_entries_read on client_entries;
+create policy client_entries_read on client_entries for select to authenticated using (app.can_see_client_entry(owner_id));
+drop policy if exists client_entries_insert on client_entries;
+create policy client_entries_insert on client_entries for insert to authenticated
+  with check (app.is_staff() and owner_id = app.me() and app.has_perm('dialer.use') and status <> 'CONVERTED' and booking_id is null);
+drop policy if exists client_entries_update on client_entries;
+create policy client_entries_update on client_entries for update to authenticated
+  using (app.can_see_client_entry(owner_id)) with check (app.can_see_client_entry(owner_id));
+drop policy if exists client_entries_delete on client_entries;
+create policy client_entries_delete on client_entries for delete to authenticated using (app.is_master());
+
+-- the owner stays the owner; converting needs the owner's own CRM entry; a converted entry is final
+create or replace function app.guard_client_entry_update() returns trigger language plpgsql as $$
+begin
+  if app.me() is null or app.is_master() then return new; end if;
+  if new.owner_id is distinct from old.owner_id then raise exception 'A client entry stays with the sales person who made it.'; end if;
+  if old.status = 'CONVERTED' then raise exception 'This client entry is already a CRM entry.'; end if;
+  if new.status = 'CONVERTED' then
+    if new.owner_id is distinct from app.me() then raise exception 'Only the sales person who made the client entry can convert it.'; end if;
+    if not exists (select 1 from bookings b where b.id = new.booking_id and b.created_by = new.owner_id) then
+      raise exception 'Convert a client entry by making its CRM entry.';
+    end if;
+  elsif new.booking_id is not null then
+    raise exception 'Convert a client entry by making its CRM entry.';
+  end if;
+  return new;
+end $$;
+drop trigger if exists guard_client_entry_update on client_entries;
+create trigger guard_client_entry_update before update on client_entries for each row execute function app.guard_client_entry_update();
+
+do $$ begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+     and not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'client_entries') then
+    alter publication supabase_realtime add table public.client_entries;
+  end if;
+end $$;
+
+-- ##################################################################### 20261029000000_dialer_dashboard.sql
+-- =====================================================================================================
+-- Rexera CRM · Dialer dashboard. Safe to run more than once. Existing rows are not changed.
+--  * lead_calls gets three optional columns the dashboard reads: total_sec (the whole Blutec call, ringing included —
+--    duration_sec stays the talk time), call_status (Blutec's final status, e.g. completed / no_answer / busy) and
+--    wrap_sec (from the end of the call until the agent saved the outcome).
+--  * lead_calls can now be updated by the person who made the call: the Blutec call-completed webhook files a call
+--    under the same id (bt-<ref>) the agent saves it under, so the agent's save merges into that row instead of
+--    making a second one (or failing).
+--  * Campaigns given to each sales person (Dialer → IVR campaigns → Dialer campaigns, Super Admin) are kept in the
+--    app_settings row "dialerCampaigns"; the server reads it so a sales person only gets their own campaigns.
+-- =====================================================================================================
+alter table lead_calls add column if not exists total_sec int check (total_sec is null or total_sec >= 0);
+alter table lead_calls add column if not exists call_status text;
+alter table lead_calls add column if not exists wrap_sec int check (wrap_sec is null or wrap_sec >= 0);
+
+drop policy if exists calls_update on lead_calls;
+create policy calls_update on lead_calls for update to authenticated
+  using (app.can_see_lead(lead_id) and (called_by = app.me() or called_by is null))
+  with check (app.can_see_lead(lead_id) and called_by = app.me());
+
+-- ##################################################################### 20261029010000_invoice_remarks.sql
+-- =====================================================================================================
+-- Rexera CRM · invoice remarks, printed on the invoice (preview, print and PDF). Safe to run more than once.
+-- An invoice is issued from the branch of the person who creates it (set by the app; no branch is picked by hand).
+-- =====================================================================================================
+alter table invoices add column if not exists remarks text check (remarks is null or length(remarks) <= 1000);
+
+-- ##################################################################### 20261030000000_sales_self_service.sql
+-- =====================================================================================================
+-- Rexera CRM · sales self-service. Safe to run more than once.
+--  * Client entries: a pitched price of 0 is allowed (e.g. a full discount); a negative one is not.
+--  * Invoices: the sales person who made a proforma (or is on it) edits it themselves while nothing has been paid
+--    against it; Accounts (billing.manage) keeps every other change. They can never change its number, type, status,
+--    payments, sales person or CRM entry.
+--  * Invoice lines follow the same rule (they were open to anyone with billing.create, for any invoice).
+-- =====================================================================================================
+alter table client_entries drop constraint if exists client_entries_pitched_price_check;
+alter table client_entries add constraint client_entries_pitched_price_check check (pitched_price >= 0);
+
+-- a proforma of mine with no payment on it
+create or replace function app.own_open_proforma(inv_id text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select app.has_perm('billing.create') and exists (
+    select 1 from invoices i where i.id = inv_id and (i.created_by = app.me() or i.sales_person = app.me())
+      and i.type = 'PROFORMA' and i.status = 'ISSUED' and i.paid = 0)
+$$;
+grant execute on function app.own_open_proforma(text) to authenticated, service_role;
+
+drop policy if exists invoices_update on invoices;
+create policy invoices_update on invoices for update to authenticated
+  using (app.has_perm('billing.manage') or app.own_open_proforma(id))
+  with check (app.has_perm('billing.manage') or (app.has_perm('billing.create') and (created_by = app.me() or sales_person = app.me())
+    and type = 'PROFORMA' and status = 'ISSUED' and paid = 0));
+
+create or replace function app.guard_invoice_update() returns trigger language plpgsql as $$
+begin
+  if app.me() is null or app.has_perm('billing.manage') then return new; end if;
+  if new.number is distinct from old.number or new.type is distinct from old.type or new.paid is distinct from old.paid
+     or new.status is distinct from old.status or new.sales_person is distinct from old.sales_person or new.created_by is distinct from old.created_by
+     or new.booking_id is distinct from old.booking_id or new.issued_on is distinct from old.issued_on or new.branch_id is distinct from old.branch_id then
+    raise exception 'Only Accounts can change the number, type, status, payments, branch or sales person of an invoice.';
+  end if;
+  return new;
+end $$;
+drop trigger if exists guard_invoice_update on invoices;
+create trigger guard_invoice_update before update on invoices for each row execute function app.guard_invoice_update();
+
+drop policy if exists invoice_items_write on invoice_items;
+create policy invoice_items_write on invoice_items for all to authenticated
+  using (app.has_perm('billing.manage') or app.own_open_proforma(invoice_id))
+  with check (app.has_perm('billing.manage') or app.own_open_proforma(invoice_id));
+
+-- ##################################################################### 20261030010000_scheme_checker_rules.sql
+-- =====================================================================================================
+-- Rexera CRM · Rexy's Scheme Checker rules. Safe to run more than once.
+--  * One row per government scheme: details, benefits, documents, how to apply, and the conditions the client is
+--    checked against (jsonb). While the table is empty the CRM uses its built-in schemes; the first change saves them.
+--  * Every staff member reads them (sales people use the checker); only Super Admin and the Operation team (with
+--    eligibility.manage) add, change, hide or remove schemes — IT Support is left out on purpose.
+-- =====================================================================================================
+create table if not exists eligibility_schemes (
+  id            text primary key,
+  position      int not null default 0,
+  active        boolean not null default true,
+  name          text not null check (length(trim(name)) between 3 and 160),
+  kind          text not null default '',
+  agency        text not null default '',
+  url           text not null default '' check (url = '' or url ~* '^https?://'),
+  service_match text not null default '',
+  status_note   text not null default '',
+  summary       text not null check (length(trim(summary)) >= 10),
+  benefits      jsonb not null default '[]'::jsonb check (jsonb_typeof(benefits) = 'array'),
+  documents     jsonb not null default '[]'::jsonb check (jsonb_typeof(documents) = 'array'),
+  process       jsonb not null default '[]'::jsonb check (jsonb_typeof(process) = 'array'),
+  conditions    jsonb not null default '[]'::jsonb check (jsonb_typeof(conditions) = 'array' and jsonb_array_length(conditions) <= 40),
+  subsidy       jsonb,
+  bands         jsonb,
+  verified_on   date not null,
+  updated_at    timestamptz,
+  updated_by    text references app_users(id) on delete set null
+);
+create index if not exists eligibility_schemes_position_idx on eligibility_schemes(position);
+
+-- Super Admin, or the Operation team holding eligibility.manage (not IT, though IT holds every other permission)
+create or replace function app.can_edit_scheme_rules() returns boolean
+language sql stable security definer set search_path = public as $$
+  select app.has_role('superadmin') or (app.has_role('operations') and app.has_perm('eligibility.manage'))
+$$;
+grant execute on function app.can_edit_scheme_rules() to authenticated, service_role;
+
+alter table eligibility_schemes enable row level security;
+drop policy if exists eligibility_schemes_read on eligibility_schemes;
+create policy eligibility_schemes_read on eligibility_schemes for select to authenticated using (app.is_staff());
+drop policy if exists eligibility_schemes_write on eligibility_schemes;
+create policy eligibility_schemes_write on eligibility_schemes for all to authenticated
+  using (app.can_edit_scheme_rules()) with check (app.can_edit_scheme_rules());
+
+insert into role_permissions (role, permission) values ('operations', 'eligibility.manage') on conflict do nothing;
+
+do $$ begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+     and not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'eligibility_schemes') then
+    alter publication supabase_realtime add table public.eligibility_schemes;
+  end if;
+end $$;
+
+-- ##################################################################### 20261030020000_automation_center.sql
+-- =====================================================================================================
+-- Rexera CRM · Automation Center. Safe to run more than once.
+--  * automation_rules: custom rules ("when this happens and these conditions hold, do that") and the on / off
+--    switches of the built-in automations (rows "builtin:<key>"). Every staff member reads them (rules run in the
+--    browser that makes the change); ONLY IT Support adds, changes or removes them.
+--  * automation_runs: what the rules did. Any staff browser may add a run of an enabled rule, as itself; a run id is
+--    written once (daily checks use "one id per record and period", so two browsers never repeat one). Super Admin
+--    and IT read them; IT clears them.
+--  * emails: a rule's email may be sent from any staff browser — only as the system (no sender), marked with the
+--    rule, and only while that rule exists and is switched on.
+-- =====================================================================================================
+create table if not exists automation_rules (
+  id          text primary key,
+  name        text not null check (length(trim(name)) between 3 and 160),
+  description text,
+  enabled     boolean not null default true,
+  position    int not null default 0,
+  trigger     text not null,
+  entity      text,
+  match       text check (match is null or match in ('all', 'any')),
+  conditions  jsonb not null default '[]'::jsonb check (jsonb_typeof(conditions) = 'array' and jsonb_array_length(conditions) <= 15),
+  actions     jsonb not null default '[]'::jsonb check (jsonb_typeof(actions) = 'array' and jsonb_array_length(actions) <= 10),
+  repeat_days int check (repeat_days is null or repeat_days between 0 and 365),
+  created_at  timestamptz,
+  updated_at  timestamptz,
+  updated_by  text references app_users(id) on delete set null
+);
+create index if not exists automation_rules_position_idx on automation_rules(position);
+
+alter table automation_rules enable row level security;
+drop policy if exists automation_rules_read on automation_rules;
+create policy automation_rules_read on automation_rules for select to authenticated using (app.is_staff());
+drop policy if exists automation_rules_write on automation_rules;
+create policy automation_rules_write on automation_rules for all to authenticated using (app.has_role('it')) with check (app.has_role('it'));
+
+create table if not exists automation_runs (
+  id           text primary key,
+  rule_id      text not null,
+  rule_name    text not null default '',
+  at           timestamptz not null default now(),
+  by_user      text references app_users(id) on delete set null,
+  trigger      text not null,
+  record_type  text not null,
+  record_id    text not null default '',
+  record_label text not null default '',
+  ok           boolean not null default true,
+  detail       text not null default ''
+);
+create index if not exists automation_runs_at_idx on automation_runs(at desc);
+create index if not exists automation_runs_rule_idx on automation_runs(rule_id);
+
+alter table automation_runs enable row level security;
+drop policy if exists automation_runs_read on automation_runs;
+create policy automation_runs_read on automation_runs for select to authenticated using (app.is_master());
+drop policy if exists automation_runs_insert on automation_runs;
+create policy automation_runs_insert on automation_runs for insert to authenticated
+  with check (app.is_staff() and (by_user is null or by_user = app.me())
+    and exists (select 1 from automation_rules r where r.id = rule_id and r.enabled));
+drop policy if exists automation_runs_delete on automation_runs;
+create policy automation_runs_delete on automation_runs for delete to authenticated using (app.has_role('it'));
+
+-- a rule's email, from whichever staff browser ran the rule
+drop policy if exists emails_by_rule on emails;
+create policy emails_by_rule on emails for insert to authenticated
+  with check (app.is_staff() and from_user is null and automation like 'rule:%'
+    and exists (select 1 from automation_rules r where r.id = substr(automation, 6) and r.enabled));
+
+do $$ begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+     and not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'automation_rules') then
+    alter publication supabase_realtime add table public.automation_rules;
+  end if;
+end $$;
+
+-- ##################################################################### 20261030030000_user_activity.sql
+-- =====================================================================================================
+-- Rexera CRM · user activity log (IT Support dashboard → User activity). Safe to run more than once.
+--  * Every page opened, click, choice, form submit, action result and screen error of every person — what was
+--    clicked and where, never what was typed. Each browser adds its own person's events, in small batches.
+--  * ONLY the IT Support team reads (and clears) it — not Super Admin, not anyone else.
+--  * Kept outside the CRM's data document (it grows fast): the IT dashboard reads it page by page.
+-- =====================================================================================================
+create table if not exists activity_log (
+  id      text primary key,
+  at      timestamptz not null default now(),
+  user_id text not null references app_users(id) on delete cascade,
+  role    text not null default '',
+  kind    text not null check (kind in ('page', 'click', 'change', 'submit', 'action', 'error')),
+  label   text not null check (length(label) <= 300),
+  path    text not null default '' check (length(path) <= 300),
+  area    text check (area is null or length(area) <= 200),
+  detail  text check (detail is null or length(detail) <= 600),
+  ok      boolean
+);
+create index if not exists activity_log_at_idx on activity_log(at desc);
+create index if not exists activity_log_user_idx on activity_log(user_id, at desc);
+create index if not exists activity_log_kind_idx on activity_log(kind, at desc);
+
+alter table activity_log enable row level security;
+drop policy if exists activity_log_insert on activity_log;
+create policy activity_log_insert on activity_log for insert to authenticated
+  with check (app.is_staff() and user_id = app.me() and at > now() - interval '1 day' and at < now() + interval '5 minutes');
+drop policy if exists activity_log_read on activity_log;
+create policy activity_log_read on activity_log for select to authenticated using (app.has_role('it'));
+drop policy if exists activity_log_delete on activity_log;
+create policy activity_log_delete on activity_log for delete to authenticated using (app.has_role('it'));

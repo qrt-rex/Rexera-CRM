@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { AlertTriangle, Briefcase, Building2, Calculator, CreditCard, FileText, IndianRupee, Layers, MessageSquareText, Package, Plus, Save, Send, Trash2, Wallet } from 'lucide-react'
+import { AlertTriangle, Briefcase, Building2, ClipboardList, Calculator, FileText, IndianRupee, Layers, MessageSquareText, Package, Plus, Save, Send, Trash2, Wallet } from 'lucide-react'
 import type { BookingType, FileRef } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useMe } from '../../lib/auth'
@@ -10,7 +10,9 @@ import { DOC_TYPES } from '../../lib/files'
 import { addDays, fmtDate, inr, isEmail, isGstin, isPan, round2, today, ymd } from '../../lib/format'
 import { rolesOf } from '../../lib/rbac'
 import { stateForCity } from '../../lib/india'
-import { Button, Card, CardHeader, cx, Input, PageHeader, Select, Textarea, useRun } from '../../components/ui'
+import { Button, Card, CardHeader, cx, Input, PageHeader, Select, Textarea, useRun, useSubmitting } from '../../components/ui'
+import { ClientEntryButtons } from '../../components/ClientEntry'
+import { CLIENT_ENTRY_STATUS, convertibleEntries, startsFromClientEntry } from '../../lib/clientEntries'
 import { CityInput, PhoneInput, StateSelect } from '../../components/fields'
 import { FileField } from '../../components/FileField'
 import { DocUploader, type PendingDoc } from '../../components/DocUploader'
@@ -19,7 +21,13 @@ const COMPANY_DOCS = ['Company PAN card', 'GST certificate', 'Certificate of Inc
 const OTHER = '__other__'
 type Pay = PaymentPartInput & { proof?: FileRef }
 
+/** A new form for each client entry / lead it is filled from (the picker links here with ?entry=…). */
 export default function BookingForm() {
+  const [params] = useSearchParams()
+  return <BookingFormBody key={params.get('entry') ?? params.get('lead') ?? ''} />
+}
+
+function BookingFormBody() {
   const db = useDb()
   const me = useMe()
   const run = useRun()
@@ -27,8 +35,11 @@ export default function BookingForm() {
   const { id } = useParams()
   const [params] = useSearchParams()
   const existing = id ? db.bookings.find((b) => b.id === id) : undefined
-  const lead = params.get('lead') ? db.leads.find((l) => l.id === params.get('lead')) : undefined
-  const svcFromLead = lead ? db.services.find((s) => s.name === lead.service) : undefined
+  // sales person → dialer → client entry → follow-ups → CRM entry: the client entry fills the form in
+  const entry = params.get('entry') ? convertibleEntries(db, me).find((e) => e.id === params.get('entry')) : undefined
+  const leadId = params.get('lead') ?? entry?.leadId
+  const lead = leadId ? db.leads.find((l) => l.id === leadId) : undefined
+  const svcFromLead = entry ? db.services.find((s) => s.id === entry.serviceId) : lead ? db.services.find((s) => s.name === lead.service) : undefined
 
   const [f, setF] = useState<BookingInput>(() => existing ? {
     companyName: existing.companyName, companyAddress: existing.address ?? '', city: existing.city, state: existing.state, industry: existing.industry,
@@ -41,13 +52,14 @@ export default function BookingForm() {
     successFee: existing.successFee ?? { type: 'PCT', value: existing.successFeePct || 0 }, remarks: existing.remarks ?? '', priority: existing.priority, teamLeadId: existing.teamLeadId,
   } : {
     // a hot lead fills itself in; the sales person can change everything
-    companyName: lead?.company || lead?.name || '', companyAddress: '', city: lead?.city ?? '', state: lead?.state || (lead?.city ? stateForCity(lead.city) ?? '' : '') || 'Gujarat', industry: lead?.industry ?? '',
-    contactPerson: lead?.name ?? '', mobile: lead?.phone ?? '', email: lead?.email ?? '', pan: '', gstin: '',
-    paymentContact: lead?.phone ?? '', paymentEmail: '',
-    services: [{ serviceId: svcFromLead?.id ?? '', price: lead?.price ?? svcFromLead?.price ?? 0 }],
+    companyName: entry?.companyName || lead?.company || lead?.name || '', companyAddress: '', city: lead?.city ?? '', state: lead?.state || (lead?.city ? stateForCity(lead.city) ?? '' : '') || 'Gujarat', industry: lead?.industry ?? '',
+    contactPerson: entry?.clientName ?? lead?.name ?? '', mobile: entry?.phone ?? lead?.phone ?? '', email: lead?.email ?? '', pan: '', gstin: '',
+    paymentContact: entry?.phone ?? lead?.phone ?? '', paymentEmail: '',
+    services: [{ serviceId: svcFromLead?.id ?? '', price: entry?.pitchedPrice ?? lead?.price ?? svcFromLead?.price ?? 0 }],
     bookingType: 'SINGLE', mode: 'Refundable', bookingDate: today(),
     payments: [{ amount: 0, date: today(), mode: 'UPI' }], closedBy: me.id,
-    successFee: { type: 'PCT', value: 0 }, remarks: '', note: '', priority: 'MEDIUM', teamLeadId: me.teamLeadId, leadId: lead?.id,
+    successFee: { type: 'PCT', value: 0 }, remarks: entry?.requirement ?? '', note: entry?.note ?? '', priority: 'MEDIUM', teamLeadId: me.teamLeadId, leadId: lead?.id,
+    clientEntryId: entry?.id,
   })
   const [docs, setDocs] = useState<PendingDoc[]>([])
   const [tried, setTried] = useState(false)
@@ -93,7 +105,9 @@ export default function BookingForm() {
     remarks: f.remarks.trim().length < 3 ? 'Remarks are required' : undefined,
   } : {} as Record<string, string | undefined>
 
-  const submit = async () => {
+  // one submit at a time: a double click must not make two CRM entries
+  const [busy, once] = useSubmitting()
+  const submit = () => once(async () => {
     setTried(true)
     if (existing) {
       const ok = await run(() => updateBooking(me, existing.id, {
@@ -106,11 +120,16 @@ export default function BookingForm() {
     }
     const newId = await run(() => createBooking(me, { ...f, documents: docs }), 'Submitted to Accounts')
     if (typeof newId === 'string') nav(`/bookings/${newId}`)
-  }
+  })
+
+  // sales people and team leaders convert a client entry (filled in the dialer) once the payment is received
+  if (!existing && !entry && startsFromClientEntry(me)) return <PickClientEntry />
 
   return (
     <div className="mx-auto max-w-6xl">
-      <PageHeader title={existing ? `Edit ${existing.bookingId}` : 'New CRM Entry'} subtitle={lead ? `Filled in from lead ${lead.code} · ${lead.name} — change anything you need` : 'Fields marked * are required. The date and time of entry are saved automatically.'} icon={Briefcase}
+      <PageHeader title={existing ? `Edit ${existing.bookingId}` : 'New CRM Entry'}
+        subtitle={entry ? `Converting the client entry of ${fmtDate(entry.date)} · ${entry.clientName} (${entry.companyName}) — add the payment received and change anything you need`
+          : lead ? `Filled in from lead ${lead.code} · ${lead.name} — change anything you need` : 'Fields marked * are required. The date and time of entry are saved automatically.'} icon={Briefcase}
         actions={<Link to={existing ? `/bookings/${existing.id}` : '/bookings'}><Button variant="outline">Cancel</Button></Link>} />
 
       {dups.length > 0 && (
@@ -122,13 +141,14 @@ export default function BookingForm() {
       )}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_330px]">
-        <div className="space-y-6">
-          <Block title="Client company" icon={Building2}>
+        <div className="space-y-4">
+          {/* client and payment contact in one block, three fields a row on wide screens (less scrolling) */}
+          <Block title="Client company & payment contact" icon={Building2}>
             <Input label="Company name" required value={f.companyName} error={e.companyName} onChange={(ev) => set('companyName', ev.target.value)} className="sm:col-span-2" />
-            <Textarea label="Company address" required rows={2} value={f.companyAddress} error={e.companyAddress} onChange={(ev) => set('companyAddress', ev.target.value)} className="sm:col-span-2" placeholder="Building, street, area" />
+            <Input label="Contact person" required value={f.contactPerson} error={e.contactPerson} onChange={(ev) => set('contactPerson', ev.target.value)} />
+            <Textarea label="Company address" required rows={1} value={f.companyAddress} error={e.companyAddress} onChange={(ev) => set('companyAddress', ev.target.value)} className="sm:col-span-2" placeholder="Building, street, area" />
             <CityInput label="City" required value={f.city} onChange={(v) => set('city', v)} onState={(s) => set('state', s)} />
             <StateSelect label="Company state" required value={f.state} onChange={(v) => set('state', v)} />
-            <Input label="Contact person" required value={f.contactPerson} error={e.contactPerson} onChange={(ev) => set('contactPerson', ev.target.value)} />
             <PhoneInput label="Company mobile" required value={f.mobile} onChange={(v) => set('mobile', v)} />
             <Input label="Company email" required type="email" value={f.email} error={e.email} onChange={(ev) => set('email', ev.target.value)} />
             <div className="grid gap-2">
@@ -141,16 +161,13 @@ export default function BookingForm() {
             </div>
             <Input label="Company PAN" required value={f.pan} error={e.pan} onChange={(ev) => set('pan', ev.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))} maxLength={10} />
             <Input label="GST" value={f.gstin} error={e.gstin} onChange={(ev) => set('gstin', ev.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15))} maxLength={15} hint={f.state === db.settings.supplierState ? 'Same state: CGST + SGST' : 'Other state: IGST'} />
-          </Block>
-
-          <Block title="Payment contact" icon={CreditCard}>
-            <PhoneInput label="Payment contact" required value={f.paymentContact} onChange={(v) => set('paymentContact', v)} hint="Who pays — can be different from the company mobile" />
+            <PhoneInput label="Payment contact" required value={f.paymentContact} onChange={(v) => set('paymentContact', v)} hint="Who pays — can differ from the company mobile" />
             <Input label="Payment email" type="email" value={f.paymentEmail} onChange={(ev) => set('paymentEmail', ev.target.value)} error={tried && f.paymentEmail && !isEmail(f.paymentEmail) ? 'Not a valid email' : undefined} />
           </Block>
 
           <Card className="overflow-hidden">
             <CardHeader title="Booking type & services" subtitle="Price bifurcation is compulsory for loans, certificates and other services · funding: one price is enough, the others can be 0" icon={Layers} />
-            <div className="space-y-4 p-5">
+            <div className="space-y-3 p-4">
               {!existing && (
                 <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Booking type">
                   {BOOKING_TYPES.map((t) => (
@@ -194,7 +211,8 @@ export default function BookingForm() {
                 {!existing && f.bookingType !== 'SINGLE' && (!pkg || f.services.length < comboCap(pkg)) && <Button type="button" size="sm" variant="soft" icon={Plus} onClick={() => set('services', [...f.services, { serviceId: '', price: 0 }])}>Add service</Button>}
                 {fundingUnpriced && <p className="text-xs text-warn">Enter the price of at least one funding service — the other funding services can stay 0.</p>}
               </div>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <Input label="Booking date" required type="date" max={today()} value={f.bookingDate} onChange={(ev) => set('bookingDate', ev.target.value)} />
                 <Select label="Mode" required value={f.mode} onChange={(ev) => set('mode', ev.target.value as BookingInput['mode'])}><option>Refundable</option><option>Non-Refundable</option></Select>
                 <div>
                   <span className="mb-1.5 block text-xs font-semibold text-mute">After discount success fee <span className="text-bad">*</span></span>
@@ -213,21 +231,20 @@ export default function BookingForm() {
           </Card>
 
           <Card className="overflow-hidden">
-            <CardHeader title="Booking & payments" subtitle="Payment part 1 is the advance — it is the total quoted on this entry. Later parts are balance payments (Accounts can add them too)." icon={Wallet} />
-            <div className="space-y-4 p-5">
-              <Input label="Booking date" required type="date" max={today()} value={f.bookingDate} onChange={(ev) => set('bookingDate', ev.target.value)} className="sm:max-w-xs" />
+            <CardHeader title="Payment received" subtitle="Payment part 1 is the advance — it is the total quoted on this entry. Later parts are balance payments (Accounts adds them)." icon={Wallet} />
+            <div className="space-y-3 p-4">
               {!existing && f.payments.map((p, i) => (
-                <div key={i} className="rounded-2xl border border-line p-4">
-                  <div className="mb-3 flex items-center justify-between">
+                <div key={i} className="rounded-2xl border border-line p-3">
+                  <div className="mb-2 flex items-center justify-between">
                     <p className="text-sm font-bold">{i === 0 ? 'Payment part 1 · advance' : `Payment part ${i + 1}`}{i === 0 && <span className="text-bad"> *</span>}</p>
                     {i > 0 && <Button type="button" size="sm" variant="ghost" icon={Trash2} aria-label={`Remove part ${i + 1}`} onClick={() => set('payments', f.payments.filter((_, j) => j !== i))} />}
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-[1fr_1fr_1fr_1.4fr]">
                     <Input label="Amount (before GST)" required type="number" inputMode="decimal" min={0} value={p.amount || ''} onChange={(ev) => setPay(i, { amount: Number(ev.target.value) })}
                       hint={p.amount ? `With GST ${inr(withGst(p.amount))}` : undefined} error={tried && !(p.amount > 0) ? 'Required' : undefined} />
                     <Input label="Date" required type="date" value={p.date} onChange={(ev) => setPay(i, { date: ev.target.value })} hint="Counts in this month's scorecard" />
                     <Select label="Mode" value={p.mode} onChange={(ev) => setPay(i, { mode: ev.target.value })}>{PAYMENT_MODES.map((m) => <option key={m}>{m}</option>)}</Select>
-                    <div className="sm:col-span-3">
+                    <div className="sm:col-span-3 xl:col-span-1">
                       <FileField label={i === 0 ? 'Attachment of receiving the payment' : 'Payment proof (optional)'} required={i === 0} accept={DOC_TYPES} acceptLabel="Screenshot or PDF"
                         value={p.proof} onChange={(proof) => setPay(i, { proof })} error={tried && i === 0 && !p.proof ? 'Attach the payment proof' : undefined} />
                     </div>
@@ -239,17 +256,20 @@ export default function BookingForm() {
             </div>
           </Card>
 
-          <Block title="Closing & remarks" icon={MessageSquareText}>
-            <Input label="Lead closed by" value={f.closedBy === me.id ? `${me.name} (me)` : userName(db, f.closedBy)} readOnly disabled />
-            <Textarea label="Remarks" required rows={3} value={f.remarks} error={e.remarks} onChange={(ev) => set('remarks', ev.target.value)} className="sm:col-span-2" placeholder="What was agreed with the client, special conditions, next steps…" />
-            {!existing && <Textarea label="Notes for Accounts" rows={2} value={f.note ?? ''} onChange={(ev) => set('note', ev.target.value)} className="sm:col-span-2" />}
+          <Block title="Remarks" icon={MessageSquareText} cols="sm:grid-cols-2">
+            <Textarea label="Remarks" required rows={2} value={f.remarks} error={e.remarks} onChange={(ev) => set('remarks', ev.target.value)} className={cx(existing && 'sm:col-span-2')} placeholder="What was agreed with the client, special conditions, next steps…" />
+            {!existing && <Textarea label="Notes for Accounts" rows={2} value={f.note ?? ''} onChange={(ev) => set('note', ev.target.value)} />}
           </Block>
 
+          {/* optional, so folded away until needed (the files stay picked while it is closed) */}
           {!existing && (
-            <Card className="overflow-hidden">
-              <CardHeader title="Company documents" subtitle="Optional — company PAN card, GSTIN, CRM / QT / Agreement" icon={FileText} />
-              <div className="p-5"><DocUploader value={docs} onChange={setDocs} categories={COMPANY_DOCS} label="Documents" /></div>
-            </Card>
+            <details className="group overflow-hidden rounded-2xl border border-line bg-card shadow-card">
+              <summary className="flex cursor-pointer list-none items-center gap-3 px-5 py-4 text-sm font-bold">
+                <FileText className="size-5 text-brand-ink" />Company documents <span className="font-normal text-mute">— optional: PAN card, GSTIN, CRM / QT / Agreement{docs.length ? ` · ${docs.length} added` : ''}</span>
+                <span className="ml-auto text-xs font-semibold text-brand-ink group-open:hidden">Add</span>
+              </summary>
+              <div className="border-t border-line p-5"><DocUploader value={docs} onChange={setDocs} categories={COMPANY_DOCS} label="Documents" /></div>
+            </details>
           )}
         </div>
 
@@ -257,6 +277,7 @@ export default function BookingForm() {
           <Card className="overflow-hidden">
             <CardHeader title="Summary" icon={Calculator} />
             <div className="space-y-2.5 p-5 text-sm">
+              <Row k="Lead closed by" v={f.closedBy === me.id ? `${me.name} (me)` : userName(db, f.closedBy)} />
               <Row k="Booking type" v={<b>{BOOKING_TYPES.find((t) => t.id === f.bookingType)?.label}</b>} />
               {rows.filter((r) => r.s).map((r, i) => <Row key={i} k={r.s!.name} v={r.price ? inr(r.price) : <span className="text-mute">0</span>} />)}
               {rows.filter((r) => r.s).length > 1 && <Row k="Services total" v={inr(sumPrices)} />}
@@ -270,7 +291,7 @@ export default function BookingForm() {
               </>}
             </div>
             <div className="border-t border-line p-4">
-              <Button variant="accent" size="lg" className="w-full" icon={existing ? Save : Send} onClick={submit}>{existing ? 'Save changes' : 'Submit to Accounts'}</Button>
+              <Button variant="accent" size="lg" className="w-full" icon={existing ? Save : Send} loading={busy} onClick={submit}>{existing ? 'Save changes' : 'Submit to Accounts'}</Button>
               {!existing && <p className="mt-2 text-center text-[11px] text-mute">Chain: Accounts → Legal → Operations → Admin → Ops approval{isTL ? '' : ' · your team leader is kept informed'}</p>}
             </div>
           </Card>
@@ -281,8 +302,41 @@ export default function BookingForm() {
   )
 }
 
-function Block({ title, icon, children }: { title: string; icon: typeof Briefcase; children: ReactNode }) {
-  return <Card className="overflow-hidden"><CardHeader title={title} icon={icon} /><div className="grid gap-4 p-5 sm:grid-cols-2">{children}</div></Card>
+/** For sales people and team leaders: the CRM entry is made from one of their client entries. */
+function PickClientEntry() {
+  const db = useDb()
+  const me = useMe()
+  const list = convertibleEntries(db, me).slice().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+  return (
+    <div className="mx-auto max-w-4xl">
+      <PageHeader title="New CRM Entry" subtitle="Pick the client entry to convert — once the payment is received" icon={Briefcase}
+        actions={<><ClientEntryButtons crm={false} /><Link to="/bookings?view=client"><Button variant="outline" icon={ClipboardList}>All client entries</Button></Link></>} />
+      <Card className="overflow-hidden">
+        <CardHeader title="My client entries" subtitle="Sales person → dialer → client entry → follow-ups → CRM entry" icon={ClipboardList} />
+        {!list.length ? (
+          <div className="p-6 text-sm text-mute">
+            <p>You have no open client entries. Add one with <b>Add Client Entry</b>, or fill it in the <Link to="/dialer" className="font-semibold text-brand-ink underline">dialer</Link> while you are on the call; once the payment is received, convert it here.</p>
+          </div>
+        ) : (
+          <ul className="divide-y divide-line/70">
+            {list.map((e) => (
+              <li key={e.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
+                <span className="min-w-0 flex-1">
+                  <span className="block font-semibold">{e.clientName} · {e.companyName}</span>
+                  <span className="block text-xs text-mute">{fmtDate(e.date)} · {e.scheme} · pitched {inr(e.pitchedPrice)} · {CLIENT_ENTRY_STATUS[e.status].label}</span>
+                </span>
+                <Link to={`/bookings/new?entry=${e.id}`}><Button size="sm" variant="soft" icon={Briefcase}>Convert to CRM entry</Button></Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+    </div>
+  )
+}
+
+function Block({ title, icon, cols = 'sm:grid-cols-2 xl:grid-cols-3', children }: { title: string; icon: typeof Briefcase; cols?: string; children: ReactNode }) {
+  return <Card className="overflow-hidden"><CardHeader title={title} icon={icon} /><div className={cx('grid gap-3 p-4', cols)}>{children}</div></Card>
 }
 function Row({ k, v }: { k: string; v: ReactNode }) {
   return <div className="flex items-center justify-between gap-3"><span className="min-w-0 truncate text-mute">{k}</span><span className="shrink-0 text-right">{v}</span></div>

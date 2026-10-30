@@ -65,9 +65,16 @@ export async function runJobs(env, { send, now = Date.now(), client, fetchImpl }
     for (const u of data ?? []) people.set(u.id, u)
   })
   const name = (id) => people.get(id)?.name ?? '—'
+  // Automation Center: a built-in automation IT Support switched off is skipped here too (no table yet = all on)
+  const off = new Set()
+  try {
+    const { data, error } = await sb.from('automation_rules').select('id, enabled').like('id', 'builtin:%')
+    if (!error) for (const r of data ?? []) if (r.enabled === false) off.add(r.id.slice('builtin:'.length))
+  } catch { /* older database: everything stays on */ }
+  out.skipped = [...off]
 
   // ---------------------------------------------------------------- 15-day follow-ups
-  for (const r of files) {
+  if (!off.has('file-follow-ups')) for (const r of files) {
     if (!followUpDue(asFile(r), t)) continue
     await step(`follow-up ${r.booking_code}`, async () => {
       const f = r.follow_up, was = f.nextOn
@@ -83,7 +90,7 @@ export async function runJobs(env, { send, now = Date.now(), client, fetchImpl }
   }
 
   // ---------------------------------------------------------------- Pitch Deck (every 3 or 4 days)
-  for (const r of files) {
+  if (!off.has('pitch-deck-reminders')) for (const r of files) {
     if (!precheckDue(asFile(r), t)) continue
     await step(`pitch deck ${r.booking_code}`, async () => {
       const pc = r.admin_work.PRECHECK, was = pc.nextRemindOn
@@ -100,7 +107,7 @@ export async function runJobs(env, { send, now = Date.now(), client, fetchImpl }
   }
 
   // ---------------------------------------------------------------- scheme ends tomorrow
-  await step('schemes', async () => {
+  if (!off.has('scheme-expiry-alerts')) await step('schemes', async () => {
     const { data: schemes, error } = await sb.from('schemes').select('id, title, active, end_date').eq('active', true).eq('end_date', addDays(t, 1))
     if (error) throw new Error(error.message)
     if (!schemes?.length) return
@@ -120,7 +127,7 @@ export async function runJobs(env, { send, now = Date.now(), client, fetchImpl }
   // ---------------------------------------------------------------- welcome messages the approving screen didn't send
   const { data: co } = await sb.from('app_settings').select('value').eq('key', 'company').maybeSingle()
   const company = co?.value?.name || 'Rexera'
-  if (send) {
+  if (send && !off.has('welcome-messages')) {
     const stale = (iso, min) => !iso || now - new Date(iso).getTime() >= min * 60_000
     for (const r of files) {
       const e = r.welcome?.email
@@ -154,7 +161,7 @@ export async function runJobs(env, { send, now = Date.now(), client, fetchImpl }
     }
   }
   // WhatsApp (Interakt): queued for 5 min, stuck, or failed — sent at most once per file (reminder_log)
-  for (const r of files) {
+  if (!off.has('welcome-messages')) for (const r of files) {
     if (!r.welcome?.whatsapp) continue
     await step(`welcome WhatsApp ${r.booking_code}`, async () => {
       const res = await welcomeWhatsapp(sb, env, r, { w, company, ops: people.get(r.ops_member_id), now, fetchImpl })

@@ -1,5 +1,5 @@
 import type {
-  AdminStageId, AdminWorkStatus, Booking, BookingStatus, BookingType, BDoc, Delivery, Service, WorkflowSettings, Branch, BreakPolicy, CallOutcome, ClientEmailLog, Shift, CandidateApplication, CandidateForm, DaySession, DB, EventItem, FileRef, Invoice, InvoiceItem, Lead, LeaveType, Milestone, Perm, Post, Role, SalesKitItem, Scheme, User,
+  AdminStageId, AdminWorkStatus, Booking, BookingStatus, BookingType, BDoc, Delivery, Service, WorkflowSettings, Branch, BreakPolicy, Call, CallOutcome, ClientEmailLog, Shift, CandidateApplication, CandidateForm, DaySession, DB, EventItem, FileRef, Invoice, InvoiceItem, Lead, LeaveType, Milestone, Perm, Post, Role, SalesKitItem, Scheme, User,
 } from './types'
 import { effectivePerms, isMaster, isStageOnlyAdmin, MASTER_ROLES, rolesOf, roleLabel } from './rbac'
 import { clearCloudDb, getDb, mutate, reloadFromCloud, saved } from './store'
@@ -15,6 +15,7 @@ import { serverPost } from './serverApi'
 import { hashPassword } from './crypto'
 import { CALL_OUTCOMES, FINAL_STAGE, hasLegalDoc, LEAD_STATUS, OPEN_LEAD, STAGE_OUTCOMES, STAGES, stageLabel } from './workflow'
 import { fireAutomation } from './email'
+import { convertibleEntries, markConverted, startsFromClientEntry } from './clientEntries'
 import { addDays, daysBetween, fmtDate, isEmail, isGstin, isPan, isPhone, normPhone, nowIso, round2, today, uid, ymd } from './format'
 
 // ============================================================ helpers
@@ -148,44 +149,6 @@ export async function changePassword(me: User, next: string, again: string) {
     u.passHash = h
     delete u.needsPasswordReset
     audit(d, me.id, 'PASSWORD', 'Changed own password')
-  })
-}
-
-// ------------------------------------------------------------ forgotten password: one-time code to the account's email
-const resets = new Map<string, Pending>()
-/** Sends a 6-digit code to the account's email. Always answers the same way, so it doesn't reveal which emails exist. */
-export function requestPasswordReset(email: string) {
-  assert(isEmail(email), 'Enter a valid email.')
-  const u = getDb().users.find((x) => x.email.toLowerCase() === email.trim().toLowerCase() && x.active)
-  const token = uid('rst-')
-  const code = genCode()
-  if (u) {
-    resets.set(token, { userId: u.id, code, expires: Date.now() + 10 * 60000, attempts: 0, resends: 0 })
-    mutate((d) => audit(d, u.id, 'PASSWORD_RESET_REQUEST', `Reset code sent to ${u.email}`))
-  }
-  // no mail server in this build: the code is returned so the screen can show it (like the sign-in code)
-  return { token, devCode: u ? code : undefined }
-}
-export async function resetPasswordWithCode(token: string, code: string, next: string, again: string) {
-  const p = resets.get(token)
-  assert(p, 'That code is not valid. Request a new one.')
-  if (Date.now() > p.expires) { resets.delete(token); throw new ActionError('The code expired. Request a new one.') }
-  p.attempts += 1
-  if (p.code !== code.trim()) {
-    if (p.attempts >= 5) { resets.delete(token); throw new ActionError('Too many wrong codes. Request a new one.') }
-    throw new ActionError(`Wrong code. ${5 - p.attempts} attempts left.`)
-  }
-  assert(PASSWORD_RULE.test(next), `Use ${PASSWORD_HINT}`)
-  assert(next === again, 'The two passwords do not match.')
-  const u = getDb().users.find((x) => x.id === p.userId)!
-  const h = await hashPassword(u.username, next)
-  resets.delete(token)
-  mutate((d) => {
-    const x = d.users.find((y) => y.id === u.id)!
-    x.passHash = h
-    delete x.needsPasswordReset
-    delete d.loginFails[u.username.toLowerCase()]; delete d.loginFails[u.email.toLowerCase()]
-    audit(d, u.id, 'PASSWORD', 'Reset password with an emailed code')
   })
 }
 
@@ -492,8 +455,6 @@ export function workedMs(s: DaySession | undefined, now = Date.now()) {
 }
 /** Is the 'no sign-in after Logout until tomorrow' rule on? (Access → Settings; off while testing.) */
 export const dayLockOn = (d: DB) => d.settings.dayLock === true
-/** Ended the day (and not re-opened by HR/IT): no new sign-in until tomorrow. */
-export const dayEnded = (d: DB, userId: string) => !!d.sessions.find((x) => x.userId === userId && x.date === today())?.logoutAt
 
 export function startDay(me: User) {
   mutate((d) => {
@@ -635,6 +596,19 @@ export function roundRobin(d: DB, userIds: string[], start: number, count: numbe
   const last = order[(k + count - 1) % order.length]!
   return { to, next: (last.i + 1) % n, skipped: userIds.filter((id) => !order.some((x) => x.id === id)) }
 }
+/** Super Admin / IT: who works a Blutec dialer campaign — it shows under "Your campaigns" on their dialer dashboard. */
+export function setCampaignAgents(me: User, campaignId: number, userIds: string[]) {
+  assert(isMaster(me), 'Only the Super Admin or IT can give campaigns to sales people.')
+  const ids = [...new Set(userIds)].filter((id) => leadTakers(getDb()).some((u) => u.id === id))
+  mutate((d) => {
+    const map = { ...(d.settings.dialerCampaigns ?? {}) }
+    if (ids.length) map[String(campaignId)] = ids
+    else delete map[String(campaignId)]
+    d.settings.dialerCampaigns = map
+    audit(d, me.id, 'DIALER_CAMPAIGN_AGENTS', `Campaign ${campaignId} · ${ids.length} people`)
+  })
+}
+
 /** Super Admin: switch automatic assignment on / off and choose who takes part (in this order). */
 export function saveLeadAssign(me: User, on: boolean, userIds: string[]) {
   need(me, 'leads.admin')
@@ -823,15 +797,16 @@ export function setLeadStatus(me: User, id: string, status: Lead['status'], note
 }
 
 /** `refId`: the Blutec call this was (click-to-call) — the call webhook files it under the same id, so both become one. */
-export function logCall(me: User, leadId: string, outcome: CallOutcome, note: string, followUp?: string, durationSec = 0, refId?: string) {
+export function logCall(me: User, leadId: string, outcome: CallOutcome, note: string, followUp?: string, durationSec = 0, refId?: string, extra: Pick<Call, 'totalSec' | 'callStatus' | 'wrapSec'> = {}) {
   need(me, 'dialer.use', 'leads.manage')
   mutate((d) => {
     const l = d.leads.find((x) => x.id === leadId)
     assert(l, 'Lead not found.')
     const id = refId ? `bt-${refId}` : uid('call-')
     const filed = l.calls.find((c) => c.id === id)
-    if (filed) Object.assign(filed, { by: me.id, outcome, note: [note, filed.note].filter(Boolean).join(' · '), durationSec: durationSec || filed.durationSec })
-    else l.calls.unshift({ id, at: nowIso(), by: me.id, outcome, note, durationSec })
+    const known = Object.fromEntries(Object.entries(extra).filter(([, v]) => v !== undefined && v !== ''))
+    if (filed) Object.assign(filed, { by: me.id, outcome, note: [note, filed.note].filter(Boolean).join(' · '), durationSec: durationSec || filed.durationSec, ...known })
+    else l.calls.unshift({ id, at: nowIso(), by: me.id, outcome, note, durationSec, ...known })
     l.status = CALL_OUTCOMES.find((o) => o.id === outcome)!.to
     if (followUp) l.followUp = followUp
     else if (!OPEN_LEAD.includes(l.status)) l.followUp = undefined
@@ -957,6 +932,8 @@ export type BookingInput = {
   note?: string
   priority: Booking['priority']; teamLeadId?: string; leadId?: string
   documents?: { file: FileRef; category: string }[]
+  /** the client entry this CRM entry is made from (required for sales people and team leaders) */
+  clientEntryId?: string
 }
 
 export function findDuplicates(d: DB, i: Partial<BookingInput>, excludeId?: string) {
@@ -1025,6 +1002,9 @@ const serviceTitle = (names: string[], combo?: number) => (combo ? `Combo ${comb
 export function createBooking(me: User, i: BookingInput) {
   need(me, 'bookings.create')
   const svcs = checkBooking(getDb(), i, true)
+  // sales person → dialer → client entry → follow-ups → CRM entry: sales people and team leaders convert a client entry
+  if (startsFromClientEntry(me)) assert(i.clientEntryId, 'Make the CRM entry from a client entry: fill the client entry in the dialer first, then convert it once the payment is received.')
+  if (i.clientEntryId) assert(convertibleEntries(getDb(), me).some((e) => e.id === i.clientEntryId), 'That client entry is not yours to convert, or it is already a CRM entry.')
   return mutate((d) => {
     const first = svcs[0]!.s
     const gstRate = Math.max(...svcs.map((x) => x.s.gstRate))
@@ -1065,6 +1045,7 @@ export function createBooking(me: User, i: BookingInput) {
     }
     d.bookings.unshift(b)
     if (i.leadId) { const l = d.leads.find((x) => x.id === i.leadId); if (l) l.status = 'CONVERTED' }
+    if (i.clientEntryId) markConverted(d, me, i.clientEntryId, b.id)
     notify(d, usersWithRole(d, 'accounts').map((u) => u.id), 'New file for accounts', `${b.bookingId} · ${b.companyName} by ${me.name}`, `/bookings/${b.id}`, 'action')
     if (tl && tl !== me.id) notify(d, [tl], 'Your team booked a client', `${b.bookingId} · ${b.companyName} by ${me.name} — sent to Accounts`, `/bookings/${b.id}`, 'info')
     audit(d, me.id, 'BOOKING_CREATE', `${b.bookingId} ${b.companyName} · ${b.serviceName}`)
@@ -1126,11 +1107,13 @@ export function runComboReminders(now = Date.now()) {
   })
   return due.length
 }
+/** Statuses in which the sales person who made a CRM entry edits it themselves (until it goes on to Legal). */
+export const OWNER_EDITABLE: BookingStatus[] = ['PENDING_TL', 'PENDING_ACCOUNTS', 'ACCOUNTS_HOLD', 'REJECTED', 'CHANGES_REQUIRED']
 export function canEditBooking(d: DB, me: User, b: Booking) {
   if (isSA(me)) return true
   if (b.status === 'COMPLETED') return false
   if (effectivePerms(d, me).has('bookings.accounts')) return true
-  return b.createdBy === me.id && ['PENDING_TL', 'REJECTED', 'CHANGES_REQUIRED'].includes(b.status)
+  return b.createdBy === me.id && effectivePerms(d, me).has('bookings.create') && OWNER_EDITABLE.includes(b.status)
 }
 
 export type BookingPatch = Partial<Pick<Booking, 'companyName' | 'address' | 'contactPerson' | 'mobile' | 'email' | 'pan' | 'gstin' | 'city' | 'state' | 'industry' | 'mode' | 'priority' | 'paymentContact' | 'paymentEmail' | 'bookingDate' | 'closedBy' | 'remarks' | 'successFee' | 'teamLeadId'>>
@@ -1144,9 +1127,16 @@ export function updateBooking(me: User, id: string, patch: BookingPatch) {
     if (patch.paymentContact !== undefined) { assert(isPhone(patch.paymentContact), 'Payment contact must be a valid 10-digit mobile.'); patch.paymentContact = normPhone(patch.paymentContact) }
     if (patch.email !== undefined) assert(isEmail(patch.email), 'Enter a valid company email.')
     if (patch.remarks !== undefined) assert(patch.remarks.trim().length >= 3, 'Remarks are required.')
-    if (patch.successFee) b.successFeePct = patch.successFee.type === 'PCT' ? patch.successFee.value : 0
+    if (patch.companyName !== undefined) assert(patch.companyName.trim().length >= 2, 'Company name is required.')
+    if (patch.successFee) {
+      assert(Number.isFinite(patch.successFee.value) && patch.successFee.value >= 0 && (patch.successFee.type === 'AMOUNT' || patch.successFee.value <= 100), 'Success fee must be 0 or more (a percentage up to 100). Enter 0 if the client did not agree.')
+      b.successFeePct = patch.successFee.type === 'PCT' ? patch.successFee.value : 0
+    }
     Object.assign(b, patch)
     b.updatedAt = nowIso()
+    // the sales person changed an entry Accounts is checking: tell Accounts
+    if (b.createdBy === me.id && !has(me, 'bookings.accounts') && ['PENDING_ACCOUNTS', 'ACCOUNTS_HOLD'].includes(b.status))
+      notify(d, usersWithRole(d, 'accounts').map((u) => u.id), 'CRM entry edited by sales', `${b.bookingId} · ${b.companyName} — check the changes`, `/bookings/${b.id}`, 'info')
     audit(d, me.id, 'BOOKING_EDIT', `${b.bookingId} edited`)
   })
 }
@@ -2027,16 +2017,6 @@ export function addComment(me: User, id: string, text: string) {
   })
 }
 
-export function addDocument(me: User, id: string, doc: Omit<BDoc, 'id' | 'at' | 'by' | 'status'>) {
-  mutate((d) => {
-    const b = findB(d, id)
-    assert(visibleBookings(d, me).some((x) => x.id === id), 'Not found.')
-    assert(doc.size <= 5 * 1024 * 1024, 'Files must be 5 MB or smaller.')
-    b.documents.push({ ...doc, id: uid('doc-'), at: nowIso(), by: me.id, status: 'PENDING' })
-    b.updatedAt = nowIso()
-    audit(d, me.id, 'DOC_UPLOAD', `${b.bookingId}: ${doc.name}`)
-  })
-}
 /** Several documents at once, each with its own type (files are already in the browser file store). */
 export function addDocuments(me: User, id: string, docs: { file: FileRef; category: string; note?: string }[]) {
   assert(docs.length, 'Add at least one document.')
@@ -2130,11 +2110,6 @@ export function deleteTask(_me: User, id: string, taskId: string) {
   mutate((d) => { const b = findB(d, id); b.tasks = b.tasks.filter((t) => t.id !== taskId) })
 }
 
-export function setPriority(me: User, id: string, priority: Booking['priority'], deadline?: string) {
-  need(me, 'bookings.legal', 'bookings.process', 'bookings.approve_tl', 'bookings.accounts')
-  mutate((d) => { const b = findB(d, id); b.priority = priority; if (deadline) b.deadline = deadline })
-}
-
 /** Team leader moves a client (CRM entry) to another sales person in the team. */
 export function reassignOwner(me: User, id: string, salesId: string) {
   need(me, 'team.assign')
@@ -2174,7 +2149,12 @@ export function visibleInvoices(d: DB, me: User) {
 /** The only service text on a proforma invoice. */
 export const PROFORMA_SERVICE = 'Consultancy services'
 
-export function createInvoice(me: User, i: { type: Invoice['type']; client: string; gstin: string; state: string; items: InvoiceItem[]; bookingId?: string; salesPerson?: string; due: string; clientAddress?: string; clientPan?: string; branchId?: string }) {
+/** The branch picked on the invoice form (must be one of Access → Settings → Invoice branches). */
+function checkInvoiceBranch(d: DB, branchId?: string) {
+  assert(!branchId || (d.settings.branches ?? []).some((b) => b.id === branchId), 'Pick the branch from the list.')
+  if ((d.settings.branches ?? []).length) assert(branchId, 'Pick the branch the invoice is issued from.')
+}
+export function createInvoice(me: User, i: { type: Invoice['type']; client: string; gstin: string; state: string; items: InvoiceItem[]; bookingId?: string; salesPerson?: string; due: string; clientAddress?: string; clientPan?: string; remarks?: string; branchId?: string }) {
   need(me, 'billing.create', 'billing.manage')
   // a proforma invoice always reads "Consultancy services" — the line can't be renamed
   if (i.type === 'PROFORMA') i = { ...i, items: i.items.map((x) => ({ ...x, desc: PROFORMA_SERVICE, sac: x.sac || '998311' })) }
@@ -2182,6 +2162,8 @@ export function createInvoice(me: User, i: { type: Invoice['type']; client: stri
   assert(!i.gstin || isGstin(i.gstin), 'GSTIN format is invalid.')
   assert(i.items.length && i.items.every((x) => x.desc && x.qty > 0 && x.rate >= 0), 'Each line needs a description, quantity and rate.')
   if (i.type === 'TAX') need(me, 'billing.manage')
+  // picked on the invoice form ('' = none picked); raised from a CRM entry it is not passed (the creator's branch)
+  if (i.branchId !== undefined) { checkInvoiceBranch(getDb(), i.branchId || undefined); i = { ...i, branchId: i.branchId || undefined } }
   return mutate((d) => {
     // one live invoice of each type per CRM entry (a double click or two people at once must not bill twice)
     const twin = i.bookingId ? d.invoices.find((x) => x.bookingId === i.bookingId && x.type === i.type && x.status !== 'CANCELLED') : undefined
@@ -2191,7 +2173,9 @@ export function createInvoice(me: User, i: { type: Invoice['type']; client: stri
       id: uid('inv-'), number: `${i.type === 'TAX' ? 'RX' : 'PF'}/${fy}/${String(d.counters.invoice++).padStart(4, '0')}`,
       type: i.type, bookingId: i.bookingId, client: i.client.trim(), gstin: i.gstin.toUpperCase(), state: i.state, items: i.items,
       paid: 0, status: 'ISSUED', date: today(), due: i.due, salesPerson: i.salesPerson ?? me.id, createdBy: me.id,
-      clientAddress: i.clientAddress?.trim() || undefined, clientPan: i.clientPan?.trim().toUpperCase() || undefined, branchId: i.branchId,
+      clientAddress: i.clientAddress?.trim() || undefined, clientPan: i.clientPan?.trim().toUpperCase() || undefined, remarks: i.remarks?.trim() || undefined,
+      // the branch picked on the form; raised from a CRM entry: the creator's own branch
+      branchId: i.branchId ?? (me.branchId && d.settings.branches?.some((b) => b.id === me.branchId) ? me.branchId : undefined),
     }
     d.invoices.unshift(inv)
     audit(d, me.id, 'INVOICE_CREATE', inv.number)
@@ -2218,6 +2202,42 @@ export function invoiceFromBooking(me: User, bookingId: string, type: Invoice['t
   })
 }
 
+/**
+ * Who edits an invoice after it is made: Accounts (billing.manage) until it is cancelled; the sales person who made it
+ * (or is on it) their own proforma while nothing has been paid against it.
+ */
+export function canEditInvoice(d: DB, me: User, inv: Invoice) {
+  if (inv.status === 'CANCELLED') return false
+  const p = effectivePerms(d, me)
+  if (p.has('billing.manage')) return true
+  return p.has('billing.create') && (inv.createdBy === me.id || inv.salesPerson === me.id) && inv.type === 'PROFORMA' && inv.status === 'ISSUED' && !inv.paid
+}
+export type InvoiceEdit = { client: string; gstin: string; state: string; items: InvoiceItem[]; due: string; clientAddress?: string; clientPan?: string; remarks?: string; branchId?: string }
+export function updateInvoice(me: User, id: string, i: InvoiceEdit) {
+  const inv0 = getDb().invoices.find((x) => x.id === id)
+  assert(inv0, 'Invoice not found.')
+  assert(canEditInvoice(getDb(), me, inv0), inv0.status === 'CANCELLED' ? 'This invoice is cancelled.' : 'Only Accounts can change this invoice now (it is a tax invoice, or a payment is recorded on it).')
+  if (inv0.type === 'PROFORMA') i = { ...i, items: i.items.map((x) => ({ ...x, desc: PROFORMA_SERVICE, sac: x.sac || '998311' })) }
+  assert(i.client.trim(), 'Client name is required.')
+  assert(!i.gstin || isGstin(i.gstin), 'GSTIN format is invalid.')
+  assert(i.items.length && i.items.every((x) => x.desc && x.qty > 0 && x.rate >= 0), 'Each line needs a description, quantity and rate.')
+  assert(/^\d{4}-\d{2}-\d{2}$/.test(i.due), 'Pick the due date.')
+  assert(!i.remarks || i.remarks.length <= 1000, 'Keep the remarks under 1000 characters.')
+  // only Accounts moves an invoice to another branch (its address, GSTIN and bank print on it)
+  const branchChanged = i.branchId !== undefined && (i.branchId || undefined) !== inv0.branchId
+  assert(!branchChanged || has(me, 'billing.manage'), 'Only Accounts can change the branch of an invoice.')
+  if (branchChanged) checkInvoiceBranch(getDb(), i.branchId || undefined)
+  mutate((d) => {
+    const inv = d.invoices.find((x) => x.id === id)!
+    if (branchChanged) inv.branchId = i.branchId || undefined
+    Object.assign(inv, {
+      client: i.client.trim(), gstin: i.gstin.toUpperCase(), state: i.state, items: i.items, due: i.due,
+      clientAddress: i.clientAddress?.trim() || undefined, clientPan: i.clientPan?.trim().toUpperCase() || undefined, remarks: i.remarks?.trim() || undefined,
+    })
+    audit(d, me.id, 'INVOICE_EDIT', inv.number)
+  })
+}
+
 export function recordInvoicePayment(me: User, id: string, amount: number, grand: number) {
   need(me, 'billing.manage')
   assert(amount > 0, 'Amount must be more than 0.')
@@ -2230,13 +2250,15 @@ export function recordInvoicePayment(me: User, id: string, amount: number, grand
   })
 }
 /** Accounts chooses the branch an invoice is issued from (its address and GSTIN print on the invoice). */
-export function setInvoiceBranch(me: User, id: string, branchId: string) {
-  need(me, 'billing.manage', 'billing.create')
+/** Remarks printed on the invoice (Accounts can change them until it is cancelled). */
+export function setInvoiceRemarks(me: User, id: string, remarks: string) {
+  need(me, 'billing.manage')
+  assert(remarks.length <= 1000, 'Keep the remarks under 1000 characters.')
   mutate((d) => {
     const inv = d.invoices.find((x) => x.id === id)
     assert(inv, 'Invoice not found.')
-    assert(d.settings.branches?.some((b) => b.id === branchId), 'Pick a branch.')
-    inv.branchId = branchId
+    assert(inv.status !== 'CANCELLED', 'This invoice is cancelled.')
+    inv.remarks = remarks.trim() || undefined
   })
 }
 export function saveBranches(me: User, branches: Branch[]) {

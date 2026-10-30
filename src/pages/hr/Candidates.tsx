@@ -4,7 +4,7 @@ import type { CandidateApplication, CandidateForm } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useMe } from '../../lib/auth'
 import { deleteCandidateForm, saveCandidateForm, setCandidateFormActive, updateCandidate } from '../../lib/actions'
-import { downloadCsv, fmtDate, fmtDateTime, today } from '../../lib/format'
+import { downloadCsv, fmtDate, fmtDateTime, today, ymd } from '../../lib/format'
 import { CANDIDATE_TYPES, candidateTypeLabel, JOB_BRANCH_INFO, JOB_POSITIONS, jobBranch } from '../../../supabase/form-rules.mjs'
 import { openFile } from '../../lib/files'
 import { FileLink } from '../../components/FileField'
@@ -30,9 +30,15 @@ export default function Candidates() {
   const [branch, setBranch] = useState('')
   const [ctype, setCtype] = useState('')
   const [q, setQ] = useState('')
+  // date-wise (the day the application came in) and position-wise
+  const [position, setPosition] = useState('')
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
+  const positions = useMemo(() => [...new Set([...JOB_POSITIONS, ...db.candidates.map((c) => c.position ?? '')].filter(Boolean))].sort(), [db.candidates])
   const [openId, setOpenId] = useState<string | null>(null)
   const list = useMemo(() => db.candidates.filter((c) => (!formFilter || c.formId === formFilter) && (!status || c.status === status) && (!branch || c.branch === branch) && (!ctype || c.candidateType === ctype)
-    && (!q || `${c.name} ${c.email} ${c.phone} ${c.city} ${c.qualification} ${c.branch ?? ''} ${c.position ?? ''}`.toLowerCase().includes(q.toLowerCase()))), [db.candidates, formFilter, status, branch, ctype, q])
+    && (!position || c.position === position) && (!from || ymd(c.submittedAt) >= from) && (!to || ymd(c.submittedAt) <= to)
+    && (!q || `${c.name} ${c.email} ${c.phone} ${c.city} ${c.qualification} ${c.branch ?? ''} ${c.position ?? ''}`.toLowerCase().includes(q.toLowerCase()))), [db.candidates, formFilter, status, branch, ctype, position, from, to, q])
   const { slice, pager, offset } = usePaged(list, 25, [formFilter, status, branch, ctype, q])
   /** "2026-10-28T11:30" → 28 Oct 2026, 11:30 am */
   const slot = (s?: string) => (s ? `${fmtDate(s.slice(0, 10))}, ${new Date(`2000-01-01T${s.slice(11, 16)}:00`).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}` : '')
@@ -85,9 +91,14 @@ export default function Candidates() {
           <select value={status} onChange={(e) => setStatus(e.target.value)} className="h-10 rounded-xl border border-line bg-card px-3 text-sm" aria-label="Status"><option value="">All statuses</option>{Object.entries(STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select>
           <select value={branch} onChange={(e) => setBranch(e.target.value)} className="h-10 rounded-xl border border-line bg-card px-3 text-sm" aria-label="Branch"><option value="">All branches</option>{JOB_BRANCH_INFO.map((b) => <option key={b.name} value={b.name}>{b.name} — {b.area}</option>)}</select>
           <select value={ctype} onChange={(e) => setCtype(e.target.value)} className="h-10 rounded-xl border border-line bg-card px-3 text-sm" aria-label="Applying as"><option value="">Intern / fresher / experienced</option>{CANDIDATE_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</select>
+          <select value={position} onChange={(e) => setPosition(e.target.value)} className="h-10 max-w-64 rounded-xl border border-line bg-card px-3 text-sm" aria-label="Position"><option value="">All positions</option>{positions.map((p) => <option key={p} value={p}>{p}</option>)}</select>
+          <span className="flex items-center gap-1.5 text-xs text-mute">Applied
+            <input type="date" value={from} max={to || today()} onChange={(e) => setFrom(e.target.value)} className="h-10 rounded-xl border border-line bg-card px-2 text-sm text-ink" aria-label="Applied from" />to
+            <input type="date" value={to} min={from} max={today()} onChange={(e) => setTo(e.target.value)} className="h-10 rounded-xl border border-line bg-card px-2 text-sm text-ink" aria-label="Applied to" />
+          </span>
           <Button variant="outline" disabled={!list.length} onClick={() => downloadCsv(`applications-${today()}.csv`, list.map((c) => ({ form: formName(c.formId), position: c.position ?? '', branch: c.branch ?? '', branch_address: jobBranch(c.branch)?.address ?? '', applying_as: candidateTypeLabel(c.candidateType), preferred_interview: c.interviewAt?.replace('T', ' ') ?? '', current_ctc: c.currentCtc ?? '', name: c.name, email: c.email, phone: c.phone, city: c.city, dob: c.dob ?? '', qualification: c.qualification, college: c.college ?? '', experience: c.experience, current_company: c.currentCompany ?? '', expected: c.expectedSalary ?? '', notice: c.noticePeriod ?? '', linkedin: c.linkedin ?? '', status: STATUS[c.status].label, submitted: c.submittedAt, resume: c.resume.name })))}>Export</Button>
         </div>
-        {!list.length ? <EmptyState icon={Users} title="No applications yet" text="Share a form link — applications appear here with their resumes." /> : (
+        {!list.length ? <EmptyState icon={Users} title={db.candidates.length ? 'No applications match the filters' : 'No applications yet'} text={db.candidates.length ? undefined : 'Share a form link — applications appear here with their resumes.'} /> : (
           <Table>
             <thead><tr><Th>Number</Th><Th>Candidate</Th><Th>Position · branch</Th><Th>Applying as · qualification</Th><Th>Preferred interview</Th><Th>Resume</Th><Th>Status</Th><Th>Submitted</Th></tr></thead>
             <tbody>

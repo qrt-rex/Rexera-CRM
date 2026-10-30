@@ -15,6 +15,7 @@ function fakeSupabase(tables) {
       select: () => api,
       eq: (k, v) => { filters.push((r) => get(r, k) === v); return api },
       in: (k, vs) => { filters.push((r) => vs.includes(get(r, k))); return api },
+      like: (k, pat) => { const re = new RegExp(`^${pat.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/%/g, '.*')}$`); filters.push((r) => re.test(String(get(r, k) ?? ''))); return api },
       maybeSingle: async () => ({ data: rows.find(match) ?? null, error: null }),
       update: (p) => { patch = p; return api },
       upsert: (r, { onConflict, ignoreDuplicates }) => { pendingUpsert = { r, onConflict, ignoreDuplicates }; return api },
@@ -96,6 +97,14 @@ await runJobsWith(sb2, env({ SUPABASE_URL: 'x', SUPABASE_SECRET_KEY: 'sb_secret_
 await runJobsWith(sb2, env({ SUPABASE_URL: 'x', SUPABASE_SECRET_KEY: 'sb_secret_x' }), { send: failing, now: now + 93 * 60_000 })
 assert.equal(fail, 3, 'stops after 3 attempts')
 assert.equal(sb2.t.bookings[0].welcome.email.attempts, 3)
+
+// built-in automations IT Support switched off (Automation Center) are skipped; the others still run
+const sb3 = fakeSupabase({ ...base, automation_rules: [{ id: 'builtin:file-follow-ups', enabled: false }, { id: 'builtin:welcome-messages', enabled: false }, { id: 'builtin:scheme-expiry-alerts', enabled: true }, { id: 'rule-x', enabled: false }] })
+sent = []
+r = await runJobsWith(sb3, env({ SUPABASE_URL: 'x', SUPABASE_SECRET_KEY: 'sb_secret_x' }), { send, now })
+assert.deepEqual([r.followUps, r.precheck, r.schemes, r.welcome.sent, sent.length], [0, 1, 1, 0, 0], 'follow-ups and welcome off; Pitch Deck and schemes on')
+assert.deepEqual(r.skipped.sort(), ['file-follow-ups', 'welcome-messages'])
+assert.equal(sb3.t.bookings[0].follow_up.nextOn, '2026-10-16', 'a switched-off follow-up is not moved on')
 
 // the cron secret
 assert.equal(jobsAuthorized(env({ JOBS_SECRET: 'a-long-enough-secret' }), 'a-long-enough-secret'), true)

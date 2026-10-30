@@ -160,6 +160,10 @@ let lastSave: Promise<void> = Promise.resolve()
 /** Resolves once the latest change reached Supabase; rejects if it was refused. Browser mode: resolves at once. */
 export const saved = () => (CLOUD ? lastSave : Promise.resolve())
 
+const commitListeners = new Set<(prev: DB, next: DB) => void>()
+/** Told about every change made in this browser (not about data loaded from elsewhere) — the Automation Center's events. */
+export function onCommit(fn: (prev: DB, next: DB) => void) { commitListeners.add(fn); return () => { commitListeners.delete(fn) } }
+
 /** Applies a change. Only the records touched are copied, so this stays fast with thousands of client files. */
 export function mutate<T = void>(fn: (d: DB) => T): T {
   let out!: T
@@ -167,6 +171,7 @@ export function mutate<T = void>(fn: (d: DB) => T): T {
   db = produce(db, (draft) => { out = fn(draft as DB) })
   if (CLOUD) { if (db !== prev) { lastSave = pushToCloud(prev, db); lastSave.catch(() => undefined) } } else save()
   emit()
+  if (db !== prev) for (const l of commitListeners) { try { l(prev, db) } catch (e) { console.warn('[store] listener', e) } }
   return out
 }
 

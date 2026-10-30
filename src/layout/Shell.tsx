@@ -7,10 +7,12 @@ import {
 } from 'lucide-react'
 import type { Perm, User } from '../lib/types'
 import { Rexy } from '../components/hr/Mascots'
-import { useDb } from '../lib/store'
+import { getDb, useDb } from '../lib/store'
+import { builtinOn, runScheduledRules, startAutomations } from '../lib/automation'
+import { startActivity, stopActivity, track } from '../lib/activity'
 import { applyTheme, getTheme, useAuth, useMe, type Theme } from '../lib/auth'
 import { MESSAGES_ENABLED, MODULES, canSee, moduleLabel } from '../lib/modules'
-import { isMaster, ROLES, roleLabel } from '../lib/rbac'
+import { canOpenDashboard, isMaster, ROLES, roleLabel } from '../lib/rbac'
 import { CLOUD } from '../lib/cloud'
 import { markRead, overdueLeadsOf, runBreakMonitor, runComboReminders, runFollowUpReminders, runPrecheckReminders, runSchemeAlerts, runTaskReminders, unseenLeadsOf } from '../lib/actions'
 import { runScheduledAutomations } from '../lib/email'
@@ -20,8 +22,10 @@ import { Logo, Mark } from '../components/Logo'
 import { useMedia } from '../components/LoginShowcase'
 import { MiniCalendar } from './MiniCalendar'
 import { BreakBanner, BreakReminder } from '../pages/dashboards/widgets'
+import { BreakPrompt } from '../components/BreakPrompt'
 import { CommandPalette } from './CommandPalette'
 import { AiAssistant } from '../components/AiAssistant'
+import { QuickRail } from '../components/QuickRail'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 
 export function useUnread() {
@@ -70,11 +74,21 @@ export function Shell() {
   // scheduled email automations (daily reminders, monthly summaries) run while anyone has the app open
   useEffect(() => {
     if (!companyJobs) return
-    const tick = () => { try { runScheduledAutomations(); runTaskReminders(); runComboReminders(); runFollowUpReminders(); runPrecheckReminders(); runSchemeAlerts() } catch { /* never block the app */ } }
+    // each built-in automation can be switched off by IT Support (Automation Center); daily-check rules run here too
+    const jobs: [string, () => unknown][] = [
+      ['scheduled-emails', runScheduledAutomations], ['task-reminders', runTaskReminders], ['combo-reminders', runComboReminders],
+      ['file-follow-ups', runFollowUpReminders], ['pitch-deck-reminders', runPrecheckReminders], ['scheme-expiry-alerts', runSchemeAlerts], ['custom-rules', runScheduledRules],
+    ]
+    const tick = () => { for (const [key, run] of jobs) { try { if (builtinOn(getDb(), key)) run() } catch { /* never block the app */ } } }
     tick()
     const t = setInterval(tick, 5 * 60000)
     return () => clearInterval(t)
   }, [companyJobs])
+  // event rules: run in this browser right after the change that starts them
+  useEffect(() => { startAutomations() }, [])
+  // user activity (IT Support → User activity): every page and click of the signed-in person
+  useEffect(() => { startActivity(me); return () => stopActivity() }, [me.id, me.role])  // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { track('page', title || loc.pathname, { path: `${loc.pathname}${loc.search}` }) }, [loc.pathname, loc.search])  // eslint-disable-line react-hooks/exhaustive-deps
   // a new day starts at midnight even when the CRM was left open: redraw every page so dates, "today" and the
   // login / logout card move to the new day (checked every 30 s; nothing re-renders while the day is the same)
   const [, setDay] = useState(today)
@@ -87,7 +101,7 @@ export function Shell() {
   // lunch break: reminder at the start, late warning a couple of minutes after the end — needs to be on time
   useEffect(() => {
     if (!companyJobs) return
-    const tick = () => { try { runBreakMonitor() } catch { /* never block the app */ } }
+    const tick = () => { try { if (builtinOn(getDb(), 'break-monitor')) runBreakMonitor() } catch { /* never block the app */ } }
     tick()
     const t = setInterval(tick, 30000)
     return () => clearInterval(t)
@@ -180,11 +194,12 @@ export function Shell() {
 
         <main id="main" className="mx-auto w-full max-w-[1500px] flex-1 px-4 py-6 sm:px-6 lg:px-8">
           <BreakBanner />
+          <BreakPrompt />
           {loc.pathname.startsWith('/dashboard') && <OverdueLeadsBanner />}
           {maintenance?.on && isMaster(me) && (
             <div className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-warn/40 bg-warn-soft px-4 py-3 text-sm text-warn">
               <Wrench className="size-4" /><b>Maintenance mode is on</b><span className="text-ink/70">Only IT Support and Super Admin can use the app.{maintenance.message ? ` Message: “${maintenance.message}”` : ''}</span>
-              <Link to="/dashboard/it" className="ml-auto font-semibold underline">Manage</Link>
+              {canOpenDashboard(me, 'it') && <Link to="/dashboard/it" className="ml-auto font-semibold underline">Manage</Link>}
             </div>
           )}
           {maintenance?.on && !isMaster(me) ? (
@@ -212,6 +227,7 @@ export function Shell() {
       <NotificationBubble />
       <BreakReminder />
       <AiAssistant />
+      <QuickRail />
       {warnIn !== null && (
         <div className="anim-pop fixed bottom-6 left-1/2 z-[95] flex -translate-x-1/2 items-center gap-3 rounded-2xl border border-line bg-card px-5 py-3 shadow-pop">
           <span className="text-sm">You'll be signed out in <b>{Math.ceil(warnIn / 1000)}s</b> for inactivity.</span>
@@ -238,7 +254,7 @@ function Sidebar({ mini, onExpand }: { mini: boolean; onExpand: () => void }) {
     try { localStorage.setItem('rexera-nav', JSON.stringify(n)) } catch { /* ignore */ }
     return n
   })
-  const visible = MODULES.filter((m) => canSee(m, can) && !m.hrOnly && !['attendance', 'notifications', 'security', 'users', 'system', 'inbox'].includes(m.key))
+  const visible = MODULES.filter((m) => canSee(m, can, me) && !m.hrOnly && !['attendance', 'notifications', 'security', 'users', 'system', 'inbox'].includes(m.key))
   const groups = [...new Set(visible.map((m) => m.group))]
   const item = cx('relative flex items-center gap-3 rounded-xl py-2 text-sm font-semibold transition', mini ? 'justify-center px-0' : 'px-3')
   const active = 'bg-brand-soft text-brand-ink'
@@ -278,7 +294,7 @@ function Sidebar({ mini, onExpand }: { mini: boolean; onExpand: () => void }) {
         <NavLink to="/attendance" className={({ isActive }) => cx(item, isActive ? active : idle)}><UserCheck className="size-[18px]" />Attendance Board</NavLink>
         {isMaster(me) && (
           <SideGroup label="All dashboards" open={openGroups['dash'] ?? false} onToggle={() => toggle('dash')} icon={LayoutGrid}>
-            {ROLES.map((r) => (
+            {ROLES.filter((r) => canOpenDashboard(me, r.id)).map((r) => (
               <NavLink key={r.id} to={`/dashboard/${r.id}`} className={({ isActive }) => cx(item, 'py-1.5 pl-9 text-[13px]', isActive ? active : idle)}>
                 <span className="size-2 rounded-full" style={{ background: r.color }} />{r.label}
               </NavLink>

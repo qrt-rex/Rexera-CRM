@@ -14,7 +14,8 @@ import { mapAll, rowsToDb, type Row, type Tables } from '../../supabase/backup-m
 export const CLOUD = import.meta.env.VITE_DATA_BACKEND === 'supabase' && cloudConfig().status === 'ready'
 
 type Mode = 'id' | 'replace' | 'append' | 'insertNew'
-interface Child { prop: string | string[]; table: string; fk: string; mode: Mode; order: [string, boolean]; newestFirst?: boolean }
+/** upsert: a new row may already be in the table under the same id (written by the server), and is merged into */
+interface Child { prop: string | string[]; table: string; fk: string; mode: Mode; order: [string, boolean]; newestFirst?: boolean; upsert?: boolean }
 /** once: rows are written once under a fixed id (e.g. one break reminder per person per day); an id already in the table is skipped, not an error */
 interface Spec { key: keyof DB; table: string; idProp?: string; idCol?: string; order: [string, boolean]; limit?: number; children?: Child[]; once?: boolean }
 
@@ -27,7 +28,8 @@ const SPECS: Spec[] = [
   { key: 'services', table: 'services', order: ['name', true] },
   { key: 'leadUploads', table: 'lead_uploads', order: ['uploaded_at', false] },
   { key: 'leads', table: 'leads', order: ['created_at', false], children: [
-    { prop: 'calls', table: 'lead_calls', fk: 'lead_id', mode: 'id', order: ['called_at', false] },
+    // the Blutec call webhook may have filed the call first (same bt-<ref> id)
+    { prop: 'calls', table: 'lead_calls', fk: 'lead_id', mode: 'id', order: ['called_at', false], upsert: true },
   ] },
   { key: 'bookings', table: 'bookings', order: ['created_at', false], children: [
     { prop: 'payments', table: 'booking_payments', fk: 'booking_id', mode: 'id', order: ['part', true] },
@@ -41,6 +43,8 @@ const SPECS: Spec[] = [
     // files the client uploaded in the portal: written by the server only, the CRM reads them
     { prop: 'clientUploads', table: 'client_doc_uploads', fk: 'booking_id', mode: 'id', order: ['at', true] },
   ] },
+  // client entries (pre-CRM entries) point at the lead and the CRM entry made from them
+  { key: 'clientEntries', table: 'client_entries', order: ['created_at', false] },
   { key: 'invoices', table: 'invoices', order: ['issued_on', false], children: [
     { prop: 'items', table: 'invoice_items', fk: 'invoice_id', mode: 'replace', order: ['position', true] },
     // written only by the live server (sends to the client); the CRM reads it and never changes it
@@ -80,6 +84,10 @@ const SPECS: Spec[] = [
   { key: 'expenses', table: 'company_expenses', order: ['created_at', false] },
   { key: 'docForms', table: 'doc_forms', order: ['created_at', false] },
   { key: 'salesKit', table: 'sales_kit', order: ['position', true] },
+  { key: 'eligibilitySchemes', table: 'eligibility_schemes', order: ['position', true] },
+  // Automation Center: rules and switches (IT Support writes), and what they did (any staff browser adds; same id = done)
+  { key: 'automationRules', table: 'automation_rules', order: ['position', true] },
+  { key: 'automationRuns', table: 'automation_runs', order: ['at', false], limit: 500, once: true },
   { key: 'siteContent', table: 'site_content', idProp: 'key', idCol: 'key', order: ['key', true] },
   { key: 'siteHistory', table: 'site_content_history', order: ['published_at', false], limit: 300 },
   // written by the server only (each website form submission); the CRM reads it
@@ -260,7 +268,8 @@ export function plan(prev: DB, next: DB, s: SupabaseClient): Op[][] {
             const add = curList.filter((x) => !oldById.has(x.id)).map((x) => rowById.get(x.id)).filter(Boolean) as Row[]
             const upd = curList.filter((x) => oldById.has(x.id) && oldById.get(x.id) !== x).map((x) => rowById.get(x.id)).filter(Boolean) as Row[]
             const gone = oldList.filter((x) => !curIds.has(x.id)).map((x) => x.id)
-            if (add.length) childOps.push(() => s.from(c.table).insert(add))
+            // missing columns keep what the row has (defaultToNull: false)
+            if (add.length) childOps.push(() => (c.upsert ? s.from(c.table).upsert(add, { onConflict: 'id', defaultToNull: false }) : s.from(c.table).insert(add)))
             for (const r of upd) childOps.push(() => s.from(c.table).update(r).eq('id', r.id as string))
             if (gone.length) childOps.push(() => s.from(c.table).delete().in('id', gone))
           }

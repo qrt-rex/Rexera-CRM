@@ -24,9 +24,12 @@ const WorkBoard = lazy(() => import('./pages/modules/WorkBoard'))
 const Documents = lazy(() => import('./pages/modules/Documents'))
 const Schemes = lazy(() => import('./pages/modules/Schemes'))
 const SalesKit = lazy(() => import('./pages/modules/SalesKit'))
+const SchemeRules = lazy(() => import('./pages/modules/SchemeRules'))
+const AutomationCenter = lazy(() => import('./pages/modules/AutomationCenter'))
 const Website = lazy(() => import('./pages/modules/Website'))
 const ClientPortal = lazy(() => import('./pages/modules/ClientPortal'))
 const DigitalMedia = lazy(() => import('./pages/modules/DigitalMedia'))
+const ClientEntries = lazy(() => import('./pages/modules/ClientEntries'))
 const MediaGallery = lazy(() => import('./pages/modules/MediaGallery'))
 const Portal = lazy(() => import('./pages/portal/Portal'))
 const Content = lazy(() => import('./pages/modules/Content'))
@@ -80,8 +83,8 @@ function RequireAuth({ children }: { children: ReactNode }) {
 }
 
 function Guard({ m, perm, children }: { m: string; perm?: Perm; children: ReactNode }) {
-  const { can } = useAuth()
-  return canSee(moduleByKey(m), can) && (!perm || can(perm)) ? <>{children}</> : <NotFound />
+  const { can, user } = useAuth()
+  return canSee(moduleByKey(m), can, user) && (!perm || can(perm)) ? <>{children}</> : <NotFound />
 }
 
 function DashboardRoute() {
@@ -157,6 +160,7 @@ export default function App() {
               <Route path="/branches/:id" element={<S><BranchRoute /></S>} />
               <Route path="/leads" element={<Guard m="leads"><S><Leads /></S></Guard>} />
               <Route path="/dialer" element={<Guard m="dialer"><S><Dialer /></S></Guard>} />
+              <Route path="/client-entries" element={<Guard m="client-entries"><S><ClientEntries /></S></Guard>} />
               <Route path="/team" element={<Guard m="team"><S><TeamProgress /></S></Guard>} />
               <Route path="/assign" element={<Guard m="assign"><S><Assign /></S></Guard>} />
               <Route path="/bookings" element={<Guard m="bookings"><S><Bookings /></S></Guard>} />
@@ -168,6 +172,8 @@ export default function App() {
               <Route path="/documents" element={<Guard m="documents"><S><Documents /></S></Guard>} />
               <Route path="/schemes" element={<Guard m="schemes"><S><Schemes /></S></Guard>} />
               <Route path="/sales-kit" element={<Guard m="sales-kit"><S><SalesKit /></S></Guard>} />
+              <Route path="/scheme-rules" element={<Guard m="scheme-rules"><S><SchemeRules /></S></Guard>} />
+              <Route path="/automation" element={<Guard m="automation"><S><AutomationCenter /></S></Guard>} />
               <Route path="/website" element={<Guard m="website"><S><Website /></S></Guard>} />
               <Route path="/client-portal" element={<Guard m="client-portal"><S><ClientPortal /></S></Guard>} />
               <Route path="/content" element={<Guard m="content"><S><Content /></S></Guard>} />

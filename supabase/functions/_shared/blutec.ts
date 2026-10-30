@@ -1,6 +1,6 @@
 /**
  * Blutec Dialer + IVR relay (docs: https://docs.dialer.blutec.ai). Runs server-side only — in the local dev server
- * (vite.config.ts) and in the Supabase Edge Function `blutec` — because requests are signed with a secret that must
+ * (vite.config.ts) and in the live server (server.mjs) — because requests are signed with a secret that must
  * never reach a browser, and Blutec does not accept browser (CORS) calls.
  *
  * Click-to-call (`/api/v1`) uses key_id + api_key + HMAC-SHA256 signing. The DND list uses the dialer's long-lived
@@ -29,6 +29,8 @@ export type BlutecRequest =
   | { action: 'callStatus'; refId: string }
   | { action: 'campaigns' }
   | { action: 'campaignLeads'; id: number }
+  /** only these campaigns (the server works out which are the signed-in person's) */
+  | { action: 'campaignsByIds'; ids: number[] }
   | { action: 'ivrList' }
   | { action: 'ivrStats'; id: number }
   | { action: 'ivrGet'; id: number }
@@ -176,6 +178,14 @@ export async function handleBlutec(req: BlutecRequest, e: BlutecEnv): Promise<Bl
         const r = await dialerApi(e, 'GET', '/api/campaigns?limit=100')
         if (r.status !== 200) return r
         return { status: 200, body: { success: true, data: rows(r.body, 'campaigns') } }
+      }
+      case 'campaignsByIds': {
+        const ids = new Set((Array.isArray(req.ids) ? req.ids : []).map(Number).filter(Number.isFinite))
+        if (!ids.size) return { status: 200, body: { success: true, data: [] } }
+        if (!dncReady(e)) return fail(503, 'Blutec campaigns need the Blutec API token (BLUTEC_TOKEN).', 'NOT_CONFIGURED')
+        const r = await dialerApi(e, 'GET', '/api/campaigns?limit=100')
+        if (r.status !== 200) return r
+        return { status: 200, body: { success: true, data: rows(r.body, 'campaigns').filter((c) => ids.has(Number((c as { id?: unknown }).id))) } }
       }
       case 'campaignLeads': {
         if (!dncReady(e)) return fail(503, 'Blutec campaigns need the Blutec API token (BLUTEC_TOKEN).', 'NOT_CONFIGURED')

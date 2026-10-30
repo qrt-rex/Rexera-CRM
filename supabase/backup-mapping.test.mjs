@@ -9,6 +9,8 @@ import { readFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
 import { createServer } from 'vite'
 import { mapAll, rowsToDb } from './backup-mapping.mjs'
+import { DEFAULT_SCHEMES } from './eligibility-rules.mjs'
+import { TEMPLATES } from './automation-rules.mjs'
 
 // the app's seed is TypeScript: let Vite load it
 const vite = await createServer({ server: { middlewareMode: true }, appType: 'custom', logLevel: 'error' })
@@ -99,6 +101,20 @@ db.candidates.push({ id: 'cand-qa', formId: 'cf-qa', name: 'Asha', email: 'asha@
 // Sales Kit: the seed list (55) plus one edited by the Operation team
 assert.ok(db.salesKit.length >= 50, 'the Sales Kit list is loaded')
 Object.assign(db.salesKit[0], { registrationCharge: 'Govt fee extra', updatedAt: at, updatedBy: a.id })
+// Scheme Checker rules: the built-in set saved, one edited (subsidy, bands, when-rules) and one hidden
+db.eligibilitySchemes = structuredClone(DEFAULT_SCHEMES).map((s) => ({ ...s, updatedAt: at, updatedBy: a.id }))
+db.eligibilitySchemes[0].active = false
+db.eligibilitySchemes[0].statusNote = 'Paused by the Operation team'
+// Automation Center: a built-in switched off, an event rule and a daily check, and what they did
+db.automationRules = [
+  { id: 'builtin:task-reminders', name: 'File task reminders', enabled: false, position: 0, trigger: 'builtin', conditions: [], actions: [], updatedAt: at, updatedBy: a.id },
+  { ...structuredClone(TEMPLATES[1]), id: 'rule-1', enabled: true, position: 1, description: 'Big bookings', createdAt: at, updatedAt: at, updatedBy: a.id },
+  { ...structuredClone(TEMPLATES[4]), id: 'rule-2', enabled: false, position: 2, match: 'any', createdAt: at, updatedAt: at, updatedBy: a.id },
+]
+db.automationRuns = [
+  { id: 'ar-rule-2-bk-1-20000', ruleId: 'rule-2', ruleName: 'Stuck', at, by: a.id, trigger: 'schedule.daily', recordType: 'booking', recordId: 'bk-1', recordLabel: 'RX-2026-000001', ok: true, detail: 'notified 2' },
+  { id: 'ar-x', ruleId: 'rule-1', ruleName: 'Big', at, trigger: 'booking.created', recordType: 'booking', recordId: 'bk-2', recordLabel: 'RX-2026-000002', ok: false, detail: 'failed' },
+]
 db.settings.leadAssign = { on: true, userIds: [a.id, b.id], next: 1 }
 db.users.push({ ...b, id: 'u-left', username: 'left.person', email: 'left@example.com', active: false, exitOn: '2026-10-15' })
 db.payrollRuns.push({ id: 'pr-x', month: '2026-09', status: 'PAID', provisional: false, calculatedAt: at, calculatedBy: a.id, history: [],
@@ -129,6 +145,15 @@ db.mediaItems = [
   { id: 'med-2', serial: 2, schemeName: 'PMEGP', title: 'Reel', description: '', mediaType: 'VIDEO', files: [], internal: false, external: false, workStatus: 'ON_HOLD', submitted: false, createdAt: at, createdBy: a.id, updatedAt: at, updatedBy: a.id, history: [] },
 ]
 db.counters.media = 2
+// a Blutec click-to-call with the dialer-dashboard fields (whole call, final status, wrap-up time)
+db.leads[0].calls.unshift({ id: 'bt-ref-1', at, by: a.id, outcome: 'HOT_PROSPECT', note: 'Blutec call', durationSec: 95, totalSec: 120, callStatus: 'completed', wrapSec: 14 })
+db.settings.dialerCampaigns = { 12: [a.id], 15: [a.id, b.id] }
+if (db.invoices[0]) db.invoices[0].remarks = 'Advance for the Seed Fund application'
+// client entries: one converted to the CRM entry above (with a follow-up), one still open with a follow-up date
+db.clientEntries = [
+  { id: 'ce-1', date: '2026-10-27', clientName: 'Asha Patel', companyName: 'Patel Foods', phone: '9876500002', serviceId: db.services[0].id, scheme: db.services[0].name, pitchedPrice: 45000, status: 'CONVERTED', requirement: 'Seed funding', note: 'Wants a call after Diwali', followUps: [{ id: 'cf-1', at, by: a.id, date: '2026-10-28', status: 'PAYMENT_PENDING', note: 'Payment tomorrow' }], leadId: db.leads[0].id, ownerId: a.id, createdAt: at, updatedAt: at, bookingId: bk.id, convertedAt: at },
+  { id: 'ce-2', date: '2026-10-28', clientName: 'Ravi', companyName: 'Ravi Tech', phone: '9876500003', serviceId: db.services[1].id, scheme: db.services[1].name, pitchedPrice: 12500.5, status: 'CALL_BACK', requirement: 'ISO certificate', note: 'Busy this week', followUp: '2026-11-02', followUps: [], ownerId: b.id, createdAt: at, updatedAt: at },
+]
 check('demo data', db)
 
 const file = process.argv[2]

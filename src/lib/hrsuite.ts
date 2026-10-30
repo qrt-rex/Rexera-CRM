@@ -233,7 +233,16 @@ export function upgradeDb(d: DB): DB {
     if (!CLOUD && !d.salesKit.length) d.salesKit = SALES_KIT_SEED.map((x) => ({ ...x }))
     d.upgrades.push('sales-kit-1')
   }
+  d.eligibilitySchemes ??= []
+  d.automationRules ??= []
+  d.automationRuns ??= []
+  if (!d.upgrades.includes('scheme-checker-1')) {
+    // Rexy's Scheme Checker rules: edited by the Operation team (and Super Admin); the live CRM gets this from its migration
+    d.rolePerms.operations = [...new Set([...(d.rolePerms.operations ?? []), 'eligibility.manage' as Perm])]
+    d.upgrades.push('scheme-checker-1')
+  }
   d.mediaItems ??= []
+  d.clientEntries ??= []
   if (!d.upgrades.includes('digital-media-1')) {
     // Digital Media: everyone sees company media; only the Digital Media team manages it (the live CRM gets this from its migration)
     for (const r of Object.keys(d.rolePerms) as (keyof typeof d.rolePerms)[]) d.rolePerms[r] = [...new Set([...(d.rolePerms[r] ?? []), 'media.view' as Perm])]

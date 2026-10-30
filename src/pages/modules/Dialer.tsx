@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Ban, Briefcase, CircleCheck, CircleDashed, Flame, History, Pause, Phone, PhoneCall, PhoneOff, Play, Radio, RefreshCcw, Settings2, SkipForward, Square, Timer, UserPlus } from 'lucide-react'
+import { Ban, Briefcase, CircleCheck, CircleDashed, ClipboardList, Flame, History, LayoutDashboard, Pause, Phone, PhoneCall, PhoneOff, Play, Radio, RefreshCcw, Settings2, SkipForward, Square, Timer, UserPlus } from 'lucide-react'
 import type { CallOutcome, Lead } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
@@ -8,12 +8,16 @@ import { createLead, logCall, setLeadStatus, visibleLeads } from '../../lib/acti
 import { CALL_OUTCOMES, dispositionToStatus, FOLLOW_UP_LEAD, LEAD_STATUS, OPEN_LEAD } from '../../lib/workflow'
 import { addDays, fmtDate, fmtDateTime, fmtTime, inr, normPhone, today, ymd } from '../../lib/format'
 import { blutec, dialerKey, ivrKey, KEYLESS, DialerError, FINAL_STATUSES, isHot, type AgentConnect, type BlutecStatus, type CallStatus, type Ivr, type IvrCall, type IvrStats } from '../../lib/dialer'
-import { rolesOf } from '../../lib/rbac'
+import { isMaster, rolesOf } from '../../lib/rbac'
 import { Badge, Button, Card, CardHeader, cx, EmptyState, Input, Modal, PageHeader, Table, Tabs, Td, Textarea, Th, useConfirm, useRun, useToast } from '../../components/ui'
 import { DialerCampaigns } from '../../components/DialerCampaigns'
 import { salesNumbers } from '../../lib/metrics'
 import { MiniStat } from '../dashboards/widgets'
 import { CallWindow } from '../../components/CallWindow'
+import { DialerDashboard } from '../../components/DialerDashboard'
+import type { LiveCall } from '../../lib/callStats'
+import { ClientEntryForLead } from '../../components/ClientEntry'
+import { CLIENT_ENTRY_STATUS, openEntryForLead } from '../../lib/clientEntries'
 
 /** Blutec connection state, checked once per page view. */
 function useBlutec() {
@@ -26,7 +30,10 @@ function useBlutec() {
   return { ...state, check }
 }
 
-export function CallLogger({ lead, seconds = 0, suggested, refId, onDone }: { lead: Lead; seconds?: number; suggested?: CallOutcome; refId?: string; onDone?: (outcome: CallOutcome) => void }) {
+/** `totalSec` / `callStatus`: what Blutec reported for the call; `endedAt`: when it ended (the time until Save is wrap-up). */
+export function CallLogger({ lead, seconds = 0, suggested, refId, totalSec, callStatus, endedAt, onDone }: {
+  lead: Lead; seconds?: number; suggested?: CallOutcome; refId?: string; totalSec?: number; callStatus?: string; endedAt?: number; onDone?: (outcome: CallOutcome) => void
+}) {
   const me = useMe()
   const run = useRun()
   const [outcome, setOutcome] = useState<CallOutcome | null>(null)
@@ -37,7 +44,8 @@ export function CallLogger({ lead, seconds = 0, suggested, refId, onDone }: { le
   const needsFollow = !!outcome && FOLLOW_UP_LEAD.includes(outcome)
   const save = async () => {
     if (!outcome) return
-    const ok = await run(() => logCall(me, lead.id, outcome, note, needsFollow ? follow || ymd(addDays(new Date(), 1)) : undefined, seconds, refId), 'Call logged')
+    const wrapSec = endedAt ? Math.max(0, Math.round((Date.now() - endedAt) / 1000)) : undefined
+    const ok = await run(() => logCall(me, lead.id, outcome, note, needsFollow ? follow || ymd(addDays(new Date(), 1)) : undefined, seconds, refId, { totalSec, callStatus, wrapSec }), 'Call logged')
     if (ok) { const o = outcome; setOutcome(null); setNote(''); setFollow(''); onDone?.(o) }
   }
   return (
@@ -57,25 +65,38 @@ export function CallLogger({ lead, seconds = 0, suggested, refId, onDone }: { le
 
 export default function Dialer() {
   const me = useMe()
+  const { can } = useAuth()
   const [params, setParams] = useSearchParams()
   const roles = rolesOf(me)
-  // Calls are for sales people (sales / team leader); IVR campaigns are for Super Admin only
+  // Calls are for sales people (sales / team leader); IVR campaigns are for Super Admin only; the dashboard is for
+  // sales people (their own) and anyone who may see other people's calls
   const showCalls = roles.some((r) => r === 'sales' || r === 'teamlead')
   const showIvr = roles.includes('superadmin')
-  const tab = showIvr && (!showCalls || params.get('tab') === 'ivr') ? 'ivr' : showCalls ? 'calls' : null
+  const showDash = showCalls || isMaster(me) || can('leads.manage', 'team.progress')
+  const tabs = [
+    ...(showCalls ? [{ id: 'calls', label: 'Calls', icon: PhoneCall }] : []),
+    ...(showIvr ? [{ id: 'ivr', label: 'IVR campaigns', icon: Radio }] : []),
+    ...(showDash ? [{ id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard }] : []),
+  ]
+  const tab = tabs.find((x) => x.id === params.get('tab'))?.id ?? tabs[0]?.id ?? null
   const bt = useBlutec()
+  /** the call on this computer (for the dashboard's status), and a lead the dashboard asked to open */
+  const [live, setLive] = useState<LiveCall | null>(null)
+  const [focus, setFocus] = useState<{ id: string; at: number } | null>(null)
   return (
     <div>
       <PageHeader title={tab === 'ivr' && !showCalls ? 'IVR' : 'Dialer'} icon={tab === 'ivr' ? Radio : Phone}
-        subtitle={tab === 'ivr' ? 'IVR campaigns through Blutec: live stats and hot prospects' : 'Click-to-call through Blutec — follow-ups due come first, then new leads'}
+        subtitle={tab === 'ivr' ? 'IVR campaigns through Blutec: live stats and hot prospects' : tab === 'dashboard' ? 'Today’s calls, outcomes, campaigns, callbacks and time in each state'
+          : 'Click-to-call through Blutec — follow-ups due come first, then new leads'}
         actions={tab && <>
-          <ConnectionPill bt={bt} ivr={tab === 'ivr'} />
-          {showCalls && showIvr && <Tabs value={tab} onChange={(t) => setParams(t === 'calls' ? {} : { tab: t })} tabs={[{ id: 'calls', label: 'Calls', icon: PhoneCall }, { id: 'ivr', label: 'IVR campaigns', icon: Radio }]} />}
+          {tab !== 'dashboard' && <ConnectionPill bt={bt} ivr={tab === 'ivr'} />}
+          {tabs.length > 1 && <Tabs value={tab} onChange={(t) => setParams(t === tabs[0]!.id ? {} : { tab: t })} tabs={tabs} />}
         </>} />
-      {tab === 'calls' ? <CallsTab bt={bt} /> : tab === 'ivr' ? <IvrTab bt={bt} manage /> : (
-        <Card><EmptyState icon={Phone} title="Dialer is for sales people" text="Calls are used by sales people and team leaders; IVR campaigns are run by the Super Admin." /></Card>
-      )}
-      {tab === 'ivr' && <DialerCampaigns />}
+      {/* the calls stay mounted on the other tabs, so a call in progress (and its window) carries on */}
+      {showCalls && <div hidden={tab !== 'calls'}><CallsTab bt={bt} onLive={setLive} focus={focus} /></div>}
+      {tab === 'ivr' && <><IvrTab bt={bt} manage /><DialerCampaigns /></>}
+      {tab === 'dashboard' && <DialerDashboard live={live} onOpenLead={showCalls ? (l) => { setFocus({ id: l.id, at: Date.now() }); setParams({}) } : undefined} />}
+      {!tab && <Card><EmptyState icon={Phone} title="Dialer is for sales people" text="Calls are used by sales people and team leaders; IVR campaigns are run by the Super Admin." /></Card>}
     </div>
   )
 }
@@ -114,13 +135,11 @@ function ConnectionPill({ bt, ivr }: { bt: ReturnType<typeof useBlutec>; ivr: bo
   )
 }
 
-function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
+function CallsTab({ bt, onLive, focus }: { bt: ReturnType<typeof useBlutec>; onLive: (l: LiveCall | null) => void; focus: { id: string; at: number } | null }) {
   const db = useDb()
   const me = useMe()
-  const { can } = useAuth()
   const run = useRun()
   const toast = useToast()
-  const nav = useNavigate()
   const [confirm, confirmNode] = useConfirm()
   const t = today()
   const queue = useMemo(() => visibleLeads(db, me)
@@ -134,9 +153,14 @@ function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
   const [params] = useSearchParams()
   const [currentId, setCurrentId] = useState<string | null>(() => params.get('lead'))
   const current = queue.find((l) => l.id === currentId) ?? queue[0]
+  useEffect(() => { if (focus) setCurrentId(focus.id) }, [focus])
   /** The call in progress (Blutec click-to-call, or the person's own phone): drives the floating call window. */
   const [call, setCall] = useState<{ leadId: string; startedAt: number; endedAt?: number; phone: boolean } | null>(null)
   const [winHidden, setWinHidden] = useState(false)
+  /** the call window opens on the client entry; the outcome is the other tab */
+  const [winTab, setWinTab] = useState<'entry' | 'outcome'>('entry')
+  /** the client entry in a window of its own (after the call, or with the call window hidden) */
+  const [entryFor, setEntryFor] = useState<{ leadId: string; thenNext?: boolean } | null>(null)
   const [live, setLive] = useState<{ refId: string; status: string; info?: CallStatus } | null>(null)
   const poll = useRef<ReturnType<typeof setInterval> | null>(null)
   const retry = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -148,9 +172,14 @@ function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
   const ended = (!!live && FINAL_STATUSES.includes(live.status)) || !!call?.endedAt
   // Blutec reported the end: stop the window's clock
   useEffect(() => { if (live && FINAL_STATUSES.includes(live.status)) setCall((c) => c && !c.endedAt ? { ...c, endedAt: Date.now() } : c) }, [live])
+  // the dialer dashboard's status: on a call until it ends, then wrap-up until the outcome is saved
+  const liveKey = !call ? '' : ended ? `w${call.endedAt ?? ''}` : `c${call.startedAt}`
+  useEffect(() => { onLive(!call ? null : ended ? { state: 'WRAP_UP', since: call.endedAt ?? Date.now() } : { state: 'ON_CALL', since: call.startedAt }) }, [liveKey]) // eslint-disable-line react-hooks/exhaustive-deps
   const elapsed = call ? Math.max(0, Math.floor(((call.endedAt ?? Date.now()) - call.startedAt) / 1000)) : 0
   const secs = live?.info?.talk_duration_seconds ?? live?.info?.duration_seconds ?? elapsed
   const clock = `${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`
+  /** what Blutec reported once the call ended (whole length, final status) and when it ended */
+  const callExtras = { endedAt: call?.endedAt, totalSec: ended ? live?.info?.duration_seconds : undefined, callStatus: ended && live && FINAL_STATUSES.includes(live.status) ? live.status : undefined }
   // Blutec's disposition when it names one of ours (Not Pickup, Intro…), else hot / not picked up from the call record
   const blutecOutcome = dispositionToStatus(live?.info?.disposition)
   const suggested: CallOutcome | undefined = ended && live ? (blutecOutcome && blutecOutcome !== 'NEW' ? blutecOutcome : isHot(live.info?.disposition) ? 'HOT_PROSPECT' : !live.info?.answer_time ? 'NOT_PICKUP' : undefined) : undefined
@@ -162,7 +191,7 @@ function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
   const n = salesNumbers(db, me)
   const myCallsToday = db.leads.flatMap((l) => l.calls.filter((c) => c.by === me.id && ymd(c.at) === t).map((c) => ({ ...c, lead: l }))).sort((a, b) => b.at.localeCompare(a.at))
   const reset = () => { if (poll.current) clearInterval(poll.current); if (retry.current) clearTimeout(retry.current); poll.current = null; retry.current = null; setLive(null); setCall(null); setWinHidden(false) }
-  const startPhoneCall = (l: Lead) => { setCall({ leadId: l.id, startedAt: Date.now(), phone: true }); setWinHidden(false) }
+  const startPhoneCall = (l: Lead) => { setCall({ leadId: l.id, startedAt: Date.now(), phone: true }); setWinHidden(false); setWinTab('entry') }
   const endPhoneCall = () => setCall((c) => c && !c.endedAt ? { ...c, endedAt: Date.now() } : c)
   /** The client asked not to be called: Blutec's DND list (when connected) + the lead leaves every queue. */
   const markDnd = async (l: Lead) => {
@@ -177,7 +206,7 @@ function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
 
   const dial = async (l: Lead, attempt = `${Date.now()}`, retried = false) => {
     retry.current = null
-    if (!retried) { setLive(null); setCall({ leadId: l.id, startedAt: Date.now(), phone: false }); setWinHidden(false) }
+    if (!retried) { setLive(null); setCall({ leadId: l.id, startedAt: Date.now(), phone: false }); setWinHidden(false); setWinTab('entry') }
     let r: { ref_id: string; status: string }
     try { r = await blutec.clickToCall(me.email, l.phone, l.id, attempt, me.id) }
     catch (e) {
@@ -204,12 +233,15 @@ function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
       } catch { /* keep polling; the call itself is unaffected */ }
     }, 3000)
   }
+  // sales person → dialer → client entry → follow-ups → CRM entry: a hot prospect gets its client entry first
   const afterSave = async (o: CallOutcome) => {
-    if ((o === 'HOT_PROSPECT' || o === 'CONVERTED') && current && can('bookings.create')) {
-      if (await confirm('Hot prospect — create a CRM entry?', `${current.name}'s details will be filled in for you; you can change anything before saving.`)) { nav(`/bookings/new?lead=${current.id}`); return }
+    if ((o === 'HOT_PROSPECT' || o === 'CONVERTED') && current && !openEntryForLead(db, current.id)) {
+      if (await confirm('Hot prospect — fill the client entry?', `Fill ${current.name}'s client entry now. You convert it into the CRM entry from your dashboard once the payment is received.`)) { setEntryFor({ leadId: current.id, thenNext: true }); return }
     }
     next()
   }
+  const entryLead = entryFor ? db.leads.find((l) => l.id === entryFor.leadId) : undefined
+  const currentEntry = current ? openEntryForLead(db, current.id) : undefined
 
   return (
     <div>
@@ -247,6 +279,7 @@ function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
                 {current.service && <Badge tone="navy">{current.service}</Badge>}
                 {current.price != null && <Badge tone="green">{inr(current.price)}</Badge>}
                 {current.followUp && <Badge tone="amber">Follow-up {fmtDate(current.followUp)}</Badge>}
+                {currentEntry && <Badge tone={CLIENT_ENTRY_STATUS[currentEntry.status].tone}>Client entry · {CLIENT_ENTRY_STATUS[currentEntry.status].label}</Badge>}
               </div>
               {call && call.leadId === current.id && (
                 <div className="mt-4 flex w-full items-center gap-3 rounded-2xl border border-line bg-card2 p-3 text-left text-sm">
@@ -264,7 +297,7 @@ function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
                     : <a href={`tel:+91${current.phone}`} onClick={() => startPhoneCall(current)}><Button size="lg" variant="success" icon={PhoneCall}>{ended && call?.leadId === current.id ? 'Call again' : 'Call now'}</Button></a>}
                 <Button size="lg" variant="outline" icon={SkipForward} onClick={next}>Skip</Button>
                 <Button size="lg" variant="ghost" icon={Ban} onClick={() => markDnd(current)}>Do not call</Button>
-                {can('bookings.create') && <Button size="lg" variant="soft" icon={Briefcase} onClick={() => nav(`/bookings/new?lead=${current.id}`)}>Book</Button>}
+                <Button size="lg" variant="soft" icon={ClipboardList} onClick={() => setEntryFor({ leadId: current.id })}>{currentEntry ? 'Follow-up' : 'Client entry'}</Button>
               </div>
               {current.notes && <p className="mt-5 w-full whitespace-pre-line rounded-xl bg-card2 p-3 text-left text-sm">{current.notes}</p>}
             </div>
@@ -272,7 +305,8 @@ function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
             {!(windowOpen && call?.leadId === current.id) && (
               <div className="mt-6 border-t border-line pt-5">
                 <h4 className="mb-3 font-bold">Outcome</h4>
-                <CallLogger lead={current} seconds={call?.leadId === current.id ? secs : 0} suggested={suggested} refId={call?.leadId === current.id ? live?.refId || undefined : undefined} onDone={afterSave} />
+                <CallLogger lead={current} seconds={call?.leadId === current.id ? secs : 0} suggested={suggested} refId={call?.leadId === current.id ? live?.refId || undefined : undefined} onDone={afterSave}
+                  {...(call?.leadId === current.id ? callExtras : {})} />
               </div>
             )}
           </Card>
@@ -294,11 +328,13 @@ function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
             {callLead.notes && <p className="mb-3 line-clamp-3 whitespace-pre-line rounded-lg bg-card2 px-3 py-2 text-xs" title={callLead.notes}>{callLead.notes}</p>}
             {call?.phone && !ended && <Button className="mb-3 w-full" variant="danger" icon={PhoneOff} onClick={endPhoneCall}>End call</Button>}
             {!call?.phone && !ended && <p className="mb-3 text-xs text-mute">Answer your phone to connect the client. You can note the outcome now or when the call ends.</p>}
-            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-mute">Outcome</p>
-            <CallLogger lead={callLead} seconds={secs} suggested={suggested} refId={live?.refId || undefined} onDone={afterSave} />
+            {/* while the call is on, the client entry is filled here (compulsory before it can become a CRM entry) */}
+            <Tabs className="mb-3" value={winTab} onChange={setWinTab} tabs={[{ id: 'entry', label: openEntryForLead(db, callLead.id) ? 'Follow-up' : 'Client entry', icon: ClipboardList }, { id: 'outcome', label: 'Outcome', icon: PhoneCall }]} />
+            {winTab === 'entry'
+              ? <ClientEntryForLead lead={callLead} compact onSaved={() => setWinTab('outcome')} />
+              : <CallLogger lead={callLead} seconds={secs} suggested={suggested} refId={live?.refId || undefined} onDone={afterSave} {...callExtras} />}
             <div className="mt-3 flex gap-2 border-t border-line pt-3">
               <Button size="sm" variant="ghost" icon={Ban} className="flex-1" onClick={() => markDnd(callLead)}>Do not call</Button>
-              {can('bookings.create') && <Button size="sm" variant="soft" icon={Briefcase} className="flex-1" onClick={() => nav(`/bookings/new?lead=${callLead.id}`)}>Book</Button>}
             </div>
           </CallWindow>
         )}
@@ -316,6 +352,10 @@ function CallsTab({ bt }: { bt: ReturnType<typeof useBlutec> }) {
           </ul>
         </Card>
       </div>
+      <Modal open={!!entryLead} onClose={() => setEntryFor(null)} size="lg" title={entryLead ? `${entryLead.name}${entryLead.company ? ` · ${entryLead.company}` : ''}` : ''}
+        subtitle={entryLead && openEntryForLead(db, entryLead.id) ? 'Follow-up on the client entry' : 'Client entry — every field but the follow-up is compulsory'}>
+        {entryLead && <ClientEntryForLead lead={entryLead} onSaved={() => { const then = entryFor?.thenNext; setEntryFor(null); if (then) next() }} />}
+      </Modal>
       {confirmNode}
     </div>
   )

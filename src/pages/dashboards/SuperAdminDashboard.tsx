@@ -6,7 +6,7 @@ import { useMe } from '../../lib/auth'
 import { collections, invoiceSummary, monthStart, presentToday, revenueByMonth, todaySession } from '../../lib/metrics'
 import { BOOKING_STATUS } from '../../lib/workflow'
 import { fmtDate, fmtTime, inr, inrShort, today, ymd } from '../../lib/format'
-import { ROLES, rolesOf } from '../../lib/rbac'
+import { canOpenDashboard, ROLES, rolesOf } from '../../lib/rbac'
 import { Avatar, Card, cx, Progress } from '../../components/ui'
 import { Bars, Donut, HBars } from '../../components/charts'
 import { useUnread } from '../../layout/Shell'
@@ -123,7 +123,7 @@ export function SuperAdminDashboard() {
           </Card>
           <Card className="overflow-hidden">
             <p className="border-b border-line bg-brand-soft px-4 py-3 font-bold text-brand-ink">All dashboards</p>
-            {ROLES.map((r) => (
+            {ROLES.filter((r) => canOpenDashboard(me, r.id)).map((r) => (
               <Link key={r.id} to={`/dashboard/${r.id}`} className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-card2">
                 <span className="size-2.5 rounded-full" style={{ background: r.color }} />{r.label}
               </Link>

@@ -9,7 +9,7 @@ import { DocReview } from '../../components/DocReview'
 import { DOC_FORM, KYC_CATEGORIES } from '../../lib/workflow'
 import { ago, fmtDateTime } from '../../lib/format'
 import { checkFile, saveFile } from '../../lib/files'
-import { Badge, Button, Card, CardHeader, cx, EmptyState, Input, PageHeader, Progress, SearchBox, Select, Table, Tabs, Td, Th, useRun, useToast } from '../../components/ui'
+import { Badge, Button, Card, CardHeader, cx, EmptyState, Input, PageHeader, Progress, SearchBox, SearchSelect, Table, Tabs, Td, Th, useRun, useToast } from '../../components/ui'
 import { DOC_ACCEPT } from '../../components/DocUploader'
 import { FileLink } from '../../components/FileField'
 import { PhoneInput } from '../../components/fields'
@@ -36,9 +36,9 @@ export default function Documents() {
         <Card className="overflow-hidden lg:col-span-2">
           <CardHeader title="Client" subtitle="Pick the client, then fill in their details and upload each document" icon={UserRound} />
           <div className="p-5">
-            <Select label="Client (CRM entry)" value={bookingId} onChange={(e) => setParams(e.target.value ? { client: e.target.value } : {})}>
-              <option value="">— Select —</option>{bookings.map((x) => <option key={x.id} value={x.id}>{x.bookingId} · {x.companyName}</option>)}
-            </Select>
+            <SearchSelect label="Client (CRM entry)" value={bookingId} clearable placeholder="Search by company, CRM ID or contact…" emptyText="No client matches"
+              onChange={(v) => setParams(v ? { client: v } : {})}
+              options={bookings.map((x) => ({ value: x.id, label: `${x.companyName} · ${x.bookingId}`, hint: [x.contactPerson, x.mobile, x.serviceName].filter(Boolean).join(' · ') }))} />
             {b && <ClientInfo key={b.id} b={b} />}
           </div>
         </Card>
@@ -97,16 +97,27 @@ function ClientInfo({ b }: { b: Booking }) {
   )
 }
 
-/** One upload slot per document type, plus "other documents" (note required). */
+/**
+ * One upload slot per document type, plus "other documents" (note required). The search box finds a document by
+ * name: picking it shows just that slot, and its upload files the document under that type.
+ */
 function DocumentForm({ b }: { b: Booking }) {
   const done = DOC_FORM.filter((s) => b.documents.some((d) => d.category === s.cat)).length
+  const [pick, setPick] = useState('')
+  const slots = [...DOC_FORM.map((s) => ({ cat: s.cat, title: s.short, hint: s.hint })), { cat: OTHER, title: 'Other documents', hint: 'Anything else — describe it in the note' }]
+  const shown = pick ? slots.filter((s) => s.cat === pick) : slots
+  const status = (cat: string) => { const n = b.documents.filter((d) => d.category === cat).length; return n ? `${n} uploaded` : 'Not uploaded yet' }
   return (
     <Card className="overflow-hidden">
       <CardHeader title={`Document form · ${b.companyName}`} subtitle={`${done} of ${DOC_FORM.length} documents collected · ${b.bookingId}`} icon={FileText}
         action={<div className="w-40"><Progress value={(done / DOC_FORM.length) * 100} tone={done === DOC_FORM.length ? 'green' : 'orange'} /></div>} />
-      <div className="grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-3">
-        {DOC_FORM.map((s) => <DocSlot key={s.cat} b={b} cat={s.cat} title={s.short} hint={s.hint} />)}
-        <DocSlot b={b} cat={OTHER} title="Other documents" hint="Anything else — describe it in the note" noteRequired className="md:col-span-2 xl:col-span-3" />
+      <div className="flex flex-wrap items-end gap-3 border-b border-line px-5 py-4">
+        <SearchSelect label="Find a document" value={pick} onChange={setPick} clearable className="w-full sm:max-w-md" placeholder="Type a document name — Aadhaar, PAN, ITR, pitch deck…"
+          emptyText="No document type matches — use Other documents" options={slots.map((s) => ({ value: s.cat, label: s.title, hint: `${s.cat === s.title ? '' : `${s.cat} · `}${status(s.cat)}` }))} />
+        {pick && <Button size="sm" variant="ghost" onClick={() => setPick('')}>Show all documents</Button>}
+      </div>
+      <div className={cx('grid gap-4 p-5', !pick && 'md:grid-cols-2 xl:grid-cols-3')}>
+        {shown.map((s) => <DocSlot key={s.cat} b={b} cat={s.cat} title={s.title} hint={s.hint} noteRequired={s.cat === OTHER} className={cx(!pick && s.cat === OTHER && 'md:col-span-2 xl:col-span-3')} />)}
       </div>
     </Card>
   )

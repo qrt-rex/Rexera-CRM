@@ -1,4 +1,4 @@
-import type { Booking, DB, Lead, User } from './types'
+import type { Booking, DB, Invoice, Lead, User } from './types'
 import { rolesOf, isMaster } from './rbac'
 import { OPEN_LEAD } from './workflow'
 import { bookingMoney, today, ymd } from './format'
@@ -20,6 +20,14 @@ export const branchLabel = (db: DB, id?: string) => {
   const b = id && id !== NO_BRANCH ? branchList(db).find((x) => x.id === id) : undefined
   return b ? (b.code?.trim() && b.code.trim() !== b.name ? `${b.code.trim()} · ${b.name}` : b.name) : branchName(db, id)
 }
+/**
+ * The branch an invoice is issued from: the one saved on it (picked on the invoice form, or the creator's branch when
+ * it was raised from a CRM entry), else the creator's branch now. Its address, GSTIN and bank print on the invoice.
+ */
+export const invoiceBranch = (db: DB, inv: Pick<Invoice, 'branchId' | 'createdBy'>) => {
+  const id = inv.branchId ?? db.users.find((u) => u.id === inv.createdBy)?.branchId
+  return id ? branchList(db).find((b) => b.id === id) : undefined
+}
 const monthStart = () => { const d = new Date(); return ymd(new Date(d.getFullYear(), d.getMonth(), 1)) }
 
 /**
@@ -34,7 +42,6 @@ export function directorBranches(db: DB, me: User): string[] {
 }
 /** Only Super Admin / IT also see people who have no branch yet (so nobody is missed). */
 export const seesUnbranched = (me: User) => isMaster(me)
-export const canSeeBranch = (db: DB, me: User, id: string) => directorBranches(db, me).includes(id)
 /** Branch Directors are scoped to their branches everywhere (leads, CRM entries); people with wider roles are not. */
 export const isBranchScoped = (me: User) => me.role === 'branchdirector' && !isMaster(me)
 

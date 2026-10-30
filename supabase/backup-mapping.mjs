@@ -33,7 +33,9 @@ export function mapAll(backup) {
     upload_id: l.uploadId && uploadIds.has(l.uploadId) ? l.uploadId : null, chain: l.chain?.length ? l.chain : null, assigned_at: s(l.assignedAt), seen_at: s(l.seenAt),
     history: l.history?.length ? l.history : null,
   }))
-  t.lead_calls = d.leads.flatMap((l) => l.calls.map((c) => ({ id: c.id, lead_id: l.id, called_at: c.at, called_by: uref(c.by), outcome: c.outcome, note: c.note ?? '', duration_sec: c.durationSec ?? 0 })))
+  t.lead_calls = d.leads.flatMap((l) => l.calls.map((c) => ({ id: c.id, lead_id: l.id, called_at: c.at, called_by: uref(c.by), outcome: c.outcome, note: c.note ?? '', duration_sec: c.durationSec ?? 0,
+    // the dialer-dashboard columns are only sent when set, so call logging keeps working before their migration is run
+    ...(c.totalSec != null ? { total_sec: c.totalSec } : {}), ...(c.callStatus ? { call_status: c.callStatus } : {}), ...(c.wrapSec != null ? { wrap_sec: c.wrapSec } : {}) })))
 
   t.bookings = d.bookings.map((b) => ({
     id: b.id, booking_code: b.bookingId, company_name: b.companyName, contact_person: b.contactPerson, mobile: b.mobile, email: s(b.email),
@@ -59,7 +61,9 @@ export function mapAll(backup) {
   t.client_doc_uploads = d.bookings.flatMap((b) => (b.clientUploads ?? []).map((x) => ({ id: x.id, booking_id: b.id, category: x.category, file: x.file, at: x.at, account_id: s(x.accountId), note: s(x.note) })))
   t.booking_tasks = d.bookings.flatMap((b) => b.tasks.map((x) => ({ id: x.id, booking_id: b.id, title: x.title, done: x.done, due_on: s(x.due), created_by: uref(x.by), assignee_id: uref(x.assignee), remind_every_days: x.remindEveryDays ?? null, last_reminded_at: s(x.lastRemindedAt), created_at: x.createdAt ?? b.createdAt })))
 
-  t.invoices = d.invoices.map((i) => ({ id: i.id, number: i.number, type: i.type, booking_id: s(i.bookingId), client: i.client, gstin: i.gstin ?? '', state: i.state, paid: i.paid, status: i.status, issued_on: i.date, due_on: i.due, sales_person: uref(i.salesPerson), created_by: uref(i.createdBy), branch_id: s(i.branchId), client_address: s(i.clientAddress), client_pan: s(i.clientPan) }))
+  t.invoices = d.invoices.map((i) => ({ id: i.id, number: i.number, type: i.type, booking_id: s(i.bookingId), client: i.client, gstin: i.gstin ?? '', state: i.state, paid: i.paid, status: i.status, issued_on: i.date, due_on: i.due, sales_person: uref(i.salesPerson), created_by: uref(i.createdBy), branch_id: s(i.branchId), client_address: s(i.clientAddress), client_pan: s(i.clientPan),
+    // sent only when set, so invoices keep saving before the remarks column's migration is run
+    ...(i.remarks ? { remarks: i.remarks } : {}) }))
   t.invoice_items = d.invoices.flatMap((i) => i.items.map((it, n) => ({ invoice_id: i.id, position: n + 1, description: it.desc, sac: it.sac ?? '', qty: it.qty, rate: it.rate, gst_rate: it.gstRate })))
   t.invoice_shares = d.invoices.flatMap((i) => (i.shares ?? []).map((x) => ({ id: x.id, invoice_id: i.id, sent_at: x.at, sent_by: uref(x.by), channel: x.channel, to_addr: x.to, status: x.status, error: s(x.error), message_id: s(x.messageId) })))
 
@@ -103,6 +107,7 @@ export function mapAll(backup) {
     { key: 'leadAssign', value: d.settings.leadAssign ?? null },
     { key: 'workflow', value: d.settings.workflow ?? null },
     { key: 'jobs', value: d.settings.jobs ?? null },
+    { key: 'dialerCampaigns', value: d.settings.dialerCampaigns ?? null },
     { key: 'counters', value: d.counters },
     { key: 'meta', value: { version: d.version, upgrades: d.upgrades ?? [] } },
   ]
@@ -134,6 +139,18 @@ export function mapAll(backup) {
     updated_at: s(x.updatedAt), updated_by: uref(x.updatedBy),
   }))
   t.site_content = (d.siteContent ?? []).map((x) => ({ key: x.key, draft: x.draft ?? null, published: x.published ?? null, updated_at: x.updatedAt, updated_by: uref(x.updatedBy), published_at: s(x.publishedAt), published_by: uref(x.publishedBy) }))
+  t.eligibility_schemes = (d.eligibilitySchemes ?? []).map((x) => ({
+    id: x.id, position: x.position, active: x.active !== false, name: x.name, kind: x.kind ?? '', agency: x.agency ?? '', url: x.url ?? '', service_match: x.serviceMatch ?? '',
+    status_note: x.statusNote ?? '', summary: x.summary ?? '', benefits: x.benefits ?? [], documents: x.documents ?? [], process: x.process ?? [], conditions: x.conditions ?? [],
+    subsidy: x.subsidy ?? null, bands: x.bands ?? null, verified_on: x.verifiedOn, updated_at: s(x.updatedAt), updated_by: uref(x.updatedBy),
+  }))
+  t.automation_rules = (d.automationRules ?? []).map((x) => ({
+    id: x.id, name: x.name, description: s(x.description), enabled: x.enabled !== false, position: x.position ?? 0, trigger: x.trigger, entity: s(x.entity), match: s(x.match),
+    conditions: x.conditions ?? [], actions: x.actions ?? [], repeat_days: x.repeatDays ?? null, created_at: s(x.createdAt), updated_at: s(x.updatedAt), updated_by: uref(x.updatedBy),
+  }))
+  t.automation_runs = (d.automationRuns ?? []).map((x) => ({
+    id: x.id, rule_id: x.ruleId, rule_name: x.ruleName, at: x.at, by_user: uref(x.by), trigger: x.trigger, record_type: x.recordType, record_id: x.recordId ?? '', record_label: x.recordLabel ?? '', ok: x.ok !== false, detail: x.detail ?? '',
+  }))
   t.site_content_history = (d.siteHistory ?? []).map((x) => ({ id: x.id, key: x.key, content: x.content ?? null, published_at: x.at, published_by: uref(x.by) }))
   t.client_accounts = (d.clientAccounts ?? []).map((x) => ({ id: x.id, auth_user_id: s(x.authUserId), email: x.email, name: x.name, phone: s(x.phone), booking_ids: x.bookingIds ?? [], status: x.status, invited_at: x.invitedAt, invited_by: uref(x.invitedBy), activated_at: s(x.activatedAt), last_login_at: s(x.lastLoginAt), assigned_to: uref(x.assignedTo), disabled_at: s(x.disabledAt) }))
   t.client_activity = (d.clientActivity ?? []).map((x) => ({ id: x.id, account_id: x.accountId, booking_id: s(x.bookingId), at: x.at, action: x.action, detail: s(x.detail), by_user: uref(x.by) }))
@@ -142,6 +159,11 @@ export function mapAll(backup) {
     internal: !!x.internal, external: !!x.external, client_booking_ids: x.clientBookingIds ?? [], assign_date: s(x.assignDate), assign_time: s(x.assignTime),
     assigned_to: uref(x.assignedTo), work_status: x.workStatus, notes: s(x.notes), submitted: !!x.submitted, submitted_at: s(x.submittedAt), submitted_by: uref(x.submittedBy),
     completed_at: s(x.completedAt), created_at: x.createdAt, created_by: uref(x.createdBy), updated_at: x.updatedAt, updated_by: uref(x.updatedBy), history: x.history ?? [],
+  }))
+  t.client_entries = (d.clientEntries ?? []).map((x) => ({
+    id: x.id, entry_date: x.date, client_name: x.clientName, company_name: x.companyName, phone: x.phone, service_id: s(x.serviceId), scheme: x.scheme,
+    pitched_price: x.pitchedPrice, status: x.status, requirement: x.requirement, note: x.note, follow_up: s(x.followUp), follow_ups: x.followUps ?? [],
+    lead_id: s(x.leadId), owner_id: uref(x.ownerId), created_at: x.createdAt, updated_at: x.updatedAt, booking_id: s(x.bookingId), converted_at: s(x.convertedAt),
   }))
   t.website_lead_log = (d.webLeadLog ?? []).map((x) => ({ id: x.id, at: x.at, status: x.status, form: s(x.form), name: s(x.name), phone: s(x.phone), email: s(x.email), error: s(x.error), lead_id: s(x.leadId), fields: x.fields ?? null, retried_at: s(x.retriedAt), retried_by: uref(x.retriedBy) }))
   t.recruitment_datasets = (backup.imports ?? []).map((x) => ({ id: x.id, name: x.name, file_name: x.fileName, sheet: s(x.sheet), kind: x.kind, columns: x.columns, imported_at: x.importedAt, imported_by: uref(x.importedBy), bytes: x.bytes ?? 0 }))
@@ -161,9 +183,9 @@ export const ORDER = [
   ['message_templates', 'id'], ['emails', 'id'], ['email_automations', 'key'], ['app_settings', 'key'], ['api_keys', 'id'],
   ['backup_log', 'id'], ['candidate_forms', 'id'], ['candidate_applications', 'id'], ['recruitment_datasets', 'id'], ['recruitment_rows', 'dataset_id,row_no'],
   ['company_assets', 'id'], ['stock_items', 'id'], ['company_expenses', 'id'], ['legacy_files', 'path'],
-  ['doc_forms', 'id'], ['doc_form_submissions', 'id'], ['sales_kit', 'id'],
+  ['doc_forms', 'id'], ['doc_form_submissions', 'id'], ['sales_kit', 'id'], ['eligibility_schemes', 'id'], ['automation_rules', 'id'], ['automation_runs', 'id'],
   ['site_content', 'key'], ['site_content_history', 'id'], ['website_lead_log', 'id'],
-  ['client_accounts', 'id'], ['client_activity', 'id'], ['client_doc_uploads', 'id'], ['media_items', 'id'],
+  ['client_accounts', 'id'], ['client_activity', 'id'], ['client_doc_uploads', 'id'], ['media_items', 'id'], ['client_entries', 'id'],
 ]
 export const APPEND_ONLY = ['payroll_history', 'audit_log', 'asset_events', 'stock_moves']   // identity ids: only copied into an empty table
 
@@ -213,7 +235,7 @@ export function rowsToDb(input) {
     altPhone: u(r.alt_phone), location: u(r.location), industry: u(r.industry), businessType: u(r.business_type), turnover: u(r.turnover),
     fundingAmount: u(r.funding_amount), fundingCategory: u(r.funding_category), requirement: u(r.requirement), formAt: u(r.form_at), extra: u(r.extra),
     uploadId: u(r.upload_id), chain: u(r.chain), assignedAt: u(r.assigned_at), seenAt: u(r.seen_at), history: u(r.history),
-    calls: callsOf(r.id).map((c) => ({ id: c.id, at: c.called_at, by: c.called_by ?? '', outcome: c.outcome, note: c.note ?? '', durationSec: c.duration_sec ?? 0 })),
+    calls: callsOf(r.id).map((c) => opt({ id: c.id, at: c.called_at, by: c.called_by ?? '', outcome: c.outcome, note: c.note ?? '', durationSec: c.duration_sec ?? 0, totalSec: u(c.total_sec), callStatus: u(c.call_status), wrapSec: u(c.wrap_sec) })),
   }))
 
   const payOf = group('booking_payments', 'booking_id'), apprOf = group('booking_approvals', 'booking_id'), stageOf = group('booking_stage_moves', 'booking_id')
@@ -245,7 +267,7 @@ export function rowsToDb(input) {
   const itemsOf = group('invoice_items', 'invoice_id'), sharesOf = group('invoice_shares', 'invoice_id')
   const invoices = rows('invoices').map((r) => opt({
     id: r.id, number: r.number, type: r.type, bookingId: u(r.booking_id), client: r.client, gstin: r.gstin ?? '', state: r.state, paid: r.paid, status: r.status,
-    date: r.issued_on, due: r.due_on, salesPerson: u(r.sales_person), createdBy: r.created_by ?? '', branchId: u(r.branch_id), clientAddress: u(r.client_address), clientPan: u(r.client_pan),
+    date: r.issued_on, due: r.due_on, salesPerson: u(r.sales_person), createdBy: r.created_by ?? '', branchId: u(r.branch_id), clientAddress: u(r.client_address), clientPan: u(r.client_pan), remarks: u(r.remarks),
     items: [...itemsOf(r.id)].sort((a, b) => a.position - b.position).map((it) => ({ desc: it.description, sac: it.sac ?? '', qty: it.qty, rate: it.rate, gstRate: it.gst_rate })),
     shares: [...sharesOf(r.id)].sort((a, b) => String(b.sent_at).localeCompare(String(a.sent_at))).map((x) => opt({ id: x.id, at: x.sent_at, by: x.sent_by ?? '', channel: x.channel, to: x.to_addr ?? '', status: x.status, error: u(x.error), messageId: u(x.message_id) })),
   }))
@@ -275,7 +297,7 @@ export function rowsToDb(input) {
       sessionMinutes: session.minutes, supplierState: company.supplierState, companyName: company.name, companyGstin: company.gstin,
       maintenance: maintenance && (maintenance.on || maintenance.message || maintenance.by) ? maintenance : undefined,
       sessionsValidAfter: u(session.validAfter), dayLock: setting('attendance')?.dayLock || undefined,
-      branches: setting('branches')?.length ? setting('branches') : undefined, breakPolicy: u(setting('breaks')), leadAssign: u(setting('leadAssign')), workflow: u(setting('workflow')), jobs: u(setting('jobs')),
+      branches: setting('branches')?.length ? setting('branches') : undefined, breakPolicy: u(setting('breaks')), leadAssign: u(setting('leadAssign')), workflow: u(setting('workflow')), jobs: u(setting('jobs')), dialerCampaigns: u(setting('dialerCampaigns')),
     }),
     counters: setting('counters') ?? { booking: 0, lead: 0, invoice: 0 },
     loginFails: Object.fromEntries(rows('login_attempts').map((r) => [r.login, opt({ count: r.failures, until: u(r.locked_until) })])),
@@ -328,7 +350,24 @@ export function rowsToDb(input) {
       assignedTo: u(x.assigned_to), workStatus: x.work_status, notes: u(x.notes), submitted: !!x.submitted, submittedAt: u(x.submitted_at), submittedBy: u(x.submitted_by),
       completedAt: u(x.completed_at), createdAt: x.created_at, createdBy: x.created_by ?? '', updatedAt: x.updated_at, updatedBy: x.updated_by ?? '', history: x.history ?? [],
     })),
+    clientEntries: rows('client_entries').map((x) => opt({
+      id: x.id, date: x.entry_date, clientName: x.client_name, companyName: x.company_name, phone: x.phone, serviceId: x.service_id ?? '', scheme: x.scheme,
+      pitchedPrice: Number(x.pitched_price), status: x.status, requirement: x.requirement, note: x.note, followUp: u(x.follow_up), followUps: x.follow_ups ?? [],
+      leadId: u(x.lead_id), ownerId: x.owner_id ?? '', createdAt: x.created_at, updatedAt: x.updated_at, bookingId: u(x.booking_id), convertedAt: u(x.converted_at),
+    })),
     webLeadLog: rows('website_lead_log').map((x) => opt({ id: x.id, at: x.at, status: x.status, form: u(x.form), name: u(x.name), phone: u(x.phone), email: u(x.email), error: u(x.error), leadId: u(x.lead_id), fields: u(x.fields), retriedAt: u(x.retried_at), retriedBy: u(x.retried_by) })),
+    automationRules: rows('automation_rules').map((x) => opt({
+      id: x.id, name: x.name, description: u(x.description), enabled: x.enabled !== false, position: x.position ?? 0, trigger: x.trigger, entity: u(x.entity), match: u(x.match),
+      conditions: x.conditions ?? [], actions: x.actions ?? [], repeatDays: u(x.repeat_days), createdAt: u(x.created_at), updatedAt: u(x.updated_at), updatedBy: u(x.updated_by),
+    })),
+    automationRuns: rows('automation_runs').map((x) => opt({
+      id: x.id, ruleId: x.rule_id, ruleName: x.rule_name, at: x.at, by: u(x.by_user), trigger: x.trigger, recordType: x.record_type, recordId: x.record_id ?? '', recordLabel: x.record_label ?? '', ok: x.ok !== false, detail: x.detail ?? '',
+    })),
+    eligibilitySchemes: rows('eligibility_schemes').map((x) => opt({
+      id: x.id, position: x.position, active: x.active !== false, name: x.name, kind: x.kind ?? '', agency: x.agency ?? '', url: x.url ?? '', serviceMatch: x.service_match ?? '',
+      statusNote: x.status_note ?? '', summary: x.summary ?? '', benefits: x.benefits ?? [], documents: x.documents ?? [], process: x.process ?? [], conditions: x.conditions ?? [],
+      subsidy: u(x.subsidy), bands: u(x.bands), verifiedOn: x.verified_on, updatedAt: u(x.updated_at), updatedBy: u(x.updated_by),
+    })),
     salesKit: rows('sales_kit').map((x) => opt({
       id: x.id, category: x.category, position: x.position, name: x.name, benefits: x.benefits ?? '', sectors: x.sectors ?? '', eligibility: x.eligibility ?? '', lastDate: x.last_date ?? '',
       organisation: x.organisation ?? '', schemeType: x.scheme_type ?? '', applicableFor: x.applicable_for ?? '', minCharge: x.min_charge ?? '', registrationCharge: u(x.registration_charge),

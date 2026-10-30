@@ -1,9 +1,10 @@
 import {
   BarChart3, BellRing, BookOpenCheck, Briefcase, CalendarDays, Clapperboard, Cloud, ClipboardCheck, Coffee, FileText, Package, FolderKanban, Images, IndianRupee,
   BookMarked, Globe, UserRoundCheck, KeyRound, Megaphone, MessagesSquare, Phone, Settings, ShieldCheck, Sparkles, UserCheck, UserCog, UserPlus, Users, UsersRound,
-  CalendarCheck2, Network, ScrollText, Wallet, Receipt, Landmark, Trophy, SlidersHorizontal, Gauge, KeySquare, DatabaseBackup, DatabaseZap, MailPlus, ClipboardList, FilePen, Inbox, Undo2, BadgeCheck, BadgePercent, Layers, FileSignature, Settings2, type LucideIcon,
+  CalendarCheck2, Network, ScrollText, Wallet, Receipt, Landmark, Trophy, SlidersHorizontal, Gauge, KeySquare, DatabaseBackup, DatabaseZap, MailPlus, ClipboardList, FilePen, Inbox, Undo2, BadgeCheck, BadgePercent, Layers, FileSignature, Settings2, Workflow, type LucideIcon,
 } from 'lucide-react'
-import type { Perm, User } from './types'
+import type { Perm, Role, User } from './types'
+import { rolesOf } from './rbac'
 import type { Tone } from './workflow'
 
 export interface ModuleDef {
@@ -18,11 +19,15 @@ export interface ModuleDef {
   group: 'Sales' | 'Client files' | 'Content' | 'Digital Media' | 'People' | 'Finance' | 'Workspace' | 'Admin'
   /** listed only in the HR sidebar (still searchable with Ctrl K) */
   hrOnly?: boolean
+  /** only for people with one of these roles (on top of `perms`) */
+  roles?: Role[]
 }
 
 export const MODULES: ModuleDef[] = [
   { key: 'leads', path: '/leads', label: 'CRM Leads', desc: 'Manual, website and CSV leads, auto-assign, lead source', icon: UserPlus, tone: 'navy', perms: ['leads.admin'], group: 'Sales' },
   { key: 'dialer', path: '/dialer', label: 'Dialer', desc: 'Power-dial your queue and log outcomes', icon: Phone, tone: 'orange', perms: ['dialer.use'], group: 'Sales' },
+  // client entries filled in the dialer: the sales person's own, and a team leader's team's
+  { key: 'client-entries', path: '/client-entries', label: 'Client Entries', desc: 'Client entries from the dialer: follow-ups, convert to CRM entry', icon: ClipboardList, tone: 'violet', perms: ['dialer.use'], roles: ['sales', 'teamlead'], group: 'Sales' },
   { key: 'team', path: '/team', label: 'Sales Team Progress', desc: 'Calls, conversions and collections by person', icon: BarChart3, tone: 'green', perms: ['team.progress'], group: 'Sales' },
   { key: 'assign', path: '/assign', label: 'Client Assignment', desc: 'Who owns which client, reassign within team', icon: Network, tone: 'pink', perms: ['team.assign', 'bookings.create', 'leads.assign'], group: 'Sales' },
   { key: 'bookings', path: '/bookings', label: 'CRM Entries', desc: 'Client bookings, approvals and payments', icon: Briefcase, tone: 'violet', perms: ['bookings.own', 'bookings.team', 'bookings.all'], group: 'Client files' },
@@ -36,6 +41,8 @@ export const MODULES: ModuleDef[] = [
   { key: 'documents', path: '/documents', label: 'Document Forms', desc: 'Collect and verify client documents', icon: FileText, tone: 'blue', perms: ['documents.forms'], group: 'Client files' },
   { key: 'services', path: '/services', label: 'Services & Combo Packages', desc: 'Prices for single, multiple and combo (3/6/9/12 months) bookings', icon: Layers, tone: 'violet', perms: ['bookings.create', 'bookings.all', 'schemes.manage', 'billing.manage'], group: 'Content' },
   { key: 'schemes', path: '/schemes', label: 'Schemes', desc: 'Government schemes and offers', icon: Sparkles, tone: 'green', perms: ['schemes.view', 'schemes.manage'], group: 'Content' },
+  // Rexy's Scheme Checker rules: Super Admin and the Operation team only (not IT)
+  { key: 'scheme-rules', path: '/scheme-rules', label: 'Scheme Checker Rules', desc: 'Government schemes, eligibility conditions, documents — what Rexy checks', icon: BadgeCheck, tone: 'green', perms: ['eligibility.manage'], roles: ['superadmin', 'operations'], group: 'Content' },
   { key: 'sales-kit', path: '/sales-kit', label: 'Sales Kit', desc: 'Every scheme: benefits, eligibility, last date and our charge', icon: BookMarked, tone: 'orange', perms: [], group: 'Content' },
   { key: 'content', path: '/content', label: 'Flyers, Posts & Sales Info', desc: 'Marketing material and sales scripts', icon: Images, tone: 'orange', perms: ['content.view', 'content.manage'], group: 'Content' },
   { key: 'broadcasts', path: '/broadcasts', label: 'Broadcasts', desc: 'Company updates with acknowledgement', icon: Megaphone, tone: 'red', perms: ['broadcasts.view', 'broadcasts.manage'], group: 'Content' },
@@ -68,6 +75,8 @@ export const MODULES: ModuleDef[] = [
   { key: 'inbox', path: '/inbox', label: 'Email', desc: 'Emails sent to your login address', icon: Inbox, tone: 'blue', perms: [], group: 'Workspace' },
   { key: 'reports', path: '/reports', label: 'Reports', desc: 'Analytics, report cards and exports', icon: BookOpenCheck, tone: 'navy', perms: ['reports.view'], group: 'Workspace' },
   { key: 'notifications', path: '/notifications', label: 'Notifications', desc: 'Everything that needs your attention', icon: BellRing, tone: 'orange', perms: [], group: 'Workspace' },
+  // every automation in one place: IT Support edits, Super Admin looks
+  { key: 'automation', path: '/automation', label: 'Automation Center', desc: 'Built-in automations on / off, your own rules (when → if → then), run history', icon: Workflow, tone: 'violet', perms: [], roles: ['it', 'superadmin'], group: 'Admin' },
   { key: 'access', path: '/access', label: 'Access Management', desc: 'Users, roles and permissions', icon: KeyRound, tone: 'navy', perms: ['access.manage'], group: 'Admin' },
   { key: 'api-keys', path: '/api-keys', label: 'API Keys', desc: 'Keys for integrations: create, rotate, revoke', icon: KeySquare, tone: 'orange', perms: ['access.manage'], group: 'Admin' },
   { key: 'legacy-import', path: '/legacy-import', label: 'Import from old CRM', desc: 'Load the old PHP CRM .sql dump, checked line by line', icon: DatabaseZap, tone: 'violet', perms: ['access.manage'], group: 'Admin' },
@@ -81,7 +90,8 @@ export const MODULES: ModuleDef[] = [
 export const moduleByKey = (k: string) => MODULES.find((m) => m.key === k)!
 /** Messages is switched off for now (the code stays); set to true to bring the module back everywhere. */
 export const MESSAGES_ENABLED = false
-export const canSee = (m: ModuleDef, has: (...p: Perm[]) => boolean) => (m.key !== 'messages' || MESSAGES_ENABLED) && (!m.perms.length || has(...m.perms))
+export const canSee = (m: ModuleDef, has: (...p: Perm[]) => boolean, me?: User | null) =>
+  (m.key !== 'messages' || MESSAGES_ENABLED) && (!m.perms.length || has(...m.perms)) && (!m.roles || (!!me && rolesOf(me).some((r) => m.roles!.includes(r))))
 
 /** The Super Admin only runs IVR campaigns there (calls are for sales people), so for them the Dialer is called IVR. */
 export const moduleLabel = (m: { key: string; label: string }, me: User) =>
