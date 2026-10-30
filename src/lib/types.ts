@@ -7,7 +7,7 @@ export type Perm =
   | 'content.view' | 'content.manage' | 'salesinfo.manage' | 'schemes.view' | 'schemes.manage'
   | 'broadcasts.view' | 'broadcasts.manage'
   | 'billing.own' | 'billing.create' | 'billing.manage' | 'refunds.manage'
-  | 'workflow.manage' | 'forms.manage' | 'followup.manage' | 'saleskit.manage' | 'eligibility.manage' | 'website.manage' | 'portal.manage'
+  | 'workflow.manage' | 'forms.manage' | 'followup.manage' | 'saleskit.manage' | 'eligibility.manage' | 'website.manage' | 'portal.manage' | 'portal.view'
   | 'team.progress' | 'team.assign'
   | 'attendance.all' | 'leave.approve'
   | 'employees.view' | 'employees.manage'

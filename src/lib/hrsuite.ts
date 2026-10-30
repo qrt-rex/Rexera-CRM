@@ -241,6 +241,11 @@ export function upgradeDb(d: DB): DB {
     d.rolePerms.operations = [...new Set([...(d.rolePerms.operations ?? []), 'eligibility.manage' as Perm])]
     d.upgrades.push('scheme-checker-1')
   }
+  if (!d.upgrades.includes('portal-view-1')) {
+    // every client's portal logins and progress for the Operation team and Admin (the live CRM: its migration)
+    for (const r of ['operations', 'admin'] as const) d.rolePerms[r] = [...new Set([...(d.rolePerms[r] ?? []), 'portal.view' as Perm])]
+    d.upgrades.push('portal-view-1')
+  }
   d.mediaItems ??= []
   d.clientEntries ??= []
   if (!d.upgrades.includes('digital-media-1')) {

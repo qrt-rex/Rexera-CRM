@@ -1,13 +1,15 @@
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Activity, Ban, CheckCircle2, Link2, LogOut, Mail, Send, ShieldCheck, UserPlus, UserRoundCheck, Users } from 'lucide-react'
+import { Activity, Ban, CheckCircle2, Link2, LogOut, Mail, Send, ShieldCheck, TrendingUp, UserPlus, UserRoundCheck, Users } from 'lucide-react'
 import type { Booking, ClientAccount } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useAuth } from '../../lib/auth'
 import { CLOUD } from '../../lib/cloud'
-import { portalAdmin, userName } from '../../lib/actions'
+import { clientDocState, portalAdmin, userName } from '../../lib/actions'
 import { ServerError } from '../../lib/serverApi'
-import { fmtDateTime, isEmail } from '../../lib/format'
+import { ago, fmtDateTime, isEmail } from '../../lib/format'
+import { BOOKING_STATUS, STAGES } from '../../lib/workflow'
+import { ADMIN_STAGES } from '../../../supabase/workflow-rules.mjs'
 import { Badge, Button, Card, CardHeader, Checkbox, cx, EmptyState, Input, Modal, PageHeader, SearchBox, Select, Stat, Table, Tabs, Td, Th, useConfirm, useToast } from '../../components/ui'
 
 const STATUS = { ACTIVE: { label: 'Active', tone: 'green' }, INVITED: { label: 'Invited', tone: 'amber' }, DISABLED: { label: 'Deactivated', tone: 'red' } } as const
@@ -24,7 +26,7 @@ export default function ClientPortal() {
   const toast = useToast()
   const [confirm, confirmNode] = useConfirm()
   const [params, setParams] = useSearchParams()
-  const [tab, setTab] = useState<'accounts' | 'activity'>('accounts')
+  const [tab, setTab] = useState<'progress' | 'accounts' | 'activity'>('progress')
   const [q, setQ] = useState('')
   const [status, setStatus] = useState<'' | ClientAccount['status']>('')
   const [busy, setBusy] = useState('')
@@ -72,7 +74,12 @@ export default function ClientPortal() {
         <Stat label="Deactivated" value={accounts.filter((a) => a.status === 'DISABLED').length} icon={Ban} tone="red" onClick={() => setStatus('DISABLED')} />
       </div>
 
-      <Tabs className="mb-5 w-fit" value={tab} onChange={setTab} tabs={[{ id: 'accounts', label: 'Accounts', icon: Users, count: accounts.length }, { id: 'activity', label: 'Activity log', icon: Activity }]} />
+      <Tabs className="mb-5 w-fit max-w-full" value={tab} onChange={setTab} tabs={[
+        { id: 'progress', label: 'Progress', icon: TrendingUp, count: accounts.length }, { id: 'accounts', label: 'Accounts', icon: Users, count: accounts.length },
+        { id: 'activity', label: 'Activity log', icon: Activity, count: activity.length },
+      ]} />
+
+      {tab === 'progress' && <Progress onActivity={setLogFor} />}
 
       {tab === 'accounts' && (
         <Card className="overflow-hidden">
@@ -168,6 +175,99 @@ export default function ClientPortal() {
         </ul>}
       </Modal>
       {confirmNode}
+    </div>
+  )
+}
+
+const DOC: Record<string, { label: string; tone: 'gray' | 'amber' | 'blue' | 'violet' | 'green' | 'red' }> = {
+  PENDING_UPLOAD: { label: 'waiting for client', tone: 'amber' }, RESUBMISSION: { label: 'asked again', tone: 'red' }, SUBMITTED: { label: 'uploaded — to check', tone: 'blue' },
+  UNDER_REVIEW: { label: 'under review', tone: 'violet' }, APPROVED: { label: 'approved', tone: 'green' },
+}
+type Show = 'all' | 'week' | 'never' | 'waiting' | 'review'
+
+/**
+ * Every client who logs in from the website, and how far their work has got: sign-ins, uploads, each CRM entry's
+ * status and stage, the documents asked for (waiting / to check / approved), milestones and updates. Read-only for the
+ * Operation team, Admin and IT; Super Admin manages access on the Accounts tab.
+ */
+function Progress({ onActivity }: { onActivity: (a: ClientAccount) => void }) {
+  const db = useDb()
+  const [q, setQ] = useState('')
+  const [show, setShow] = useState<Show>('all')
+  const byId = useMemo(() => new Map(db.bookings.map((b) => [b.id, b])), [db.bookings])
+  const acts = db.clientActivity ?? []
+  const week = Date.now() - 7 * 86400000
+  const rows = (db.clientAccounts ?? []).map((a) => {
+    const mine = acts.filter((x) => x.accountId === a.id).sort((x, y) => y.at.localeCompare(x.at))
+    const files = a.bookingIds.map((id) => byId.get(id)).filter(Boolean) as Booking[]
+    const docs = files.flatMap((b) => ADMIN_STAGES.map((s) => ({ b, s, st: clientDocState(b, s.id) })).filter((x) => x.st))
+    return {
+      a, files, docs, last: mine[0], signIns: mine.filter((x) => x.action === 'SIGNED_IN').length, uploads: mine.filter((x) => x.action === 'UPLOADED').length,
+      waiting: docs.filter((x) => x.st === 'PENDING_UPLOAD' || x.st === 'RESUBMISSION').length, review: docs.filter((x) => x.st === 'SUBMITTED' || x.st === 'UNDER_REVIEW').length,
+      approved: docs.filter((x) => x.st === 'APPROVED').length,
+    }
+  }).sort((x, y) => (y.last?.at ?? y.a.invitedAt).localeCompare(x.last?.at ?? x.a.invitedAt))
+  const ql = q.trim().toLowerCase()
+  const shown = rows.filter((r) => (show === 'all' || (show === 'week' ? !!r.a.lastLoginAt && new Date(r.a.lastLoginAt).getTime() >= week : show === 'never' ? !r.a.lastLoginAt : show === 'waiting' ? r.waiting > 0 : r.review > 0))
+    && (!ql || `${r.a.name} ${r.a.email} ${r.a.phone ?? ''} ${r.files.map((b) => `${b.bookingId} ${b.companyName}`).join(' ')}`.toLowerCase().includes(ql)))
+  const count = (s: Show) => rows.filter((r) => (s === 'week' ? !!r.a.lastLoginAt && new Date(r.a.lastLoginAt).getTime() >= week : s === 'never' ? !r.a.lastLoginAt : s === 'waiting' ? r.waiting > 0 : s === 'review' ? r.review > 0 : true)).length
+
+  return (
+    <div>
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <Tabs className="w-fit max-w-full" value={show} onChange={setShow} tabs={[
+          { id: 'all', label: 'All', count: count('all') }, { id: 'week', label: 'Signed in this week', count: count('week') }, { id: 'never', label: 'Never signed in', count: count('never') },
+          { id: 'waiting', label: 'Waiting on client', count: count('waiting') }, { id: 'review', label: 'Documents to check', count: count('review') },
+        ]} />
+        <SearchBox value={q} onChange={setQ} placeholder="Search client, email or entry…" className="min-w-56 flex-1" />
+      </div>
+      {!shown.length ? <Card><EmptyState icon={TrendingUp} title={rows.length ? 'Nothing matches' : 'No client has portal access yet'} text={rows.length ? undefined : 'Clients appear here once the Super Admin invites them; they log in from the website.'} /></Card> : (
+        <div className="grid gap-4 xl:grid-cols-2">
+          {shown.map(({ a, files, docs, last, signIns, uploads, waiting, review, approved }) => (
+            <Card key={a.id} className="overflow-hidden">
+              <div className="flex flex-wrap items-start gap-3 border-b border-line px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <p className="flex flex-wrap items-center gap-2"><b>{a.name}</b><Badge tone={STATUS[a.status].tone}>{STATUS[a.status].label}</Badge></p>
+                  <p className="truncate text-xs text-mute">{a.email}{a.phone ? ` · ${a.phone}` : ''}{a.assignedTo ? ` · team member ${userName(db, a.assignedTo)}` : ''}</p>
+                </div>
+                <Button size="sm" variant="ghost" icon={Activity} onClick={() => onActivity(a)}>Activity</Button>
+              </div>
+              <div className="grid grid-cols-2 gap-px bg-line sm:grid-cols-4">
+                {[
+                  ['Last sign-in', a.lastLoginAt ? ago(a.lastLoginAt) : 'never'], ['Sign-ins', signIns], ['Uploads', uploads],
+                  ['Last activity', last ? `${ACTION_LABEL[last.action] ?? last.action} · ${ago(last.at)}` : '—'],
+                ].map(([k, v]) => <div key={String(k)} className="bg-card px-3 py-2"><p className="text-[10px] font-semibold uppercase text-mute">{k}</p><p className="truncate text-sm font-semibold">{v}</p></div>)}
+              </div>
+              <div className="space-y-3 px-4 py-3">
+                {!files.length && <p className="text-xs text-mute">No CRM entry you can see is linked to this login.</p>}
+                {files.map((b) => {
+                  const ms = (b.milestones ?? []).filter((m) => m.visible)
+                  const mine = docs.filter((x) => x.b.id === b.id)
+                  return (
+                    <div key={b.id} className="rounded-xl border border-line p-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Link to={`/bookings/${b.id}?tab=workflow`} className="min-w-0 flex-1 truncate text-sm font-bold hover:underline">{b.bookingId} · {b.companyName}</Link>
+                        <Badge tone={BOOKING_STATUS[b.status].tone}>{BOOKING_STATUS[b.status].label}</Badge>
+                      </div>
+                      <div className="mt-2">
+                        <div className="mb-1 flex justify-between text-[11px] text-mute"><span>Stage {b.stage} of {STAGES.length} · {STAGES[b.stage - 1]}</span><span>{Math.round((b.stage / STAGES.length) * 100)}%</span></div>
+                        <div className="h-1.5 overflow-hidden rounded-full bg-card2"><div className="h-full rounded-full bg-brand" style={{ width: `${(b.stage / STAGES.length) * 100}%` }} /></div>
+                      </div>
+                      {mine.length > 0 && <div className="mt-2 flex flex-wrap gap-1">{mine.map((x) => <Badge key={x.s.id} tone={DOC[x.st!]?.tone ?? 'gray'}>{x.s.short}: {DOC[x.st!]?.label ?? x.st}</Badge>)}</div>}
+                      <p className="mt-2 text-[11px] text-mute">{ms.length ? `Milestones ${ms.filter((m) => m.status === 'DONE').length}/${ms.length} done` : 'No milestones shared yet'} · {(b.clientUpdates ?? []).length} update(s) sent</p>
+                    </div>
+                  )
+                })}
+              </div>
+              {(waiting > 0 || review > 0 || approved > 0) && (
+                <p className="flex flex-wrap gap-3 border-t border-line px-4 py-2 text-[11px] font-semibold">
+                  {waiting > 0 && <span className="text-warn">{waiting} waiting for the client</span>}{review > 0 && <span className="text-info">{review} to check</span>}{approved > 0 && <span className="text-ok">{approved} approved</span>}
+                </p>
+              )}
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

@@ -105,6 +105,7 @@ export const PERM_GROUPS: { group: string; perms: { id: Perm; label: string }[] 
       { id: 'access.manage', label: 'Roles, users & permissions' },
       { id: 'website.manage', label: 'Website content, publishing & website leads (Super Admin)' },
       { id: 'portal.manage', label: 'Client portal accounts: invite, link, deactivate (Super Admin)' },
+      { id: 'portal.view', label: 'Client portal: see every client’s logins, activity and progress (Operation team, Admin, IT)' },
       { id: 'audit.view', label: 'Activity log' },
     ],
   },
@@ -116,10 +117,10 @@ const common: Perm[] = ['broadcasts.view', 'messages.use', 'schemes.view', 'cont
 
 export const DEFAULT_ROLE_PERMS: Record<Role, Perm[]> = {
   superadmin: [...ALL_PERMS],
-  admin: [...common, 'bookings.all', 'bookings.admin', 'content.manage', 'salesinfo.manage', 'schemes.manage', 'employees.view', 'documents.forms', 'reports.view', 'followup.manage', 'forms.manage', 'workflow.manage'],
+  admin: [...common, 'bookings.all', 'bookings.admin', 'content.manage', 'salesinfo.manage', 'schemes.manage', 'employees.view', 'documents.forms', 'reports.view', 'followup.manage', 'forms.manage', 'workflow.manage', 'portal.view'],
   accounts: [...common, 'bookings.all', 'bookings.accounts', 'billing.create', 'billing.manage', 'refunds.manage', 'reports.view', 'reports.export'],
   legal: [...common, 'bookings.all', 'bookings.legal', 'documents.forms', 'leave.approve', 'reports.view'],
-  operations: [...common, 'bookings.all', 'bookings.process', 'content.manage', 'salesinfo.manage', 'schemes.manage', 'employees.view', 'documents.forms', 'reports.view', 'events.manage', 'forms.manage', 'saleskit.manage', 'eligibility.manage'],
+  operations: [...common, 'bookings.all', 'bookings.process', 'content.manage', 'salesinfo.manage', 'schemes.manage', 'employees.view', 'documents.forms', 'reports.view', 'events.manage', 'forms.manage', 'saleskit.manage', 'eligibility.manage', 'portal.view'],
   teamlead: [
     ...common, 'salesinfo.manage', 'leads.own', 'leads.assign', 'dialer.use', 'bookings.create', 'bookings.own', 'bookings.team', 'bookings.approve_tl',
     'billing.own', 'billing.create', 'team.progress', 'team.assign', 'documents.forms', 'leave.approve', 'reports.view',
@@ -144,6 +145,8 @@ export const RESERVED: Partial<Record<Perm, Role[]>> = {
   // the live website and client portal accounts: Super Admin only
   'website.manage': ['superadmin'],
   'portal.manage': ['superadmin'],
+  // every client's portal logins and progress: the Operation team and Admin (IT and Super Admin always)
+  'portal.view': ['superadmin', 'operations', 'admin'],
   'billing.manage': ['superadmin', 'accounts'],
   'refunds.manage': ['superadmin', 'accounts'],
   // the CRM Leads page (lead source, uploads, website leads, auto-assign) is the Super Admin's; others work leads in the Dialer
@@ -210,7 +213,7 @@ export const isStageOnlyAdmin = (db: DB, u: User) => {
   return roles.length === 1 && roles[0] === 'admin' && !!db.settings.workflow?.adminStageAccess?.[u.id]
 }
 /** What such an Admin doesn't get from the Admin role: every file, workflow / form / follow-up settings and reports. */
-export const STAGE_ONLY_ADMIN_DROPS: Perm[] = ['bookings.all', 'workflow.manage', 'forms.manage', 'followup.manage', 'reports.view', 'reports.export', 'documents.forms', 'media.manage']
+export const STAGE_ONLY_ADMIN_DROPS: Perm[] = ['bookings.all', 'workflow.manage', 'forms.manage', 'followup.manage', 'reports.view', 'reports.export', 'documents.forms', 'media.manage', 'portal.view']
 
 export function canOpenDashboard(u: User, slug: Role) {
   // the IT Support dashboard (user activity, system tools) is the IT team's alone — not even Super Admin's
