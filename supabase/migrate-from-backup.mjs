@@ -84,7 +84,7 @@ let total = 0
 for (const [table, onConflict] of ORDER) {
   const list = rows[table] ?? []
   const target = table === 'app_users_team' ? 'app_users' : table
-  for (const part of chunk(list, 500)) {
+  for (const part of chunk(list, 50)) {
     const q = table === 'app_users_team'
       ? Promise.all(part.map((r) => sb.from('app_users').update({ team_lead_id: r.team_lead_id }).eq('id', r.id)))
       : sb.from(target).upsert(part, { onConflict })
@@ -99,7 +99,7 @@ for (const table of APPEND_ONLY) {
   const { count, error } = await sb.from(table).select('*', { count: 'exact', head: true })
   if (error) { console.error(`✗ ${table}: ${error.message}`); process.exit(1) }
   if (count) { console.log(`• ${table.padEnd(26)} skipped (already has ${count} rows)`); continue }
-  for (const part of chunk(rows[table], 500)) {
+  for (const part of chunk(rows[table], 50)) {
     const { error: e } = await sb.from(table).insert(part)
     if (e) { console.error(`✗ ${table}: ${e.message}`); process.exit(1) }
   }
