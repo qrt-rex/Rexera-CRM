@@ -18,6 +18,8 @@ const KIND = {
   FLYER: { title: 'Flyers', one: 'flyer', icon: Images, types: ['FLYER', 'POSTER'] as MediaItem['mediaType'][], desc: 'Every flyer and poster created in the Digital Media Dashboard' },
 }
 type Show = 'all' | 'published' | 'draft'
+/** Compact cards: two a row on phones, up to five on wide screens. */
+const MEDIA_GRID = 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5'
 
 /**
  * Digital Media → Posts / Flyers: every post (or flyer / poster) from the Media Function, the moment it is created —
@@ -50,24 +52,25 @@ export default function MediaGallery({ kind }: { kind: 'POST' | 'FLYER' }) {
         <SearchBox value={q} onChange={setQ} placeholder={`Search ${k.title.toLowerCase()}…`} className="min-w-56 flex-1" />
       </div>
       {!list.length ? <Card><EmptyState icon={k.icon} title={all.length ? 'Nothing matches' : `No ${k.title.toLowerCase()} yet`} text={all.length ? 'Change the search or filter.' : `Every ${k.one} created in the Digital Media Dashboard appears here.`} /></Card> : (
-        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        <div className={MEDIA_GRID}>
           {list.map((m) => {
             const u = UPLOAD_STATUS[uploadStatus(m)], w = WORK_STATUS[workStatus(m)]
             return (
-              <Card key={m.id} className="overflow-hidden">
-                <button type="button" className="block w-full text-left" onClick={() => setDetail(m.id)}>
-                  {m.files[0] ? <MediaPreview file={m.files[0]} compact className="aspect-square w-full rounded-none border-0" />
-                    : <div className="grid aspect-square w-full place-items-center bg-card2 text-sm text-mute">No file uploaded yet</div>}
+              <Card key={m.id} className="flex flex-col overflow-hidden transition hover:-translate-y-0.5 hover:shadow-lg">
+                <button type="button" className="block w-full text-left" onClick={() => setDetail(m.id)} aria-label={`Open ${m.title}`}>
+                  {m.files[0] ? <MediaPreview file={m.files[0]} compact className="aspect-[4/3] w-full rounded-none border-0" />
+                    : <div className="grid aspect-[4/3] w-full place-items-center bg-card2 text-xs text-mute">No file uploaded yet</div>}
                 </button>
-                <div className="p-4">
-                  <p className="flex items-center gap-2"><span className="font-mono text-xs text-mute">#{m.serial}</span><b className="min-w-0 flex-1 truncate">{m.title}</b></p>
-                  <p className="truncate text-xs text-mute">{m.schemeName} · {mediaTypeLabel(m.mediaType)} · {ago(m.updatedAt)}</p>
-                  {m.description && <p className="mt-1 line-clamp-2 text-sm">{m.description}</p>}
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {m.submitted ? <Badge tone="blue">{isLive(m) ? 'Published' : 'Published · needs a file'}{m.internal && m.external ? ' · company + clients' : m.external ? ' · clients' : ' · company'}</Badge> : <Badge tone="gray">Draft</Badge>}
-                    <Badge tone={u.tone}>{u.label}</Badge><Badge tone={w.tone}>{w.label}</Badge>
+                <div className="flex flex-1 flex-col p-3">
+                  <p className="flex items-center gap-1.5 text-sm"><span className="font-mono text-[11px] text-mute">#{m.serial}</span><b className="min-w-0 flex-1 truncate" title={m.title}>{m.title}</b></p>
+                  <p className="truncate text-[11px] text-mute">{m.schemeName} · {mediaTypeLabel(m.mediaType)} · {ago(m.updatedAt)}</p>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {m.submitted ? <Badge tone="blue" className="text-[10px]">{isLive(m) ? 'Published' : 'Needs a file'}</Badge> : <Badge tone="gray" className="text-[10px]">Draft</Badge>}
+                    <Badge tone={u.tone} className="text-[10px]">{u.label}</Badge><Badge tone={w.tone} className="text-[10px]">{w.label}</Badge>
                   </div>
-                  <p className="mt-2 text-[11px] text-mute">{m.assignedTo ? `${userName(db, m.assignedTo)}` : 'Not assigned'}{m.assignDate ? ` · due ${fmtDate(m.assignDate)}${m.assignTime ? ` ${m.assignTime}` : ''}` : ''}</p>
+                  <p className="mt-auto truncate pt-2 text-[11px] text-mute" title={m.submitted ? (m.internal && m.external ? 'Company + clients' : m.external ? 'Clients' : 'Company') : undefined}>
+                    {m.assignedTo ? userName(db, m.assignedTo) : 'Not assigned'}{m.assignDate ? ` · due ${fmtDate(m.assignDate)}${m.assignTime ? ` ${m.assignTime}` : ''}` : ''}
+                  </p>
                 </div>
               </Card>
             )

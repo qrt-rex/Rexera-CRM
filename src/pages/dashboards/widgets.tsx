@@ -129,7 +129,10 @@ export function LoginLogoutCard({ className }: { className?: string }) {
           : <>
             {paused
               ? <Button size="sm" variant="success" icon={Play} onClick={() => run(() => resumeDay(me), 'Welcome back — day resumed')}>Resume</Button>
-              : <Button size="sm" variant="soft" icon={Pause} disabled={!inBreakWindow(now, bp) || left <= 0} title={`Lunch break: ${breakLabel(bp)}`} onClick={() => run(() => pauseDay(me), `Day paused · ${mmss(left)} of break left`)}>{inBreakWindow(now, bp) ? (left <= 0 ? 'Break used' : 'Pause') : 'Break'}</Button>}
+              // the break button turns on at the start of the lunch window (1:00 pm); one click starts the break
+              : inBreakWindow(now, bp) && left > 0
+                ? <Button size="sm" variant="accent" icon={Pause} title={`Lunch break: ${breakLabel(bp)}`} onClick={() => run(() => pauseDay(me), `Break started · ${mmss(left)} of break left`)}>Start break</Button>
+                : <Button size="sm" variant="soft" icon={Pause} disabled title={`Lunch break: ${breakLabel(bp)}`}>{inBreakWindow(now, bp) ? 'Break used' : now < breakWindow(now, bp).start ? `Break at ${clock(breakWindow(now, bp).start, bp.timeZone)}` : 'Break over'}</Button>}
             <Button size="sm" variant="outline" icon={Square} onClick={logout}>End my day</Button>
           </>}
       </div>

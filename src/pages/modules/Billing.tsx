@@ -1,13 +1,12 @@
 import { useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { Download, FilePlus2, IndianRupee, Plus, Receipt, Trash2, Wallet, AlertCircle } from 'lucide-react'
-import type { Invoice, InvoiceItem } from '../../lib/types'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Download, IndianRupee, Plus, Receipt, Wallet, AlertCircle } from 'lucide-react'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
-import { createInvoice, PROFORMA_SERVICE, userName, visibleInvoices } from '../../lib/actions'
-import { INDIAN_STATES, addDays, downloadCsv, fmtDate, gstSplit, inr, invoiceTotals, today, ymd } from '../../lib/format'
-import { Badge, Button, Card, cx, EmptyState, Input, Modal, PageHeader, SearchBox, Select, Table, Tabs, Td, Textarea, Th, useRun } from '../../components/ui'
-import { branchList } from '../../lib/branches'
+import { userName, visibleInvoices } from '../../lib/actions'
+import { downloadCsv, fmtDate, inr, invoiceTotals, today } from '../../lib/format'
+import { Badge, Button, Card, EmptyState, PageHeader, SearchBox, Table, Tabs, Td, Th } from '../../components/ui'
+import { InvoiceFormModal } from '../../components/InvoiceForm'
 import { MiniStat } from '../dashboards/widgets'
 
 const statusTone = { ISSUED: 'blue', PARTIALLY_PAID: 'amber', PAID: 'green', CANCELLED: 'gray' } as const
@@ -16,11 +15,13 @@ export default function Billing() {
   const db = useDb()
   const me = useMe()
   const { can } = useAuth()
-  const run = useRun()
   const nav = useNavigate()
   const [q, setQ] = useState('')
   const [tab, setTab] = useState<'all' | 'TAX' | 'PROFORMA' | 'due'>('all')
-  const [open, setOpen] = useState(false)
+  const [params, setParams] = useSearchParams()
+  // ?new=1 (e.g. from the dashboard) opens the new-invoice form straight away
+  const [open, setOpenState] = useState(() => params.get('new') === '1' && can('billing.create', 'billing.manage'))
+  const setOpen = (v: boolean) => { setOpenState(v); if (!v && params.has('new')) setParams({}, { replace: true }) }
   const all = visibleInvoices(db, me)
   const st = db.settings.supplierState
   const rows = useMemo(() => all.map((i) => ({ i, t: invoiceTotals(i, st) })), [all, st])
@@ -28,15 +29,6 @@ export default function Billing() {
   const billed = rows.filter((r) => r.i.status !== 'CANCELLED' && r.i.type === 'TAX').reduce((s, r) => s + r.t.grand, 0)
   const paid = rows.filter((r) => r.i.status !== 'CANCELLED').reduce((s, r) => s + r.i.paid, 0)
   const due = rows.filter((r) => r.i.status !== 'CANCELLED').reduce((s, r) => s + Math.max(0, r.t.balance), 0)
-
-  // new invoice form
-  const [f, setF] = useState({ type: (can('billing.manage') ? 'TAX' : 'PROFORMA') as Invoice['type'], client: '', gstin: '', state: 'Gujarat', due: ymd(addDays(new Date(), 15)), remarks: '' })
-  // issued from the creator's own branch: shown, never picked
-  const myBranch = branchList(db).find((b) => b.id === me.branchId)
-  const [items, setItems] = useState<InvoiceItem[]>([{ desc: '', sac: '998311', qty: 1, rate: 0, gstRate: 18 }])
-  const fromState = myBranch?.state || st
-  const draft = invoiceTotals({ ...f, items, paid: 0 } as unknown as Invoice, fromState)
-  const proforma = f.type === 'PROFORMA'
 
   return (
     <div>
@@ -75,53 +67,7 @@ export default function Billing() {
         )}
       </Card>
 
-      <Modal open={open} onClose={() => setOpen(false)} size="xl" title="New invoice"
-        subtitle={`${myBranch ? `Issued from your branch: ${myBranch.name}` : 'Your branch is not set (HR → Employee Details) — the branch address is printed once it is'} · same state → CGST + SGST, otherwise IGST`}
-        footer={<><Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button icon={FilePlus2} onClick={async () => { const id = await run(() => createInvoice(me, { ...f, items }), 'Invoice created'); if (typeof id === 'string') { setOpen(false); nav(`/billing/${id}`) } }}>Create {f.type === 'TAX' ? 'tax invoice' : 'proforma'}</Button></>}>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Select label="Type" value={f.type} onChange={(e) => { const type = e.target.value as Invoice['type']; setF({ ...f, type }); if (type === 'PROFORMA') setItems((x) => [{ ...x[0]!, desc: PROFORMA_SERVICE }]) }}>{can('billing.manage') && <option value="TAX">Tax invoice</option>}<option value="PROFORMA">Proforma</option></Select>
-          <Input label="Client" required value={f.client} onChange={(e) => setF({ ...f, client: e.target.value })} className="sm:col-span-2" list="clients" />
-          <datalist id="clients">{db.bookings.map((b) => <option key={b.id} value={b.companyName} />)}</datalist>
-          <Input label="GSTIN" value={f.gstin} onChange={(e) => setF({ ...f, gstin: e.target.value.toUpperCase() })} maxLength={15} />
-          <Select label="Place of supply" value={f.state} onChange={(e) => setF({ ...f, state: e.target.value })}>{INDIAN_STATES.map((s) => <option key={s}>{s}</option>)}</Select>
-          <Input label="Due date" type="date" value={f.due} onChange={(e) => setF({ ...f, due: e.target.value })} />
-          <Textarea label="Remarks (printed on the invoice)" rows={2} maxLength={1000} value={f.remarks} onChange={(e) => setF({ ...f, remarks: e.target.value })} className="sm:col-span-3" />
-        </div>
-        <div className="mt-5 overflow-x-auto rounded-xl border border-line">
-          <table className="w-full min-w-[640px] text-sm">
-            <thead className="bg-card2 text-left text-[11px] uppercase text-mute"><tr><th className="p-2">Description</th><th className="p-2">SAC</th><th className="p-2">Qty</th><th className="p-2">Rate</th><th className="p-2">GST %</th><th className="p-2 text-right">Amount</th><th /></tr></thead>
-            <tbody>
-              {items.map((it, i) => {
-                const upd = (p: Partial<InvoiceItem>) => setItems(items.map((x, j) => (j === i ? { ...x, ...p } : x)))
-                const cls = 'h-9 w-full rounded-lg border border-line bg-card px-2'
-                return (
-                  <tr key={i} className="border-t border-line">
-                    <td className="p-2">{proforma
-                      ? <input className={cx(cls, 'bg-card2 font-semibold')} value={PROFORMA_SERVICE} readOnly aria-label="Service (fixed on proforma invoices)" title="A proforma invoice always reads “Consultancy services”" />
-                      : <input className={cls} value={it.desc} onChange={(e) => upd({ desc: e.target.value })} list="svcs" placeholder="Service" />}</td>
-                    <td className="p-2 w-24"><input className={cls} value={it.sac} onChange={(e) => upd({ sac: e.target.value })} /></td>
-                    <td className="p-2 w-16"><input type="number" min={1} className={cls} value={it.qty} onChange={(e) => upd({ qty: Number(e.target.value) })} /></td>
-                    <td className="p-2 w-28"><input type="number" min={0} className={cls} value={it.rate || ''} onChange={(e) => upd({ rate: Number(e.target.value) })} /></td>
-                    <td className="p-2 w-20"><select className={cls} value={it.gstRate} onChange={(e) => upd({ gstRate: Number(e.target.value) })}>{[0, 5, 12, 18, 28].map((r) => <option key={r} value={r}>{r}</option>)}</select></td>
-                    <td className="p-2 text-right tabular-nums">{inr(it.qty * it.rate + gstSplit(it.qty * it.rate, it.gstRate, f.state, fromState).tax)}</td>
-                    <td className="p-2"><button aria-label="Remove line" onClick={() => setItems(items.filter((_, j) => j !== i))} className="text-mute hover:text-bad"><Trash2 className="size-4" /></button></td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-          <datalist id="svcs">{db.services.map((s) => <option key={s.id} value={s.name} />)}</datalist>
-        </div>
-        <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
-          {proforma ? <p className="max-w-sm text-xs text-mute">A proforma invoice has one line, “{PROFORMA_SERVICE}” — enter the amount.</p>
-            : <Button size="sm" variant="soft" icon={Plus} onClick={() => setItems([...items, { desc: '', sac: '998311', qty: 1, rate: 0, gstRate: 18 }])}>Add line</Button>}
-          <div className="w-64 space-y-1 text-sm">
-            <div className="flex justify-between"><span className="text-mute">Taxable</span>{inr(draft.taxable)}</div>
-            {draft.igst ? <div className="flex justify-between"><span className="text-mute">IGST</span>{inr(draft.igst)}</div> : <><div className="flex justify-between"><span className="text-mute">CGST</span>{inr(draft.cgst)}</div><div className="flex justify-between"><span className="text-mute">SGST</span>{inr(draft.sgst)}</div></>}
-            <div className="flex justify-between border-t border-line pt-1 font-bold"><span>Total</span>{inr(draft.grand)}</div>
-          </div>
-        </div>
-      </Modal>
+      {open && <InvoiceFormModal onClose={() => setOpen(false)} />}
     </div>
   )
 }

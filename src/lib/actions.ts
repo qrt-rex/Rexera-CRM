@@ -1110,11 +1110,13 @@ export function runComboReminders(now = Date.now()) {
   })
   return due.length
 }
+/** Statuses in which the sales person who made a CRM entry edits it themselves (until it goes on to Legal). */
+export const OWNER_EDITABLE: BookingStatus[] = ['PENDING_TL', 'PENDING_ACCOUNTS', 'ACCOUNTS_HOLD', 'REJECTED', 'CHANGES_REQUIRED']
 export function canEditBooking(d: DB, me: User, b: Booking) {
   if (isSA(me)) return true
   if (b.status === 'COMPLETED') return false
   if (effectivePerms(d, me).has('bookings.accounts')) return true
-  return b.createdBy === me.id && ['PENDING_TL', 'REJECTED', 'CHANGES_REQUIRED'].includes(b.status)
+  return b.createdBy === me.id && effectivePerms(d, me).has('bookings.create') && OWNER_EDITABLE.includes(b.status)
 }
 
 export type BookingPatch = Partial<Pick<Booking, 'companyName' | 'address' | 'contactPerson' | 'mobile' | 'email' | 'pan' | 'gstin' | 'city' | 'state' | 'industry' | 'mode' | 'priority' | 'paymentContact' | 'paymentEmail' | 'bookingDate' | 'closedBy' | 'remarks' | 'successFee' | 'teamLeadId'>>
@@ -1128,9 +1130,16 @@ export function updateBooking(me: User, id: string, patch: BookingPatch) {
     if (patch.paymentContact !== undefined) { assert(isPhone(patch.paymentContact), 'Payment contact must be a valid 10-digit mobile.'); patch.paymentContact = normPhone(patch.paymentContact) }
     if (patch.email !== undefined) assert(isEmail(patch.email), 'Enter a valid company email.')
     if (patch.remarks !== undefined) assert(patch.remarks.trim().length >= 3, 'Remarks are required.')
-    if (patch.successFee) b.successFeePct = patch.successFee.type === 'PCT' ? patch.successFee.value : 0
+    if (patch.companyName !== undefined) assert(patch.companyName.trim().length >= 2, 'Company name is required.')
+    if (patch.successFee) {
+      assert(Number.isFinite(patch.successFee.value) && patch.successFee.value >= 0 && (patch.successFee.type === 'AMOUNT' || patch.successFee.value <= 100), 'Success fee must be 0 or more (a percentage up to 100). Enter 0 if the client did not agree.')
+      b.successFeePct = patch.successFee.type === 'PCT' ? patch.successFee.value : 0
+    }
     Object.assign(b, patch)
     b.updatedAt = nowIso()
+    // the sales person changed an entry Accounts is checking: tell Accounts
+    if (b.createdBy === me.id && !has(me, 'bookings.accounts') && ['PENDING_ACCOUNTS', 'ACCOUNTS_HOLD'].includes(b.status))
+      notify(d, usersWithRole(d, 'accounts').map((u) => u.id), 'CRM entry edited by sales', `${b.bookingId} · ${b.companyName} — check the changes`, `/bookings/${b.id}`, 'info')
     audit(d, me.id, 'BOOKING_EDIT', `${b.bookingId} edited`)
   })
 }
@@ -2186,6 +2195,37 @@ export function invoiceFromBooking(me: User, bookingId: string, type: Invoice['t
         ? paid.map((s) => ({ desc: s.name, sac: '998311', qty: 1, rate: s.price, gstRate: b.gstRate }))
         : [{ desc: b.serviceName, sac: '998311', qty: 1, rate: b.totalQuoted, gstRate: b.gstRate }]
     })(),
+  })
+}
+
+/**
+ * Who edits an invoice after it is made: Accounts (billing.manage) until it is cancelled; the sales person who made it
+ * (or is on it) their own proforma while nothing has been paid against it.
+ */
+export function canEditInvoice(d: DB, me: User, inv: Invoice) {
+  if (inv.status === 'CANCELLED') return false
+  const p = effectivePerms(d, me)
+  if (p.has('billing.manage')) return true
+  return p.has('billing.create') && (inv.createdBy === me.id || inv.salesPerson === me.id) && inv.type === 'PROFORMA' && inv.status === 'ISSUED' && !inv.paid
+}
+export type InvoiceEdit = { client: string; gstin: string; state: string; items: InvoiceItem[]; due: string; clientAddress?: string; clientPan?: string; remarks?: string }
+export function updateInvoice(me: User, id: string, i: InvoiceEdit) {
+  const inv0 = getDb().invoices.find((x) => x.id === id)
+  assert(inv0, 'Invoice not found.')
+  assert(canEditInvoice(getDb(), me, inv0), inv0.status === 'CANCELLED' ? 'This invoice is cancelled.' : 'Only Accounts can change this invoice now (it is a tax invoice, or a payment is recorded on it).')
+  if (inv0.type === 'PROFORMA') i = { ...i, items: i.items.map((x) => ({ ...x, desc: PROFORMA_SERVICE, sac: x.sac || '998311' })) }
+  assert(i.client.trim(), 'Client name is required.')
+  assert(!i.gstin || isGstin(i.gstin), 'GSTIN format is invalid.')
+  assert(i.items.length && i.items.every((x) => x.desc && x.qty > 0 && x.rate >= 0), 'Each line needs a description, quantity and rate.')
+  assert(/^\d{4}-\d{2}-\d{2}$/.test(i.due), 'Pick the due date.')
+  assert(!i.remarks || i.remarks.length <= 1000, 'Keep the remarks under 1000 characters.')
+  mutate((d) => {
+    const inv = d.invoices.find((x) => x.id === id)!
+    Object.assign(inv, {
+      client: i.client.trim(), gstin: i.gstin.toUpperCase(), state: i.state, items: i.items, due: i.due,
+      clientAddress: i.clientAddress?.trim() || undefined, clientPan: i.clientPan?.trim().toUpperCase() || undefined, remarks: i.remarks?.trim() || undefined,
+    })
+    audit(d, me.id, 'INVOICE_EDIT', inv.number)
   })
 }
 

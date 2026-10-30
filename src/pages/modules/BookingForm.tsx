@@ -10,7 +10,8 @@ import { DOC_TYPES } from '../../lib/files'
 import { addDays, fmtDate, inr, isEmail, isGstin, isPan, round2, today, ymd } from '../../lib/format'
 import { rolesOf } from '../../lib/rbac'
 import { stateForCity } from '../../lib/india'
-import { Button, Card, CardHeader, cx, Input, PageHeader, Select, Textarea, useRun } from '../../components/ui'
+import { Button, Card, CardHeader, cx, Input, PageHeader, Select, Textarea, useRun, useSubmitting } from '../../components/ui'
+import { ClientEntryButtons } from '../../components/ClientEntry'
 import { CLIENT_ENTRY_STATUS, convertibleEntries, startsFromClientEntry } from '../../lib/clientEntries'
 import { CityInput, PhoneInput, StateSelect } from '../../components/fields'
 import { FileField } from '../../components/FileField'
@@ -104,7 +105,9 @@ function BookingFormBody() {
     remarks: f.remarks.trim().length < 3 ? 'Remarks are required' : undefined,
   } : {} as Record<string, string | undefined>
 
-  const submit = async () => {
+  // one submit at a time: a double click must not make two CRM entries
+  const [busy, once] = useSubmitting()
+  const submit = () => once(async () => {
     setTried(true)
     if (existing) {
       const ok = await run(() => updateBooking(me, existing.id, {
@@ -117,7 +120,7 @@ function BookingFormBody() {
     }
     const newId = await run(() => createBooking(me, { ...f, documents: docs }), 'Submitted to Accounts')
     if (typeof newId === 'string') nav(`/bookings/${newId}`)
-  }
+  })
 
   // sales people and team leaders convert a client entry (filled in the dialer) once the payment is received
   if (!existing && !entry && startsFromClientEntry(me)) return <PickClientEntry />
@@ -288,7 +291,7 @@ function BookingFormBody() {
               </>}
             </div>
             <div className="border-t border-line p-4">
-              <Button variant="accent" size="lg" className="w-full" icon={existing ? Save : Send} onClick={submit}>{existing ? 'Save changes' : 'Submit to Accounts'}</Button>
+              <Button variant="accent" size="lg" className="w-full" icon={existing ? Save : Send} loading={busy} onClick={submit}>{existing ? 'Save changes' : 'Submit to Accounts'}</Button>
               {!existing && <p className="mt-2 text-center text-[11px] text-mute">Chain: Accounts → Legal → Operations → Admin → Ops approval{isTL ? '' : ' · your team leader is kept informed'}</p>}
             </div>
           </Card>
@@ -307,12 +310,12 @@ function PickClientEntry() {
   return (
     <div className="mx-auto max-w-4xl">
       <PageHeader title="New CRM Entry" subtitle="Pick the client entry to convert — once the payment is received" icon={Briefcase}
-        actions={<Link to="/"><Button variant="outline">Back to dashboard</Button></Link>} />
+        actions={<><ClientEntryButtons crm={false} /><Link to="/bookings?view=client"><Button variant="outline" icon={ClipboardList}>All client entries</Button></Link></>} />
       <Card className="overflow-hidden">
         <CardHeader title="My client entries" subtitle="Sales person → dialer → client entry → follow-ups → CRM entry" icon={ClipboardList} />
         {!list.length ? (
           <div className="p-6 text-sm text-mute">
-            <p>You have no open client entries. Fill the client entry in the <Link to="/dialer" className="font-semibold text-brand-ink underline">dialer</Link> while you are on the call; once the payment is received, convert it here or from your dashboard.</p>
+            <p>You have no open client entries. Add one with <b>Add Client Entry</b>, or fill it in the <Link to="/dialer" className="font-semibold text-brand-ink underline">dialer</Link> while you are on the call; once the payment is received, convert it here.</p>
           </div>
         ) : (
           <ul className="divide-y divide-line/70">

@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Ban, Download, IndianRupee, Mail, MessageCircle, Pencil, Printer, Receipt, Send } from 'lucide-react'
+import { ArrowLeft, Ban, Download, FilePen, IndianRupee, Mail, MessageCircle, Pencil, Printer, Receipt, Send } from 'lucide-react'
 import type { Invoice } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
-import { cancelInvoice, recordInvoicePayment, setInvoiceRemarks, userName, visibleInvoices } from '../../lib/actions'
+import { cancelInvoice, canEditInvoice, recordInvoicePayment, setInvoiceRemarks, userName, visibleInvoices } from '../../lib/actions'
+import { InvoiceFormModal } from '../../components/InvoiceForm'
 import { invoiceBranch } from '../../lib/branches'
 import { fmtDate, fmtDateTime, gstSplit, inr, invoiceTotals, isEmail, isPhone, rupeesInWords } from '../../lib/format'
 import { CLOUD } from '../../lib/cloud'
@@ -96,6 +97,7 @@ export default function InvoiceView() {
   const [sendOpen, setSendOpen] = useState(false)
   const [amt, setAmt] = useState(0)
   const [remarks, setRemarks] = useState<string | null>(null)
+  const [editing, setEditing] = useState(false)
   const inv = visibleInvoices(db, me).find((x) => x.id === id)
   if (!inv) return <Card><EmptyState icon={Receipt} title="Invoice not found" action={<Link to="/billing"><Button>All invoices</Button></Link>} /></Card>
   // the branch of the person who created the invoice (never chosen by hand)
@@ -119,6 +121,7 @@ export default function InvoiceView() {
         <Link to="/billing" className="mr-auto flex items-center gap-1.5 text-sm text-mute hover:text-ink"><ArrowLeft className="size-4" />All invoices</Link>
         {can('billing.manage') && inv.status !== 'CANCELLED' && inv.status !== 'PAID' && <Button variant="success" icon={IndianRupee} onClick={() => { setAmt(t.balance); setPayOpen(true) }}>Record payment</Button>}
         {can('billing.manage') && inv.status !== 'CANCELLED' && <Button variant="outline" icon={Ban} onClick={async () => { if (await confirm('Cancel invoice?', `${inv.number} will stay in the register as cancelled.`, true)) run(() => cancelInvoice(me, inv.id), 'Invoice cancelled') }}>Cancel</Button>}
+        {canEditInvoice(db, me, inv) && <Button variant="outline" icon={FilePen} onClick={() => setEditing(true)}>Edit invoice</Button>}
         {can('billing.manage') && inv.status !== 'CANCELLED' && <Button variant="outline" icon={Pencil} onClick={() => setRemarks(inv.remarks ?? '')}>Remarks</Button>}
         <Button icon={Printer} variant="outline" disabled={needBranch} title={needBranch ? 'The creator’s branch is not set' : undefined} onClick={() => window.print()}>Print</Button>
         <Button icon={Download} variant="outline" disabled={needBranch} title={needBranch ? 'The creator’s branch is not set' : 'The PDF exactly as the client receives it'}
@@ -204,6 +207,7 @@ export default function InvoiceView() {
         footer={<><Button variant="outline" onClick={() => setRemarks(null)}>Cancel</Button><Button onClick={async () => { if (await run(() => setInvoiceRemarks(me, inv.id, remarks ?? ''), 'Remarks saved')) setRemarks(null) }}>Save</Button></>}>
         <Textarea label="Remarks" rows={4} maxLength={1000} value={remarks ?? ''} onChange={(e) => setRemarks(e.target.value)} placeholder="e.g. Payment against advance for the Seed Fund application" />
       </Modal>
+      {editing && <InvoiceFormModal existing={inv} onClose={() => setEditing(false)} />}
       {node}
     </div>
   )

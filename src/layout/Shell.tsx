@@ -20,6 +20,7 @@ import { Logo, Mark } from '../components/Logo'
 import { useMedia } from '../components/LoginShowcase'
 import { MiniCalendar } from './MiniCalendar'
 import { BreakBanner, BreakReminder } from '../pages/dashboards/widgets'
+import { BreakPrompt } from '../components/BreakPrompt'
 import { CommandPalette } from './CommandPalette'
 import { AiAssistant } from '../components/AiAssistant'
 import { ErrorBoundary } from '../components/ErrorBoundary'
@@ -180,6 +181,7 @@ export function Shell() {
 
         <main id="main" className="mx-auto w-full max-w-[1500px] flex-1 px-4 py-6 sm:px-6 lg:px-8">
           <BreakBanner />
+          <BreakPrompt />
           {loc.pathname.startsWith('/dashboard') && <OverdueLeadsBanner />}
           {maintenance?.on && isMaster(me) && (
             <div className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-warn/40 bg-warn-soft px-4 py-3 text-sm text-warn">

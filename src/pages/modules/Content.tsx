@@ -15,6 +15,8 @@ import { downloadFlyerJpeg, downloadFlyerPdf } from '../../lib/flyer'
 import { byPrice, inPriceBand, OptionFilter, PriceFilter, schemeIn, schemePrice, type PriceBand, type PriceSort } from '../../components/CatalogFilters'
 import { Mark } from '../../components/Logo'
 
+/** Compact flyer / post cards: two a row on phones, up to five on wide screens. */
+const CARD_GRID = 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5'
 const THEMES: Record<string, string> = {
   navy: 'from-[#2E3A8C] to-[#4b5bc4] text-white', orange: 'from-[#F47B20] to-[#F4A12A] text-white', violet: 'from-[#6D28D9] to-[#a855f7] text-white',
   green: 'from-[#047857] to-[#10b981] text-white', gray: 'from-[#1f2937] to-[#4b5563] text-white',
@@ -75,15 +77,15 @@ export default function Content() {
         <div className="mb-6">
           <p className="mb-3 flex items-center gap-2 text-sm font-bold"><Clapperboard className="size-4 text-accent" />From the Digital Media Dashboard
             {can('media.manage') && <Link to="/digital-media" className="text-xs font-semibold text-brand-ink hover:underline">Manage media</Link>}</p>
-          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          <div className={CARD_GRID}>
             {fromMedia.map((m) => (
-              <Card key={m.id} className="overflow-hidden">
-                <MediaPreview file={m.files[0]!} className="aspect-square w-full rounded-none border-0" />
-                <div className="p-4">
-                  <p className="truncate font-bold">{m.title}</p>
-                  <p className="truncate text-xs text-mute">{m.schemeName} · {mediaTypeLabel(m.mediaType)} · {ago(m.submittedAt ?? m.createdAt)}</p>
-                  {m.description && <p className="mt-1 line-clamp-2 text-sm">{m.description}</p>}
-                  <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+              <Card key={m.id} className="flex flex-col overflow-hidden transition hover:-translate-y-0.5 hover:shadow-lg">
+                <MediaPreview file={m.files[0]!} className="aspect-[4/3] w-full rounded-none border-0" />
+                <div className="flex flex-1 flex-col p-3">
+                  <p className="truncate text-sm font-bold" title={m.title}>{m.title}</p>
+                  <p className="truncate text-[11px] text-mute">{m.schemeName} · {mediaTypeLabel(m.mediaType)} · {ago(m.submittedAt ?? m.createdAt)}</p>
+                  {m.description && <p className="mt-1 line-clamp-2 text-xs">{m.description}</p>}
+                  <div className="mt-auto flex flex-wrap items-center gap-2 pt-2 text-[11px]">
                     {m.files.map((f) => <button key={f.id} type="button" className="inline-flex items-center gap-1 font-semibold text-brand-ink hover:underline" onClick={() => openFile(f, true).catch((e) => toast('error', e.message))}><Download className="size-3" />{m.files.length > 1 ? f.name : 'Download'}</button>)}
                     {can('media.manage') && <Link to={`/digital-media?open=${m.id}`} className="ml-auto font-semibold text-mute hover:text-ink">Details</Link>}
                   </div>
@@ -108,19 +110,19 @@ export default function Content() {
           ))}
         </div>
       ) : (
-        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        <div className={CARD_GRID}>
           {list.map((p) => (
-            <Card key={p.id} className="overflow-hidden">
-              <div className={cx('relative aspect-square bg-gradient-to-br p-6', THEMES[p.theme] ?? THEMES.navy)}>
-                <div className="pointer-events-none absolute -right-10 -top-10 size-40 rounded-full bg-white/10" />
-                <p className="flex items-center gap-2 text-xs font-bold tracking-[0.3em] opacity-90"><span className="grid size-7 place-items-center rounded-lg bg-white"><Mark className="h-4" fixed /></span>REXERA</p>
-                <h3 className="mt-6 text-2xl font-extrabold leading-tight">{p.title}</h3>
-                <p className="mt-3 text-sm opacity-90">{p.body}</p>
-                <p className="absolute bottom-5 left-6 text-[11px] opacity-75">rexera.co.in</p>
-                {p.pinned && <Pin className="absolute right-4 top-4 size-4" />}
+            <Card key={p.id} className="overflow-hidden transition hover:-translate-y-0.5 hover:shadow-lg">
+              <div className={cx('relative aspect-[4/3] overflow-hidden bg-gradient-to-br p-4', THEMES[p.theme] ?? THEMES.navy)}>
+                <div className="pointer-events-none absolute -right-8 -top-8 size-24 rounded-full bg-white/10" />
+                <p className="flex items-center gap-1.5 text-[10px] font-bold tracking-[0.25em] opacity-90"><span className="grid size-5 place-items-center rounded-md bg-white"><Mark className="h-3" fixed /></span>REXERA</p>
+                <h3 className="mt-3 line-clamp-2 text-base font-extrabold leading-snug" title={p.title}>{p.title}</h3>
+                <p className="mt-1.5 line-clamp-3 text-xs opacity-90">{p.body}</p>
+                <p className="absolute bottom-2.5 left-4 text-[10px] opacity-75">rexera.co.in</p>
+                {p.pinned && <Pin className="absolute right-3 top-3 size-3.5" />}
               </div>
-              <div className="flex items-center gap-2 p-4">
-                <p className="min-w-0 flex-1 truncate text-xs text-mute">{userName(db, p.by)} · {ago(p.createdAt)}</p>
+              <div className="flex flex-wrap items-center justify-end gap-x-1 px-3 py-2">
+                <p className="w-full truncate text-[11px] text-mute">{userName(db, p.by)} · {ago(p.createdAt)}</p>
                 <Menu width="w-48" trigger={(o) => <Button size="sm" variant="ghost" icon={Download} aria-label="Download" aria-expanded={o} />}>
                   {(close) => <>
                     <MenuItem icon={ImageDown} onClick={() => { close(); run(() => downloadFlyerJpeg(p), 'JPEG downloaded') }}>Download JPEG</MenuItem>

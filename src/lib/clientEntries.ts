@@ -26,6 +26,10 @@ function assert(cond: unknown, msg: string): asserts cond { if (!cond) throw new
 /** Sales people and team leaders make their CRM entries from a client entry (Super Admin / IT are not held to it). */
 export const startsFromClientEntry = (u: User) => !isMaster(u) && rolesOf(u).some((r) => r === 'sales' || r === 'teamlead')
 const usesEntries = (d: DB, u: User) => rolesOf(u).some((r) => r === 'sales' || r === 'teamlead') && effectivePerms(d, u).has('dialer.use')
+/** Can this person make client entries (from the dialer or the Add Client Entry button)? */
+export const canMakeClientEntry = (d: DB, u: User) => usesEntries(d, u)
+/** The sales person who made an entry edits it until it becomes a CRM entry (Super Admin / IT always can). */
+export const canEditClientEntry = (me: User, e: ClientEntry) => e.status !== 'CONVERTED' && (e.ownerId === me.id || isMaster(me))
 
 /** The person's own entries; a team leader also sees their team's. */
 export function visibleClientEntries(d: DB, me: User): ClientEntry[] {
@@ -57,7 +61,8 @@ export function entryProblems(d: DB, f: ClientEntryForm): Partial<Record<keyof C
   if (f.companyName.trim().length < 2) p.companyName = 'Required'
   if (!isPhone(f.phone)) p.phone = 'A valid 10-digit mobile is required'
   if (!d.services.some((s) => s.id === f.serviceId)) p.serviceId = 'Pick the scheme'
-  if (f.pitchedPrice === '' || !Number.isFinite(Number(f.pitchedPrice)) || Number(f.pitchedPrice) <= 0) p.pitchedPrice = 'Enter the price you pitched'
+  // 0 is a valid price (e.g. a full discount); only an empty or negative price is not
+  if (f.pitchedPrice === '' || !Number.isFinite(Number(f.pitchedPrice)) || Number(f.pitchedPrice) < 0) p.pitchedPrice = 'Enter the price you pitched (0 or more)'
   if (!f.status || !ENTRY_STATUSES.includes(f.status)) p.status = 'Pick the status'
   if (f.requirement.trim().length < 3) p.requirement = 'Required'
   if (f.note.trim().length < 3) p.note = 'Required'
@@ -73,10 +78,13 @@ const LABELS: Record<keyof ClientEntryForm, string> = {
 /** Saves the client entry the sales person filled (while on the call, or after it). Answers its id. */
 export function createClientEntry(me: User, f: ClientEntryForm, leadId?: string) {
   const d0 = getDb()
-  assert(usesEntries(d0, me), 'Client entries are made by sales people and team leaders from the dialer.')
+  assert(usesEntries(d0, me), 'Client entries are made by sales people and team leaders.')
   const missing = Object.keys(entryProblems(d0, f)) as (keyof ClientEntryForm)[]
   assert(!missing.length, `Fill in every field: ${missing.map((k) => LABELS[k]).join(', ')}.`)
   assert(!leadId || !openEntryForLead(d0, leadId), 'This client already has an open client entry — add a follow-up to it instead.')
+  // the same client and scheme twice (e.g. a double click) is one entry
+  assert(!(d0.clientEntries ?? []).some((e) => e.ownerId === me.id && e.phone === normPhone(f.phone) && e.serviceId === f.serviceId && e.status !== 'CONVERTED' && e.status !== 'NOT_INTERESTED'),
+    'You already have an open client entry for this number and scheme — edit it or add a follow-up instead.')
   return mutate((d) => {
     const svc = d.services.find((s) => s.id === f.serviceId)!
     const at = nowIso()
@@ -98,6 +106,29 @@ export function createClientEntry(me: User, f: ClientEntryForm, leadId?: string)
     d.audit.unshift({ id: uid('a-'), at, by: me.id, action: 'CLIENT_ENTRY_CREATE', detail: `${e.clientName} · ${e.companyName} · ${e.scheme}` })
     if (d.audit.length > 1000) d.audit.length = 1000
     return e.id
+  })
+}
+
+/** The owner corrects their client entry (every field, same rules as a new one) until it is converted. */
+export function updateClientEntry(me: User, id: string, f: ClientEntryForm) {
+  const d0 = getDb()
+  const e0 = (d0.clientEntries ?? []).find((e) => e.id === id)
+  assert(e0, 'Client entry not found.')
+  assert(canEditClientEntry(me, e0), e0.status === 'CONVERTED' ? 'This client entry is already a CRM entry.' : 'Only the sales person who made this client entry can edit it.')
+  const missing = Object.keys(entryProblems(d0, f)) as (keyof ClientEntryForm)[]
+  assert(!missing.length, `Fill in every field: ${missing.map((k) => LABELS[k]).join(', ')}.`)
+  mutate((d) => {
+    const e = d.clientEntries!.find((y) => y.id === id)!
+    const svc = d.services.find((s) => s.id === f.serviceId)!
+    const at = nowIso()
+    Object.assign(e, {
+      date: f.date, clientName: f.clientName.trim(), companyName: f.companyName.trim(), phone: normPhone(f.phone), serviceId: svc.id, scheme: svc.name,
+      pitchedPrice: Number(f.pitchedPrice), status: f.status as ClientEntryStatus, requirement: f.requirement.trim(), note: f.note.trim(), followUp: f.followUp || undefined, updatedAt: at,
+    })
+    const l = e.leadId ? d.leads.find((x) => x.id === e.leadId) : undefined
+    if (l) { l.followUp = e.followUp; if (e.status === 'NOT_INTERESTED') l.status = 'NOT_INTERESTED' }
+    d.audit.unshift({ id: uid('a-'), at, by: me.id, action: 'CLIENT_ENTRY_EDIT', detail: `${e.clientName} · ${e.companyName} · ${e.scheme}` })
+    if (d.audit.length > 1000) d.audit.length = 1000
   })
 }
 

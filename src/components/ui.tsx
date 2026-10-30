@@ -1,6 +1,6 @@
 import {
   createContext, useCallback, useContext, useEffect, useId, useRef, useState,
-  type ButtonHTMLAttributes, type HTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes,
+  type ButtonHTMLAttributes, type HTMLAttributes, type InputHTMLAttributes, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes,
 } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
@@ -62,6 +62,63 @@ export function Select({ label, required, hint, error, className, children, ...r
 }
 export function Textarea({ label, required, hint, error, className, ...rest }: TextareaHTMLAttributes<HTMLTextAreaElement> & { label?: string; hint?: string; error?: string }) {
   return <Field label={label} required={required} hint={hint} error={error} className={className}><textarea required={required} rows={3} {...rest} className={cx(ctl, 'py-2.5 resize-y')} /></Field>
+}
+export interface SearchOption { value: string; label: string; hint?: string }
+/**
+ * A dropdown you can type in: the options are filtered by name as you type; arrow keys / Enter or a click picks one.
+ * `value` is the picked option's value ('' = none).
+ */
+export function SearchSelect({ label, required, hint, error, value, onChange, options, placeholder = 'Type to search…', className, emptyText = 'Nothing matches', clearable }: {
+  label?: string; required?: boolean; hint?: string; error?: string; value: string; onChange: (v: string) => void; options: SearchOption[]
+  placeholder?: string; className?: string; emptyText?: string; clearable?: boolean
+}) {
+  const id = useId()
+  const box = useRef<HTMLDivElement>(null)
+  const [open, setOpen] = useState(false)
+  const [q, setQ] = useState('')
+  const [active, setActive] = useState(0)
+  const picked = options.find((o) => o.value === value)
+  const ql = q.trim().toLowerCase()
+  const shown = (ql ? options.filter((o) => `${o.label} ${o.hint ?? ''}`.toLowerCase().includes(ql)) : options).slice(0, 100)
+  useEffect(() => {
+    if (!open) return
+    const h = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) { setOpen(false); setQ('') } }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [open])
+  const pick = (o: SearchOption) => { onChange(o.value); setQ(''); setOpen(false) }
+  const key = (e: ReactKeyboardEvent) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); setOpen(true); setActive((a) => Math.max(0, Math.min(shown.length - 1, a + (e.key === 'ArrowDown' ? 1 : -1)))) }
+    else if (e.key === 'Enter' && open && shown[active]) { e.preventDefault(); pick(shown[active]) }
+    else if (e.key === 'Escape') { setOpen(false); setQ('') }
+  }
+  return (
+    <div ref={box} className={cx('relative block', className)}>
+      {label && <label htmlFor={id} className="mb-1.5 block text-xs font-semibold text-mute">{label}{required && <span className="text-bad"> *</span>}</label>}
+      <div className="relative">
+        <svg className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-mute" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+        <input id={id} role="combobox" aria-expanded={open} aria-controls={`${id}-list`} aria-autocomplete="list" autoComplete="off"
+          aria-activedescendant={open && shown[active] ? `${id}-o${active}` : undefined}
+          value={open ? q : picked?.label ?? ''} placeholder={picked && open ? picked.label : placeholder}
+          onFocus={() => { setOpen(true); setActive(0) }} onClick={() => setOpen(true)}
+          onChange={(e) => { setQ(e.target.value); setOpen(true); setActive(0) }} onKeyDown={key}
+          className={cx(ctl, 'h-10 pl-9', clearable && value ? 'pr-9' : 'pr-3', error && 'border-bad')} />
+        {clearable && value && <button type="button" aria-label="Clear" onClick={() => { onChange(''); setQ('') }} className="absolute right-2 top-1/2 grid size-6 -translate-y-1/2 place-items-center rounded-md text-mute hover:bg-card2 hover:text-ink"><X className="size-4" /></button>}
+      </div>
+      {open && (
+        <ul id={`${id}-list`} role="listbox" className="absolute z-40 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-line bg-card py-1 shadow-pop">
+          {!shown.length ? <li className="px-3 py-2 text-sm text-mute">{emptyText}</li> : shown.map((o, i) => (
+            <li key={o.value} id={`${id}-o${i}`} role="option" aria-selected={o.value === value}
+              onMouseDown={(e) => e.preventDefault()} onClick={() => pick(o)} onMouseEnter={() => setActive(i)}
+              className={cx('cursor-pointer px-3 py-2 text-sm', i === active && 'bg-card2', o.value === value && 'font-semibold text-brand-ink')}>
+              <span className="block truncate">{o.label}</span>{o.hint && <span className="block truncate text-[11px] text-mute">{o.hint}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+      {error ? <span className="mt-1 block text-xs text-bad">{error}</span> : hint ? <span className="mt-1 block text-xs text-mute">{hint}</span> : null}
+    </div>
+  )
 }
 export function Checkbox({ checked, onChange, label, disabled }: { checked: boolean; onChange: (v: boolean) => void; label?: ReactNode; disabled?: boolean }) {
   return (
@@ -353,6 +410,22 @@ export function useRun() {
       return undefined
     }
   }, [toast])
+}
+
+/**
+ * One submit at a time: a double click (or Enter pressed twice) while a save is running is ignored, so nothing is
+ * saved twice. `busy` is for the button's `loading`.
+ */
+export function useSubmitting() {
+  const lock = useRef(false)
+  const [busy, setBusy] = useState(false)
+  const submit = useCallback(async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
+    if (lock.current) return undefined
+    lock.current = true
+    setBusy(true)
+    try { return await fn() } finally { lock.current = false; setBusy(false) }
+  }, [])
+  return [busy, submit] as const
 }
 
 // ------------------------------------------------------------------ Confirm

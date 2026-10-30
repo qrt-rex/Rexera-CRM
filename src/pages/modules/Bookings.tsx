@@ -1,14 +1,17 @@
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Briefcase, Download, FileText, Plus } from 'lucide-react'
+import { Briefcase, ClipboardList, Download, FileText, Pencil, Plus } from 'lucide-react'
 import type { BookingStatus } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
-import { userName, visibleBookings } from '../../lib/actions'
+import { canEditBooking, userName, visibleBookings } from '../../lib/actions'
+import { rolesOf } from '../../lib/rbac'
+import { visibleClientEntries } from '../../lib/clientEntries'
+import { ClientEntriesPanel, ClientEntryButtons } from '../../components/ClientEntry'
 import { BOOKING_STATUS, stageLabel } from '../../lib/workflow'
 import { bookingMoney, downloadCsv, fmtDateTime, inr, today, ymd } from '../../lib/format'
 import { pipelineTotals } from '../../lib/metrics'
-import { Button, Card, EmptyState, PageHeader, SearchBox, Table, Td, Th, usePaged, useRun } from '../../components/ui'
+import { Button, Card, EmptyState, PageHeader, SearchBox, Table, Tabs, Td, Th, usePaged, useRun } from '../../components/ui'
 import { openBookingPdf } from '../../lib/bookingPdf'
 import { BookingStatusBadge, DeadlineBadge, MoneyBar, PriorityBadge } from '../../components/booking'
 import { StageSelect } from '../../components/StageControls'
@@ -40,14 +43,23 @@ export default function Bookings() {
   const owners = [...new Set(all.map((b) => b.createdBy))]
   const countBy = (st: BookingStatus) => all.filter((b) => b.status === st).length
 
+  // sales people and team leaders see their client entries here too (the step before a CRM entry)
+  const withEntries = rolesOf(me).some((r) => r === 'sales' || r === 'teamlead')
+  const view = withEntries && params.get('view') === 'client' ? 'client' : 'crm'
+  const entryCount = withEntries ? visibleClientEntries(db, me).length : 0
+
   return (
     <div>
-      <PageHeader title="CRM Entries" subtitle="Every client booking: approval chain, processing stage and money" icon={Briefcase}
-        actions={<>
+      <PageHeader title="CRM Entries" subtitle={view === 'client' ? 'Client entries: follow up, then convert to a CRM entry once the payment is received' : 'Every client booking: approval chain, processing stage and money'} icon={Briefcase}
+        actions={view === 'client' ? <ClientEntryButtons /> : <>
           {can('reports.export', 'bookings.all', 'bookings.team', 'bookings.own') && <Button variant="outline" icon={Download} onClick={() => downloadCsv(`crm-entries-${today()}.csv`, list.map((b) => { const m = bookingMoney(b); return { booking_id: b.bookingId, company: b.companyName, contact: b.contactPerson, mobile: b.mobile, email: b.email, pan: b.pan, gstin: b.gstin, state: b.state, service: b.serviceName, mode: b.mode, status: BOOKING_STATUS[b.status].label, stage: stageLabel(b.stage, b.stageOutcome), quoted: b.totalQuoted, quoted_with_gst: m.quotedWithGst, collected: m.collected, outstanding: m.outstanding, sales_person: b.createdBy ? userName(db, b.createdBy) : b.ownerName ?? '', team_leader: userName(db, b.teamLeadId), operations: userName(db, b.opsMemberId), admin: userName(db, b.adminId), booking_date: b.bookingDate ?? ymd(b.createdAt), entered_at: fmtDateTime(b.createdAt), remarks: b.remarks ?? '' } }))}>Export</Button>}
           {can('bookings.create') && <Link to="/bookings/new"><Button variant="accent" icon={Plus}>New CRM entry</Button></Link>}
         </>} />
 
+      {withEntries && <Tabs className="mb-5 w-fit max-w-full" value={view} onChange={(v) => setParams(v === 'client' ? { view: 'client' } : {})} tabs={[
+        { id: 'crm', label: 'CRM entries', icon: Briefcase, count: all.length }, { id: 'client', label: 'Client entries', icon: ClipboardList, count: entryCount },
+      ]} />}
+      {view === 'client' ? <Card className="overflow-hidden"><ClientEntriesPanel lead={rolesOf(me).includes('teamlead')} full /></Card> : <>
       <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <MiniStat label="Quoted (with GST)" value={inr(totals.quoted)} icon={IndianRupee} />
         <MiniStat label="Collected" value={inr(totals.collected)} icon={Wallet} tone="green" />
@@ -103,6 +115,7 @@ export default function Bookings() {
                   <Td>
                     <Link to={`/bookings/${b.id}`} className="block font-semibold hover:text-brand-ink">{b.companyName}</Link>
                     <span className="font-mono text-[11px] text-mute">{b.bookingId}</span>
+                    {canEditBooking(db, me, b) && <Link to={`/bookings/${b.id}/edit`} className="ml-2 inline-flex items-center gap-0.5 text-[11px] font-semibold text-brand-ink hover:underline"><Pencil className="size-3" />Edit</Link>}
                   </Td>
                   <Td><span className="block max-w-48 truncate">{b.serviceName}</span><span className="flex gap-1 pt-0.5"><PriorityBadge p={b.priority} /><DeadlineBadge b={b} /></span></Td>
                   <Td><BookingStatusBadge b={b} /><StageSelect b={b} /></Td>
@@ -116,6 +129,7 @@ export default function Bookings() {
         )}
         {pager}
       </Card>
+      </>}
     </div>
   )
 }
