@@ -1,7 +1,7 @@
 import {
   BarChart3, BellRing, BookOpenCheck, Briefcase, CalendarDays, Clapperboard, Cloud, ClipboardCheck, Coffee, FileText, Package, FolderKanban, Images, IndianRupee,
   BookMarked, Globe, UserRoundCheck, KeyRound, Megaphone, MessagesSquare, Phone, Settings, ShieldCheck, Sparkles, UserCheck, UserCog, UserPlus, Users, UsersRound,
-  CalendarCheck2, Network, ScrollText, Wallet, Receipt, Landmark, Trophy, SlidersHorizontal, Gauge, KeySquare, DatabaseBackup, DatabaseZap, MailPlus, ClipboardList, FilePen, Inbox, Undo2, BadgeCheck, BadgePercent, Layers, FileSignature, Settings2, type LucideIcon,
+  CalendarCheck2, Network, ScrollText, Wallet, Receipt, Landmark, Trophy, SlidersHorizontal, Gauge, KeySquare, DatabaseBackup, DatabaseZap, MailPlus, ClipboardList, FilePen, Inbox, Undo2, BadgeCheck, BadgePercent, Layers, FileSignature, Settings2, Workflow, type LucideIcon,
 } from 'lucide-react'
 import type { Perm, Role, User } from './types'
 import { rolesOf } from './rbac'
@@ -75,6 +75,8 @@ export const MODULES: ModuleDef[] = [
   { key: 'inbox', path: '/inbox', label: 'Email', desc: 'Emails sent to your login address', icon: Inbox, tone: 'blue', perms: [], group: 'Workspace' },
   { key: 'reports', path: '/reports', label: 'Reports', desc: 'Analytics, report cards and exports', icon: BookOpenCheck, tone: 'navy', perms: ['reports.view'], group: 'Workspace' },
   { key: 'notifications', path: '/notifications', label: 'Notifications', desc: 'Everything that needs your attention', icon: BellRing, tone: 'orange', perms: [], group: 'Workspace' },
+  // every automation in one place: IT Support edits, Super Admin looks
+  { key: 'automation', path: '/automation', label: 'Automation Center', desc: 'Built-in automations on / off, your own rules (when → if → then), run history', icon: Workflow, tone: 'violet', perms: [], roles: ['it', 'superadmin'], group: 'Admin' },
   { key: 'access', path: '/access', label: 'Access Management', desc: 'Users, roles and permissions', icon: KeyRound, tone: 'navy', perms: ['access.manage'], group: 'Admin' },
   { key: 'api-keys', path: '/api-keys', label: 'API Keys', desc: 'Keys for integrations: create, rotate, revoke', icon: KeySquare, tone: 'orange', perms: ['access.manage'], group: 'Admin' },
   { key: 'legacy-import', path: '/legacy-import', label: 'Import from old CRM', desc: 'Load the old PHP CRM .sql dump, checked line by line', icon: DatabaseZap, tone: 'violet', perms: ['access.manage'], group: 'Admin' },

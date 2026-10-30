@@ -10,6 +10,7 @@ import assert from 'node:assert/strict'
 import { createServer } from 'vite'
 import { mapAll, rowsToDb } from './backup-mapping.mjs'
 import { DEFAULT_SCHEMES } from './eligibility-rules.mjs'
+import { TEMPLATES } from './automation-rules.mjs'
 
 // the app's seed is TypeScript: let Vite load it
 const vite = await createServer({ server: { middlewareMode: true }, appType: 'custom', logLevel: 'error' })
@@ -104,6 +105,16 @@ Object.assign(db.salesKit[0], { registrationCharge: 'Govt fee extra', updatedAt:
 db.eligibilitySchemes = structuredClone(DEFAULT_SCHEMES).map((s) => ({ ...s, updatedAt: at, updatedBy: a.id }))
 db.eligibilitySchemes[0].active = false
 db.eligibilitySchemes[0].statusNote = 'Paused by the Operation team'
+// Automation Center: a built-in switched off, an event rule and a daily check, and what they did
+db.automationRules = [
+  { id: 'builtin:task-reminders', name: 'File task reminders', enabled: false, position: 0, trigger: 'builtin', conditions: [], actions: [], updatedAt: at, updatedBy: a.id },
+  { ...structuredClone(TEMPLATES[1]), id: 'rule-1', enabled: true, position: 1, description: 'Big bookings', createdAt: at, updatedAt: at, updatedBy: a.id },
+  { ...structuredClone(TEMPLATES[4]), id: 'rule-2', enabled: false, position: 2, match: 'any', createdAt: at, updatedAt: at, updatedBy: a.id },
+]
+db.automationRuns = [
+  { id: 'ar-rule-2-bk-1-20000', ruleId: 'rule-2', ruleName: 'Stuck', at, by: a.id, trigger: 'schedule.daily', recordType: 'booking', recordId: 'bk-1', recordLabel: 'RX-2026-000001', ok: true, detail: 'notified 2' },
+  { id: 'ar-x', ruleId: 'rule-1', ruleName: 'Big', at, trigger: 'booking.created', recordType: 'booking', recordId: 'bk-2', recordLabel: 'RX-2026-000002', ok: false, detail: 'failed' },
+]
 db.settings.leadAssign = { on: true, userIds: [a.id, b.id], next: 1 }
 db.users.push({ ...b, id: 'u-left', username: 'left.person', email: 'left@example.com', active: false, exitOn: '2026-10-15' })
 db.payrollRuns.push({ id: 'pr-x', month: '2026-09', status: 'PAID', provisional: false, calculatedAt: at, calculatedBy: a.id, history: [],

@@ -144,6 +144,13 @@ export function mapAll(backup) {
     status_note: x.statusNote ?? '', summary: x.summary ?? '', benefits: x.benefits ?? [], documents: x.documents ?? [], process: x.process ?? [], conditions: x.conditions ?? [],
     subsidy: x.subsidy ?? null, bands: x.bands ?? null, verified_on: x.verifiedOn, updated_at: s(x.updatedAt), updated_by: uref(x.updatedBy),
   }))
+  t.automation_rules = (d.automationRules ?? []).map((x) => ({
+    id: x.id, name: x.name, description: s(x.description), enabled: x.enabled !== false, position: x.position ?? 0, trigger: x.trigger, entity: s(x.entity), match: s(x.match),
+    conditions: x.conditions ?? [], actions: x.actions ?? [], repeat_days: x.repeatDays ?? null, created_at: s(x.createdAt), updated_at: s(x.updatedAt), updated_by: uref(x.updatedBy),
+  }))
+  t.automation_runs = (d.automationRuns ?? []).map((x) => ({
+    id: x.id, rule_id: x.ruleId, rule_name: x.ruleName, at: x.at, by_user: uref(x.by), trigger: x.trigger, record_type: x.recordType, record_id: x.recordId ?? '', record_label: x.recordLabel ?? '', ok: x.ok !== false, detail: x.detail ?? '',
+  }))
   t.site_content_history = (d.siteHistory ?? []).map((x) => ({ id: x.id, key: x.key, content: x.content ?? null, published_at: x.at, published_by: uref(x.by) }))
   t.client_accounts = (d.clientAccounts ?? []).map((x) => ({ id: x.id, auth_user_id: s(x.authUserId), email: x.email, name: x.name, phone: s(x.phone), booking_ids: x.bookingIds ?? [], status: x.status, invited_at: x.invitedAt, invited_by: uref(x.invitedBy), activated_at: s(x.activatedAt), last_login_at: s(x.lastLoginAt), assigned_to: uref(x.assignedTo), disabled_at: s(x.disabledAt) }))
   t.client_activity = (d.clientActivity ?? []).map((x) => ({ id: x.id, account_id: x.accountId, booking_id: s(x.bookingId), at: x.at, action: x.action, detail: s(x.detail), by_user: uref(x.by) }))
@@ -176,7 +183,7 @@ export const ORDER = [
   ['message_templates', 'id'], ['emails', 'id'], ['email_automations', 'key'], ['app_settings', 'key'], ['api_keys', 'id'],
   ['backup_log', 'id'], ['candidate_forms', 'id'], ['candidate_applications', 'id'], ['recruitment_datasets', 'id'], ['recruitment_rows', 'dataset_id,row_no'],
   ['company_assets', 'id'], ['stock_items', 'id'], ['company_expenses', 'id'], ['legacy_files', 'path'],
-  ['doc_forms', 'id'], ['doc_form_submissions', 'id'], ['sales_kit', 'id'], ['eligibility_schemes', 'id'],
+  ['doc_forms', 'id'], ['doc_form_submissions', 'id'], ['sales_kit', 'id'], ['eligibility_schemes', 'id'], ['automation_rules', 'id'], ['automation_runs', 'id'],
   ['site_content', 'key'], ['site_content_history', 'id'], ['website_lead_log', 'id'],
   ['client_accounts', 'id'], ['client_activity', 'id'], ['client_doc_uploads', 'id'], ['media_items', 'id'], ['client_entries', 'id'],
 ]
@@ -349,6 +356,13 @@ export function rowsToDb(input) {
       leadId: u(x.lead_id), ownerId: x.owner_id ?? '', createdAt: x.created_at, updatedAt: x.updated_at, bookingId: u(x.booking_id), convertedAt: u(x.converted_at),
     })),
     webLeadLog: rows('website_lead_log').map((x) => opt({ id: x.id, at: x.at, status: x.status, form: u(x.form), name: u(x.name), phone: u(x.phone), email: u(x.email), error: u(x.error), leadId: u(x.lead_id), fields: u(x.fields), retriedAt: u(x.retried_at), retriedBy: u(x.retried_by) })),
+    automationRules: rows('automation_rules').map((x) => opt({
+      id: x.id, name: x.name, description: u(x.description), enabled: x.enabled !== false, position: x.position ?? 0, trigger: x.trigger, entity: u(x.entity), match: u(x.match),
+      conditions: x.conditions ?? [], actions: x.actions ?? [], repeatDays: u(x.repeat_days), createdAt: u(x.created_at), updatedAt: u(x.updated_at), updatedBy: u(x.updated_by),
+    })),
+    automationRuns: rows('automation_runs').map((x) => opt({
+      id: x.id, ruleId: x.rule_id, ruleName: x.rule_name, at: x.at, by: u(x.by_user), trigger: x.trigger, recordType: x.record_type, recordId: x.record_id ?? '', recordLabel: x.record_label ?? '', ok: x.ok !== false, detail: x.detail ?? '',
+    })),
     eligibilitySchemes: rows('eligibility_schemes').map((x) => opt({
       id: x.id, position: x.position, active: x.active !== false, name: x.name, kind: x.kind ?? '', agency: x.agency ?? '', url: x.url ?? '', serviceMatch: x.service_match ?? '',
       statusNote: x.status_note ?? '', summary: x.summary ?? '', benefits: x.benefits ?? [], documents: x.documents ?? [], process: x.process ?? [], conditions: x.conditions ?? [],

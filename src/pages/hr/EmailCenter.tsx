@@ -5,7 +5,7 @@ import type { AutomationKey, EmailMsg, Role } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useMe } from '../../lib/auth'
 import { userName } from '../../lib/actions'
-import { AUTOMATIONS, PLACEHOLDERS, automationMeta, deleteBatch, fill, mailtoLink, rolesForPicker, runScheduledAutomations, saveAutomation, sendEmail, sendTest } from '../../lib/email'
+import { AUTOMATIONS, PLACEHOLDERS, automationMeta, canEditEmailAutomations, deleteBatch, fill, mailtoLink, rolesForPicker, runScheduledAutomations, saveAutomation, sendEmail, sendTest } from '../../lib/email'
 import { roleLabel } from '../../lib/rbac'
 import { ago, fmtDateTime } from '../../lib/format'
 import { Avatar, Badge, Button, Card, CardHeader, cx, Drawer, EmptyState, Input, Modal, PageHeader, Tabs, Textarea, Toggle, useConfirm, useRun, useToast } from '../../components/ui'
@@ -190,7 +190,9 @@ function Sent() {
                   <span className={cx('grid size-9 shrink-0 place-items-center rounded-xl', first.automation ? 'bg-violet-500/12 text-violet-600 dark:text-violet-300' : 'bg-brand-soft text-brand-ink')}>{first.automation ? <Bot className="size-4" /> : <Send className="size-4" />}</span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-semibold">{first.subject}</span>
-                    <span className="block truncate text-xs text-mute">{first.automation ? `Automation · ${automationMeta(first.automation as AutomationKey).name}` : `By ${userName(db, first.from)}`} · to {b.length === 1 ? first.toEmail : `${b.length} people`}</span>
+                    <span className="block truncate text-xs text-mute">{first.automation ? (first.automation.startsWith('rule:')
+                      ? `Automation rule · ${db.automationRules?.find((r) => `rule:${r.id}` === first.automation)?.name ?? 'removed rule'}`
+                      : `Automation · ${automationMeta(first.automation as AutomationKey)?.name ?? first.automation}`) : `By ${userName(db, first.from)}`} · to {b.length === 1 ? first.toEmail : `${b.length} people`}</span>
                   </span>
                   <Badge tone={read === b.length ? 'green' : 'gray'}>{read}/{b.length} read</Badge>
                   <span className="text-xs text-mute">{ago(first.at)}</span>
@@ -227,8 +229,11 @@ function Automations() {
   const me = useMe()
   const run = useRun()
   const [edit, setEdit] = useState<{ key: AutomationKey; subject: string; body: string } | null>(null)
+  // only the IT Support team switches or edits automations; others see them and can send themselves a test
+  const editor = canEditEmailAutomations(me)
   return (
     <div className="grid gap-4 lg:grid-cols-2">
+      {!editor && <p className="rounded-2xl border border-info/30 bg-info-soft px-4 py-3 text-sm text-info lg:col-span-2">Automations are switched on / off and edited by the IT Support team (Automation Center). Ask them for a change.</p>}
       {AUTOMATIONS.map((meta) => {
         const a = db.emailAutomations.find((x) => x.key === meta.key)!
         return (
@@ -239,7 +244,8 @@ function Automations() {
                 <p className="font-bold">{meta.name}</p>
                 <p className="text-xs text-mute">{meta.when}</p>
               </div>
-              <Toggle checked={a.enabled} label={`${meta.name} on/off`} onChange={(v) => run(() => saveAutomation(me, meta.key, { enabled: v }), v ? 'Automation on' : 'Automation off')} />
+              {editor ? <Toggle checked={a.enabled} label={`${meta.name} on/off`} onChange={(v) => run(() => saveAutomation(me, meta.key, { enabled: v }), v ? 'Automation on' : 'Automation off')} />
+                : <Badge tone={a.enabled ? 'green' : 'gray'}>{a.enabled ? 'On' : 'Off'}</Badge>}
             </div>
             <p className="mt-3 truncate rounded-lg bg-card2 px-3 py-2 text-sm"><b>Subject:</b> {a.subject}</p>
             <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-mute">
@@ -247,7 +253,7 @@ function Automations() {
               <span className="ml-auto flex gap-1">
                 <Button size="sm" variant="ghost" icon={TestTube2} onClick={() => run(() => sendTest(me, meta.key), 'Test email sent to your inbox')}>Test to me</Button>
                 {meta.schedule !== 'event' && <Button size="sm" variant="ghost" icon={Play} onClick={() => run(() => { const n = runScheduledAutomations(); if (!n) throw new Error('Nothing due right now — scheduled emails run once per day/month at their time.') }, 'Due emails sent')}>Run due now</Button>}
-                <Button size="sm" variant="soft" icon={Pencil} onClick={() => setEdit({ key: meta.key, subject: a.subject, body: a.body })}>Edit</Button>
+                {editor && <Button size="sm" variant="soft" icon={Pencil} onClick={() => setEdit({ key: meta.key, subject: a.subject, body: a.body })}>Edit</Button>}
               </span>
             </div>
           </Card>

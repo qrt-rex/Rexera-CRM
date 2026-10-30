@@ -606,6 +606,53 @@ export interface Branch {
   bank?: string
 }
 
+/** Automation Center: "field op value" on a record's facts (see supabase/automation-rules.mjs). */
+export interface AutomationCondition { field: string; op: string; value?: string | number | boolean; values?: string[] }
+export interface AutomationRecipient { kind: 'owner' | 'teamlead' | 'ops' | 'admin' | 'role' | 'user'; role?: Role; userId?: string }
+export interface AutomationAction {
+  type: 'notify' | 'email' | 'task' | 'comment' | 'priority'
+  to?: AutomationRecipient[]
+  /** notify / task */
+  title?: string
+  /** notify / email */
+  body?: string
+  subject?: string
+  /** comment */
+  text?: string
+  /** task: due this many days after the rule runs */
+  dueInDays?: number
+  /** priority */
+  value?: 'LOW' | 'MEDIUM' | 'HIGH'
+}
+/**
+ * An automation of the Automation Center. Custom rules: when `trigger` happens (or, for a daily check, for every
+ * `entity` record) and the conditions hold, the actions run. Built-in automations are rows with id "builtin:<key>"
+ * that only carry the on / off switch. Only IT Support edits them.
+ */
+export interface AutomationRule {
+  id: string
+  name: string
+  description?: string
+  enabled: boolean
+  position: number
+  trigger: string
+  /** daily check: which records it looks at */
+  entity?: string
+  match?: 'all' | 'any'
+  conditions: AutomationCondition[]
+  actions: AutomationAction[]
+  /** daily check: 0 = once per record, n = again every n days while the record still matches */
+  repeatDays?: number
+  createdAt?: string
+  updatedAt?: string
+  updatedBy?: string
+}
+/** One time a rule ran for one record (event rules: one per event; daily checks: one per record and period). */
+export interface AutomationRun {
+  id: string; ruleId: string; ruleName: string; at: string; by?: string; trigger: string
+  recordType: string; recordId: string; recordLabel: string; ok: boolean; detail: string
+}
+
 /** One rule of the Scheme Checker: field op value(s) — e.g. projectCost lte 5000000 (money in ₹, ages in years). */
 export interface EligibilityRule {
   field: string
@@ -1028,6 +1075,10 @@ export interface DB {
   salesKit?: SalesKitItem[]
   /** Rexy's Scheme Checker (empty = the built-in schemes) */
   eligibilitySchemes?: EligibilityScheme[]
+  /** Automation Center: custom rules and the built-in on / off switches (IT Support edits) */
+  automationRules?: AutomationRule[]
+  /** what the automations did, newest first */
+  automationRuns?: AutomationRun[]
   clientAccounts?: ClientAccount[]
   clientActivity?: ClientActivity[]
   mediaItems?: MediaItem[]

@@ -4,6 +4,7 @@ import { useDb } from '../lib/store'
 import { useMe } from '../lib/auth'
 import { breakFor, breakLabel, breakLeftMs, breakWindow, inBreakWindow, onBreak, pauseDay, workDay, dateIn } from '../lib/actions'
 import { todaySession } from '../lib/metrics'
+import { builtinOn } from '../lib/automation'
 import { Button, useRun, useSubmitting } from './ui'
 
 const SKIP = 'rexera-break-later'
@@ -30,7 +31,8 @@ export function BreakPrompt() {
   const w = breakWindow(now, bp)
   const day = dateIn(now, bp.timeZone)
   const [later, setLater] = useState(() => { try { return sessionStorage.getItem(SKIP) } catch { return null } })
-  const show = working && workDay(day, bp) && inBreakWindow(now, bp) && !onBreak(s) && !s?.breaks?.length && breakLeftMs(s, now) > 0 && later !== day
+  // IT Support can switch the card off (Automation Center)
+  const show = builtinOn(db, 'break-prompt') && working && workDay(day, bp) && inBreakWindow(now, bp) && !onBreak(s) && !s?.breaks?.length && breakLeftMs(s, now) > 0 && later !== day
   if (!show) return null
   const skip = () => { try { sessionStorage.setItem(SKIP, day) } catch { /* private mode: hide for now only */ } setLater(day) }
   return (

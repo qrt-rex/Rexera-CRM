@@ -7,7 +7,8 @@ import {
 } from 'lucide-react'
 import type { Perm, User } from '../lib/types'
 import { Rexy } from '../components/hr/Mascots'
-import { useDb } from '../lib/store'
+import { getDb, useDb } from '../lib/store'
+import { builtinOn, runScheduledRules, startAutomations } from '../lib/automation'
 import { applyTheme, getTheme, useAuth, useMe, type Theme } from '../lib/auth'
 import { MESSAGES_ENABLED, MODULES, canSee, moduleLabel } from '../lib/modules'
 import { isMaster, ROLES, roleLabel } from '../lib/rbac'
@@ -71,11 +72,18 @@ export function Shell() {
   // scheduled email automations (daily reminders, monthly summaries) run while anyone has the app open
   useEffect(() => {
     if (!companyJobs) return
-    const tick = () => { try { runScheduledAutomations(); runTaskReminders(); runComboReminders(); runFollowUpReminders(); runPrecheckReminders(); runSchemeAlerts() } catch { /* never block the app */ } }
+    // each built-in automation can be switched off by IT Support (Automation Center); daily-check rules run here too
+    const jobs: [string, () => unknown][] = [
+      ['scheduled-emails', runScheduledAutomations], ['task-reminders', runTaskReminders], ['combo-reminders', runComboReminders],
+      ['file-follow-ups', runFollowUpReminders], ['pitch-deck-reminders', runPrecheckReminders], ['scheme-expiry-alerts', runSchemeAlerts], ['custom-rules', runScheduledRules],
+    ]
+    const tick = () => { for (const [key, run] of jobs) { try { if (builtinOn(getDb(), key)) run() } catch { /* never block the app */ } } }
     tick()
     const t = setInterval(tick, 5 * 60000)
     return () => clearInterval(t)
   }, [companyJobs])
+  // event rules: run in this browser right after the change that starts them
+  useEffect(() => { startAutomations() }, [])
   // a new day starts at midnight even when the CRM was left open: redraw every page so dates, "today" and the
   // login / logout card move to the new day (checked every 30 s; nothing re-renders while the day is the same)
   const [, setDay] = useState(today)
@@ -88,7 +96,7 @@ export function Shell() {
   // lunch break: reminder at the start, late warning a couple of minutes after the end — needs to be on time
   useEffect(() => {
     if (!companyJobs) return
-    const tick = () => { try { runBreakMonitor() } catch { /* never block the app */ } }
+    const tick = () => { try { if (builtinOn(getDb(), 'break-monitor')) runBreakMonitor() } catch { /* never block the app */ } }
     tick()
     const t = setInterval(tick, 30000)
     return () => clearInterval(t)

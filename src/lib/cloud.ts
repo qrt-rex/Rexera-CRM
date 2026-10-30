@@ -85,6 +85,9 @@ const SPECS: Spec[] = [
   { key: 'docForms', table: 'doc_forms', order: ['created_at', false] },
   { key: 'salesKit', table: 'sales_kit', order: ['position', true] },
   { key: 'eligibilitySchemes', table: 'eligibility_schemes', order: ['position', true] },
+  // Automation Center: rules and switches (IT Support writes), and what they did (any staff browser adds; same id = done)
+  { key: 'automationRules', table: 'automation_rules', order: ['position', true] },
+  { key: 'automationRuns', table: 'automation_runs', order: ['at', false], limit: 500, once: true },
   { key: 'siteContent', table: 'site_content', idProp: 'key', idCol: 'key', order: ['key', true] },
   { key: 'siteHistory', table: 'site_content_history', order: ['published_at', false], limit: 300 },
   // written by the server only (each website form submission); the CRM reads it

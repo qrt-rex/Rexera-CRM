@@ -10,7 +10,7 @@
     "typecheck": "tsc -b",
     "db:migrate": "node supabase/migrate-from-backup.mjs",
     "db:password": "node supabase/set-password.mjs",
-    "db:check": "node server/blutecWebhook.test.mjs && node server/websiteLeads.test.mjs && node server/jobs.test.mjs && node server/forms.test.mjs && node server/whatsapp.test.mjs && node server/apply.test.mjs && node server/site.test.mjs && node server/portal.test.mjs && node server/mailGuard.test.mjs && node supabase/workflow-rules.test.mjs && node supabase/media-rules.test.mjs && node supabase/eligibility-rules.test.mjs &&node src/lib/leadUpload.test.mjs && node supabase/cloud-sync.test.mjs && node supabase/backup-mapping.test.mjs",
+    "db:check": "node server/blutecWebhook.test.mjs && node server/websiteLeads.test.mjs && node server/jobs.test.mjs && node server/forms.test.mjs && node server/whatsapp.test.mjs && node server/apply.test.mjs && node server/site.test.mjs && node server/portal.test.mjs && node server/mailGuard.test.mjs && node supabase/workflow-rules.test.mjs && node supabase/media-rules.test.mjs && node supabase/eligibility-rules.test.mjs && node supabase/automation-rules.test.mjs && node src/lib/leadUpload.test.mjs && node supabase/cloud-sync.test.mjs && node supabase/backup-mapping.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

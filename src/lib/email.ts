@@ -25,7 +25,7 @@ export function fill(text: string, u: User | undefined, d: DB, extra: Record<str
 }
 
 /** Writes personalised emails into the data (inside a mutate) and rings each person's bell. */
-export function deliver(d: DB, from: string, recipients: User[], subject: string, body: string, opts: { automation?: AutomationKey; extra?: (u: User) => Record<string, string | number> } = {}) {
+export function deliver(d: DB, from: string, recipients: User[], subject: string, body: string, opts: { automation?: AutomationKey | `rule:${string}`; extra?: (u: User) => Record<string, string | number> } = {}) {
   const batchId = uid('eb-')
   const at = nowIso()
   for (const u of recipients) {
@@ -86,8 +86,10 @@ export function markEmailRead(me: User, id?: string) {
   mutate((d) => { for (const e of d.emails) if (e.to === me.id && (!id || e.id === id)) e.read = true })
 }
 
+/** Every automation — email ones too — is edited by the IT Support team only (Automation Center). */
+export const canEditEmailAutomations = (me: User) => rolesOf(me).includes('it')
 export function saveAutomation(me: User, key: AutomationKey, patch: Partial<Pick<EmailAutomation, 'enabled' | 'subject' | 'body'>>) {
-  if (!canEmail(me)) throw new Error("You don't have access to change automations.")
+  if (!canEditEmailAutomations(me)) throw new Error('Only the IT Support team can change automations.')
   if (patch.subject !== undefined && !patch.subject.trim()) throw new Error('Subject cannot be empty.')
   if (patch.body !== undefined && patch.body.trim().length < 3) throw new Error('Message cannot be empty.')
   mutate((d) => {
