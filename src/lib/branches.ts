@@ -21,8 +21,8 @@ export const branchLabel = (db: DB, id?: string) => {
   return b ? (b.code?.trim() && b.code.trim() !== b.name ? `${b.code.trim()} · ${b.name}` : b.name) : branchName(db, id)
 }
 /**
- * The branch an invoice is issued from: the one saved on it (the creator's branch when it was made), else the
- * creator's branch now — never picked by hand. Its address, GSTIN and bank print on the invoice.
+ * The branch an invoice is issued from: the one saved on it (picked on the invoice form, or the creator's branch when
+ * it was raised from a CRM entry), else the creator's branch now. Its address, GSTIN and bank print on the invoice.
  */
 export const invoiceBranch = (db: DB, inv: Pick<Invoice, 'branchId' | 'createdBy'>) => {
   const id = inv.branchId ?? db.users.find((u) => u.id === inv.createdBy)?.branchId

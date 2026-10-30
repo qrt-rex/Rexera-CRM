@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { isMaster } from '../lib/rbac'
 import { FilePlus2, Plus, Save, Trash2 } from 'lucide-react'
 import type { Invoice, InvoiceItem } from '../lib/types'
 import { useDb } from '../lib/store'
@@ -26,24 +27,28 @@ export function InvoiceFormModal({ existing, onClose }: { existing?: Invoice; on
     ? { type: existing.type, client: existing.client, gstin: existing.gstin, state: existing.state, due: existing.due, remarks: existing.remarks ?? '' }
     : { type: (can('billing.manage') ? 'TAX' : 'PROFORMA') as Invoice['type'], client: '', gstin: '', state: 'Gujarat', due: ymd(addDays(new Date(), 15)), remarks: '' })
   const [items, setItems] = useState<InvoiceItem[]>(() => existing ? existing.items.map((x) => ({ ...x })) : [blankLine()])
-  // issued from the creator's own branch: shown, never picked
-  const branch = existing ? invoiceBranch(db, existing) : branchList(db).find((b) => b.id === me.branchId)
+  // the branch the invoice is issued from (its address, GSTIN and bank print on it): your own branch to start with
+  const branches = branchList(db)
+  const [branchId, setBranchId] = useState(() => (existing ? invoiceBranch(db, existing)?.id : branches.find((b) => b.id === me.branchId)?.id) ?? '')
+  const branch = branches.find((b) => b.id === branchId)
+  // on a saved invoice only Accounts moves it to another branch
+  const branchLocked = !!existing && !can('billing.manage')
   const fromState = branch?.state || db.settings.supplierState
   const draft = invoiceTotals({ ...f, items, paid: 0 } as unknown as Invoice, fromState)
   const proforma = f.type === 'PROFORMA'
 
   const save = () => once(async () => {
     if (existing) {
-      if (await run(() => updateInvoice(me, existing.id, { client: f.client, gstin: f.gstin, state: f.state, due: f.due, remarks: f.remarks, items }), 'Invoice updated')) onClose()
+      if (await run(() => updateInvoice(me, existing.id, { client: f.client, gstin: f.gstin, state: f.state, due: f.due, remarks: f.remarks, items, ...(branchLocked ? {} : { branchId }) }), 'Invoice updated')) onClose()
       return
     }
-    const id = await run(() => createInvoice(me, { ...f, items }), 'Invoice created')
+    const id = await run(() => createInvoice(me, { ...f, items, branchId }), 'Invoice created')
     if (typeof id === 'string') { onClose(); nav(`/billing/${id}`) }
   })
 
   return (
     <Modal open onClose={onClose} size="xl" title={existing ? `Edit ${existing.number}` : 'New invoice'}
-      subtitle={`${branch ? `Issued from ${existing ? 'the branch' : 'your branch'}: ${branch.name}` : 'The branch is not set (HR → Employee Details) — the branch address is printed once it is'} · same state → CGST + SGST, otherwise IGST`}
+      subtitle={`${branch ? `Issued from ${branch.name}${branch.state ? ` (${branch.state})` : ''}` : 'Pick the branch the invoice is issued from'} · same state → CGST + SGST, otherwise IGST`}
       footer={<><Button variant="outline" onClick={onClose}>Cancel</Button>
         <Button icon={existing ? Save : FilePlus2} loading={busy} onClick={save}>{existing ? 'Save changes' : `Create ${f.type === 'TAX' ? 'tax invoice' : 'proforma'}`}</Button></>}>
       <div className="grid gap-4 sm:grid-cols-3">
@@ -52,6 +57,17 @@ export function InvoiceFormModal({ existing, onClose }: { existing?: Invoice; on
         </Select>
         <Input label="Client" required value={f.client} onChange={(e) => setF({ ...f, client: e.target.value })} className="sm:col-span-2" list="invoice-clients" />
         <datalist id="invoice-clients">{db.bookings.map((b) => <option key={b.id} value={b.companyName} />)}</datalist>
+        {branches.length ? (
+          <Select label="Branch" required value={branchId} disabled={branchLocked} onChange={(e) => setBranchId(e.target.value)} className="sm:col-span-3"
+            hint={branchLocked ? 'Only Accounts can move a saved invoice to another branch' : branch ? [branch.address, branch.city, branch.state, branch.gstin && `GSTIN ${branch.gstin}`].filter(Boolean).join(' · ') : 'Its address, GSTIN and bank details print on the invoice'}>
+            <option value="">— Select branch —</option>
+            {branches.map((b) => <option key={b.id} value={b.id}>{b.code?.trim() && b.code.trim() !== b.name ? `${b.code.trim()} · ${b.name}` : b.name}{b.city ? ` — ${b.city}` : ''}</option>)}
+          </Select>
+        ) : (
+          <p className="rounded-xl bg-warn-soft px-3 py-2 text-xs text-warn sm:col-span-3">
+            No branches are set up yet. {isMaster(me) ? <Link to="/access?tab=settings" className="font-semibold underline">Add them under Access → Settings → Invoice branches</Link> : 'Super Admin / IT add them under Access → Settings → Invoice branches.'}
+          </p>
+        )}
         <Input label="GSTIN" value={f.gstin} onChange={(e) => setF({ ...f, gstin: e.target.value.toUpperCase() })} maxLength={15} />
         <Select label="Place of supply" value={f.state} onChange={(e) => setF({ ...f, state: e.target.value })}>{INDIAN_STATES.map((s) => <option key={s}>{s}</option>)}</Select>
         <Input label="Due date" type="date" value={f.due} onChange={(e) => setF({ ...f, due: e.target.value })} />

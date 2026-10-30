@@ -2152,7 +2152,12 @@ export function visibleInvoices(d: DB, me: User) {
 /** The only service text on a proforma invoice. */
 export const PROFORMA_SERVICE = 'Consultancy services'
 
-export function createInvoice(me: User, i: { type: Invoice['type']; client: string; gstin: string; state: string; items: InvoiceItem[]; bookingId?: string; salesPerson?: string; due: string; clientAddress?: string; clientPan?: string; remarks?: string }) {
+/** The branch picked on the invoice form (must be one of Access → Settings → Invoice branches). */
+function checkInvoiceBranch(d: DB, branchId?: string) {
+  assert(!branchId || (d.settings.branches ?? []).some((b) => b.id === branchId), 'Pick the branch from the list.')
+  if ((d.settings.branches ?? []).length) assert(branchId, 'Pick the branch the invoice is issued from.')
+}
+export function createInvoice(me: User, i: { type: Invoice['type']; client: string; gstin: string; state: string; items: InvoiceItem[]; bookingId?: string; salesPerson?: string; due: string; clientAddress?: string; clientPan?: string; remarks?: string; branchId?: string }) {
   need(me, 'billing.create', 'billing.manage')
   // a proforma invoice always reads "Consultancy services" — the line can't be renamed
   if (i.type === 'PROFORMA') i = { ...i, items: i.items.map((x) => ({ ...x, desc: PROFORMA_SERVICE, sac: x.sac || '998311' })) }
@@ -2160,6 +2165,8 @@ export function createInvoice(me: User, i: { type: Invoice['type']; client: stri
   assert(!i.gstin || isGstin(i.gstin), 'GSTIN format is invalid.')
   assert(i.items.length && i.items.every((x) => x.desc && x.qty > 0 && x.rate >= 0), 'Each line needs a description, quantity and rate.')
   if (i.type === 'TAX') need(me, 'billing.manage')
+  // picked on the invoice form ('' = none picked); raised from a CRM entry it is not passed (the creator's branch)
+  if (i.branchId !== undefined) { checkInvoiceBranch(getDb(), i.branchId || undefined); i = { ...i, branchId: i.branchId || undefined } }
   return mutate((d) => {
     // one live invoice of each type per CRM entry (a double click or two people at once must not bill twice)
     const twin = i.bookingId ? d.invoices.find((x) => x.bookingId === i.bookingId && x.type === i.type && x.status !== 'CANCELLED') : undefined
@@ -2170,8 +2177,8 @@ export function createInvoice(me: User, i: { type: Invoice['type']; client: stri
       type: i.type, bookingId: i.bookingId, client: i.client.trim(), gstin: i.gstin.toUpperCase(), state: i.state, items: i.items,
       paid: 0, status: 'ISSUED', date: today(), due: i.due, salesPerson: i.salesPerson ?? me.id, createdBy: me.id,
       clientAddress: i.clientAddress?.trim() || undefined, clientPan: i.clientPan?.trim().toUpperCase() || undefined, remarks: i.remarks?.trim() || undefined,
-      // issued from the branch of the person creating it (no branch picked by hand)
-      branchId: me.branchId && d.settings.branches?.some((b) => b.id === me.branchId) ? me.branchId : undefined,
+      // the branch picked on the form; raised from a CRM entry: the creator's own branch
+      branchId: i.branchId ?? (me.branchId && d.settings.branches?.some((b) => b.id === me.branchId) ? me.branchId : undefined),
     }
     d.invoices.unshift(inv)
     audit(d, me.id, 'INVOICE_CREATE', inv.number)
@@ -2208,7 +2215,7 @@ export function canEditInvoice(d: DB, me: User, inv: Invoice) {
   if (p.has('billing.manage')) return true
   return p.has('billing.create') && (inv.createdBy === me.id || inv.salesPerson === me.id) && inv.type === 'PROFORMA' && inv.status === 'ISSUED' && !inv.paid
 }
-export type InvoiceEdit = { client: string; gstin: string; state: string; items: InvoiceItem[]; due: string; clientAddress?: string; clientPan?: string; remarks?: string }
+export type InvoiceEdit = { client: string; gstin: string; state: string; items: InvoiceItem[]; due: string; clientAddress?: string; clientPan?: string; remarks?: string; branchId?: string }
 export function updateInvoice(me: User, id: string, i: InvoiceEdit) {
   const inv0 = getDb().invoices.find((x) => x.id === id)
   assert(inv0, 'Invoice not found.')
@@ -2219,8 +2226,13 @@ export function updateInvoice(me: User, id: string, i: InvoiceEdit) {
   assert(i.items.length && i.items.every((x) => x.desc && x.qty > 0 && x.rate >= 0), 'Each line needs a description, quantity and rate.')
   assert(/^\d{4}-\d{2}-\d{2}$/.test(i.due), 'Pick the due date.')
   assert(!i.remarks || i.remarks.length <= 1000, 'Keep the remarks under 1000 characters.')
+  // only Accounts moves an invoice to another branch (its address, GSTIN and bank print on it)
+  const branchChanged = i.branchId !== undefined && (i.branchId || undefined) !== inv0.branchId
+  assert(!branchChanged || has(me, 'billing.manage'), 'Only Accounts can change the branch of an invoice.')
+  if (branchChanged) checkInvoiceBranch(getDb(), i.branchId || undefined)
   mutate((d) => {
     const inv = d.invoices.find((x) => x.id === id)!
+    if (branchChanged) inv.branchId = i.branchId || undefined
     Object.assign(inv, {
       client: i.client.trim(), gstin: i.gstin.toUpperCase(), state: i.state, items: i.items, due: i.due,
       clientAddress: i.clientAddress?.trim() || undefined, clientPan: i.clientPan?.trim().toUpperCase() || undefined, remarks: i.remarks?.trim() || undefined,
