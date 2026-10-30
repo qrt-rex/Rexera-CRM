@@ -34,8 +34,10 @@ Checked against `main` at `fb0a6cb` (2026-10-21). The build passes and `npm run 
 - [ ] **Services from the uploaded photo.** The prices-per-type column and the combo packages exist, but the services and prices from the photo are not entered. That photo isn't in the repo.
   Enter them on the Services page, or send the photo again so they can be seeded.
   Also confirm: the request said "4 columns" but listed 6 (Single, Multiple, Combo 3/6/9/12). All 6 were built.
-- [ ] **Connect the website itself.** The CRM side is ready, but rexera.co.in's form still has to post to `https://rexera-crm.onrender.com/api/website-lead`. The address and the field names are shown in CRM Leads → Website form.
-  - Set `WEBSITE_LEAD_KEY` on Render if you use a key.
+- [ ] **Connect the website itself.** The CRM side is ready and tested (30 Oct 2026): rexera.co.in's forms (`consultationForm`, `helpLeadForm`) still post only to the site's `send_mail.php`, and the site has no client login link. One line on every page of rexera.co.in, just before `</body>`, connects both:
+  `<script src="https://rexera-crm.onrender.com/website-connect.js" defer></script>`
+  It copies every enquiry with a phone number to the CRM as a lead (the site's own email keeps working) and adds a "Client Login" button next to the Call button (→ `/portal`). See `public/website-connect.js`.
+  - Set `WEBSITE_LEAD_KEY` on Render if you use a key, and add it to the script tag as `data-key="…"`.
   - Small fix needed: the server's CORS `Access-Control-Allow-Headers` (`server.mjs`, the `sendJson` headers) lacks `X-Website-Key`. A browser `fetch` that sends the key as a header will be blocked; sending it as a `key` form field works. Add the header name when wiring the site.
 - [ ] **Scorecard drill-down by payment date.** The scorecard already counts each part payment in the month it was paid, but it shows only totals.
   The request asked it to show "this was added on this date". Still to add: a per-person list of the payments that make up the figure (CRM entry, part no., date, amount).
