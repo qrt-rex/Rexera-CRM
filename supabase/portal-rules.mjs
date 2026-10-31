@@ -49,3 +49,18 @@ export function projectProgress(milestones, onlyVisible = false) {
   const parts = list.map((m) => (m.status === 'DONE' ? 1 : m.tasks?.length ? m.tasks.filter((t) => t.done).length / m.tasks.length : 0))
   return Math.round((parts.reduce((a, b) => a + b, 0) / list.length) * 100)
 }
+
+// ------------------------------------------------------------------ client logins (IT Support)
+/** Client portal logins — create, password, link, deactivate — are IT Support's alone (the server checks the same). */
+export const PORTAL_LOGIN_ROLES = ['it']
+export const mayManagePortalLogins = (roles) => (roles ?? []).some((r) => PORTAL_LOGIN_ROLES.includes(r))
+/** A password IT Support gives a client: 8–72 characters, letters and numbers, no spaces, not the login ID itself. */
+export function portalPasswordProblem(pw, email = '') {
+  const s = String(pw ?? '')
+  if (s.length < 8) return 'The password needs at least 8 characters.'
+  if (s.length > 72) return 'The password can be up to 72 characters.'
+  if (/\s/.test(s)) return 'No spaces in the password.'
+  if (!/[A-Za-z]/.test(s) || !/\d/.test(s)) return 'Use both letters and numbers in the password.'
+  if (email && s.toLowerCase() === String(email).trim().toLowerCase()) return 'The password can’t be the login ID.'
+  return null
+}

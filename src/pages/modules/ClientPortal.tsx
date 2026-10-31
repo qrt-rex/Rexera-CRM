@@ -1,9 +1,12 @@
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Activity, Ban, CheckCircle2, Link2, LogOut, Mail, Send, ShieldCheck, TrendingUp, UserPlus, UserRoundCheck, Users } from 'lucide-react'
+import { Activity, Ban, CheckCircle2, Copy, Eye, EyeOff, KeyRound, Link2, LogOut, Mail, RefreshCw, Send, ShieldCheck, TrendingUp, UserPlus, UserRoundCheck, Users } from 'lucide-react'
 import type { Booking, ClientAccount } from '../../lib/types'
 import { useDb } from '../../lib/store'
-import { useAuth } from '../../lib/auth'
+import { useMe } from '../../lib/auth'
+import { canManagePortalLogins } from '../../lib/rbac'
+import { CLIENT_PORTAL_URL } from '../../lib/share'
+import { portalPasswordProblem } from '../../../supabase/portal-rules.mjs'
 import { CLOUD } from '../../lib/cloud'
 import { clientDocState, portalAdmin, userName } from '../../lib/actions'
 import { ServerError } from '../../lib/serverApi'
@@ -12,17 +15,30 @@ import { BOOKING_STATUS, STAGES } from '../../lib/workflow'
 import { ADMIN_STAGES } from '../../../supabase/workflow-rules.mjs'
 import { Badge, Button, Card, CardHeader, Checkbox, cx, EmptyState, Input, Modal, PageHeader, SearchBox, Select, Stat, Table, Tabs, Td, Th, useConfirm, useToast } from '../../components/ui'
 
-const STATUS = { ACTIVE: { label: 'Active', tone: 'green' }, INVITED: { label: 'Invited', tone: 'amber' }, DISABLED: { label: 'Deactivated', tone: 'red' } } as const
+const STATUS = { ACTIVE: { label: 'Active', tone: 'green' }, INVITED: { label: 'Not signed in yet', tone: 'amber' }, DISABLED: { label: 'Deactivated', tone: 'red' } } as const
 const ACTION_LABEL: Record<string, string> = {
-  INVITED: 'Invited', ACTIVATED: 'Set password — active', SIGNED_IN: 'Signed in', UPLOADED: 'Uploaded', PROFILE: 'Profile changed', REQUEST: 'Message to the team', ACCESS_RESET: 'Reset link sent',
+  INVITED: 'Invited by email', CREATED: 'Login created', PASSWORD_SET: 'New password (IT)', ACTIVATED: 'First sign-in — active', SIGNED_IN: 'Signed in', UPLOADED: 'Uploaded', PROFILE: 'Profile changed', REQUEST: 'Message to the team', ACCESS_RESET: 'Reset link sent',
   APPROVED: 'Approved', DEACTIVATED: 'Deactivated', SESSIONS_REVOKED: 'Signed out everywhere', LINKED: 'Entries linked', ASSIGNED: 'Team member',
 }
-type Invite = { bookingIds: string[]; email: string; name: string; assignedTo: string; override: boolean; mismatch?: string }
+type Invite = { mode: 'create' | 'invite'; bookingIds: string[]; email: string; password: string; name: string; assignedTo: string; override: boolean; mismatch?: string }
+/** login details just given to a client: shown once, to copy and send them */
+type Given = { name: string; email: string; password: string; title: string }
 
-/** Super Admin: client portal accounts — invite, link CRM entries, approve / deactivate, reset access, sign out, assign; activity log. */
+// easy to read out or type: no 0/O, 1/l/I
+const PW_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789'
+function makePassword(): string {
+  const s = Array.from(crypto.getRandomValues(new Uint8Array(10)), (x) => PW_CHARS[x % PW_CHARS.length]).join('')
+  return /\d/.test(s) && /[A-Za-z]/.test(s) ? s : makePassword()
+}
+const loginText = (g: Given) => `Rexera client portal\nSign in: ${CLIENT_PORTAL_URL}\nLogin ID: ${g.email}\nPassword: ${g.password}\nYou can change the password after signing in (Profile).`
+
+/**
+ * Client portal: Progress, Accounts and Activity for Legal, the Operation team, Admin and Super Admin (read-only); IT Support
+ * alone creates client logins (ID + password), sets passwords, links CRM entries, approves / deactivates, signs out, assigns.
+ */
 export default function ClientPortal() {
   const db = useDb()
-  const { can } = useAuth()
+  const me = useMe()
   const toast = useToast()
   const [confirm, confirmNode] = useConfirm()
   const [params, setParams] = useSearchParams()
@@ -34,10 +50,14 @@ export default function ClientPortal() {
   const byId = useMemo(() => new Map(db.bookings.map((b) => [b.id, b])), [db.bookings])
   const staff = db.users.filter((u) => u.active)
   const linked = new Set(accounts.flatMap((a) => a.bookingIds))
-  const fromEntry = (b?: Booking): Invite => ({ bookingIds: b ? [b.id] : [], email: b?.email || b?.paymentEmail || '', name: b?.contactPerson ?? '', assignedTo: b?.opsMemberId ?? '', override: false })
+  const fromEntry = (b?: Booking, mode: Invite['mode'] = 'create'): Invite => ({ mode, bookingIds: b ? [b.id] : [], email: b?.email || b?.paymentEmail || '', password: mode === 'create' ? makePassword() : '', name: b?.contactPerson ?? '', assignedTo: b?.opsMemberId ?? '', override: false })
   const [invite, setInvite] = useState<Invite | null>(() => { const b = byId.get(params.get('invite') ?? ''); return b ? fromEntry(b) : null })
   const [linkFor, setLinkFor] = useState<{ acct: ClientAccount; ids: string[]; override: boolean; mismatch?: string } | null>(null)
   const [logFor, setLogFor] = useState<ClientAccount | null>(null)
+  const [pwFor, setPwFor] = useState<{ acct: ClientAccount; password: string } | null>(null)
+  const [given, setGiven] = useState<Given | null>(null)
+  const [showPw, setShowPw] = useState(true)
+  const copyLogin = (g: Given) => navigator.clipboard?.writeText(loginText(g)).then(() => toast('success', 'Login details copied — send them to the client'), () => toast('error', 'Copy blocked — select the text and copy it'))
   const [entryQ, setEntryQ] = useState('')
 
   const call = async (key: string, action: Parameters<typeof portalAdmin>[0], body: Record<string, unknown>, ok?: string) => {
@@ -59,18 +79,23 @@ export default function ClientPortal() {
   const acctOf = new Map(accounts.map((a) => [a.id, a]))
   const eq = entryQ.trim().toLowerCase()
   const entryOptions = (keep: string[], acctId?: string) => db.bookings.filter((b) => keep.includes(b.id) || ((!linked.has(b.id) || accounts.find((a) => a.id === acctId)?.bookingIds.includes(b.id)) && (!eq || `${b.bookingId} ${b.companyName} ${b.contactPerson} ${b.email}`.toLowerCase().includes(eq)))).slice(0, 60)
-  const mayManage = can('portal.manage')
+  // client logins: IT Support only (the live server refuses everyone else, the Super Admin included)
+  const mayManage = canManagePortalLogins(me)
 
   return (
     <div>
-      <PageHeader title="Client Portal" subtitle="Clients sign in with email and password after your invite, and see only their own projects, documents and updates" icon={UserRoundCheck}
-        actions={mayManage && <Button icon={UserPlus} onClick={() => { setEntryQ(''); setInvite(fromEntry()) }}>Invite a client</Button>} />
+      <PageHeader title="Client Portal" subtitle="Clients sign in on the website with the login ID and password IT Support gives them, and see only their own projects, documents and updates" icon={UserRoundCheck}
+        actions={mayManage && <div className="flex flex-wrap gap-2">
+          <Button variant="outline" icon={Mail} onClick={() => { setEntryQ(''); setInvite(fromEntry(undefined, 'invite')) }}>Invite by email</Button>
+          <Button icon={UserPlus} onClick={() => { setEntryQ(''); setShowPw(true); setInvite(fromEntry()) }}>Create client login</Button>
+        </div>} />
+      {!mayManage && <p className="mb-4 rounded-xl bg-info-soft px-4 py-3 text-sm text-info">Client logins (ID and password) are created and managed by IT Support. Here you follow every client’s sign-ins, uploads and progress.</p>}
       {!CLOUD && <p className="mb-4 rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn">The client portal works on the live CRM (connected to Supabase) — invites, sign-in and uploads go through the live server.</p>}
 
       <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label="Portal accounts" value={accounts.length} icon={Users} onClick={() => setStatus('')} />
         <Stat label="Active" value={accounts.filter((a) => a.status === 'ACTIVE').length} icon={CheckCircle2} tone="green" onClick={() => setStatus('ACTIVE')} />
-        <Stat label="Invited (not signed in)" value={accounts.filter((a) => a.status === 'INVITED').length} icon={Mail} tone="amber" onClick={() => setStatus('INVITED')} />
+        <Stat label="Not signed in yet" value={accounts.filter((a) => a.status === 'INVITED').length} icon={Mail} tone="amber" onClick={() => setStatus('INVITED')} />
         <Stat label="Deactivated" value={accounts.filter((a) => a.status === 'DISABLED').length} icon={Ban} tone="red" onClick={() => setStatus('DISABLED')} />
       </div>
 
@@ -87,7 +112,7 @@ export default function ClientPortal() {
             <SearchBox value={q} onChange={setQ} placeholder="Search client, email or entry…" className="min-w-56 flex-1" />
             <Select aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value as typeof status)} className="w-44"><option value="">All statuses</option><option value="ACTIVE">Active</option><option value="INVITED">Invited</option><option value="DISABLED">Deactivated</option></Select>
           </div>
-          {!shown.length ? <EmptyState icon={UserRoundCheck} title={accounts.length ? 'No account matches' : 'No client has portal access yet'} text={accounts.length ? undefined : 'Invite a client: they get an email to set their password.'} /> : (
+          {!shown.length ? <EmptyState icon={UserRoundCheck} title={accounts.length ? 'No account matches' : 'No client has portal access yet'} text={accounts.length ? undefined : mayManage ? 'Create a client login: their email is the login ID, and you give them the password.' : 'IT Support creates the client logins.'} /> : (
             <Table>
               <thead><tr><Th>Client</Th><Th>CRM entries</Th><Th>Status</Th><Th>Team member</Th><Th>Last sign-in</Th><Th className="text-right">Access</Th></tr></thead>
               <tbody>
@@ -105,7 +130,8 @@ export default function ClientPortal() {
                         <Button size="sm" variant="ghost" icon={Activity} onClick={() => setLogFor(a)}>Activity</Button>
                         {mayManage && <>
                           <Button size="sm" variant="ghost" icon={Link2} onClick={() => { setEntryQ(''); setLinkFor({ acct: a, ids: a.bookingIds, override: false }) }}>Entries</Button>
-                          {a.status !== 'DISABLED' && <Button size="sm" variant="ghost" icon={Send} loading={busy === `sl-${a.id}`} onClick={() => call(`sl-${a.id}`, 'send-link', { accountId: a.id })}>{a.activatedAt ? 'Reset access' : 'Send invite again'}</Button>}
+                          {a.authUserId && a.status !== 'DISABLED' && <Button size="sm" variant="ghost" icon={KeyRound} onClick={() => { setShowPw(true); setPwFor({ acct: a, password: makePassword() }) }}>Set password</Button>}
+                          {a.status !== 'DISABLED' && <Button size="sm" variant="ghost" icon={Send} loading={busy === `sl-${a.id}`} onClick={() => call(`sl-${a.id}`, 'send-link', { accountId: a.id })}>{a.activatedAt ? 'Email reset link' : 'Email invite'}</Button>}
                           {a.authUserId && a.status !== 'INVITED' && <Button size="sm" variant="ghost" icon={LogOut} loading={busy === `rv-${a.id}`} onClick={async () => { if (await confirm('Sign out everywhere?', `${a.name} is signed out on every device and must sign in again.`)) call(`rv-${a.id}`, 'revoke', { accountId: a.id }, 'Signed out everywhere') }}>Sign out</Button>}
                           {a.status === 'DISABLED'
                             ? <Button size="sm" variant="outline" icon={ShieldCheck} loading={busy === `st-${a.id}`} onClick={() => call(`st-${a.id}`, 'status', { accountId: a.id, active: true }, 'Access approved')}>Approve</Button>
@@ -123,7 +149,7 @@ export default function ClientPortal() {
 
       {tab === 'activity' && (
         <Card className="overflow-hidden">
-          <CardHeader title="Activity log" icon={Activity} subtitle="Invites, sign-ins, uploads, profile changes and access changes" />
+          <CardHeader title="Activity log" icon={Activity} subtitle="Logins created, sign-ins, uploads, profile changes and access changes" />
           {!activity.length ? <EmptyState icon={Activity} title="Nothing yet" /> : (
             <Table>
               <thead><tr><Th>When</Th><Th>Client</Th><Th>What</Th><Th>Details</Th><Th>By</Th></tr></thead>
@@ -135,17 +161,25 @@ export default function ClientPortal() {
         </Card>
       )}
 
-      {/* ------------------------------------------------------------ invite */}
-      <Modal open={!!invite} onClose={() => { setInvite(null); if (params.has('invite')) setParams({}) }} title="Invite a client to the portal" subtitle="They get an email with a link to set their password" size="md"
-        footer={<><Button variant="outline" onClick={() => setInvite(null)}>Cancel</Button><Button icon={Send} loading={busy === 'invite'} disabled={!invite || !invite.bookingIds.length || !isEmail(invite.email) || (!!invite.mismatch && !invite.override)} onClick={async () => {
+      {/* ------------------------------------------------------------ create a login (ID + password) / invite by email */}
+      <Modal open={!!invite} onClose={() => { setInvite(null); if (params.has('invite')) setParams({}) }} size="md"
+        title={invite?.mode === 'invite' ? 'Invite a client by email' : 'Create a client login'}
+        subtitle={invite?.mode === 'invite' ? 'They get an email with a link to set their password (needs email set up on the server)' : 'Their email is the login ID; you give them the password. They sign in on the website at once.'}
+        footer={<><Button variant="outline" onClick={() => setInvite(null)}>Cancel</Button><Button icon={invite?.mode === 'invite' ? Send : KeyRound} loading={busy === 'invite'}
+          disabled={!invite || !invite.bookingIds.length || !isEmail(invite.email) || (invite.mode === 'create' && !!portalPasswordProblem(invite.password, invite.email.trim())) || (!!invite.mismatch && !invite.override)} onClick={async () => {
           if (!invite) return
-          const r = await call('invite', 'invite', { bookingIds: invite.bookingIds, email: invite.email.trim(), name: invite.name.trim(), assignedTo: invite.assignedTo || undefined, override: invite.override })
-          if (r.ok) { setInvite(null); setParams({}) } else if (r.mismatch) setInvite({ ...invite, mismatch: r.mismatch })
-        }}>Send invite</Button></>}>
+          const create = invite.mode === 'create'
+          const r = await call('invite', invite.mode, { bookingIds: invite.bookingIds, email: invite.email.trim(), ...(create ? { password: invite.password } : {}), name: invite.name.trim(), assignedTo: invite.assignedTo || undefined, override: invite.override })
+          if (r.ok) {
+            if (create) setGiven({ name: invite.name.trim() || invite.email.trim(), email: invite.email.trim().toLowerCase(), password: invite.password, title: 'Login created' })
+            setInvite(null); setParams({})
+          } else if (r.mismatch) setInvite({ ...invite, mismatch: r.mismatch })
+        }}>{invite?.mode === 'invite' ? 'Send invite' : 'Create login'}</Button></>}>
         {invite && <div className="grid gap-3">
           <EntryPicker options={entryOptions(invite.bookingIds)} q={entryQ} setQ={setEntryQ} picked={invite.bookingIds} byId={byId}
             onChange={(ids) => { const first = byId.get(ids[0] ?? ''); setInvite({ ...invite, bookingIds: ids, ...(!invite.bookingIds.length && first ? { email: first.email || first.paymentEmail || '', name: first.contactPerson, assignedTo: first.opsMemberId ?? '' } : {}), mismatch: undefined, override: false }) }} />
-          <Input label="Client email (their sign-in)" type="email" required value={invite.email} onChange={(e) => setInvite({ ...invite, email: e.target.value, mismatch: undefined, override: false })} hint="Must be the email saved on the CRM entry — one account per email" />
+          <Input label="Login ID (the client’s email)" type="email" required value={invite.email} onChange={(e) => setInvite({ ...invite, email: e.target.value, mismatch: undefined, override: false })} hint="Must be the email saved on the CRM entry — one account per email" />
+          {invite.mode === 'create' && <PasswordField value={invite.password} onChange={(password) => setInvite({ ...invite, password })} email={invite.email.trim()} show={showPw} setShow={setShowPw} />}
           <Input label="Name" value={invite.name} onChange={(e) => setInvite({ ...invite, name: e.target.value })} />
           <Select label="Team member (client's contact)" value={invite.assignedTo} onChange={(e) => setInvite({ ...invite, assignedTo: e.target.value })}><option value="">— Operation team member of the entry —</option>{staff.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</Select>
           {invite.mismatch && <div className="rounded-xl bg-warn-soft px-3 py-2 text-xs text-warn"><p>{invite.mismatch}</p><div className="mt-2"><Checkbox checked={invite.override} onChange={(v) => setInvite({ ...invite, override: v })} label={<span className="text-xs">I checked — this is the client’s email</span>} /></div></div>}
@@ -163,6 +197,25 @@ export default function ClientPortal() {
           <EntryPicker options={entryOptions(linkFor.ids, linkFor.acct.id)} q={entryQ} setQ={setEntryQ} picked={linkFor.ids} byId={byId} onChange={(ids) => setLinkFor({ ...linkFor, ids, mismatch: undefined, override: false })} />
           {linkFor.mismatch && <div className="rounded-xl bg-warn-soft px-3 py-2 text-xs text-warn"><p>{linkFor.mismatch}</p><div className="mt-2"><Checkbox checked={linkFor.override} onChange={(v) => setLinkFor({ ...linkFor, override: v })} label={<span className="text-xs">I checked — these entries belong to this client</span>} /></div></div>}
         </div>}
+      </Modal>
+
+      {/* ------------------------------------------------------------ IT Support sets a new password */}
+      <Modal open={!!pwFor} onClose={() => setPwFor(null)} title={pwFor ? `New password · ${pwFor.acct.name}` : ''} subtitle="The client is signed out on their other devices and signs in with this password" size="sm"
+        footer={<><Button variant="outline" onClick={() => setPwFor(null)}>Cancel</Button><Button icon={KeyRound} loading={busy === 'password'} disabled={!pwFor || !!portalPasswordProblem(pwFor.password, pwFor.acct.email)} onClick={async () => {
+          if (!pwFor) return
+          const r = await call('password', 'password', { accountId: pwFor.acct.id, password: pwFor.password })
+          if (r.ok) { setGiven({ name: pwFor.acct.name, email: pwFor.acct.email, password: pwFor.password, title: 'New password saved' }); setPwFor(null) }
+        }}>Save password</Button></>}>
+        {pwFor && <div className="grid gap-3">
+          <p className="text-sm">Login ID: <b>{pwFor.acct.email}</b></p>
+          <PasswordField value={pwFor.password} onChange={(password) => setPwFor({ ...pwFor, password })} email={pwFor.acct.email} show={showPw} setShow={setShowPw} />
+        </div>}
+      </Modal>
+
+      {/* ------------------------------------------------------------ the login details, once: copy and send them to the client */}
+      <Modal open={!!given} onClose={() => setGiven(null)} title={given?.title ?? ''} subtitle="Send these to the client yourself (WhatsApp, SMS or a call). The password is not shown again." size="sm"
+        footer={<><Button variant="outline" onClick={() => setGiven(null)}>Done</Button>{given && <Button icon={Copy} onClick={() => copyLogin(given)}>Copy login details</Button>}</>}>
+        {given && <pre className="whitespace-pre-wrap break-all rounded-xl bg-card2 p-4 font-mono text-[13px] leading-relaxed select-all">{loginText(given)}</pre>}
       </Modal>
 
       {/* ------------------------------------------------------------ one account's activity */}
@@ -187,8 +240,8 @@ type Show = 'all' | 'week' | 'never' | 'waiting' | 'review'
 
 /**
  * Every client who logs in from the website, and how far their work has got: sign-ins, uploads, each CRM entry's
- * status and stage, the documents asked for (waiting / to check / approved), milestones and updates. Read-only for the
- * Operation team, Admin and IT; Super Admin manages access on the Accounts tab.
+ * status and stage, the documents asked for (waiting / to check / approved), milestones and updates. Read-only for Legal, the
+ * Operation team, Admin and Super Admin; IT Support manages the logins on the Accounts tab.
  */
 function Progress({ onActivity }: { onActivity: (a: ClientAccount) => void }) {
   const db = useDb()
@@ -221,7 +274,7 @@ function Progress({ onActivity }: { onActivity: (a: ClientAccount) => void }) {
         ]} />
         <SearchBox value={q} onChange={setQ} placeholder="Search client, email or entry…" className="min-w-56 flex-1" />
       </div>
-      {!shown.length ? <Card><EmptyState icon={TrendingUp} title={rows.length ? 'Nothing matches' : 'No client has portal access yet'} text={rows.length ? undefined : 'Clients appear here once the Super Admin invites them; they log in from the website.'} /></Card> : (
+      {!shown.length ? <Card><EmptyState icon={TrendingUp} title={rows.length ? 'Nothing matches' : 'No client has portal access yet'} text={rows.length ? undefined : 'Clients appear here once IT Support creates their login; they sign in from the website.'} /></Card> : (
         <div className="grid gap-4 xl:grid-cols-2">
           {shown.map(({ a, files, docs, last, signIns, uploads, waiting, review, approved }) => (
             <Card key={a.id} className="overflow-hidden">
@@ -268,6 +321,21 @@ function Progress({ onActivity }: { onActivity: (a: ClientAccount) => void }) {
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+/** The client's password: suggested (easy to read out), editable, checked as you type. */
+function PasswordField({ value, onChange, email, show, setShow }: { value: string; onChange: (v: string) => void; email: string; show: boolean; setShow: (v: boolean) => void }) {
+  const problem = value ? portalPasswordProblem(value, email) : null
+  return (
+    <div>
+      <Input label="Password" required type={show ? 'text' : 'password'} autoComplete="new-password" spellCheck={false} value={value} onChange={(e) => onChange(e.target.value)}
+        error={problem ?? undefined} hint={problem ? undefined : 'At least 8 characters, letters and numbers. The client can change it after signing in.'} className="font-mono" />
+      <div className="mt-1.5 flex gap-1">
+        <Button size="sm" variant="ghost" icon={RefreshCw} onClick={() => onChange(makePassword())}>Suggest another</Button>
+        <Button size="sm" variant="ghost" icon={show ? EyeOff : Eye} onClick={() => setShow(!show)}>{show ? 'Hide' : 'Show'}</Button>
+      </div>
     </div>
   )
 }

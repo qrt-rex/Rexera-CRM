@@ -16,6 +16,7 @@ const ALIASES = {
   city: ['city', 'location', 'town', 'your-city'],
   state: ['state', 'region'],
   service: ['service', 'services', 'scheme', 'interest', 'interested_in', 'product', 'subject', 'your-subject'],
+  business_type: ['business_type', 'businesstype', 'business_category', 'industry_type'],
   requirement: ['requirement', 'requirements', 'funding_requirement', 'funding_amount', 'amount', 'loan_amount'],
   message: ['message', 'your-message', 'your_message', 'msg', 'notes', 'comments', 'comment', 'query', 'details', 'description'],
   page: ['page', 'page_url', 'source_url', 'url', 'form_name', 'form'],
@@ -153,7 +154,7 @@ export async function saveLead(sb, x, now = new Date()) {
     const id = `lead-web-${crypto.randomUUID().slice(0, 12)}`
     const row = {
       id, code: `LD-${counters.lead}`, name: x.name, phone: x.phone, email: x.email || null, company: x.company, city: x.city, state: x.state, service: x.service,
-      requirement: x.requirement || null, source: WEBSITE_SOURCE, status: 'NEW', notes: note, created_at: at, form_at: at,
+      requirement: x.requirement || null, ...(x.business_type ? { business_type: x.business_type } : {}), source: WEBSITE_SOURCE, status: 'NEW', notes: note, created_at: at, form_at: at,
       extra: Object.keys(x.extra ?? {}).length || x.page ? { ...(x.extra ?? {}), ...(x.page ? { page: x.page } : {}) } : null,
       history: owner ? [{ at, by: '', action: `Assigned to ${owner.name} (round robin)`, note: 'Auto-assigned' }, event] : [event],
       ...(owner ? { assigned_to: owner.id, assigned_at: at, chain: [{ to: owner.id, by: '', at, kind: 'ASSIGNED', note: 'Auto-assigned (website)' }] } : {}),

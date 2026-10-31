@@ -1,15 +1,15 @@
 // Client portal on the live server (SUPABASE_SECRET_KEY, server only). Clients never read a table or a file
 // themselves: every answer here is built from the CRM entries linked to their own account, and staff-only parts
 // (internal notes, staff history, who did what) never leave the server.
-//  * /api/portal-admin/<action> — the Super Admin (portal.manage): invite a client, resend / reset their access,
-//    link CRM entries, approve (re-enable) or deactivate, sign them out everywhere, assign a team member.
+//  * /api/portal-admin/<action> — IT Support only: create a client's login (ID + password) or invite them by email,
+//    set a new password, link CRM entries, approve (re-enable) or deactivate, sign them out everywhere, assign a team member.
 //  * /api/portal/<action> — the client, with their own Supabase sign-in: their projects, documents (upload / open),
 //    milestones and progress, updates, notices, activity, and their profile.
 import { randomBytes } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 import { ADMIN_STAGES } from '../supabase/workflow-rules.mjs'
 import { fileProblem } from '../supabase/form-rules.mjs'
-import { clientMayUpload, docStatus, projectProgress } from '../supabase/portal-rules.mjs'
+import { clientMayUpload, docStatus, mayManagePortalLogins, portalPasswordProblem, projectProgress } from '../supabase/portal-rules.mjs'
 import { forClient } from '../supabase/media-rules.mjs'
 
 const BUCKET = 'crm-files'
@@ -19,9 +19,8 @@ const newId = (p) => `${p}${randomBytes(9).toString('base64url')}`
 const normEmail = (v) => String(v ?? '').trim().toLowerCase()
 const isEmail = (s) => /^[^\s@<>,;"]+@[^\s@<>,;"]+\.[^\s@<>,;"]+$/.test(s) && s.length <= 254
 const clean = (v, max) => String(v ?? '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, max)
-const MASTER = ['superadmin', 'it']
 /** what a client is shown from their own activity (staff-side entries stay in the CRM) */
-const CLIENT_SEES = { INVITED: 'Invited to the portal', ACTIVATED: 'Portal account set up', SIGNED_IN: 'Signed in', UPLOADED: 'Uploaded a document', PROFILE: 'Profile updated', REQUEST: 'Message sent to the team', ACCESS_RESET: 'Password reset link sent' }
+const CLIENT_SEES = { INVITED: 'Invited to the portal', CREATED: 'Portal login created', ACTIVATED: 'Portal account set up', SIGNED_IN: 'Signed in', UPLOADED: 'Uploaded a document', PROFILE: 'Profile updated', REQUEST: 'Message sent to the team', ACCESS_RESET: 'Password reset link sent', PASSWORD_SET: 'Password changed by REXERA' }
 
 export const portalClientFor = (env) => {
   const url = env('SUPABASE_URL') || env('VITE_SUPABASE_URL'), secret = env('SUPABASE_SECRET_KEY') || ''
@@ -50,15 +49,8 @@ const notify = (sb, to, at, title, body, link) => {
   return list.length ? sb.from('notifications').insert(list.map((user_id) => ({ id: newId('n-'), user_id, title, body, link, kind: 'action', created_at: at }))).then(() => undefined, () => undefined) : Promise.resolve()
 }
 
-/** Super Admin / IT, or anyone given portal.manage (role permission or a personal allow, unless personally denied). */
-export async function mayManagePortal(sb, who) {
-  if (!who) return false
-  if (who.roles.some((r) => MASTER.includes(r))) return true
-  const over = await rows(sb.from('user_permission_overrides').select('effect').eq('user_id', who.id).eq('permission', 'portal.manage'))
-  if (over.some((o) => o.effect === 'deny')) return false
-  if (over.some((o) => o.effect === 'allow')) return true
-  return (await rows(sb.from('role_permissions').select('role').eq('permission', 'portal.manage'))).some((r) => who.roles.includes(r.role))
-}
+/** Client logins (create, password, link, deactivate) are IT Support's alone — not even the Super Admin's. */
+export const mayManagePortal = (who) => !!who && mayManagePortalLogins(who.roles)
 
 // ======================================================================================== Super Admin side
 /**
@@ -69,7 +61,7 @@ export async function portalAdmin(env, who, action, body, deps = {}) {
   const sb = deps.client ?? portalClientFor(env)
   if (!sb) return fail(503, 'The client portal needs SUPABASE_URL and SUPABASE_SECRET_KEY on the server.')
   if (!who) return fail(401, 'Sign in again.')
-  if (!(await mayManagePortal(sb, who))) return fail(403, 'Only the Super Admin manages client portal access.')
+  if (!mayManagePortal(who)) return fail(403, 'Only IT Support creates and manages client portal logins.')
   const ctx = { sb, who, body: body ?? {}, at: (deps.now ?? new Date()).toISOString(), appUrl: String(env('APP_URL') || deps.appUrl || '').replace(/\/+$/, ''), sendEmail: deps.sendEmail ?? (async () => ({ success: false, message: 'Email is not set up.' })) }
   const fn = ADMIN_ACTIONS[action]
   return fn ? fn(ctx) : fail(404, 'Unknown action.')
@@ -117,33 +109,87 @@ async function sendAccessLink(ctx, acct, kind) {
   return { userId: r.data?.user?.id, mail }
 }
 
-const ADMIN_ACTIONS = {
-  /** { email, name?, phone?, bookingIds[], assignedTo?, override? } */
-  async invite(ctx) {
-    const { sb, who, body, at } = ctx
-    const email = normEmail(body.email)
-    if (!isEmail(email)) return fail(422, 'Enter the client’s email address.')
-    const ids = [...new Set((Array.isArray(body.bookingIds) ? body.bookingIds : []).filter((x) => typeof x === 'string' && x))]
-    const chk = await checkEntries(sb, ids, email, !!body.override)
-    if (chk.error) return chk.error
-    if (chk.accounts.some((a) => normEmail(a.email) === email)) return fail(409, 'This client already has a portal account — link the entry to that account instead.', { code: 'EXISTS', accountId: chk.accounts.find((a) => normEmail(a.email) === email).id })
-    if (await one(sb.from('app_users').select('id').eq('email', email))) return fail(409, 'This email belongs to a CRM staff login — use the client’s own email.')
-    if (body.assignedTo && !(await one(sb.from('app_users').select('id').eq('id', body.assignedTo).eq('active', true)))) return fail(422, 'Pick an active team member.')
-    const first = chk.bookings[0]
-    const acct = {
+/** The checks "create" and "invite" share — email, CRM entries, one account per email, not a staff email — and the new account row. */
+async function newAccount(ctx) {
+  const { sb, who, body, at } = ctx
+  const email = normEmail(body.email)
+  if (!isEmail(email)) return { error: fail(422, 'Enter the client’s email address (their login ID).') }
+  const ids = [...new Set((Array.isArray(body.bookingIds) ? body.bookingIds : []).filter((x) => typeof x === 'string' && x))]
+  const chk = await checkEntries(sb, ids, email, !!body.override)
+  if (chk.error) return chk
+  if (chk.accounts.some((a) => normEmail(a.email) === email)) return { error: fail(409, 'This client already has a portal account — link the entry to that account instead.', { code: 'EXISTS', accountId: chk.accounts.find((a) => normEmail(a.email) === email).id }) }
+  if (await one(sb.from('app_users').select('id').eq('email', email))) return { error: fail(409, 'This email belongs to a CRM staff login — use the client’s own email.') }
+  if (body.assignedTo && !(await one(sb.from('app_users').select('id').eq('id', body.assignedTo).eq('active', true)))) return { error: fail(422, 'Pick an active team member.') }
+  const first = chk.bookings[0]
+  return {
+    bookings: chk.bookings,
+    acct: {
       id: newId('ca-'), email, name: clean(body.name, 80) || first.contact_person || first.company_name, phone: /^\d{10}$/.test(String(body.phone ?? '')) ? body.phone : first.mobile ?? null,
       booking_ids: ids, status: 'INVITED', invited_at: at, invited_by: who.id, assigned_to: body.assignedTo || first.ops_member_id || null,
-    }
+    },
+  }
+}
+/** Saves the new account; if that fails, the sign-in made for it is removed again. */
+async function insertAccount(sb, acct) {
+  const { error } = await sb.from('client_accounts').insert(acct)
+  if (!error) return null
+  if (acct.auth_user_id) await sb.auth.admin.deleteUser(acct.auth_user_id).catch(() => undefined)
+  return fail(409, /duplicate|unique|already linked/i.test(error.message) ? 'This client or entry was just linked by someone else — refresh and try again.' : error.message)
+}
+const signInTaken = (msg) => /registered|exists/i.test(msg) ? 'A sign-in already exists for this email (perhaps a staff login) — use another email.' : msg
+
+const ADMIN_ACTIONS = {
+  /**
+   * { email (the login ID), password, name?, phone?, bookingIds[], assignedTo?, override? } — IT Support gives the client
+   * their login: it works at once, no email needed. The password is never stored or logged here; the client can change it.
+   */
+  async create(ctx) {
+    const { sb, who, body, at } = ctx
+    const bad = portalPasswordProblem(body.password, normEmail(body.email))
+    if (bad) return fail(422, bad)
+    const r = await newAccount(ctx)
+    if (r.error) return r.error
+    const { acct, bookings } = r
+    const { data, error } = await sb.auth.admin.createUser({ email: acct.email, password: String(body.password), email_confirm: true, app_metadata: { portal: true } })
+    if (error) return fail(409, signInTaken(error.message))
+    acct.auth_user_id = data?.user?.id ?? null
+    const failed = await insertAccount(sb, acct)
+    if (failed) return failed
+    await activity(sb, acct, at, 'CREATED', `Login created by IT Support — ID ${acct.email}`, { by: who.id, bookingId: acct.booking_ids[0] })
+    await audit(sb, at, who.id, 'PORTAL_CREATE', `${acct.email} · ${bookings.map((b) => b.booking_code).join(', ')}`)
+    return reply(200, { success: true, accountId: acct.id, message: `Login created for ${acct.email} — share the ID and password with the client.` })
+  },
+
+  /** { accountId, password } — IT Support sets a new password; the client is signed out on their other devices. */
+  async password(ctx) {
+    const { sb, who, body, at } = ctx
+    const acct = await accountOf(sb, body.accountId)
+    if (!acct) return fail(404, 'Portal account not found.')
+    if (!acct.auth_user_id) return fail(409, 'This account has no sign-in yet — create the login again.')
+    const bad = portalPasswordProblem(body.password, acct.email)
+    if (bad) return fail(422, bad)
+    const { error } = await sb.auth.admin.updateUserById(acct.auth_user_id, { password: String(body.password), email_confirm: true })
+    if (error) return fail(502, error.message)
+    await sb.rpc('portal_revoke_sessions', { uid: acct.auth_user_id }).then(() => undefined, () => undefined)
+    await activity(sb, acct, at, 'PASSWORD_SET', 'New password set by IT Support — signed out on other devices', { by: who.id })
+    await audit(sb, at, who.id, 'PORTAL_PASSWORD', acct.email)
+    return reply(200, { success: true, message: `New password saved for ${acct.email} — share it with the client.` })
+  },
+
+  /** { email, name?, phone?, bookingIds[], assignedTo?, override? } — the client sets their own password from an email link */
+  async invite(ctx) {
+    const { sb, who, at } = ctx
+    const r = await newAccount(ctx)
+    if (r.error) return r.error
+    const { acct, bookings } = r
+    const email = acct.email
     const sent = await sendAccessLink(ctx, acct, 'invite')
-    if (sent.error) return fail(400, /registered|exists/i.test(sent.error) ? 'A sign-in already exists for this email (perhaps a staff login) — use another email.' : sent.error)
+    if (sent.error) return fail(400, signInTaken(sent.error))
     acct.auth_user_id = sent.userId ?? null
-    const { error } = await sb.from('client_accounts').insert(acct)
-    if (error) {
-      if (sent.userId) await sb.auth.admin.deleteUser(sent.userId).catch(() => undefined)
-      return fail(409, /duplicate|unique|already linked/i.test(error.message) ? 'This client or entry was just linked by someone else — refresh and try again.' : error.message)
-    }
-    await activity(sb, acct, at, 'INVITED', `Invited by email to ${email}${sent.mail?.success ? '' : ' (email not sent)'}`, { by: who.id, bookingId: ids[0] })
-    await audit(sb, at, who.id, 'PORTAL_INVITE', `${email} · ${chk.bookings.map((b) => b.booking_code).join(', ')}`)
+    const failed = await insertAccount(sb, acct)
+    if (failed) return failed
+    await activity(sb, acct, at, 'INVITED', `Invited by email to ${email}${sent.mail?.success ? '' : ' (email not sent)'}`, { by: who.id, bookingId: acct.booking_ids[0] })
+    await audit(sb, at, who.id, 'PORTAL_INVITE', `${email} · ${bookings.map((b) => b.booking_code).join(', ')}`)
     return reply(200, { success: true, accountId: acct.id, emailed: !!sent.mail?.success, message: sent.mail?.success ? `Invite sent to ${email}.` : `Account created, but the email could not be sent: ${sent.mail?.message ?? 'unknown error'} — use “Send link again”.` })
   },
 
@@ -266,7 +312,7 @@ export async function portalClient(env, authorization, action, body, ip, deps = 
     const patch = { last_login_at: at, ...(acct.status === 'INVITED' ? { status: 'ACTIVE', activated_at: at } : {}) }
     await write(sb.from('client_accounts').update(patch).eq('id', acct.id))
     // one sign-in entry per 10 minutes (the page also calls this when it reopens)
-    if (acct.status === 'INVITED') await activity(sb, acct, at, 'ACTIVATED', 'Password set — account active')
+    if (acct.status === 'INVITED') await activity(sb, acct, at, 'ACTIVATED', 'First sign-in — account active')
     else if (!acct.last_login_at || Date.parse(at) - Date.parse(acct.last_login_at) > 600_000) await activity(sb, acct, at, 'SIGNED_IN', ip ? `from ${ip}` : null)
     return reply(200, { success: true })
   }

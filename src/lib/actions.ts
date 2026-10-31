@@ -2879,6 +2879,6 @@ export function removeClientUpdate(me: User, bookingId: string, updateId: string
   })
 }
 
-/** The Super Admin's portal account actions (the live server does them: sign-in accounts, emails, sessions). */
-export const portalAdmin = (action: 'invite' | 'send-link' | 'status' | 'revoke' | 'link' | 'assign', body: Record<string, unknown>) =>
+/** IT Support's client login actions (the live server does them: sign-in accounts, passwords, emails, sessions). */
+export const portalAdmin = (action: 'create' | 'password' | 'invite' | 'send-link' | 'status' | 'revoke' | 'link' | 'assign', body: Record<string, unknown>) =>
   serverPost<{ success: boolean; message?: string; accountId?: string; emailed?: boolean; status?: string; code?: string }>(`/api/portal-admin/${action}`, body)

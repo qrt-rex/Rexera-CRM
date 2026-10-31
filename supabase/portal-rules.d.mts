@@ -7,3 +7,6 @@ export function docStatus(item: ClientDocItem | undefined, uploads: Pick<ClientU
 export function clientMayUpload(status: ClientDocState | null): boolean
 export function reviewSteps(status: ClientDocState | null): ('START' | 'APPROVE' | 'REJECT')[]
 export function projectProgress(milestones: Pick<Milestone, 'status' | 'visible' | 'tasks'>[] | undefined, onlyVisible?: boolean): number | null
+export const PORTAL_LOGIN_ROLES: string[]
+export function mayManagePortalLogins(roles: string[] | undefined): boolean
+export function portalPasswordProblem(pw: unknown, email?: string): string | null

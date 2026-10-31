@@ -248,6 +248,11 @@ export function upgradeDb(d: DB): DB {
     for (const r of ['operations', 'admin'] as const) d.rolePerms[r] = [...new Set([...(d.rolePerms[r] ?? []), 'portal.view' as Perm])]
     d.upgrades.push('portal-view-1')
   }
+  if (!d.upgrades.includes('portal-view-legal-1')) {
+    // the Legal team sees the client portal too (the live CRM: its migration)
+    d.rolePerms.legal = [...new Set([...(d.rolePerms.legal ?? []), 'portal.view' as Perm])]
+    d.upgrades.push('portal-view-legal-1')
+  }
   d.mediaItems ??= []
   d.clientEntries ??= []
   if (!d.upgrades.includes('digital-media-1')) {

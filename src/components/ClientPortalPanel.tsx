@@ -6,7 +6,7 @@ import { CLIENT_DOC_STATUS, projectProgress, reviewSteps } from '../../supabase/
 import type { AdminStageId, Booking, FileRef, Milestone, MilestoneTask } from '../lib/types'
 import { useDb } from '../lib/store'
 import { useMe } from '../lib/auth'
-import { isMaster, rolesOf } from '../lib/rbac'
+import { canManagePortalLogins, rolesOf } from '../lib/rbac'
 import {
   canRunClientPortal, clientDocState, publishClientUpdate, removeClientUpdate, removeMilestone, reviewClientDoc, saveMilestone, setClientDocInternal, setClientDocs, setMilestoneTask, userName,
 } from '../lib/actions'
@@ -45,9 +45,9 @@ export function ClientPortalCard({ b }: { b: Booking }) {
   return (
     <Card className="overflow-hidden xl:col-span-2">
       <CardHeader title="Client portal" icon={UserRoundCheck}
-        subtitle={acct ? `${acct.email} · ${acct.status === 'ACTIVE' ? `active${acct.lastLoginAt ? `, last signed in ${fmtDateTime(acct.lastLoginAt)}` : ''}` : acct.status === 'INVITED' ? 'invited, not signed in yet' : 'access switched off'}` : 'The client has no portal access yet'}
-        action={acct ? <Badge tone={acct.status === 'ACTIVE' ? 'green' : acct.status === 'INVITED' ? 'amber' : 'red'}>{acct.status === 'ACTIVE' ? 'Portal active' : acct.status === 'INVITED' ? 'Invited' : 'Deactivated'}</Badge>
-          : (isMaster(me) || rolesOf(me).includes('superadmin')) && <Link to={`/client-portal?invite=${b.id}`}><Button size="sm" variant="outline">Invite to portal</Button></Link>} />
+        subtitle={acct ? `${acct.email} · ${acct.status === 'ACTIVE' ? `active${acct.lastLoginAt ? `, last signed in ${fmtDateTime(acct.lastLoginAt)}` : ''}` : acct.status === 'INVITED' ? 'login given, not signed in yet' : 'access switched off'}` : 'The client has no portal login yet — IT Support creates it'}
+        action={acct ? <Badge tone={acct.status === 'ACTIVE' ? 'green' : acct.status === 'INVITED' ? 'amber' : 'red'}>{acct.status === 'ACTIVE' ? 'Portal active' : acct.status === 'INVITED' ? 'Not signed in yet' : 'Deactivated'}</Badge>
+          : canManagePortalLogins(me) && <Link to={`/client-portal?invite=${b.id}`}><Button size="sm" variant="outline">Create portal login</Button></Link>} />
 
       {/* ---------------------------------------------------------------- documents asked from the client */}
       <div className="flex flex-wrap items-center gap-2 border-t border-line px-5 py-3">

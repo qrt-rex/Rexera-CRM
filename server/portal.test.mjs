@@ -1,4 +1,4 @@
-// node server/portal.test.mjs — the client portal: Super Admin access management, and that a client sees and changes
+// node server/portal.test.mjs — the client portal: IT Support's login management, and that a client sees and changes
 // only their own entries (never another client's, never internal notes)
 import assert from 'node:assert/strict'
 import { portalAdmin, portalClient } from './portal.mjs'
@@ -19,7 +19,7 @@ assert.equal(projectProgress([{ status: 'DONE', visible: true }, { status: 'PEND
 // ---------------------------------------------------------------- fake Supabase
 function fakeSb(tables, users) {
   const t = structuredClone(tables)
-  const calls = { links: [], bans: [], revoked: [], uploads: [], deleted: [] }
+  const calls = { links: [], bans: [], revoked: [], uploads: [], deleted: [], created: [] }
   const from = (name) => {
     const rows = (t[name] ??= [])
     const filters = []
@@ -47,6 +47,7 @@ function fakeSb(tables, users) {
       generateLink: async ({ type, email, options }) => { calls.links.push({ type, email, redirectTo: options.redirectTo }); return { data: { user: { id: `auth-${email}` }, properties: { action_link: `https://x.supabase.co/verify?type=${type}&t=secret` } }, error: null } },
       updateUserById: async (id, patch) => { calls.bans.push({ id, ...patch }); return { error: null } },
       deleteUser: async (id) => { calls.deleted.push(id); return { error: null } },
+      createUser: async ({ email, password, email_confirm }) => { if (calls.created.some((c) => c.email === email)) return { data: null, error: { message: 'A user with this email address has already been registered' } }; calls.created.push({ email, email_confirm, password: !!password }); return { data: { user: { id: `auth-${email}` } }, error: null } },
     },
   }
   const storage = { from: () => ({
@@ -72,6 +73,7 @@ const sb = fakeSb({
     { id: 'b1', booking_code: 'RX-1', company_name: 'Asha Foods', contact_person: 'Asha', email: 'asha@client.test', payment_email: null, mobile: '9876543210', ops_member_id: 'ops', client_docs: docs,
       milestones: [{ id: 'm1', title: 'Kick-off', status: 'DONE', visible: true }, { id: 'm2', title: 'DPR ready', status: 'IN_PROGRESS', visible: true, tasks: [{ id: 't', title: 'x', done: true }, { id: 'u', title: 'y', done: false }] }, { id: 'm3', title: 'INTERNAL milestone', status: 'PENDING', visible: false }],
       client_updates: [{ id: 'cu1', at: '2026-10-24T00:00:00.000Z', by: 'ops', title: 'Bank call done', text: 'All good', file: { id: 'file-update0001', name: 'minutes.pdf', type: 'application/pdf', size: 10, at: '2026-10-24T00:00:00.000Z' } }] },
+    { id: 'b3', booking_code: 'RX-3', company_name: 'Neel Agro', contact_person: 'Neel', email: 'neel@client.test', mobile: '9825022222', ops_member_id: 'ops', client_docs: {}, milestones: [], client_updates: [] },
     { id: 'b2', booking_code: 'RX-2', company_name: 'Ravi Steel', contact_person: 'Ravi', email: 'ravi@client.test', mobile: '9825011111', ops_member_id: 'ops', client_docs: { DPR: { ...docs.DPR, internalNote: 'RAVI-PRIVATE' } }, milestones: [], client_updates: [] },
   ],
   client_accounts: [], client_activity: [], client_doc_uploads: [{ id: 'cu-ravi000000001', booking_id: 'b2', category: 'DPR', file: { id: 'file-ravi000001', name: 'ravi-dpr.pdf', type: 'application/pdf', size: 9, at: '2026-10-21T00:00:00.000Z' }, at: '2026-10-21T00:00:00.000Z', account_id: 'other' }],
@@ -85,31 +87,33 @@ const sb = fakeSb({
 }, {
   'tok-sa': { id: 'auth-sa' }, 'tok-ops': { id: 'auth-ops' }, 'tok-asha': { id: 'auth-asha@client.test' }, 'tok-ravi': { id: 'auth-ravi@client.test' },
 })
-const SA = { id: 'sa', email: 'owner@rexera.test', roles: ['superadmin'] }, OPS = { id: 'ops', email: 'priya@rexera.test', roles: ['operations'] }
+const SA = { id: 'sa', email: 'owner@rexera.test', roles: ['superadmin'] }, IT = { id: 'itu', email: 'it@rexera.test', roles: ['it'] }, OPS = { id: 'ops', email: 'priya@rexera.test', roles: ['operations'] }
 const admin = (who, action, body) => portalAdmin(env, who, action, body, deps(sb))
 const client = (tok, action, body = {}) => portalClient(env, `Bearer ${tok}`, action, body, '1.2.3.4', deps(sb))
 
-// ---------------------------------------------------------------- Super Admin: invite, no duplicates
+// ---------------------------------------------------------------- IT Support: invite, no duplicates
 let r = await admin(OPS, 'invite', { email: 'asha@client.test', bookingIds: ['b1'] })
-assert.equal(r.status, 403, 'only the Super Admin (portal.manage) manages access')
+assert.equal(r.status, 403, 'only IT Support manages client logins')
+r = await admin(SA, 'invite', { email: 'asha@client.test', bookingIds: ['b1'] })
+assert.equal(r.status, 403, 'not even the Super Admin')
 r = await admin(null, 'invite', {})
 assert.equal(r.status, 401)
-r = await admin(SA, 'invite', { email: 'someone@else.test', bookingIds: ['b1'] })
+r = await admin(IT, 'invite', { email: 'someone@else.test', bookingIds: ['b1'] })
 assert.equal(r.status, 409); assert.equal(r.body.code, 'EMAIL_MISMATCH', 'the email must be the one on the CRM entry')
-r = await admin(SA, 'invite', { email: 'priya@rexera.test', bookingIds: ['b1'], override: true })
+r = await admin(IT, 'invite', { email: 'priya@rexera.test', bookingIds: ['b1'], override: true })
 assert.equal(r.status, 409, 'a staff login email is refused')
-r = await admin(SA, 'invite', { email: ' Asha@Client.test ', bookingIds: ['b1'] })
+r = await admin(IT, 'invite', { email: ' Asha@Client.test ', bookingIds: ['b1'] })
 assert.equal(r.status, 200, r.body.message)
 const asha = sb.t.client_accounts[0]
 assert.equal(asha.email, 'asha@client.test'); assert.equal(asha.status, 'INVITED'); assert.equal(asha.assigned_to, 'ops'); assert.equal(asha.auth_user_id, 'auth-asha@client.test')
 assert.equal(sb.calls.links[0].redirectTo, 'https://crm.test/portal/welcome')
 assert.match(mails[0].button.url, /verify\?type=invite/); assert.equal(mails[0].to, 'asha@client.test')
 assert.ok(!JSON.stringify(r.body).includes('secret'), 'the sign-in link never goes back to the browser')
-r = await admin(SA, 'invite', { email: 'asha@client.test', bookingIds: ['b2'], override: true })
+r = await admin(IT, 'invite', { email: 'asha@client.test', bookingIds: ['b2'], override: true })
 assert.equal(r.body.code, 'EXISTS', 'one account per email')
-r = await admin(SA, 'invite', { email: 'other@client.test', bookingIds: ['b1'], override: true })
+r = await admin(IT, 'invite', { email: 'other@client.test', bookingIds: ['b1'], override: true })
 assert.equal(r.body.code, 'TAKEN', 'a CRM entry belongs to one account')
-r = await admin(SA, 'invite', { email: 'ravi@client.test', bookingIds: ['b2'] })
+r = await admin(IT, 'invite', { email: 'ravi@client.test', bookingIds: ['b2'] })
 assert.equal(r.status, 200)
 const ravi = sb.t.client_accounts[1]
 
@@ -175,29 +179,56 @@ r = await client('tok-asha', 'profile', { name: 'A' })
 assert.equal(r.status, 422)
 
 // ---------------------------------------------------------------- deactivate / approve / sign out everywhere
-r = await admin(SA, 'status', { accountId: asha.id, active: false })
+r = await admin(IT, 'status', { accountId: asha.id, active: false })
 assert.equal(r.status, 200)
 assert.equal(sb.calls.bans.at(-1).ban_duration, '876000h'); assert.ok(sb.calls.revoked.includes('auth-asha@client.test'))
 r = await client('tok-asha', 'me')
 assert.equal(r.status, 403, 'a deactivated client is refused at once, even with a live session')
-r = await admin(SA, 'send-link', { accountId: asha.id })
+r = await admin(IT, 'send-link', { accountId: asha.id })
 assert.equal(r.status, 409)
-r = await admin(SA, 'status', { accountId: asha.id, active: true })
+r = await admin(IT, 'status', { accountId: asha.id, active: true })
 assert.equal(r.body.status, 'ACTIVE')
 r = await client('tok-asha', 'me')
 assert.equal(r.status, 200)
-r = await admin(SA, 'send-link', { accountId: asha.id })
+r = await admin(IT, 'send-link', { accountId: asha.id })
 assert.equal(r.status, 200); assert.equal(sb.calls.links.at(-1).type, 'recovery', 'an active account gets a reset link')
-r = await admin(SA, 'revoke', { accountId: asha.id })
+r = await admin(IT, 'revoke', { accountId: asha.id })
 assert.equal(r.status, 200)
 
 // linking: no entry in two accounts; new entries need the matching email (or a confirmation)
-r = await admin(SA, 'link', { accountId: ravi.id, bookingIds: ['b2', 'b1'] })
+r = await admin(IT, 'link', { accountId: ravi.id, bookingIds: ['b2', 'b1'] })
 assert.equal(r.body.code, 'TAKEN')
-r = await admin(SA, 'assign', { accountId: ravi.id, userId: 'adm' })
+r = await admin(IT, 'assign', { accountId: ravi.id, userId: 'adm' })
 assert.equal(r.status, 200); assert.equal(sb.t.client_accounts[1].assigned_to, 'adm')
 assert.ok(sb.t.client_activity.filter((a) => a.account_id === asha.id).length >= 5, 'every step is in the activity log')
 assert.ok(sb.t.audit_log.some((a) => a.action === 'PORTAL_DEACTIVATE'))
+
+// IT Support gives a client their login (ID + password): works without email; the password is never stored or logged
+r = await admin(SA, 'create', { email: 'neel@client.test', password: 'Neel2026x', bookingIds: ['b3'] })
+assert.equal(r.status, 403, 'not even the Super Admin creates client logins')
+r = await admin(IT, 'create', { email: 'neel@client.test', password: 'short1', bookingIds: ['b3'] })
+assert.equal(r.status, 422)
+r = await admin(IT, 'create', { email: 'neel@client.test', password: 'neelneelneel', bookingIds: ['b3'] })
+assert.match(r.body.message, /letters and numbers/)
+r = await admin(IT, 'create', { email: 'someone@else.test', password: 'Neel2026x', bookingIds: ['b3'] })
+assert.equal(r.body.code, 'EMAIL_MISMATCH', 'the login ID must be the email on the CRM entry')
+r = await admin(IT, 'create', { email: 'Neel@Client.test', password: 'Neel@2026x', bookingIds: ['b3'] })
+assert.equal(r.status, 200, r.body.message)
+const neel = sb.t.client_accounts.find((a) => a.email === 'neel@client.test')
+assert.equal(neel.auth_user_id, 'auth-neel@client.test'); assert.equal(neel.status, 'INVITED'); assert.equal(sb.calls.created.at(-1).email_confirm, true, 'ready to sign in at once')
+assert.ok(sb.t.client_activity.some((a) => a.account_id === neel.id && a.action === 'CREATED')); assert.ok(sb.t.audit_log.some((a) => a.action === 'PORTAL_CREATE'))
+assert.ok(!JSON.stringify([sb.t.client_accounts, sb.t.client_activity, sb.t.audit_log, sb.t.notifications, r.body]).includes('Neel@2026x'), 'the password is never stored or logged')
+r = await admin(IT, 'create', { email: 'neel@client.test', password: 'Neel@2026x', bookingIds: ['b3'] })
+assert.equal(r.status, 409, 'no second login for the same entry')
+// IT Support sets a new password: the client is signed out on other devices
+r = await admin(OPS, 'password', { accountId: neel.id, password: 'Fresh2026pass' })
+assert.equal(r.status, 403)
+r = await admin(IT, 'password', { accountId: neel.id, password: 'nodigits' })
+assert.equal(r.status, 422)
+r = await admin(IT, 'password', { accountId: neel.id, password: 'Fresh2026pass' })
+assert.equal(r.status, 200, r.body.message)
+assert.equal(sb.calls.bans.at(-1).password, 'Fresh2026pass'); assert.ok(sb.calls.revoked.includes('auth-neel@client.test'))
+assert.ok(!JSON.stringify([sb.t.client_activity, sb.t.audit_log]).includes('Fresh2026pass'))
 
 // forgot password: the same answer whether or not the email has an account
 const before = mails.length

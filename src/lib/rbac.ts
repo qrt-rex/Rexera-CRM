@@ -1,4 +1,5 @@
 import type { DB, Perm, Role, User } from './types'
+import { mayManagePortalLogins } from '../../supabase/portal-rules.mjs'
 
 export const ROLES: { id: Role; label: string; short: string; color: string; desc: string }[] = [
   { id: 'superadmin', label: 'Super Admin', short: 'SA', color: '#2E3A8C', desc: 'Everything, every dashboard, final say' },
@@ -104,8 +105,8 @@ export const PERM_GROUPS: { group: string; perms: { id: Perm; label: string }[] 
       { id: 'reports.export', label: 'Export data (CSV)' },
       { id: 'access.manage', label: 'Roles, users & permissions' },
       { id: 'website.manage', label: 'Website content, publishing & website leads (Super Admin)' },
-      { id: 'portal.manage', label: 'Client portal accounts: invite, link, deactivate (Super Admin)' },
-      { id: 'portal.view', label: 'Client portal: see every client’s logins, activity and progress (Operation team, Admin, IT)' },
+      { id: 'portal.manage', label: 'Client portal logins: create ID and password, link, deactivate (IT Support only)' },
+      { id: 'portal.view', label: 'Client portal: see every client’s logins, activity and progress (Legal, Operation team, Admin)' },
       { id: 'audit.view', label: 'Activity log' },
     ],
   },
@@ -119,7 +120,7 @@ export const DEFAULT_ROLE_PERMS: Record<Role, Perm[]> = {
   superadmin: [...ALL_PERMS],
   admin: [...common, 'bookings.all', 'bookings.admin', 'content.manage', 'salesinfo.manage', 'schemes.manage', 'employees.view', 'documents.forms', 'reports.view', 'followup.manage', 'forms.manage', 'workflow.manage', 'portal.view'],
   accounts: [...common, 'bookings.all', 'bookings.accounts', 'billing.create', 'billing.manage', 'refunds.manage', 'reports.view', 'reports.export'],
-  legal: [...common, 'bookings.all', 'bookings.legal', 'documents.forms', 'leave.approve', 'reports.view'],
+  legal: [...common, 'bookings.all', 'bookings.legal', 'documents.forms', 'leave.approve', 'reports.view', 'portal.view'],
   operations: [...common, 'bookings.all', 'bookings.process', 'content.manage', 'salesinfo.manage', 'schemes.manage', 'employees.view', 'documents.forms', 'reports.view', 'events.manage', 'forms.manage', 'saleskit.manage', 'eligibility.manage', 'portal.view'],
   teamlead: [
     ...common, 'salesinfo.manage', 'leads.own', 'leads.assign', 'dialer.use', 'bookings.create', 'bookings.own', 'bookings.team', 'bookings.approve_tl',
@@ -142,11 +143,12 @@ export const DEFAULT_ROLE_PERMS: Record<Role, Perm[]> = {
 /** Permissions a role may never hold, whatever the matrix or per-user grants say. */
 export const RESERVED: Partial<Record<Perm, Role[]>> = {
   'access.manage': ['superadmin'],
-  // the live website and client portal accounts: Super Admin only
+  // the live website: Super Admin only
   'website.manage': ['superadmin'],
-  'portal.manage': ['superadmin'],
-  // every client's portal logins and progress: the Operation team and Admin (IT and Super Admin always)
-  'portal.view': ['superadmin', 'operations', 'admin'],
+  // client portal logins: IT Support only (see canManagePortalLogins — the Super Admin holds the permission but not this)
+  'portal.manage': ['it'],
+  // every client's portal logins and progress: Legal, the Operation team and Admin (IT and Super Admin always)
+  'portal.view': ['superadmin', 'legal', 'operations', 'admin'],
   'billing.manage': ['superadmin', 'accounts'],
   'refunds.manage': ['superadmin', 'accounts'],
   // the CRM Leads page (lead source, uploads, website leads, auto-assign) is the Super Admin's; others work leads in the Dialer
@@ -187,6 +189,9 @@ export const canEditSchemeRules = (db: DB, u: User) => {
   const roles = rolesOf(u)
   return roles.includes('superadmin') || (roles.includes('operations') && effectivePerms(db, u).has('eligibility.manage'))
 }
+
+/** Who creates client portal logins (ID + password), sets passwords, links entries, deactivates: IT Support only (the server applies the same). */
+export const canManagePortalLogins = (u: User | null | undefined) => !!u && mayManagePortalLogins(rolesOf(u))
 
 export function effectivePerms(db: DB, u: User | null | undefined): Set<Perm> {
   if (!u) return new Set()
