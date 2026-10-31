@@ -345,6 +345,7 @@ async function handleSendOtpEmail(req, res) {
   `
 
   // 1. Try Resend API over HTTPS (port 443 - never blocked on Render free tier)
+  let resendError = ''
   try {
     const resendResult = await sendViaResendApi(email, `${code} is your Rexera CRM login verification code`, otpHtml)
     if (resendResult) {
@@ -352,6 +353,7 @@ async function handleSendOtpEmail(req, res) {
       return sendJson(res, 200, { success: true, message: `OTP delivered to ${email}` })
     }
   } catch (resendErr) {
+    resendError = resendErr.message
     console.warn('[Resend API Warning]:', resendErr.message)
   }
 
@@ -361,11 +363,13 @@ async function handleSendOtpEmail(req, res) {
   const smtpFrom = getEnv('SMTP_FROM', `"Rexera CRM" <${smtpUser || 'no-reply@hr.rexera.in'}>`)
 
   if (!transporter) {
-    console.warn('[SMTP] Attempted OTP send but SMTP_USER / SMTP_PASS is missing')
+    // Resend is set up but refused (e.g. the sending domain isn't verified yet): say so, not "not configured"
+    if (resendError) return sendJson(res, 502, { success: false, message: `Resend refused the email: ${resendError}` })
+    console.warn('[SMTP] Attempted OTP send but no mail service is set up (RESEND_API_KEY or SMTP_USER / SMTP_PASS)')
     return sendJson(res, 500, {
       success: false,
       configured: false,
-      message: 'SMTP credentials not configured on the live server (SMTP_USER / SMTP_PASS).',
+      message: 'No mail service is set up on the live server (RESEND_API_KEY, or SMTP_USER / SMTP_PASS).',
     })
   }
 
@@ -655,7 +659,9 @@ const server = http.createServer(async (req, res) => {
       status: 'ok',
       uptime: process.uptime(),
       timestamp: new Date().toISOString(),
-      smtpConfigured: Boolean(getEnv('SMTP_USER') && getEnv('SMTP_PASS')),
+      // any mail service: Resend (HTTPS, works on every Render plan) or SMTP (Render's free plan blocks SMTP ports)
+      smtpConfigured: Boolean(getEnv('RESEND_API_KEY') || getEnv('RESEND_KEY') || (getEnv('SMTP_USER') && getEnv('SMTP_PASS'))),
+      emailProvider: getEnv('RESEND_API_KEY') || getEnv('RESEND_KEY') ? 'resend' : getEnv('SMTP_USER') && getEnv('SMTP_PASS') ? 'smtp' : null,
       whatsappConfigured: whatsappConfigured(getEnv),
       // AI assistant set-up at a glance (never the key itself)
       aiConfigured: Boolean(getEnv('AI_API_KEY') || getEnv('OPENAI_API_KEY')),
