@@ -3,7 +3,7 @@ import { Navigate, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Eye, EyeOff, KeyRound, Loader2, Lock, ShieldCheck, User as UserIcon } from 'lucide-react'
 import { useAuth } from '../lib/auth'
 import { useDb } from '../lib/store'
-import { loginStep1, resendCode, verifyCode } from '../lib/actions'
+import { loginStep1, resendCode, signInWithoutCode, verifyCode } from '../lib/actions'
 import { DEMO_PASSWORD, PRESET_USERS } from '../lib/seed'
 import { ROLES } from '../lib/rbac'
 import { Logo } from '../components/Logo'
@@ -28,6 +28,9 @@ export default function Login() {
   const [devCode, setDevCode] = useState('')
   const [email, setEmail] = useState('')
   const [otpNotice, setOtpNotice] = useState('')
+  // Super Admin / IT Support: when the code can't be emailed they may go on with their password (recorded)
+  const [master, setMaster] = useState(false)
+  const [noMail, setNoMail] = useState('')
   const [code, setCode] = useState(['', '', '', '', '', ''])
   const [forgot, setForgot] = useState(false)
   // read on every render: a sign-out can happen while this page is already open
@@ -47,17 +50,31 @@ export default function Login() {
     setBusy(true)
     try {
       const r = await loginStep1(login, password)
-      setToken(r.token); setDevCode(r.devCode); setEmail(r.email); setStep('code'); setCode(['', '', '', '', '', ''])
+      setToken(r.token); setDevCode(r.devCode); setEmail(r.email); setStep('code'); setCode(['', '', '', '', '', '']); setMaster(r.master); setNoMail('')
       // The code is shown on screen only in developer mode. In a real build, showing it whenever email fails let anyone
       // who knew a password skip the second step.
       const undelivered = DEV_MODE
         ? `Email could not be sent (developer mode). Your 6-digit verification code is: ${r.devCode}`
         : 'We could not email your code right now. Please try again in a minute, or contact IT Support.'
       sendOtpEmailClient(r.email, r.devCode).then((res) => {
-        if (!res.delivered) setOtpNotice(undelivered)
-      }).catch(() => setOtpNotice(undelivered))
+        if (!res.delivered) { setOtpNotice(undelivered); setNoMail(res.message || 'email not available') }
+      }).catch((e: Error) => { setOtpNotice(undelivered); setNoMail(e.message || 'email not available') })
     } catch (e) { setErr(e instanceof Error ? e.message : 'Sign-in failed') }
     finally { setBusy(false) }
+  }
+
+  /** Super Admin / IT Support only, after the code email failed: sign in with the password already checked. */
+  const continueWithoutCode = () => {
+    setErr('')
+    try {
+      const uid = signInWithoutCode(token, noMail)
+      signIn(uid)
+      const u = db.users.find((x) => x.id === uid)!
+      nav(`/dashboard/${u.role}`, { replace: true })
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Sign-in failed')
+      if (e instanceof Error && /Sign in again/.test(e.message)) setStep('password')
+    }
   }
 
   const verify = (digits = code.join('')) => {
@@ -189,10 +206,16 @@ export default function Login() {
                   ))}
                 </div>
                 {err && <p role="alert" className="mt-5 rounded-xl bg-[#DC2626]/90 px-4 py-2.5 text-center text-sm font-medium">{err}</p>}
-                {otpNotice && (
+                {otpNotice && !(master && noMail) && (
                   <p role="status" className="mt-4 rounded-xl border border-amber-400/40 bg-amber-500/20 px-4 py-2 text-center text-xs text-amber-100">
                     {otpNotice}
                   </p>
+                )}
+                {master && noMail && (
+                  <div role="status" className="mt-4 rounded-xl border border-amber-400/40 bg-amber-500/20 px-4 py-3 text-center text-xs text-amber-100">
+                    <p>The code email could not be sent. As <b>Super Admin / IT Support</b> you can continue with the password you entered — this sign-in is recorded in the activity log.</p>
+                    <button type="button" onClick={continueWithoutCode} className="mt-2.5 rounded-xl bg-white px-4 py-2 text-sm font-bold text-[#2E3A8C] hover:bg-white/90">Continue without the code</button>
+                  </div>
                 )}
                 {DEV_MODE && devCode && (
                   <p className="mt-2 text-center text-xs font-mono text-white/50">
@@ -215,12 +238,13 @@ export default function Login() {
                         : 'We could not email your new code right now. Please try again in a minute, or contact IT Support.'
                       sendOtpEmailClient(email, nextCode).then((res) => {
                         if (res.delivered) {
+                          setNoMail('')
                           setOtpNotice('New verification code sent to your email!')
                           setTimeout(() => setOtpNotice(''), 5000)
                         } else {
-                          setOtpNotice(undelivered)
+                          setOtpNotice(undelivered); setNoMail(res.message || 'email not available')
                         }
-                      }).catch(() => setOtpNotice(undelivered))
+                      }).catch((e: Error) => { setOtpNotice(undelivered); setNoMail(e.message || 'email not available') })
                     } catch (e) { setErr((e as Error).message) }
                   }}>Resend code</button>
                 </p>

@@ -107,7 +107,37 @@ function passwordOk(d: DB, u: User) {
   const token = uid('tmp-')
   const code = genCode()
   pending.set(token, { userId: u.id, code, expires: Date.now() + 5 * 60000, attempts: 0, resends: 0 })
-  return { token, devCode: code, email: u.email }
+  // Super Admin / IT Support may go on without the code when it can't be emailed (signInWithoutCode)
+  return { token, devCode: code, email: u.email, master: isMaster(u) }
+}
+
+/** The day's session and the sign-in record, once the person is through both steps. */
+function finishSignIn(userId: string, how?: string) {
+  mutate((d) => {
+    const u = d.users.find((x) => x.id === userId)!
+    const s = d.sessions.find((x) => x.userId === u.id && x.date === today())
+    if (!s) d.sessions.push({ id: uid('ds-'), userId: u.id, date: today(), loginAt: nowIso() })
+    // lock off (testing): signing in again after Logout re-opens the day
+    else if (s.logoutAt && !dayLockOn(d)) { s.logoutAt = undefined; s.reopenedBy = u.id }
+    audit(d, u.id, how ? 'SIGN_IN_NO_EMAIL_CODE' : 'SIGN_IN', how ? `${u.name} signed in without the email code — ${how}` : `${u.name} signed in`)
+    // the other Super Admins / IT Support see every sign-in that skipped the code
+    if (how) notify(d, d.users.filter((x) => x.active && x.id !== u.id && isMaster(x)).map((x) => x.id), 'Signed in without the email code', `${u.name} — ${how}`, '/audit', 'warning')
+  })
+}
+
+/**
+ * Super Admin and IT Support only: when the login code can't be emailed (no mail service, mail server down), they
+ * continue with the password they just entered, so the CRM can always be opened to fix things. Recorded and notified.
+ */
+export function signInWithoutCode(token: string, reason: string): string {
+  const p = pending.get(token)
+  assert(p, 'Session expired. Sign in again.')
+  if (Date.now() > p.expires) { pending.delete(token); throw new ActionError('Session expired. Sign in again.') }
+  const u = getDb().users.find((x) => x.id === p.userId)
+  assert(u && u.active && isMaster(u), 'Only Super Admin and IT Support can sign in without the email code.')
+  pending.delete(token)
+  finishSignIn(u.id, `the code email could not be sent (${reason.slice(0, 160)})`)
+  return u.id
 }
 
 export function resendCode(token: string) {
@@ -128,14 +158,7 @@ export function verifyCode(token: string, code: string): string {
     throw new ActionError(`Wrong code. ${5 - p.attempts} attempts left.`)
   }
   pending.delete(token)
-  mutate((d) => {
-    const u = d.users.find((x) => x.id === p.userId)!
-    const s = d.sessions.find((x) => x.userId === u.id && x.date === today())
-    if (!s) d.sessions.push({ id: uid('ds-'), userId: u.id, date: today(), loginAt: nowIso() })
-    // lock off (testing): signing in again after Logout re-opens the day
-    else if (s.logoutAt && !dayLockOn(d)) { s.logoutAt = undefined; s.reopenedBy = u.id }
-    audit(d, u.id, 'SIGN_IN', `${u.name} signed in`)
-  })
+  finishSignIn(p.userId)
   return p.userId
 }
 
