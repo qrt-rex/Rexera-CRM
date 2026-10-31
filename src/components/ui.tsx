@@ -13,7 +13,7 @@ export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Bool
 
 // ------------------------------------------------------------------ Button
 type BtnVariant = 'primary' | 'accent' | 'outline' | 'ghost' | 'danger' | 'success' | 'soft'
-const btnBase = 'inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition-all disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap active:scale-[.98]'
+const btnBase = 'inline-flex shrink-0 select-none items-center justify-center gap-2 rounded-xl font-semibold transition-all disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap active:scale-[.98]'
 const btnVariants: Record<BtnVariant, string> = {
   primary: 'bg-brand text-white hover:bg-brand-hover shadow-sm',
   accent: 'bg-accent text-white hover:bg-accent-hover shadow-sm shadow-accent/30',
@@ -54,7 +54,7 @@ export function Field({ label, required, hint, error, children, className }: { l
     </label>
   )
 }
-const ctl = 'w-full rounded-xl border border-line bg-card px-3 text-sm text-ink placeholder:text-mute/70 outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10 disabled:opacity-60'
+const ctl = 'w-full min-w-0 rounded-xl border border-line bg-card px-3 text-sm text-ink placeholder:text-mute/70 outline-none transition hover:border-mute/40 focus:border-brand focus:ring-4 focus:ring-brand/10 disabled:cursor-not-allowed disabled:opacity-60'
 export function Input({ label, required, hint, error, className, ...rest }: InputHTMLAttributes<HTMLInputElement> & { label?: string; hint?: string; error?: string }) {
   return <Field label={label} required={required} hint={hint} error={error} className={className}><input required={required} {...rest} className={cx(ctl, 'h-10')} /></Field>
 }
@@ -140,15 +140,15 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
 
 // ------------------------------------------------------------------ Surfaces
 export function Card({ className, children, ...rest }: { className?: string; children: ReactNode } & HTMLAttributes<HTMLDivElement>) {
-  return <div {...rest} className={cx('rounded-2xl border border-line bg-card shadow-card', className)}>{children}</div>
+  return <div {...rest} className={cx('min-w-0 rounded-2xl border border-line bg-card shadow-card', className)}>{children}</div>
 }
 export function CardHeader({ title, subtitle, icon: Icon, action, className }: { title: ReactNode; subtitle?: ReactNode; icon?: LucideIcon; action?: ReactNode; className?: string }) {
   return (
-    <div className={cx('flex items-center gap-3 border-b border-line px-5 py-4', className)}>
-      {Icon && <span className="grid size-9 place-items-center rounded-xl bg-brand-soft text-brand-ink"><Icon className="size-[18px]" /></span>}
-      <div className="min-w-0 flex-1">
-        <h3 className="truncate text-[15px] font-bold">{title}</h3>
-        {subtitle && <p className="truncate text-xs text-mute">{subtitle}</p>}
+    <div className={cx('flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line px-4 py-3.5 sm:px-5 sm:py-4', className)}>
+      {Icon && <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-brand-soft text-brand-ink"><Icon className="size-[18px]" /></span>}
+      <div className="min-w-[10rem] flex-1">
+        <h3 className="truncate text-[15px] font-bold leading-snug">{title}</h3>
+        {subtitle && <p className="line-clamp-2 text-xs leading-relaxed text-mute">{subtitle}</p>}
       </div>
       {action}
     </div>
@@ -197,7 +197,7 @@ export function Progress({ value, tone = 'navy', className }: { value: number; t
 
 export function EmptyState({ icon: Icon, title, text, action }: { icon: LucideIcon; title: string; text?: string; action?: ReactNode }) {
   return (
-    <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
+    <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
       <span className="mb-4 grid size-14 place-items-center rounded-2xl bg-brand-soft text-brand-ink"><Icon className="size-7" /></span>
       <h4 className="font-bold">{title}</h4>
       {text && <p className="mt-1 max-w-sm text-sm text-mute">{text}</p>}
@@ -212,13 +212,13 @@ export function Skeleton({ className }: { className?: string }) {
 
 export function PageHeader({ title, subtitle, icon: Icon, actions }: { title: string; subtitle?: string; icon?: LucideIcon; actions?: ReactNode }) {
   return (
-    <div className="mb-6 flex flex-wrap items-center gap-4 anim-fade-up">
-      {Icon && <span className="grid size-12 place-items-center rounded-2xl bg-gradient-to-br from-brand to-[#4b5bc4] text-white shadow-lg shadow-brand/25"><Icon className="size-6" /></span>}
-      <div className="min-w-0 flex-1">
-        <h1 className="text-2xl font-extrabold tracking-tight">{title}</h1>
-        {subtitle && <p className="text-sm text-mute">{subtitle}</p>}
+    <div className="mb-6 flex flex-wrap items-start gap-x-4 gap-y-3 anim-fade-up sm:items-center">
+      {Icon && <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-brand to-[#4b5bc4] text-white shadow-lg shadow-brand/25 sm:size-12"><Icon className="size-6" /></span>}
+      <div className="min-w-[12rem] flex-1">
+        <h1 className="text-xl font-extrabold leading-tight tracking-tight sm:text-2xl">{title}</h1>
+        {subtitle && <p className="mt-0.5 max-w-3xl text-sm leading-relaxed text-mute">{subtitle}</p>}
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+      {actions && <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">{actions}</div>}
     </div>
   )
 }
@@ -248,10 +248,10 @@ export function Stat({ label, value, icon: Icon, tone = 'navy', sub, trend, to, 
 // ------------------------------------------------------------------ Tabs
 export function Tabs<T extends string>({ tabs, value, onChange, className }: { tabs: { id: T; label: string; count?: number; icon?: LucideIcon }[]; value: T; onChange: (v: T) => void; className?: string }) {
   return (
-    <div role="tablist" className={cx('flex gap-1 overflow-x-auto rounded-xl border border-line bg-card2 p-1', className)}>
+    <div role="tablist" className={cx('flex max-w-full gap-1 overflow-x-auto rounded-xl border border-line bg-card2 p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden', className)}>
       {tabs.map((t) => (
         <button key={t.id} role="tab" aria-selected={value === t.id} onClick={() => onChange(t.id)}
-          className={cx('flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold whitespace-nowrap transition',
+          className={cx('flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold whitespace-nowrap transition focus-visible:outline-offset-0',
             value === t.id ? 'bg-card text-ink shadow-sm' : 'text-mute hover:text-ink')}>
           {t.icon && <t.icon className="size-4" />}
           {t.label}
@@ -289,16 +289,16 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
   const w = { sm: 'max-w-md', md: 'max-w-xl', lg: 'max-w-3xl', xl: 'max-w-5xl' }[size]
   return createPortal(
     <div className="fixed inset-0 z-[80] flex items-end justify-center bg-[#0b1020]/50 p-0 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div role="dialog" aria-modal="true" aria-labelledby={id} className={cx('anim-pop flex max-h-[92vh] w-full flex-col rounded-t-3xl border border-line bg-card shadow-pop sm:rounded-3xl', w)}>
-        <div className="flex items-start gap-3 border-b border-line px-6 py-4">
+      <div role="dialog" aria-modal="true" aria-labelledby={id} className={cx('anim-pop flex max-h-[94dvh] w-full flex-col rounded-t-3xl border border-line bg-card shadow-pop sm:max-h-[92vh] sm:rounded-3xl', w)}>
+        <div className="flex items-start gap-3 border-b border-line px-4 py-4 sm:px-6">
           <div className="min-w-0 flex-1">
-            <h2 id={id} className="text-lg font-bold">{title}</h2>
-            {subtitle && <p className="text-sm text-mute">{subtitle}</p>}
+            <h2 id={id} className="text-base font-bold leading-snug sm:text-lg">{title}</h2>
+            {subtitle && <p className="mt-0.5 text-sm leading-relaxed text-mute">{subtitle}</p>}
           </div>
-          <IconButton icon={X} label="Close" onClick={onClose} className="-mr-2" />
+          <IconButton icon={X} label="Close" onClick={onClose} className="-mr-2 shrink-0" />
         </div>
-        <div className="overflow-y-auto px-6 py-5">{children}</div>
-        {footer && <div className="flex flex-wrap justify-end gap-2 border-t border-line px-6 py-4">{footer}</div>}
+        <div className="min-h-0 overflow-y-auto px-4 py-5 sm:px-6">{children}</div>
+        {footer && <div className="flex flex-wrap justify-end gap-2 border-t border-line px-4 py-3.5 sm:px-6 sm:py-4">{footer}</div>}
       </div>
     </div>,
     document.body,
@@ -311,12 +311,12 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
   return createPortal(
     <div className="fixed inset-0 z-[70] flex justify-end bg-[#0b1020]/40 backdrop-blur-[2px]" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <aside role="dialog" aria-modal="true" className={cx('anim-slide flex h-full w-full flex-col border-l border-line bg-card shadow-pop', width)}>
-        <div className="flex items-start gap-3 border-b border-line px-6 py-4">
-          <div className="min-w-0 flex-1"><h2 className="text-lg font-bold">{title}</h2>{subtitle && <div className="text-sm text-mute">{subtitle}</div>}</div>
-          <IconButton icon={X} label="Close" onClick={onClose} className="-mr-2" />
+        <div className="flex items-start gap-3 border-b border-line px-4 py-4 sm:px-6">
+          <div className="min-w-0 flex-1"><h2 className="text-base font-bold leading-snug sm:text-lg">{title}</h2>{subtitle && <div className="mt-0.5 text-sm text-mute">{subtitle}</div>}</div>
+          <IconButton icon={X} label="Close" onClick={onClose} className="-mr-2 shrink-0" />
         </div>
-        <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
-        {footer && <div className="flex flex-wrap justify-end gap-2 border-t border-line px-6 py-4">{footer}</div>}
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">{children}</div>
+        {footer && <div className="flex flex-wrap justify-end gap-2 border-t border-line px-4 py-3.5 sm:px-6 sm:py-4">{footer}</div>}
       </aside>
     </div>,
     document.body,
@@ -448,11 +448,11 @@ export function useConfirm() {
 
 // ------------------------------------------------------------------ Table helpers
 export function Table({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cx('overflow-x-auto', className)}><table className="w-full min-w-[640px] text-sm">{children}</table></div>
+  return <div className={cx('overflow-x-auto overscroll-x-contain [&_tbody>tr:last-child>td]:border-b-0', className)}><table className="crm-table w-full min-w-[640px] text-sm">{children}</table></div>
 }
 export function Th({ children, className, onClick, sorted }: { children?: ReactNode; className?: string; onClick?: () => void; sorted?: 'asc' | 'desc' | false }) {
   return (
-    <th onClick={onClick} className={cx('sticky top-0 border-b border-line bg-card2 px-4 py-2.5 text-left text-[11px] font-bold uppercase tracking-wide text-mute', onClick && 'cursor-pointer select-none hover:text-ink', className)}>
+    <th onClick={onClick} className={cx('sticky top-0 z-[1] whitespace-nowrap border-b border-line bg-card2 px-4 py-2.5 text-left text-[11px] font-bold uppercase tracking-wide text-mute', onClick && 'cursor-pointer select-none hover:text-ink', className)}>
       {children}{sorted ? (sorted === 'asc' ? ' ↑' : ' ↓') : ''}
     </th>
   )
@@ -466,7 +466,7 @@ export function SearchBox({ value, onChange, placeholder = 'Search…', classNam
     <div className={cx('relative', className)}>
       <svg className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-mute" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
       <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} aria-label={placeholder}
-        className="h-10 w-full rounded-xl border border-line bg-card pl-9 pr-3 text-sm outline-none focus:border-brand focus:ring-4 focus:ring-brand/10" />
+        className="h-10 w-full min-w-0 rounded-xl border border-line bg-card pl-9 pr-3 text-sm outline-none transition placeholder:text-mute/70 hover:border-mute/40 focus:border-brand focus:ring-4 focus:ring-brand/10" />
     </div>
   )
 }

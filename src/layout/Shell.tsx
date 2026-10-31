@@ -256,8 +256,9 @@ function Sidebar({ mini, onExpand }: { mini: boolean; onExpand: () => void }) {
   })
   const visible = MODULES.filter((m) => canSee(m, can, me) && !m.hrOnly && !['attendance', 'notifications', 'security', 'users', 'system', 'inbox'].includes(m.key))
   const groups = [...new Set(visible.map((m) => m.group))]
-  const item = cx('relative flex items-center gap-3 rounded-xl py-2 text-sm font-semibold transition', mini ? 'justify-center px-0' : 'px-3')
-  const active = 'bg-brand-soft text-brand-ink'
+  const item = cx('relative flex min-w-0 items-center gap-3 rounded-xl py-2 text-sm font-semibold transition focus-visible:outline-offset-0', mini ? 'justify-center px-0' : 'px-3')
+  // the page you're on: tinted, with a slim brand marker on the left edge
+  const active = 'bg-brand-soft text-brand-ink before:absolute before:inset-y-1.5 before:-left-1 before:w-1 before:rounded-r-full before:bg-brand'
   const idle = 'text-ink/80 hover:bg-card2 hover:text-ink'
 
   if (mini) return (

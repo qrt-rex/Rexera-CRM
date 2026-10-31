@@ -83,15 +83,35 @@
 }
 
 html, body, #root { height: 100%; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font-sans);
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
   font-feature-settings: "cv11", "ss01";
 }
+/* headings break evenly; paragraphs avoid a lone last word */
+h1, h2, h3, h4 { text-wrap: balance; }
+p { text-wrap: pretty; overflow-wrap: anywhere; }
 * { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+*:hover { scrollbar-color: color-mix(in srgb, var(--mute) 45%, transparent) transparent; }
+
+/* tables everywhere (components/ui.tsx → Table): aligned numbers and a quiet row highlight */
+.crm-table td { font-variant-numeric: tabular-nums; }
+.crm-table tbody tr > td { transition: background-color .12s ease; }
+.crm-table tbody tr:hover > td { background-color: color-mix(in srgb, var(--card2) 75%, transparent); }
+.crm-table th:first-child, .crm-table td:first-child { padding-left: 1.25rem; }
+.crm-table th:last-child, .crm-table td:last-child { padding-right: 1.25rem; }
+@media (max-width: 640px) {
+  .crm-table th, .crm-table td { padding-left: .75rem; padding-right: .75rem; }
+  .crm-table th:first-child, .crm-table td:first-child { padding-left: 1rem; }
+  .crm-table th:last-child, .crm-table td:last-child { padding-right: 1rem; }
+}
 /* numbers are typed, never stepped: no up/down arrows anywhere */
 input[type='number']::-webkit-inner-spin-button,
 input[type='number']::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
