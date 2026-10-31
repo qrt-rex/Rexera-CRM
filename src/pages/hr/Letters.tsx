@@ -35,12 +35,12 @@ export default function Letters() {
     if (!u) return
     const a = u.address
     set({
-      name: u.name, designation: u.designation, department: u.department, startDate: u.joinedOn, amount: kind === 'joining' ? u.salary ?? 0 : x.amount,
+      name: u.name, designation: u.designation, department: u.department, startDate: u.joinedOn, amount: kind === 'joining' || kind === 'offer' ? u.salary ?? 0 : x.amount,
       address: a ? [a.line, [a.city, a.state, a.pin].filter(Boolean).join(', ')].filter(Boolean).join('\n') : '', reportingTo: u.teamLeadId ? userName(db, u.teamLeadId) : x.reportingTo,
       endDate: kind === 'experience' ? x.endDate || today() : x.endDate,
     })
   }
-  const missing = !x.name.trim() ? 'Enter the person’s name.' : kind !== 'experience' && !x.startDate ? 'Enter the start date.' : kind !== 'joining' && !x.endDate ? (kind === 'internship' ? 'Enter the internship end date.' : 'Enter the relieving date.') : ''
+  const missing = !x.name.trim() ? 'Enter the person’s name.' : kind !== 'experience' && !x.startDate ? 'Enter the start date.' : (kind === 'internship' || kind === 'experience') && !x.endDate ? (kind === 'internship' ? 'Enter the internship end date.' : 'Enter the relieving date.') : ''
   const make = () => { if (missing) throw new Error(missing); return letterPdf(kind, x, body) }
   const fileName = `${LETTER_KINDS.find((k) => k.id === kind)!.label.replace(/ /g, '-')}-${x.name.trim().replace(/\s+/g, '-') || 'draft'}.pdf`
   const download = () => run(() => {
@@ -53,7 +53,7 @@ export default function Letters() {
 
   return (
     <div>
-      <PageHeader title="Letters" subtitle="Generate a joining, internship or experience letter on the company letterhead and download it as PDF" icon={FilePen}
+      <PageHeader title="Letters" subtitle="Generate an offer, joining, internship or experience letter on the company letterhead and download it as PDF" icon={FilePen}
         actions={<Tabs value={kind} onChange={(t) => { setParams({ type: t }); setEdited(false) }} tabs={LETTER_KINDS.map((k) => ({ id: k.id, label: k.label }))} />} />
       <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
         <Card className="overflow-hidden">
@@ -68,9 +68,10 @@ export default function Letters() {
             <Input label={kind === 'internship' ? 'Internship role' : 'Designation'} value={x.designation} onChange={(e) => set({ designation: e.target.value })} />
             <Input label="Department" value={x.department} onChange={(e) => set({ department: e.target.value })} />
             <Input label={kind === 'experience' ? 'Joined on' : kind === 'internship' ? 'Start date' : 'Joining date'} type="date" required value={x.startDate} onChange={(e) => set({ startDate: e.target.value })} />
-            {kind !== 'joining' && <Input label={kind === 'internship' ? 'End date' : 'Relieving date'} type="date" required value={x.endDate} min={x.startDate} onChange={(e) => set({ endDate: e.target.value })} />}
+            {kind === 'offer' && <Input label="Accept by (optional)" type="date" value={x.endDate} min={x.date} onChange={(e) => set({ endDate: e.target.value })} />}
+            {(kind === 'internship' || kind === 'experience') && <Input label={kind === 'internship' ? 'End date' : 'Relieving date'} type="date" required value={x.endDate} min={x.startDate} onChange={(e) => set({ endDate: e.target.value })} />}
             {kind !== 'experience' && <Input label={kind === 'internship' ? 'Monthly stipend (₹, 0 = unpaid)' : 'Monthly salary / CTC (₹)'} type="number" min={0} value={x.amount || ''} onChange={(e) => set({ amount: Number(e.target.value) })} />}
-            {kind === 'joining' && <Input label="Probation (months)" type="number" min={0} value={x.probationMonths} onChange={(e) => set({ probationMonths: Number(e.target.value) })} />}
+            {(kind === 'joining' || kind === 'offer') && <Input label="Probation (months)" type="number" min={0} value={x.probationMonths} onChange={(e) => set({ probationMonths: Number(e.target.value) })} />}
             {kind !== 'experience' && <Input label="Work location" value={x.location} onChange={(e) => set({ location: e.target.value })} placeholder="e.g. Ahmedabad office" />}
             {kind !== 'experience' && <Input label={kind === 'internship' ? 'Mentor' : 'Reporting to'} value={x.reportingTo} onChange={(e) => set({ reportingTo: e.target.value })} />}
             <Input label="Letter date" type="date" value={x.date} onChange={(e) => set({ date: e.target.value })} />

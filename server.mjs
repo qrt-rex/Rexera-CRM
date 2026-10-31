@@ -18,6 +18,7 @@ import { getPublicForm, submitPublicForm } from './server/forms.mjs'
 import { submitJobApplication } from './server/apply.mjs'
 import { sendClientWhatsapp, sendFormLink, sendInvoice, sendWelcomeNow } from './server/share.mjs'
 import { sendClientMessage } from './server/clientMessages.mjs'
+import { sendHrLetter } from './server/hrLetters.mjs'
 import { whatsappConfigured } from './server/whatsapp.mjs'
 import { incentiveReport, reportConfig } from './server/incentives.mjs'
 import { blutecEnv, handleBlutec } from './supabase/functions/_shared/blutec.ts'
@@ -753,6 +754,19 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, r.status, r.body)
     } catch (e) {
       console.error(`[client message] ${e.message}`)
+      return sendJson(res, 502, { success: false, message: `Sending failed: ${e.message}` })
+    }
+  }
+
+  // HR: an offer / joining letter (PDF) to a selected candidate by email or WhatsApp
+  if (pathname === '/api/hr/letter' && req.method === 'POST') {
+    let raw
+    try { raw = await readRawBody(req, 8_000_000) } catch { return sendJson(res, 413, { success: false, message: 'The letter PDF is too large.' }) }
+    try {
+      const r = await sendHrLetter(getEnv, req.headers.authorization, raw, { deliverEmail: deliverClientEmail })
+      return sendJson(res, r.status, r.body)
+    } catch (e) {
+      console.error(`[hr letter] ${e.message}`)
       return sendJson(res, 502, { success: false, message: `Sending failed: ${e.message}` })
     }
   }

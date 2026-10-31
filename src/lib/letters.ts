@@ -1,8 +1,9 @@
 import { jsPDF } from 'jspdf'
 import { fmtDate, inr } from './format'
 
-export type LetterKind = 'joining' | 'internship' | 'experience'
+export type LetterKind = 'offer' | 'joining' | 'internship' | 'experience'
 export const LETTER_KINDS: { id: LetterKind; label: string; title: string }[] = [
+  { id: 'offer', label: 'Offer letter', title: 'Offer of Employment' },
   { id: 'joining', label: 'Joining letter', title: 'Appointment & Joining Letter' },
   { id: 'internship', label: 'Internship letter', title: 'Internship Offer Letter' },
   { id: 'experience', label: 'Experience letter', title: 'Experience Certificate' },
@@ -35,6 +36,14 @@ const first = (n: string) => n.trim().split(/\s+/)[0] || n
 
 /** Editable body text for each letter (paragraphs separated by a blank line). */
 export function draftBody(kind: LetterKind, x: LetterData): string {
+  if (kind === 'offer') return [
+    `Dear ${first(x.name)},`,
+    `Further to your application and interview, we are pleased to offer you the position of ${x.designation || '__________'}${x.department ? ` in the ${x.department} department` : ''} at ${x.company}, based at ${x.location || 'our office'}${x.reportingTo ? `, reporting to ${x.reportingTo}` : ''}.`,
+    `Your monthly salary (CTC) will be ${x.amount ? inr(x.amount) : '__________'}, as per the company's salary structure and after statutory deductions. Your proposed date of joining is ${d(x.startDate)}.`,
+    `This offer is subject to verification of your identity, address, educational and (where applicable) previous employment documents. You will be on probation for ${x.probationMonths || 3} month(s) from your date of joining; an Appointment & Joining Letter with the full terms will be issued when you join.`,
+    `Please confirm your acceptance by replying to this letter${x.endDate ? ` by ${d(x.endDate)}` : ' within 3 working days'}. If we do not hear from you by then, this offer may lapse.`,
+    `We look forward to welcoming you to ${x.company}.`,
+  ].join('\n\n')
   if (kind === 'joining') return [
     `Dear ${first(x.name)},`,
     `We are pleased to appoint you as ${x.designation || '__________'}${x.department ? ` in the ${x.department} department` : ''} at ${x.company}, with effect from ${d(x.startDate)}. Your place of work will be ${x.location || 'our office'}${x.reportingTo ? ` and you will report to ${x.reportingTo}` : ''}.`,

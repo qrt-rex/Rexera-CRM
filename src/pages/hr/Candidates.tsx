@@ -8,6 +8,8 @@ import { downloadCsv, fmtDate, fmtDateTime, today, ymd } from '../../lib/format'
 import { CANDIDATE_TYPES, candidateTypeLabel, JOB_BRANCH_INFO, JOB_POSITIONS, jobBranch } from '../../../supabase/form-rules.mjs'
 import { openFile } from '../../lib/files'
 import { FileLink } from '../../components/FileField'
+import { CandidateLetters, SelectedCandidates } from '../../components/CandidateLetter'
+import { selectCandidate } from '../../lib/hrLetters'
 import { Badge, Button, Card, CardHeader, Checkbox, Drawer, EmptyState, Input, Modal, PageHeader, SearchBox, Select, Table, Td, Textarea, Th, useConfirm, usePaged, useRun, useToast } from '../../components/ui'
 
 // YYYY-MM-DD dates: full years, one less until this year's birthday
@@ -84,6 +86,8 @@ export default function Candidates() {
         )}
       </Card>
 
+      <SelectedCandidates onOpen={setOpenId} />
+
       <Card className="overflow-hidden">
         <div className="flex flex-wrap items-center gap-3 border-b border-line p-4">
           <SearchBox value={q} onChange={setQ} placeholder="Search name, email, phone, city…" className="min-w-56 flex-1" />
@@ -100,10 +104,11 @@ export default function Candidates() {
         </div>
         {!list.length ? <EmptyState icon={Users} title={db.candidates.length ? 'No applications match the filters' : 'No applications yet'} text={db.candidates.length ? undefined : 'Share a form link — applications appear here with their resumes.'} /> : (
           <Table>
-            <thead><tr><Th>Number</Th><Th>Candidate</Th><Th>Position · branch</Th><Th>Applying as · qualification</Th><Th>Preferred interview</Th><Th>Resume</Th><Th>Status</Th><Th>Submitted</Th></tr></thead>
+            <thead><tr><Th className="w-16 text-center">Select</Th><Th>Number</Th><Th>Candidate</Th><Th>Position · branch</Th><Th>Applying as · qualification</Th><Th>Preferred interview</Th><Th>Resume</Th><Th>Status</Th><Th>Submitted</Th></tr></thead>
             <tbody>
               {slice.map((c, idx) => (
-                <tr key={c.id} className="cursor-pointer hover:bg-card2/60" onClick={() => setOpenId(c.id)}>
+                <tr key={c.id} className={`cursor-pointer hover:bg-card2/60${c.selected ? ' bg-ok-soft/40' : ''}`} onClick={() => setOpenId(c.id)}>
+                  <Td className="text-center"><span className="inline-flex" onClick={(e) => e.stopPropagation()}><Checkbox label={<span className="sr-only">Select {c.name}</span>} checked={!!c.selected} onChange={(on) => run(() => selectCandidate(me, c.id, on), on ? `${c.name} selected — send the offer or joining letter above` : `${c.name} is no longer selected`)} /></span></Td>
                   <Td className="text-center font-semibold text-mute">{offset + idx + 1}</Td>
                   <Td><p className="font-semibold">{c.name}</p><p className="text-xs text-mute">{c.email} · {c.phone}</p></Td>
                   <Td className="max-w-64 text-sm">{c.position || formName(c.formId)}{c.branch && <span className="block text-xs text-mute">{c.branch}{jobBranch(c.branch) && <span className="block text-[11px] leading-snug">{jobBranch(c.branch)!.address}</span>}</span>}</Td>
@@ -136,6 +141,8 @@ export default function Candidates() {
             <Select label="Status" value={open.status} onChange={(e) => run(() => updateCandidate(me, open.id, { status: e.target.value as CandidateApplication['status'] }), 'Status updated')}>
               {Object.entries(STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
             </Select>
+            <div className="flex flex-wrap items-center gap-3 rounded-xl border border-line p-3"><Checkbox label={<b className="text-sm">Selected for an offer / joining letter</b>} checked={!!open.selected} onChange={(on) => run(() => selectCandidate(me, open.id, on), on ? 'Selected — the letters are on the Selected candidates list' : 'No longer selected')} /></div>
+            <CandidateLetters c={open} />
             <Textarea label="HR notes" defaultValue={open.notes ?? ''} onBlur={(e) => e.target.value !== (open.notes ?? '') && run(() => updateCandidate(me, open.id, { notes: e.target.value }), 'Notes saved')} placeholder="Interview feedback, next steps…" />
           </div>
         )}

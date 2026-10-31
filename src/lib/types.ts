@@ -852,6 +852,26 @@ export interface CandidateApplication {
   submittedAt: string
   status: 'NEW' | 'SHORTLISTED' | 'REJECTED' | 'HIRED'
   notes?: string
+  /** picked by HR for an offer / joining letter (unticking takes them off the selected list); unset = never picked */
+  selected?: boolean
+  selectedAt?: string
+  selectedBy?: string
+}
+
+/** An offer / joining letter sent to a candidate by email or WhatsApp — written by the live server (server/hrLetters.mjs). */
+export interface CandidateLetter {
+  id: string
+  candidateId: string
+  kind: 'OFFER' | 'JOINING'
+  channel: 'EMAIL' | 'WHATSAPP'
+  /** the email address / 10-digit mobile it went to */
+  to: string
+  subject?: string
+  body: string
+  status: 'SENT' | 'MANUAL' | 'FAILED' | 'NOT_CONFIGURED'
+  error?: string
+  by: string
+  at: string
 }
 
 export interface Notice { id: string; userId: string; title: string; body: string; link?: string; at: string; read: boolean; kind: 'info' | 'success' | 'warning' | 'action' }
@@ -1106,6 +1126,8 @@ export interface DB {
   automationRuns?: AutomationRun[]
   /** every WhatsApp / email message sent to a client, newest first */
   clientMessages?: ClientMessage[]
+  /** offer / joining letters sent to candidates, newest first */
+  candidateLetters?: CandidateLetter[]
   clientAccounts?: ClientAccount[]
   clientActivity?: ClientActivity[]
   mediaItems?: MediaItem[]

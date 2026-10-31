@@ -238,6 +238,7 @@ export function upgradeDb(d: DB): DB {
   d.automationRules ??= []
   d.automationRuns ??= []
   d.clientMessages ??= []
+  d.candidateLetters ??= []
   if (!d.upgrades.includes('scheme-checker-1')) {
     // Rexy's Scheme Checker rules: edited by the Operation team (and Super Admin); the live CRM gets this from its migration
     d.rolePerms.operations = [...new Set([...(d.rolePerms.operations ?? []), 'eligibility.manage' as Perm])]
