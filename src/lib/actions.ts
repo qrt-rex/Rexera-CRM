@@ -1688,14 +1688,14 @@ export function saveWorkflowSettings(me: User, w: WorkflowSettings) {
   assert(!w.opsContact.phone || isPhone(normPhone(w.opsContact.phone)), 'The Operations contact phone must be a 10-digit mobile.')
   // Interakt template code names: lower-case letters, digits and _ (as Meta names them)
   const tpl = (s: string) => s.trim()
-  assert([w.whatsapp.welcomeTemplate, w.whatsapp.invoiceTemplate, w.whatsapp.formTemplate].every((s) => !tpl(s) || /^[a-z0-9_]{1,512}$/.test(tpl(s))), 'WhatsApp template names use lower-case letters, numbers and _ only (copy the code name from Interakt → Templates).')
+  assert([w.whatsapp.welcomeTemplate, w.whatsapp.invoiceTemplate, w.whatsapp.formTemplate, w.whatsapp.notifyTemplate].every((s) => !tpl(s) || /^[a-z0-9_]{1,512}$/.test(tpl(s))), 'WhatsApp template names use lower-case letters, numbers and _ only (copy the code name from Interakt → Templates).')
   assert(/^[a-z]{2}(_[A-Z]{2})?$/.test(w.whatsapp.language.trim()), 'WhatsApp template language: a code such as en or en_US.')
   mutate((d) => {
     d.settings.workflow = {
       // document permissions are set on the Operations Dashboard: keep what is stored, not this page's copy
       ...w, adminStageAccess: d.settings.workflow?.adminStageAccess, welcomeEmail: { subject: w.welcomeEmail.subject.trim(), body: w.welcomeEmail.body.trim() }, welcomeWhatsapp: w.welcomeWhatsapp.trim(),
       opsContact: { name: w.opsContact.name.trim(), phone: w.opsContact.phone ? normPhone(w.opsContact.phone) : '', email: w.opsContact.email.trim() },
-      whatsapp: { welcomeTemplate: tpl(w.whatsapp.welcomeTemplate), invoiceTemplate: tpl(w.whatsapp.invoiceTemplate), formTemplate: tpl(w.whatsapp.formTemplate), language: w.whatsapp.language.trim() },
+      whatsapp: { welcomeTemplate: tpl(w.whatsapp.welcomeTemplate), invoiceTemplate: tpl(w.whatsapp.invoiceTemplate), formTemplate: tpl(w.whatsapp.formTemplate), notifyTemplate: tpl(w.whatsapp.notifyTemplate), language: w.whatsapp.language.trim() },
     }
     audit(d, me.id, 'WORKFLOW_SETTINGS', `follow-up every ${w.fileReminderDays} days · pitch deck every ${w.precheckDays} · welcome ${w.welcomeAuto ? 'automatic' : 'manual'}`)
   })
@@ -2849,6 +2849,14 @@ export function removeMilestone(me: User, bookingId: string, milestoneId: string
 }
 
 /** An update shown to the client in the portal (with an optional file). */
+/** WhatsApp opened with a message for the client (sent from the person's own WhatsApp); server sends log themselves. */
+export function logClientWhatsapp(me: User, bookingId: string, message: string) {
+  mutate((d) => {
+    const b = findB(d, bookingId)
+    audit(d, me.id, 'CLIENT_WHATSAPP_OPENED', `${b.bookingId} → ${b.mobile || '—'}: ${message.slice(0, 120)}`)
+  })
+}
+
 export function publishClientUpdate(me: User, bookingId: string, u: { title: string; text: string; file?: FileRef }) {
   const title = u.title.trim(), text = u.text.trim()
   assert(title.length >= 3, 'Write a short title.')

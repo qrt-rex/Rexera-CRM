@@ -4,6 +4,7 @@ import { Archive, ArrowLeft, Building2, Layers, Check, CheckCircle2, ChevronRigh
 import { AdminChecklist, FollowUpCard, WelcomeCard } from '../../components/WorkflowPanels'
 import { ClientEmailComposer } from '../../components/ClientEmail'
 import { ClientPortalCard } from '../../components/ClientPortalPanel'
+import { WhatsappClientButton } from '../../components/WhatsappClient'
 import { openBookingPdf } from '../../lib/bookingPdf'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
@@ -54,6 +55,7 @@ export default function BookingDetail() {
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" icon={FileText} onClick={() => run(() => openBookingPdf(db, b))}>PDF</Button>
             {canEmailClient(db, me, b) && <Button variant="accent" icon={Mail} onClick={() => setMail(true)}>Email client</Button>}
+            <WhatsappClientButton b={b} />
             {canEditBooking(db, me, b) && <Link to={`/bookings/${b.id}/edit`}><Button variant="outline" icon={Pencil}>Edit</Button></Link>}
             {can('billing.create', 'billing.manage') && !invoices.length && !['PENDING_TL', 'REJECTED'].includes(b.status) && (
               <Button variant="outline" icon={Receipt} onClick={async () => { const inv = await run(() => invoiceFromBooking(me, b.id, can('billing.manage') ? 'TAX' : 'PROFORMA'), 'Invoice raised'); if (typeof inv === 'string') nav(`/billing/${inv}`) }}>Raise invoice</Button>

@@ -56,7 +56,7 @@ export const DEFAULT_WORKFLOW = {
   schemeAlertRoles: ['admin', 'operations'],
   opsContact: { name: '', phone: '', email: '' },
   // Interakt template names (approved by Meta in the Interakt dashboard); empty = not set up, nothing is sent
-  whatsapp: { welcomeTemplate: '', invoiceTemplate: '', formTemplate: '', language: 'en' },
+  whatsapp: { welcomeTemplate: '', invoiceTemplate: '', formTemplate: '', notifyTemplate: '', language: 'en' },
 }
 /** The settings with every missing value filled from the defaults. */
 export const workflowSettings = (w) => ({
@@ -71,8 +71,22 @@ export const workflowSettings = (w) => ({
 export const WHATSAPP_WELCOME_VARS = ['client_name', 'service', 'reference', 'ops_name', 'ops_phone']
 export const WHATSAPP_INVOICE_VARS = ['client_name', 'document', 'amount', 'company']
 export const WHATSAPP_FORM_VARS = ['client_name', 'form', 'link', 'company']
+export const WHATSAPP_NOTIFY_VARS = ['client_name', 'reference', 'message', 'company']
 /** Template values in order; WhatsApp refuses an empty variable, so a missing one becomes "-". */
 export const templateValues = (names, vars) => names.map((n) => String(vars?.[n] ?? '').replace(/\s+/g, ' ').trim().slice(0, 900) || '-')
+
+// ------------------------------------------------------------------ WhatsApp to the client from a CRM entry
+/** Only these teams may message a client on WhatsApp from the CRM (the button and the server both check). */
+export const WHATSAPP_NOTIFY_ROLES = ['operations', 'admin', 'legal']
+export const mayWhatsappClient = (roles) => (roles ?? []).some((r) => WHATSAPP_NOTIFY_ROLES.includes(r))
+export const MAX_WHATSAPP_MESSAGE = 900
+/** A click-to-chat link (WhatsApp app or WhatsApp Web) with the message typed in; '' without a valid Indian mobile. */
+export function whatsappLink(mobile, text) {
+  let d = String(mobile ?? '').replace(/\D/g, '')
+  if (d.length === 12 && d.startsWith('91')) d = d.slice(2)
+  if (d.length === 11 && d.startsWith('0')) d = d.slice(1)
+  return /^[6-9]\d{9}$/.test(d) ? `https://wa.me/91${d}?text=${encodeURIComponent(String(text ?? '').slice(0, MAX_WHATSAPP_MESSAGE))}` : ''
+}
 
 // ------------------------------------------------------------------ dates (India time, YYYY-MM-DD)
 /** Today in India, whatever clock zone the computer or server runs in. */
