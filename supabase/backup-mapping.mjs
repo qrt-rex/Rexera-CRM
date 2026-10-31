@@ -108,6 +108,7 @@ export function mapAll(backup) {
     { key: 'workflow', value: d.settings.workflow ?? null },
     { key: 'jobs', value: d.settings.jobs ?? null },
     { key: 'dialerCampaigns', value: d.settings.dialerCampaigns ?? null },
+    { key: 'clientTemplates', value: d.settings.clientTemplates ?? null },
     { key: 'counters', value: d.counters },
     { key: 'meta', value: { version: d.version, upgrades: d.upgrades ?? [] } },
   ]
@@ -164,6 +165,12 @@ export function mapAll(backup) {
     id: x.id, entry_date: x.date, client_name: x.clientName, company_name: x.companyName, phone: x.phone, service_id: s(x.serviceId), scheme: x.scheme,
     pitched_price: x.pitchedPrice, status: x.status, requirement: x.requirement, note: x.note, follow_up: s(x.followUp), follow_ups: x.followUps ?? [],
     lead_id: s(x.leadId), owner_id: uref(x.ownerId), created_at: x.createdAt, updated_at: x.updatedAt, booking_id: s(x.bookingId), converted_at: s(x.convertedAt),
+    // sent only when set, so client entries keep saving before the email column's migration is run
+    ...(x.email ? { email: x.email } : {}),
+  }))
+  t.client_messages = (d.clientMessages ?? []).map((x) => ({
+    id: x.id, booking_id: s(x.bookingId), client_entry_id: s(x.clientEntryId), stage: x.stage, channel: x.channel, to_addr: x.to, subject: s(x.subject), body: x.body,
+    status: x.status, error: s(x.error), sent_by: uref(x.by), sent_at: x.at, provider_id: s(x.providerId),
   }))
   t.website_lead_log = (d.webLeadLog ?? []).map((x) => ({ id: x.id, at: x.at, status: x.status, form: s(x.form), name: s(x.name), phone: s(x.phone), email: s(x.email), error: s(x.error), lead_id: s(x.leadId), fields: x.fields ?? null, retried_at: s(x.retriedAt), retried_by: uref(x.retriedBy) }))
   t.recruitment_datasets = (backup.imports ?? []).map((x) => ({ id: x.id, name: x.name, file_name: x.fileName, sheet: s(x.sheet), kind: x.kind, columns: x.columns, imported_at: x.importedAt, imported_by: uref(x.importedBy), bytes: x.bytes ?? 0 }))
@@ -185,7 +192,7 @@ export const ORDER = [
   ['company_assets', 'id'], ['stock_items', 'id'], ['company_expenses', 'id'], ['legacy_files', 'path'],
   ['doc_forms', 'id'], ['doc_form_submissions', 'id'], ['sales_kit', 'id'], ['eligibility_schemes', 'id'], ['automation_rules', 'id'], ['automation_runs', 'id'],
   ['site_content', 'key'], ['site_content_history', 'id'], ['website_lead_log', 'id'],
-  ['client_accounts', 'id'], ['client_activity', 'id'], ['client_doc_uploads', 'id'], ['media_items', 'id'], ['client_entries', 'id'],
+  ['client_accounts', 'id'], ['client_activity', 'id'], ['client_doc_uploads', 'id'], ['media_items', 'id'], ['client_entries', 'id'], ['client_messages', 'id'],
 ]
 export const APPEND_ONLY = ['payroll_history', 'audit_log', 'asset_events', 'stock_moves']   // identity ids: only copied into an empty table
 
@@ -297,7 +304,7 @@ export function rowsToDb(input) {
       sessionMinutes: session.minutes, supplierState: company.supplierState, companyName: company.name, companyGstin: company.gstin,
       maintenance: maintenance && (maintenance.on || maintenance.message || maintenance.by) ? maintenance : undefined,
       sessionsValidAfter: u(session.validAfter), dayLock: setting('attendance')?.dayLock || undefined,
-      branches: setting('branches')?.length ? setting('branches') : undefined, breakPolicy: u(setting('breaks')), leadAssign: u(setting('leadAssign')), workflow: u(setting('workflow')), jobs: u(setting('jobs')), dialerCampaigns: u(setting('dialerCampaigns')),
+      branches: setting('branches')?.length ? setting('branches') : undefined, breakPolicy: u(setting('breaks')), leadAssign: u(setting('leadAssign')), workflow: u(setting('workflow')), jobs: u(setting('jobs')), dialerCampaigns: u(setting('dialerCampaigns')), clientTemplates: u(setting('clientTemplates')),
     }),
     counters: setting('counters') ?? { booking: 0, lead: 0, invoice: 0 },
     loginFails: Object.fromEntries(rows('login_attempts').map((r) => [r.login, opt({ count: r.failures, until: u(r.locked_until) })])),
@@ -353,7 +360,11 @@ export function rowsToDb(input) {
     clientEntries: rows('client_entries').map((x) => opt({
       id: x.id, date: x.entry_date, clientName: x.client_name, companyName: x.company_name, phone: x.phone, serviceId: x.service_id ?? '', scheme: x.scheme,
       pitchedPrice: Number(x.pitched_price), status: x.status, requirement: x.requirement, note: x.note, followUp: u(x.follow_up), followUps: x.follow_ups ?? [],
-      leadId: u(x.lead_id), ownerId: x.owner_id ?? '', createdAt: x.created_at, updatedAt: x.updated_at, bookingId: u(x.booking_id), convertedAt: u(x.converted_at),
+      leadId: u(x.lead_id), ownerId: x.owner_id ?? '', createdAt: x.created_at, updatedAt: x.updated_at, bookingId: u(x.booking_id), convertedAt: u(x.converted_at), email: u(x.email),
+    })),
+    clientMessages: rows('client_messages').map((x) => opt({
+      id: x.id, bookingId: u(x.booking_id), clientEntryId: u(x.client_entry_id), stage: x.stage, channel: x.channel, to: x.to_addr, subject: u(x.subject), body: x.body,
+      status: x.status, error: u(x.error), by: x.sent_by ?? '', at: x.sent_at, providerId: u(x.provider_id),
     })),
     webLeadLog: rows('website_lead_log').map((x) => opt({ id: x.id, at: x.at, status: x.status, form: u(x.form), name: u(x.name), phone: u(x.phone), email: u(x.email), error: u(x.error), leadId: u(x.lead_id), fields: u(x.fields), retriedAt: u(x.retried_at), retriedBy: u(x.retried_by) })),
     automationRules: rows('automation_rules').map((x) => opt({

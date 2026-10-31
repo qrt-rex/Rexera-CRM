@@ -209,7 +209,8 @@ export interface WorkflowSettings {
   /** document types each Admin may handle and upload (user id → stages); a person not listed may do all five */
   adminStageAccess?: Record<string, AdminStageId[]>
   /** Interakt template names (approved by Meta); empty = WhatsApp not set up for that message */
-  whatsapp: { welcomeTemplate: string; invoiceTemplate: string; formTemplate: string; language: string }
+  /** updateTemplate: the approved template for client messages (Client messages): {{1}} client, {{2}} the text, {{3}} us */
+  whatsapp: { welcomeTemplate: string; invoiceTemplate: string; formTemplate: string; updateTemplate?: string; language: string }
 }
 
 // ------------------------------------------------------------------ Document Form Builder (client links)
@@ -454,6 +455,8 @@ export interface ClientEntry {
   clientName: string
   companyName: string
   phone: string
+  /** optional: where the welcome email goes */
+  email?: string
   /** the scheme picked from the Services list (its id, and its name as it was) */
   serviceId: string
   scheme: string
@@ -604,6 +607,27 @@ export interface Branch {
   id: string; name: string; /** short code shown on dashboards, e.g. AMD-A */ code?: string; address: string; city: string; state: string; pin: string; gstin: string; phone: string; email: string
   /** bank details printed on its invoices, e.g. "HDFC Bank · A/c 5020… · IFSC HDFC0001234" (nothing printed when empty) */
   bank?: string
+}
+
+/**
+ * A message sent to a client — WhatsApp or email — from a CRM entry or a client entry (supabase/message-rules.mjs).
+ * Written by the live server when it sends (or records a message sent from the sender's own WhatsApp / mail app).
+ */
+export interface ClientMessage {
+  id: string
+  bookingId?: string
+  clientEntryId?: string
+  stage: string
+  channel: 'EMAIL' | 'WHATSAPP'
+  /** the email address / 10-digit mobile it went to */
+  to: string
+  subject?: string
+  body: string
+  status: 'SENT' | 'MANUAL' | 'FAILED' | 'NOT_CONFIGURED'
+  error?: string
+  by: string
+  at: string
+  providerId?: string
 }
 
 /** Automation Center: "field op value" on a record's facts (see supabase/automation-rules.mjs). */
@@ -857,6 +881,8 @@ export interface Settings {
   jobs?: { lastRunAt: string; summary?: string }
   /** Blutec dialer campaigns given to sales people (campaign id → user ids): their "Your campaigns" (Super Admin sets it) */
   dialerCampaigns?: Record<string, string[]>
+  /** client message templates edited by the Operation Team / Admin (missing = the built-in text) */
+  clientTemplates?: Partial<Record<string, { subject?: string; email?: string; whatsapp?: string; updatedAt?: string; updatedBy?: string }>>
 }
 /** Round robin: `next` is the position in `userIds` that gets the next lead (wraps back to the first person). */
 export interface LeadAssign { on: boolean; userIds: string[]; next: number }
@@ -1079,6 +1105,8 @@ export interface DB {
   automationRules?: AutomationRule[]
   /** what the automations did, newest first */
   automationRuns?: AutomationRun[]
+  /** every WhatsApp / email message sent to a client, newest first */
+  clientMessages?: ClientMessage[]
   clientAccounts?: ClientAccount[]
   clientActivity?: ClientActivity[]
   mediaItems?: MediaItem[]

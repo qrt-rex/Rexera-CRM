@@ -17,6 +17,7 @@ import { jobsAuthorized, runJobs } from './server/jobs.mjs'
 import { getPublicForm, submitPublicForm } from './server/forms.mjs'
 import { submitJobApplication } from './server/apply.mjs'
 import { sendFormLink, sendInvoice, sendWelcomeNow } from './server/share.mjs'
+import { sendClientMessage } from './server/clientMessages.mjs'
 import { whatsappConfigured } from './server/whatsapp.mjs'
 import { incentiveReport, reportConfig } from './server/incentives.mjs'
 import { blutecEnv, handleBlutec } from './supabase/functions/_shared/blutec.ts'
@@ -712,6 +713,19 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, r.status, r.body)
     } catch (e) {
       console.error(`[${pathname}] ${e.message}`)
+      return sendJson(res, 502, { success: false, message: `Sending failed: ${e.message}` })
+    }
+  }
+
+  // client messages (Sales welcome, Accounts / Legal clearance, Operations / Admin updates): WhatsApp or email
+  if (pathname === '/api/client-message' && req.method === 'POST') {
+    let raw
+    try { raw = await readRawBody(req, 64_000) } catch { return sendJson(res, 413, { success: false, message: 'The message is too long.' }) }
+    try {
+      const r = await sendClientMessage(getEnv, req.headers.authorization, raw, { deliverEmail: deliverClientEmail })
+      return sendJson(res, r.status, r.body)
+    } catch (e) {
+      console.error(`[client message] ${e.message}`)
       return sendJson(res, 502, { success: false, message: `Sending failed: ${e.message}` })
     }
   }

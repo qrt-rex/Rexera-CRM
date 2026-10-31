@@ -111,6 +111,14 @@ db.automationRules = [
   { ...structuredClone(TEMPLATES[1]), id: 'rule-1', enabled: true, position: 1, description: 'Big bookings', createdAt: at, updatedAt: at, updatedBy: a.id },
   { ...structuredClone(TEMPLATES[4]), id: 'rule-2', enabled: false, position: 2, match: 'any', createdAt: at, updatedAt: at, updatedBy: a.id },
 ]
+// client messages: a client entry with an email, an edited template, and messages on both channels / every status
+db.clientEntries = [{ id: 'ce-msg', date: '2026-10-30', clientName: 'Bina', companyName: 'Bina Tech', phone: '9876500002', email: 'bina@tech.test', serviceId: db.services[0].id, scheme: db.services[0].name, pitchedPrice: 0, status: 'HOT', requirement: 'Grant', note: 'Call back', followUps: [], ownerId: a.id, createdAt: at, updatedAt: at }]
+db.settings.clientTemplates = { WELCOME: { whatsapp: 'Hi {client_name}!', updatedAt: at, updatedBy: a.id } }
+db.clientMessages = [
+  { id: 'cm-1', clientEntryId: 'ce-msg', stage: 'WELCOME', channel: 'WHATSAPP', to: '9876500002', body: 'Hi Bina!', status: 'MANUAL', by: a.id, at },
+  { id: 'cm-2', bookingId: db.bookings[0].id, stage: 'ACCOUNT_CLEARED', channel: 'EMAIL', to: 'x@y.test', subject: 'Account cleared', body: 'Cleared', status: 'FAILED', error: 'SMTP down', by: a.id, at },
+  { id: 'cm-3', bookingId: db.bookings[0].id, stage: 'GENERAL', channel: 'WHATSAPP', to: '9876500001', body: 'Hello', status: 'SENT', by: a.id, at, providerId: 'wa-9' },
+]
 db.automationRuns = [
   { id: 'ar-rule-2-bk-1-20000', ruleId: 'rule-2', ruleName: 'Stuck', at, by: a.id, trigger: 'schedule.daily', recordType: 'booking', recordId: 'bk-1', recordLabel: 'RX-2026-000001', ok: true, detail: 'notified 2' },
   { id: 'ar-x', ruleId: 'rule-1', ruleName: 'Big', at, trigger: 'booking.created', recordType: 'booking', recordId: 'bk-2', recordLabel: 'RX-2026-000002', ok: false, detail: 'failed' },

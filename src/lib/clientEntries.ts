@@ -46,8 +46,11 @@ export const followUpDue = (e: ClientEntry, t = today()) => !!e.followUp && e.fo
 export interface ClientEntryForm {
   date: string; clientName: string; companyName: string; phone: string; serviceId: string
   pitchedPrice: number | ''; status: ClientEntryStatus | ''; requirement: string; note: string; followUp: string
+  /** optional: where the welcome email goes */
+  email?: string
 }
-export const emptyEntry = (lead?: { name: string; company: string; phone: string; requirement?: string; service?: string; price?: number }, d?: DB): ClientEntryForm => ({
+export const emptyEntry = (lead?: { name: string; company: string; phone: string; email?: string; requirement?: string; service?: string; price?: number }, d?: DB): ClientEntryForm => ({
+  email: lead?.email ?? '',
   date: today(), clientName: lead?.name ?? '', companyName: lead?.company ?? '', phone: lead?.phone ?? '',
   serviceId: (lead?.service && d?.services.find((s) => s.active && s.name === lead.service)?.id) || '',
   pitchedPrice: lead?.price ?? '', status: '', requirement: lead?.requirement ?? '', note: '', followUp: '',
@@ -67,12 +70,13 @@ export function entryProblems(d: DB, f: ClientEntryForm): Partial<Record<keyof C
   if (f.requirement.trim().length < 3) p.requirement = 'Required'
   if (f.note.trim().length < 3) p.note = 'Required'
   if (f.followUp && !/^\d{4}-\d{2}-\d{2}$/.test(f.followUp)) p.followUp = 'Pick a date'
+  if (f.email?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim())) p.email = 'Not a valid email'
   return p
 }
 
 const LABELS: Record<keyof ClientEntryForm, string> = {
   date: 'Date', clientName: 'Client name', companyName: 'Company name', phone: 'Number', serviceId: 'Scheme', pitchedPrice: 'Pitched price',
-  status: 'Status', requirement: 'Requirement', note: 'Note', followUp: 'Follow-up',
+  status: 'Status', requirement: 'Requirement', note: 'Note', followUp: 'Follow-up', email: 'Email',
 }
 
 /** Saves the client entry the sales person filled (while on the call, or after it). Answers its id. */
@@ -92,7 +96,7 @@ export function createClientEntry(me: User, f: ClientEntryForm, leadId?: string)
       id: uid('ce-'), date: f.date, clientName: f.clientName.trim(), companyName: f.companyName.trim(), phone: normPhone(f.phone),
       serviceId: svc.id, scheme: svc.name, pitchedPrice: Number(f.pitchedPrice), status: f.status as ClientEntryStatus,
       requirement: f.requirement.trim(), note: f.note.trim(), followUp: f.followUp || undefined, followUps: [],
-      leadId, ownerId: me.id, createdAt: at, updatedAt: at,
+      leadId, ownerId: me.id, createdAt: at, updatedAt: at, ...(f.email?.trim() ? { email: f.email.trim().toLowerCase() } : {}),
     }
     d.clientEntries = [e, ...(d.clientEntries ?? [])]
     // the lead keeps the latest status and follow-up, so the dialer queue shows it
@@ -124,7 +128,9 @@ export function updateClientEntry(me: User, id: string, f: ClientEntryForm) {
     Object.assign(e, {
       date: f.date, clientName: f.clientName.trim(), companyName: f.companyName.trim(), phone: normPhone(f.phone), serviceId: svc.id, scheme: svc.name,
       pitchedPrice: Number(f.pitchedPrice), status: f.status as ClientEntryStatus, requirement: f.requirement.trim(), note: f.note.trim(), followUp: f.followUp || undefined, updatedAt: at,
+      email: f.email?.trim() ? f.email.trim().toLowerCase() : undefined,
     })
+    if (!e.email) delete e.email
     const l = e.leadId ? d.leads.find((x) => x.id === e.leadId) : undefined
     if (l) { l.followUp = e.followUp; if (e.status === 'NOT_INTERESTED') l.status = 'NOT_INTERESTED' }
     d.audit.unshift({ id: uid('a-'), at, by: me.id, action: 'CLIENT_ENTRY_EDIT', detail: `${e.clientName} · ${e.companyName} · ${e.scheme}` })

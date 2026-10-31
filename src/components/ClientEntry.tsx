@@ -1,6 +1,8 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Briefcase, CalendarClock, ClipboardList, Download, History, Pencil, Plus, Save, Search } from 'lucide-react'
+import { Briefcase, CalendarClock, ClipboardList, Download, History, MessageCircle, Pencil, Plus, Save, Search } from 'lucide-react'
+import { MessageClientModal, MessageLog } from './ClientMessage'
+import { mayMessage } from '../lib/clientMessages'
 import type { ClientEntry, ClientEntryStatus, Lead } from '../lib/types'
 import { useDb } from '../lib/store'
 import { useAuth, useMe } from '../lib/auth'
@@ -42,7 +44,7 @@ export function ClientEntryFormView({ lead, entry, compact, onSaved }: { lead?: 
   const [busy, submit] = useSubmitting()
   const [f, setF] = useState<ClientEntryForm>(() => entry ? {
     date: entry.date, clientName: entry.clientName, companyName: entry.companyName, phone: entry.phone, serviceId: entry.serviceId,
-    pitchedPrice: entry.pitchedPrice, status: entry.status === 'CONVERTED' ? '' : entry.status, requirement: entry.requirement, note: entry.note, followUp: entry.followUp ?? '',
+    pitchedPrice: entry.pitchedPrice, status: entry.status === 'CONVERTED' ? '' : entry.status, requirement: entry.requirement, note: entry.note, followUp: entry.followUp ?? '', email: entry.email ?? '',
   } : emptyEntry(lead, db))
   const [tried, setTried] = useState(false)
   const set = <K extends keyof ClientEntryForm>(k: K, v: ClientEntryForm[K]) => setF((x) => ({ ...x, [k]: v }))
@@ -68,6 +70,7 @@ export function ClientEntryFormView({ lead, entry, compact, onSaved }: { lead?: 
         <Input label="Pitched price (₹)" required type="number" min={0} inputMode="decimal" value={f.pitchedPrice} error={e.pitchedPrice} hint="0 is allowed" onChange={(ev) => set('pitchedPrice', ev.target.value === '' ? '' : Number(ev.target.value))} />
         <StatusSelect value={f.status} error={e.status} onChange={(s) => set('status', s)} />
         <Input label="Follow-up (if needed)" type="date" min={today()} value={f.followUp} error={e.followUp} onChange={(ev) => set('followUp', ev.target.value)} />
+        <Input label="Email (for the welcome email)" type="email" value={f.email ?? ''} error={e.email} onChange={(ev) => set('email', ev.target.value)} className={cx(!compact && 'sm:col-span-2')} placeholder="Optional" />
         <Textarea label="Requirement" required rows={2} value={f.requirement} error={e.requirement} onChange={(ev) => set('requirement', ev.target.value)} className={cx(!compact && 'sm:col-span-2')} placeholder="What the client needs" />
         <Textarea label="Note" required rows={2} value={f.note} error={e.note} onChange={(ev) => set('note', ev.target.value)} className={cx(!compact && 'sm:col-span-2')} placeholder="What was discussed on the call" />
       </div>
@@ -156,6 +159,7 @@ export function ClientEntriesPanel({ lead, full }: { lead: boolean; full?: boole
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [open, setOpen] = useState<{ id: string; follow: boolean; edit?: boolean } | null>(null)
+  const [msg, setMsg] = useState<string | null>(null)
   const t = today()
   const all = useMemo(() => visibleClientEntries(db, me).slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)), [db, me])
   const isOpen = (e: ClientEntry) => e.status !== 'CONVERTED' && e.status !== 'NOT_INTERESTED'
@@ -180,6 +184,7 @@ export function ClientEntriesPanel({ lead, full }: { lead: boolean; full?: boole
       {e.status === 'CONVERTED'
         ? e.bookingId && <Button size="sm" variant="ghost" icon={Briefcase} onClick={() => nav(`/bookings/${e.bookingId}`)}>CRM entry</Button>
         : <>
+          {mayMessage(db, me, { kind: 'entry', e }) && <Button size="sm" variant="ghost" icon={MessageCircle} title="WhatsApp / email the client" aria-label={`Message ${e.clientName}`} onClick={() => setMsg(e.id)} />}
           {canEditClientEntry(me, e) && <Button size="sm" variant="ghost" icon={Pencil} title="Edit" aria-label={`Edit ${e.clientName}`} onClick={() => setOpen({ id: e.id, follow: false, edit: true })} />}
           <Button size="sm" variant="ghost" icon={CalendarClock} title="Add follow-up" aria-label={`Follow-up ${e.clientName}`} onClick={() => setOpen({ id: e.id, follow: true })} />
           {e.ownerId === me.id && e.status !== 'NOT_INTERESTED' && can('bookings.create') && <Button size="sm" variant="soft" icon={Briefcase} title="Convert to CRM entry (payment received)" onClick={() => convert(e)}>Convert</Button>}
@@ -269,10 +274,13 @@ export function ClientEntriesPanel({ lead, full }: { lead: boolean; full?: boole
             {cur.status !== 'CONVERTED' && !open?.follow && <div className="flex flex-wrap gap-2">
               <Button variant="outline" icon={CalendarClock} onClick={() => setOpen({ id: cur.id, follow: true })}>Add follow-up</Button>
               {canEditClientEntry(me, cur) && <Button variant="outline" icon={Pencil} onClick={() => setOpen({ id: cur.id, follow: false, edit: true })}>Edit entry</Button>}
+              {mayMessage(db, me, { kind: 'entry', e: cur }) && <Button variant="outline" icon={MessageCircle} onClick={() => setMsg(cur.id)}>Message client</Button>}
             </div>}
+            <div className="rounded-2xl border border-line"><h4 className="flex items-center gap-2 border-b border-line px-4 py-2.5 text-sm font-bold"><MessageCircle className="size-4" />Messages to the client</h4><MessageLog target={{ kind: 'entry', e: cur }} compact /></div>
           </div>
         ))}
       </Modal>
+      {msg && (() => { const e = all.find((x) => x.id === msg); return e ? <MessageClientModal target={{ kind: 'entry', e }} stage="WELCOME" onClose={() => setMsg(null)} /> : null })()}
       {confirmNode}
     </>
   )
@@ -288,13 +296,17 @@ export function ClientEntryButtons({ size = 'md', crm = true }: { size?: 'sm' | 
   const { can } = useAuth()
   const nav = useNavigate()
   const [adding, setAdding] = useState(false)
+  // right after a new entry is saved: the welcome message for the client, ready to review and send
+  const [welcome, setWelcome] = useState<string | null>(null)
+  const saved = welcome ? (db.clientEntries ?? []).find((x) => x.id === welcome) : undefined
   return (
     <>
       {canMakeClientEntry(db, me) && <Button size={size} variant="accent" icon={Plus} onClick={() => setAdding(true)}>Add Client Entry</Button>}
       {crm && can('bookings.create') && <Button size={size} variant="outline" icon={Briefcase} onClick={() => nav('/bookings/new')}>CRM Entries</Button>}
       <Modal open={adding} onClose={() => setAdding(false)} size="lg" title="Add client entry" subtitle="Every field but the follow-up is compulsory · convert it to a CRM entry once the payment is received">
-        {adding && <ClientEntryFormView onSaved={() => setAdding(false)} />}
+        {adding && <ClientEntryFormView onSaved={(id) => { setAdding(false); setWelcome(id) }} />}
       </Modal>
+      {saved && mayMessage(db, me, { kind: 'entry', e: saved }) && <MessageClientModal target={{ kind: 'entry', e: saved }} stage="WELCOME" onClose={() => setWelcome(null)} />}
     </>
   )
 }

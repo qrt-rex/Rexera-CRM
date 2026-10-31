@@ -45,6 +45,8 @@ const SPECS: Spec[] = [
   ] },
   // client entries (pre-CRM entries) point at the lead and the CRM entry made from them
   { key: 'clientEntries', table: 'client_entries', order: ['created_at', false] },
+  // WhatsApp / email messages to clients: written by the live server; the app adds the server's row as it answers (same id = skipped)
+  { key: 'clientMessages', table: 'client_messages', order: ['sent_at', false], limit: 2000, once: true },
   { key: 'invoices', table: 'invoices', order: ['issued_on', false], children: [
     { prop: 'items', table: 'invoice_items', fk: 'invoice_id', mode: 'replace', order: ['position', true] },
     // written only by the live server (sends to the client); the CRM reads it and never changes it

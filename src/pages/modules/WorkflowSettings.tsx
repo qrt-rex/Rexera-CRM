@@ -114,6 +114,9 @@ export default function WorkflowSettings() {
               <Input label="Form link template (Document Form Builder)" placeholder="e.g. form_link" value={w.whatsapp.formTemplate} onChange={(e) => set({ whatsapp: { ...w.whatsapp, formTemplate: e.target.value } })} />
               <p className="text-[11px] text-mute">Variables: {WHATSAPP_FORM_VARS.map((v, i) => `{{${i + 1}}} ${v}`).join(' · ')}</p>
               <pre className="whitespace-pre-wrap rounded-xl bg-card2 p-3 font-sans text-[12px]">{'Dear {{1}}, please open this secure link to complete "{{2}}": {{3}} — {{4}}'}</pre>
+              <Input label="Client update template (Client Messages)" placeholder="e.g. client_update" value={w.whatsapp.updateTemplate ?? ''} onChange={(e) => set({ whatsapp: { ...w.whatsapp, updateTemplate: e.target.value } })} />
+              <p className="text-[11px] text-mute">Variables: {'{{1}}'} client_name · {'{{2}}'} message · {'{{3}}'} company — every team’s WhatsApp message goes in it.</p>
+              <pre className="whitespace-pre-wrap rounded-xl bg-card2 p-3 font-sans text-[12px]">{'Dear {{1}}, {{2}} — {{3}}'}</pre>
               <Input label="Template language code" placeholder="en" value={w.whatsapp.language} onChange={(e) => set({ whatsapp: { ...w.whatsapp, language: e.target.value } })} hint="The language the templates were created in (en, en_US, hi …)." />
             </div>
           </div>

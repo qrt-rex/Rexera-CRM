@@ -26,6 +26,7 @@ const Schemes = lazy(() => import('./pages/modules/Schemes'))
 const SalesKit = lazy(() => import('./pages/modules/SalesKit'))
 const SchemeRules = lazy(() => import('./pages/modules/SchemeRules'))
 const AutomationCenter = lazy(() => import('./pages/modules/AutomationCenter'))
+const ClientMessages = lazy(() => import('./pages/modules/ClientMessages'))
 const Website = lazy(() => import('./pages/modules/Website'))
 const ClientPortal = lazy(() => import('./pages/modules/ClientPortal'))
 const DigitalMedia = lazy(() => import('./pages/modules/DigitalMedia'))
@@ -174,6 +175,7 @@ export default function App() {
               <Route path="/sales-kit" element={<Guard m="sales-kit"><S><SalesKit /></S></Guard>} />
               <Route path="/scheme-rules" element={<Guard m="scheme-rules"><S><SchemeRules /></S></Guard>} />
               <Route path="/automation" element={<Guard m="automation"><S><AutomationCenter /></S></Guard>} />
+              <Route path="/client-messages" element={<Guard m="client-messages"><S><ClientMessages /></S></Guard>} />
               <Route path="/website" element={<Guard m="website"><S><Website /></S></Guard>} />
               <Route path="/client-portal" element={<Guard m="client-portal"><S><ClientPortal /></S></Guard>} />
               <Route path="/content" element={<Guard m="content"><S><Content /></S></Guard>} />

@@ -14,7 +14,7 @@ const opts = { auth: { persistSession: false, autoRefreshToken: false } }
 const rid = (p) => `${p}${randomBytes(9).toString('base64url')}`
 
 /** { admin, asCaller, me } for a signed-in, active CRM user, or { error }. `clients` replaces the lookup in tests. */
-async function signedIn(env, authorization, clients) {
+export async function signedIn(env, authorization, clients) {
   if (clients) return clients
   const url = env('SUPABASE_URL') || env('VITE_SUPABASE_URL'), secret = env('SUPABASE_SECRET_KEY') || '', publishable = env('VITE_SUPABASE_PUBLISHABLE_KEY')
   if (!url || !secret.startsWith('sb_secret_') || !publishable) return { error: no(503, 'Sending from the CRM needs the live server connected to Supabase (SUPABASE_URL, SUPABASE_SECRET_KEY).') }

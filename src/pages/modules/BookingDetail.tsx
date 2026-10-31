@@ -1,8 +1,11 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Archive, ArrowLeft, Building2, Layers, Check, CheckCircle2, ChevronRight, CircleDot, Download, FileText, FolderKanban, History, IndianRupee, ListTodo, MessageSquare, Pencil, Plus, Receipt, Send, ShieldCheck, Trash2, X, Lock, Mail, Gift, Percent, Undo2, Workflow } from 'lucide-react'
+import { Archive, ArrowLeft, Building2, Layers, Check, CheckCircle2, ChevronRight, CircleDot, Download, FileText, FolderKanban, History, IndianRupee, ListTodo, MessageCircle, MessageSquare, Pencil, Plus, Receipt, Send, ShieldCheck, Trash2, X, Lock, Mail, Gift, Percent, Undo2, Workflow } from 'lucide-react'
 import { AdminChecklist, FollowUpCard, WelcomeCard } from '../../components/WorkflowPanels'
 import { ClientEmailComposer } from '../../components/ClientEmail'
+import { MessageClientModal, MessageLog, NextMessage } from '../../components/ClientMessage'
+import { mayMessage } from '../../lib/clientMessages'
+import type { MessageStageId } from '../../../supabase/message-rules.mjs'
 import { ClientPortalCard } from '../../components/ClientPortalPanel'
 import { openBookingPdf } from '../../lib/bookingPdf'
 import { useDb } from '../../lib/store'
@@ -22,7 +25,7 @@ import { Avatar, Badge, Button, Card, CardHeader, Checkbox, cx, EmptyState, Inpu
 import { canSee, moduleByKey } from '../../lib/modules'
 import { BookingStatusBadge, ChainStepper, DeadlineBadge, DecisionButtons, PriorityBadge, StageTrack } from '../../components/booking'
 
-type Tab = 'overview' | 'workflow' | 'processing' | 'documents' | 'timeline' | 'legacy'
+type Tab = 'overview' | 'workflow' | 'processing' | 'documents' | 'timeline' | 'messages' | 'legacy'
 
 export default function BookingDetail() {
   const { id } = useParams()
@@ -33,8 +36,10 @@ export default function BookingDetail() {
   const nav = useNavigate()
   const [params] = useSearchParams()
   // a notification can open a tab directly (/bookings/<id>?tab=workflow)
-  const [tab, setTab] = useState<Tab>(() => (['workflow', 'processing', 'documents', 'timeline'].includes(params.get('tab') ?? '') ? params.get('tab') as Tab : 'overview'))
+  const [tab, setTab] = useState<Tab>(() => (['workflow', 'processing', 'documents', 'timeline', 'messages'].includes(params.get('tab') ?? '') ? params.get('tab') as Tab : 'overview'))
   const [mail, setMail] = useState(false)
+  // WhatsApp / email to the client: null = closed, '' = the composer on its first open message
+  const [message, setMessage] = useState<MessageStageId | '' | null>(null)
   const b = visibleBookings(db, me).find((x) => x.id === id)
   if (!b) return <Card><EmptyState icon={FileText} title="CRM entry not found" text="It doesn't exist or isn't visible to you." action={<Link to="/bookings"><Button>All CRM entries</Button></Link>} /></Card>
   const m = bookingMoney(b)
@@ -53,7 +58,8 @@ export default function BookingDetail() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" icon={FileText} onClick={() => run(() => openBookingPdf(db, b))}>PDF</Button>
-            {canEmailClient(db, me, b) && <Button variant="accent" icon={Mail} onClick={() => setMail(true)}>Email client</Button>}
+            {mayMessage(db, me, { kind: 'booking', b }) && <Button variant="accent" icon={MessageCircle} onClick={() => setMessage('')}>Message client</Button>}
+            {canEmailClient(db, me, b) && <Button variant="outline" icon={Mail} onClick={() => setMail(true)}>Detailed email</Button>}
             {canEditBooking(db, me, b) && <Link to={`/bookings/${b.id}/edit`}><Button variant="outline" icon={Pencil}>Edit</Button></Link>}
             {can('billing.create', 'billing.manage') && !invoices.length && !['PENDING_TL', 'REJECTED'].includes(b.status) && (
               <Button variant="outline" icon={Receipt} onClick={async () => { const inv = await run(() => invoiceFromBooking(me, b.id, can('billing.manage') ? 'TAX' : 'PROFORMA'), 'Invoice raised'); if (typeof inv === 'string') nav(`/billing/${inv}`) }}>Raise invoice</Button>
@@ -71,6 +77,7 @@ export default function BookingDetail() {
         </div>
       </Card>
 
+      <NextMessage b={b} onOpen={(s) => setMessage(s)} />
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[['Quoted with GST', inr(m.quotedWithGst), ''], ['Collected', inr(m.collected), 'text-ok'], ['Outstanding', inr(m.outstanding), 'text-bad'], ['Stage', b.opsMemberId ? `${stageLabel(b.stage, b.stageOutcome)} (of ${STAGES.length})` : 'Not started', '']].map(([k, v, c]) => (
           <Card key={k} className="p-4"><p className="text-xs font-semibold text-mute">{k}</p><p className={cx('mt-1 truncate text-lg font-extrabold', c)}>{v}</p></Card>
@@ -82,6 +89,7 @@ export default function BookingDetail() {
         ...(b.welcome || b.followUp || b.adminWork || b.clientDocs || b.milestones || canForwardAdminStages(db, me, b) || canRunClientPortal(me, b) ? [{ id: 'workflow' as const, label: 'Workflow', icon: Workflow }] : []),
         { id: 'processing', label: 'Processing', icon: FolderKanban, count: visibleTasks(db, me, b).filter((t) => !t.done).length },
         { id: 'documents', label: 'Documents', icon: FileText, count: visibleDocuments(db, me, b).length }, { id: 'timeline', label: 'Timeline', icon: History, count: b.comments.length + b.approvals.length + (b.clientEmails?.length ?? 0) },
+        { id: 'messages', label: 'Client messages', icon: MessageCircle, count: (db.clientMessages ?? []).filter((x) => x.bookingId === b.id).length },
         ...(b.legacy ? [{ id: 'legacy' as const, label: 'Old CRM record', icon: Archive }] : []),
       ]} />
       {tab === 'overview' && <Overview id={b.id} />}
@@ -96,6 +104,14 @@ export default function BookingDetail() {
       {tab === 'processing' && <Processing id={b.id} />}
       {tab === 'documents' && <Documents id={b.id} />}
       {tab === 'timeline' && <Timeline id={b.id} />}
+      {tab === 'messages' && (
+        <Card className="overflow-hidden">
+          <CardHeader title="Client messages" subtitle="Every WhatsApp and email message to this client — what was sent, by whom, to where, when, and whether it went" icon={MessageCircle}
+            action={mayMessage(db, me, { kind: 'booking', b }) && <Button size="sm" icon={MessageCircle} onClick={() => setMessage('')}>Message client</Button>} />
+          <MessageLog target={{ kind: 'booking', b }} />
+        </Card>
+      )}
+      {message !== null && <MessageClientModal target={{ kind: 'booking', b }} stage={message || undefined} onClose={() => setMessage(null)} />}
       {tab === 'legacy' && <LegacyRecord id={b.id} />}
       {mail && <ClientEmailComposer b={b} onClose={() => setMail(false)} />}
     </div>
