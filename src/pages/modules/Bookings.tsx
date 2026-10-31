@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Briefcase, ClipboardList, Download, FileText, Pencil, Plus } from 'lucide-react'
+import { Briefcase, ClipboardList, Columns3, Download, FileText, Pencil, Plus, Rows3 } from 'lucide-react'
 import type { BookingStatus } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
@@ -15,6 +15,7 @@ import { Button, Card, EmptyState, PageHeader, SearchBox, Table, Tabs, Td, Th, u
 import { openBookingPdf } from '../../lib/bookingPdf'
 import { BookingStatusBadge, DeadlineBadge, MoneyBar, PriorityBadge } from '../../components/booking'
 import { StageSelect } from '../../components/StageControls'
+import { BookingBoard } from '../../components/BookingBoard'
 import { MiniStat } from '../dashboards/widgets'
 import { IndianRupee, Wallet, AlertCircle } from 'lucide-react'
 
@@ -27,6 +28,9 @@ export default function Bookings() {
   const [service, setService] = useState('')
   const [owner, setOwner] = useState('')
   const status = (params.get('status') ?? '') as BookingStatus | ''
+  // table, or a board with one column per stage (drag a card to move the file)
+  const layout = params.get('layout') === 'board' ? 'board' : 'table'
+  const setLayout = (l: 'table' | 'board') => { const next = new URLSearchParams(params); if (l === 'board') next.set('layout', 'board'); else next.delete('layout'); setParams(next) }
   const all = useMemo(() => visibleBookings(db, me), [db, me])
   const run = useRun()
   // Legal, the Operation team and Admin get the case table: ID, company, BDM, service, paid with GST, status, PDF
@@ -67,9 +71,9 @@ export default function Bookings() {
       </div>
 
       <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
-        <button onClick={() => setParams({})} className={`rounded-full border px-3 py-1.5 text-xs font-semibold whitespace-nowrap ${!status ? 'border-brand bg-brand text-white' : 'border-line bg-card hover:bg-card2'}`}>All · {all.length}</button>
+        <button onClick={() => setParams(layout === 'board' ? { layout: 'board' } : {})} className={`rounded-full border px-3 py-1.5 text-xs font-semibold whitespace-nowrap ${!status ? 'border-brand bg-brand text-white' : 'border-line bg-card hover:bg-card2'}`}>All · {all.length}</button>
         {(Object.keys(BOOKING_STATUS) as BookingStatus[]).map((st) => (
-          <button key={st} onClick={() => setParams({ status: st })} className={`rounded-full border px-3 py-1.5 text-xs font-semibold whitespace-nowrap ${status === st ? 'border-brand bg-brand text-white' : 'border-line bg-card hover:bg-card2'}`}>{BOOKING_STATUS[st].label} · {countBy(st)}</button>
+          <button key={st} onClick={() => setParams(layout === 'board' ? { status: st, layout: 'board' } : { status: st })} className={`rounded-full border px-3 py-1.5 text-xs font-semibold whitespace-nowrap ${status === st ? 'border-brand bg-brand text-white' : 'border-line bg-card hover:bg-card2'}`}>{BOOKING_STATUS[st].label} · {countBy(st)}</button>
         ))}
       </div>
 
@@ -84,8 +88,9 @@ export default function Bookings() {
               <option value="">All sales people</option>{owners.map((id) => <option key={id} value={id}>{userName(db, id)}</option>)}
             </select>
           )}
+          <Tabs className="ml-auto" value={layout} onChange={setLayout} tabs={[{ id: 'table', label: 'Table', icon: Rows3 }, { id: 'board', label: 'Board', icon: Columns3 }]} />
         </div>
-        {!list.length ? <EmptyState icon={Briefcase} title="No CRM entries" text="Try another filter, or create a new entry." /> : desk ? (
+        {!list.length ? <EmptyState icon={Briefcase} title="No CRM entries" text="Try another filter, or create a new entry." /> : layout === 'board' ? <BookingBoard list={list} /> : desk ? (
           <Table>
             <thead><tr><Th>CRM ID</Th><Th>Company name</Th><Th>BDM / Sales person</Th><Th>Service</Th><Th className="text-right">Amount paid <span className="normal-case">(incl. GST)</span></Th><Th>Status</Th><Th className="text-center">PDF</Th></tr></thead>
             <tbody>
@@ -127,7 +132,7 @@ export default function Bookings() {
             </tbody>
           </Table>
         )}
-        {pager}
+        {layout === 'table' && pager}
       </Card>
       </>}
     </div>
