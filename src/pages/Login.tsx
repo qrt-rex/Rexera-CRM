@@ -209,16 +209,18 @@ export default function Login() {
                       setDevCode(nextCode)
                       setErr('')
                       setOtpNotice('Dispatching new verification code...')
+                      // the code itself is shown only in developer / demo mode, never on the live CRM
+                      const undelivered = DEV_MODE
+                        ? `Email could not be sent (developer mode). Your new 6-digit code is: ${nextCode}`
+                        : 'We could not email your new code right now. Please try again in a minute, or contact IT Support.'
                       sendOtpEmailClient(email, nextCode).then((res) => {
                         if (res.delivered) {
                           setOtpNotice('New verification code sent to your email!')
                           setTimeout(() => setOtpNotice(''), 5000)
                         } else {
-                          setOtpNotice(`Render Free tier blocks outbound email ports. Your new 6-digit code is: ${nextCode}`)
+                          setOtpNotice(undelivered)
                         }
-                      }).catch(() => {
-                        setOtpNotice(`Render Free tier blocks outbound email ports. Your new 6-digit code is: ${nextCode}`)
-                      })
+                      }).catch(() => setOtpNotice(undelivered))
                     } catch (e) { setErr((e as Error).message) }
                   }}>Resend code</button>
                 </p>
