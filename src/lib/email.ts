@@ -3,6 +3,7 @@ import { effectivePerms, roleLabel, rolesOf } from './rbac'
 import { getDb, mutate } from './store'
 import { addDays, nowIso, today, uid, ymd } from './format'
 import { automationMeta } from './emailTemplates'
+import { archiveDeleted } from './recycle'
 
 /**
  * Email Center. Emails go to each person's login email address. This build has no SMTP server, so every email is
@@ -73,6 +74,7 @@ export function deleteBatch(me: User, batchId: string) {
   mutate((d) => {
     const msgs = d.emails.filter((e) => e.batchId === batchId)
     if (!msgs.length) throw new Error('Email not found.')
+    archiveDeleted(d, me.id, { module: 'Email Center', kind: 'Email', label: msgs[0]!.subject, data: msgs })
     d.emails = d.emails.filter((e) => e.batchId !== batchId)
     d.audit.unshift({ id: uid('a-'), at: nowIso(), by: me.id, action: 'EMAIL_DELETE', detail: `“${msgs[0]!.subject}” removed from ${msgs.length} inbox(es)` })
   })

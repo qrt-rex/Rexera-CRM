@@ -4,6 +4,7 @@ import { getDb, mutate } from './store'
 import { ActionError } from './actions'
 import { fireAutomation } from './email'
 import { nowIso, round2, today, uid, ymd } from './format'
+import { archiveDeleted } from './recycle'
 
 // ------------------------------------------------------------------ months
 export const thisMonth = () => today().slice(0, 7)
@@ -280,6 +281,7 @@ export function removeManualIncentive(me: User, id: string) {
     const m = d.manualIncentives.find((x) => x.id === id)
     if (!m) throw new ActionError('Incentive not found.')
     if (m.paidAt) throw new ActionError('A paid incentive cannot be removed. Mark it unpaid first.')
+    archiveDeleted(d, me.id, { module: 'Payroll', kind: 'Incentive', label: `${d.users.find((u) => u.id === m.userId)?.name ?? m.userId} · ₹${m.amount}`, data: m })
     d.manualIncentives = d.manualIncentives.filter((x) => x.id !== id)
     log(d, me.id, 'INCENTIVE_REMOVE', `${d.users.find((u) => u.id === m.userId)?.name} · ₹${m.amount}`)
   })

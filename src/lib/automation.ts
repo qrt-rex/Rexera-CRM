@@ -7,6 +7,7 @@ import { deliver } from './email'
 import { BOOKING_STATUS, LEAD_STATUS, STAGES } from './workflow'
 import { CLIENT_ENTRY_STATUS } from './clientEntries'
 import { addDays, bookingMoney, daysBetween, invoiceTotals, nowIso, today, uid, ymd } from './format'
+import { archiveDeleted } from './recycle'
 import {
   BUILTINS, builtinId, MAX_PER_RUN, ruleEntity, ruleMatches, ruleProblems, scheduleRunId, fillText, triggerOf,
 } from '../../supabase/automation-rules.mjs'
@@ -391,6 +392,7 @@ export function deleteAutomationRule(me: User, id: string) {
   mutate((d) => {
     const r = d.automationRules?.find((x) => x.id === id)
     assert(r && !id.startsWith('builtin:'), 'Rule not found.')
+    archiveDeleted(d, me.id, { module: 'Automation Center', kind: 'Rule', label: r.name, data: r })
     d.automationRules = d.automationRules!.filter((x) => x.id !== id)
     audit(d, me, 'AUTOMATION_DELETE', r.name)
   })

@@ -78,6 +78,8 @@ const SPECS: Spec[] = [
   { key: 'candidates', table: 'candidate_applications', order: ['submitted_at', false] },
   // offer / joining letters: written by the server only (/api/hr/letter)
   { key: 'candidateLetters', table: 'candidate_letters', order: ['sent_at', false], limit: 2000, once: true },
+  // copies of deleted records: everyone writes their own, only IT Support reads and deletes them
+  { key: 'deletedItems', table: 'deleted_items', order: ['deleted_at', false], limit: 2000, once: true },
   { key: 'legacyFiles', table: 'legacy_files', idProp: 'path', idCol: 'path', order: ['path', true] },
   { key: 'assets', table: 'company_assets', order: ['created_at', false], children: [
     { prop: 'history', table: 'asset_events', fk: 'asset_id', mode: 'append', order: ['id', false], newestFirst: true },

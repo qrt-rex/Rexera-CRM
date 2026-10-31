@@ -98,6 +98,10 @@ db.services[0].prices = { MULTIPLE: 70000, COMBO12: 60000 }
 // a job application with its branch
 db.candidateForms.push({ id: 'cf-qa', token: 'tok-cf-qa', title: 'BDE', kind: 'JOB', positions: ['BDM (Business Development Manager)', 'BDE (Business Development Executive)'], department: 'Sales', description: '', active: true, createdAt: at, by: a.id })
 db.candidates.push({ id: 'cand-qa', formId: 'cf-qa', name: 'Asha', email: 'asha@x.test', phone: '9876500001', city: 'Ahmedabad', qualification: 'MBA', experience: '1–3 years', branch: 'Ahmedabad (A)', position: 'BDE', candidateType: 'EXPERIENCED', currentCtc: '3,60,000', interviewAt: '2026-10-28T11:30', resume: { id: 'f-cv', name: 'cv.pdf', type: 'application/pdf', size: 9, at }, submittedAt: at, status: 'NEW', selected: true, selectedAt: at, selectedBy: a.id })
+db.deletedItems = [
+  { id: 'del-1', module: 'CRM entries', kind: 'Document', label: 'pan.pdf · RX-1', rows: 1, data: { bookingId: 'RX-1', name: 'pan.pdf', file: { id: 'f-pan', name: 'pan.pdf', type: 'application/pdf', size: 9, at } }, files: [{ id: 'f-pan', name: 'pan.pdf', type: 'application/pdf', size: 9, at }], deletedBy: a.id, deletedAt: at },
+  { id: 'del-2', module: 'Leads', kind: 'Lead', label: '2 leads', rows: 2, data: [{ id: 'l1', name: 'A' }, { id: 'l2', name: 'B' }], deletedBy: a.id, deletedAt: at },
+]
 db.candidateLetters = [
   { id: 'cl-1', candidateId: 'cand-qa', kind: 'OFFER', channel: 'EMAIL', to: 'asha@x.test', subject: 'Offer', body: 'Please find it attached', status: 'SENT', by: a.id, at },
   { id: 'cl-2', candidateId: 'cand-qa', kind: 'JOINING', channel: 'WHATSAPP', to: '9876500001', body: 'Joining letter', status: 'NOT_CONFIGURED', error: 'No key', by: a.id, at },

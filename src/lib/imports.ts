@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { parseCsvRows, uid, nowIso } from './format'
 import { CLOUD } from './cloud'
 import { getSupabase } from './supabase'
+import { mutate } from './store'
+import { archiveDeleted } from './recycle'
 
 /**
  * Imported tables (Recruitment → Import). Every CSV file, and every non-empty sheet of an Excel workbook,
@@ -64,7 +66,9 @@ export async function saveDatasets(list: Dataset[]) {
   if (CLOUD) { for (const d of list) await cloudSave(d) } else await tx('readwrite', (s) => { for (const d of list) s.put(d) })
   await changed()
 }
-export async function deleteDataset(id: string) {
+/** `backup`: the table and who deletes it — a copy goes to IT Support's Deleted files first. */
+export async function deleteDataset(id: string, backup?: { by: string; ds: Dataset }) {
+  if (backup) mutate((d) => { archiveDeleted(d, backup.by, { module: 'HR', kind: 'Recruitment table', label: `${backup.ds.name} (${backup.ds.rows.length} rows)`, data: backup.ds.rows.map((r) => Object.fromEntries(backup.ds.columns.map((c, i) => [c || `Column ${i + 1}`, r[i] ?? '']))) }) })
   if (CLOUD) await check((await getSupabase()).from('recruitment_datasets').delete().eq('id', id))
   else await tx('readwrite', (s) => s.delete(id))
   await changed()

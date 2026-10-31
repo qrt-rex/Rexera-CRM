@@ -3,6 +3,7 @@ import { getDb, mutate } from './store'
 import { effectivePerms } from './rbac'
 import { ActionError } from './actions'
 import { addDays, fmtDate, nowIso, round2, today, uid, ymd } from './format'
+import { archiveDeleted } from './recycle'
 
 /** Company assets (tracked one by one), inventory (counted by quantity) and expenses — managed by HR. */
 export const ASSET_CATEGORIES = ['Laptop', 'Desktop', 'Monitor', 'Mobile phone', 'SIM card', 'Tablet', 'Printer / scanner', 'Networking', 'Furniture', 'Vehicle', 'Office equipment', 'Software licence', 'Other']
@@ -109,6 +110,7 @@ export function deleteAsset(me: User, id: string) {
   mutate((d) => {
     const a = findAsset(d, id)
     assert(a.status !== 'ASSIGNED', `Get ${a.tag} back from ${userName(d, a.assignedTo)} first (or retire it).`)
+    archiveDeleted(d, me.id, { module: 'Assets', kind: 'Asset', label: `${a.tag} ${a.name}`, data: a })
     d.assets = d.assets!.filter((x) => x.id !== id)
     log(d, me.id, 'ASSET_DELETE', `${a.tag} ${a.name}`)
   })
@@ -165,6 +167,7 @@ export function deleteStockItem(me: User, id: string) {
   mutate((d) => {
     const s = d.stock?.find((x) => x.id === id)
     assert(s, 'Item not found.')
+    archiveDeleted(d, me.id, { module: 'Assets', kind: 'Stock item', label: s.name, data: s })
     d.stock = d.stock!.filter((x) => x.id !== id)
     log(d, me.id, 'STOCK_DELETE', s.name)
   })
@@ -205,6 +208,7 @@ export function deleteExpense(me: User, id: string) {
   mutate((d) => {
     const e = d.expenses?.find((x) => x.id === id)
     assert(e, 'Expense not found.')
+    archiveDeleted(d, me.id, { module: 'Expenses', kind: 'Expense', label: `${e.category} · ${e.description}`, data: e })
     d.expenses = d.expenses!.filter((x) => x.id !== id)
     log(d, me.id, 'EXPENSE_DELETE', `${e.category} · ${e.description} · ₹${e.amount + e.gst}`)
   })

@@ -4,6 +4,7 @@ import { getDb, mutate } from './store'
 import { ActionError } from './actions'
 import { nowIso, uid } from './format'
 import { DEFAULT_SCHEMES, FIELDS, schemeProblems } from '../../supabase/eligibility-rules.mjs'
+import { archiveDeleted } from './recycle'
 
 /**
  * Rexy's Scheme Checker rules (table eligibility_schemes). Everyone on the staff reads them; only Super Admin and the
@@ -85,6 +86,7 @@ export function deleteEligibilityScheme(me: User, id: string) {
     const cur = d.eligibilitySchemes!.find((s) => s.id === id)
     assert(cur, 'Scheme not found.')
     assert(d.eligibilitySchemes!.length > 1, 'Keep at least one scheme — hide it instead of removing the last one.')
+    archiveDeleted(d, me.id, { module: 'Scheme Checker', kind: 'Scheme rule', label: cur.name, data: cur })
     d.eligibilitySchemes = d.eligibilitySchemes!.filter((s) => s.id !== id)
     audit(d, me, 'SCHEME_RULES_DELETE', cur.name)
   })

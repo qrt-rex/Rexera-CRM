@@ -17,6 +17,7 @@ import { CALL_OUTCOMES, FINAL_STAGE, hasLegalDoc, LEAD_STATUS, OPEN_LEAD, STAGE_
 import { fireAutomation } from './email'
 import { convertibleEntries, markConverted, startsFromClientEntry } from './clientEntries'
 import { addDays, daysBetween, fmtDate, isEmail, isGstin, isPan, isPhone, normPhone, nowIso, round2, today, uid, ymd } from './format'
+import { archiveDeleted } from './recycle'
 
 // ============================================================ helpers
 export class ActionError extends Error {}
@@ -712,6 +713,8 @@ export function updateLead(me: User, id: string, patch: Partial<LeadInput & { st
 export function deleteLeads(me: User, ids: string[]) {
   need(me, 'leads.manage')
   mutate((d) => {
+    const gone = d.leads.filter((l) => ids.includes(l.id))
+    if (gone.length) archiveDeleted(d, me.id, { module: 'Leads', kind: 'Lead', label: gone.length === 1 ? `${gone[0]!.name} · ${gone[0]!.phone}` : `${gone.length} leads`, data: gone })
     d.leads = d.leads.filter((l) => !ids.includes(l.id))
     audit(d, me.id, 'LEAD_DELETE', `${ids.length} lead(s)`)
   })
@@ -720,7 +723,8 @@ export function deleteLeads(me: User, ids: string[]) {
 export function deleteUnassignedLeads(me: User) {
   need(me, 'leads.manage')
   return mutate((d) => {
-    const n = d.leads.filter((l) => !l.assignedTo).length
+    const gone = d.leads.filter((l) => !l.assignedTo), n = gone.length
+    if (n) archiveDeleted(d, me.id, { module: 'Leads', kind: 'Unassigned leads', label: `${n} unassigned lead(s)`, data: gone })
     d.leads = d.leads.filter((l) => l.assignedTo)
     audit(d, me.id, 'LEAD_DELETE', `${n} unassigned lead(s)`)
     return n
@@ -852,7 +856,8 @@ export function deleteLeadUpload(me: User, uploadId: string) {
   return mutate((d) => {
     const up = d.leadUploads?.find((u) => u.id === uploadId)
     assert(up, 'Upload not found.')
-    const n = d.leads.filter((l) => l.uploadId === uploadId).length
+    const gone = d.leads.filter((l) => l.uploadId === uploadId), n = gone.length
+    archiveDeleted(d, me.id, { module: 'Leads', kind: 'Lead upload', label: `${up.fileName} (${n} leads)`, data: { upload: up, leads: gone } })
     d.leads = d.leads.filter((l) => l.uploadId !== uploadId)
     d.leadUploads = d.leadUploads!.filter((u) => u.id !== uploadId)
     audit(d, me.id, 'LEAD_UPLOAD_DELETE', `${up.fileName}: ${n} lead(s)`)
@@ -1969,6 +1974,7 @@ export function deleteRefund(me: User, id: string, refundId: string) {
     const r = b.refunds?.find((x) => x.id === refundId)
     assert(r, 'Refund not found.')
     assert(r.status === 'PENDING', 'A refund already paid back can’t be deleted — mark it pending first.')
+    archiveDeleted(d, me.id, { module: 'CRM entries', kind: 'Refund', label: `${b.bookingId} · ₹${r.amount}`, data: { bookingId: b.bookingId, company: b.companyName, ...r } })
     b.refunds = b.refunds!.filter((x) => x.id !== refundId)
     audit(d, me.id, 'REFUND_DELETE', `${b.bookingId} ₹${r.amount}`)
   })
@@ -2064,6 +2070,7 @@ export function deleteDocument(me: User, id: string, docId: string) {
     const b = findB(d, id)
     const doc = b.documents.find((x) => x.id === docId)
     assert(doc && (doc.by === me.id || isSA(me) || has(me, 'bookings.legal')), 'You cannot delete this file.')
+    archiveDeleted(d, me.id, { module: 'CRM entries', kind: 'Document', label: `${doc.name} · ${b.bookingId}`, data: { bookingId: b.bookingId, company: b.companyName, ...doc } })
     b.documents = b.documents.filter((x) => x.id !== docId)
     audit(d, me.id, 'DOC_DELETE', `${b.bookingId}: ${doc.name}`)
   })
@@ -2107,7 +2114,11 @@ export function toggleTask(_me: User, id: string, taskId: string) {
   mutate((d) => { const t = findB(d, id).tasks.find((x) => x.id === taskId); if (t) t.done = !t.done })
 }
 export function deleteTask(_me: User, id: string, taskId: string) {
-  mutate((d) => { const b = findB(d, id); b.tasks = b.tasks.filter((t) => t.id !== taskId) })
+  mutate((d) => {
+    const b = findB(d, id), t = b.tasks.find((x) => x.id === taskId)
+    if (t) archiveDeleted(d, _me.id, { module: 'CRM entries', kind: 'Task', label: `${t.title} · ${b.bookingId}`, data: { bookingId: b.bookingId, ...t } })
+    b.tasks = b.tasks.filter((x) => x.id !== taskId)
+  })
 }
 
 /** Team leader moves a client (CRM entry) to another sales person in the team. */
@@ -2312,6 +2323,7 @@ export function deleteSalesKitItem(me: User, id: string) {
   mutate((d) => {
     const cur = d.salesKit?.find((s) => s.id === id)
     assert(cur, 'Scheme not found.')
+    archiveDeleted(d, me.id, { module: 'Sales Kit', kind: 'Scheme', label: cur.name, data: cur })
     d.salesKit = d.salesKit!.filter((s) => s.id !== id)
     audit(d, me.id, 'SALES_KIT_DELETE', `${cur.category}: ${cur.name}`)
   })
@@ -2341,7 +2353,12 @@ export function upsertScheme(me: User, s: Omit<Scheme, 'id' | 'createdAt' | 'by'
 }
 export function deleteScheme(me: User, id: string) {
   need(me, 'schemes.manage')
-  mutate((d) => { const x = d.schemes.find((y) => y.id === id); d.schemes = d.schemes.filter((y) => y.id !== id); if (x) audit(d, me.id, 'SCHEME_DELETE', x.title) })
+  mutate((d) => {
+    const x = d.schemes.find((y) => y.id === id)
+    if (x) archiveDeleted(d, me.id, { module: 'Schemes', kind: 'Scheme', label: x.title, data: x })
+    d.schemes = d.schemes.filter((y) => y.id !== id)
+    if (x) audit(d, me.id, 'SCHEME_DELETE', x.title)
+  })
 }
 /**
  * One day before a scheme ends, the people in Workflow settings → scheme alerts (Admin and Operations by default) are
@@ -2386,7 +2403,10 @@ export function deletePost(me: User, id: string) {
   const cur = getDb().posts.find((x) => x.id === id)
   assert(cur, 'Not found.')
   assert(canEditPost(me, cur.kind), "You don't have access to delete this.")
-  mutate((d) => { d.posts = d.posts.filter((x) => x.id !== id) })
+  mutate((d) => {
+    archiveDeleted(d, me.id, { module: 'Content', kind: 'Post', label: cur.title, data: cur })
+    d.posts = d.posts.filter((x) => x.id !== id)
+  })
 }
 
 export function publishBroadcast(me: User, b: { title: string; body: string; priority: 'NORMAL' | 'HIGH' | 'URGENT'; audience: Role[] | 'ALL' }) {
@@ -2414,7 +2434,11 @@ export function upsertEvent(me: User, e: Omit<EventItem, 'id' | 'by'> & { id?: s
 }
 export function deleteEvent(me: User, id: string) {
   need(me, 'events.manage')
-  mutate((d) => { d.events = d.events.filter((x) => x.id !== id) })
+  mutate((d) => {
+    const ev = d.events.find((x) => x.id === id)
+    if (ev) archiveDeleted(d, me.id, { module: 'Events', kind: 'Event', label: ev.title, data: ev })
+    d.events = d.events.filter((x) => x.id !== id)
+  })
 }
 
 // ============================================================ leave
@@ -2509,6 +2533,8 @@ export function deleteCandidateForm(me: User, id: string) {
   need(me, 'recruitment.manage')
   mutate((d) => {
     assert(!d.candidates.some((c) => c.formId === id), 'This form has applications — close it instead of deleting.')
+    const f = d.candidateForms.find((c) => c.id === id)
+    if (f) archiveDeleted(d, me.id, { module: 'HR', kind: 'Candidate form', label: f.title, data: f })
     d.candidateForms = d.candidateForms.filter((c) => c.id !== id)
   })
 }
@@ -2839,6 +2865,7 @@ export function removeMilestone(me: User, bookingId: string, milestoneId: string
     assert(canRunClientPortal(me, b), 'Only the entry’s Operation team member, Super Admin or a portal manager can change milestones.')
     const m = b.milestones?.find((x) => x.id === milestoneId)
     assert(m, 'Milestone not found.')
+    archiveDeleted(d, me.id, { module: 'Client portal', kind: 'Milestone', label: `${m.title} · ${b.bookingId}`, data: { bookingId: b.bookingId, ...m } })
     b.milestones = b.milestones!.filter((x) => x.id !== milestoneId)
     b.updatedAt = nowIso()
     audit(d, me.id, 'MILESTONE_REMOVE', `${b.bookingId}: ${m.title}`)
@@ -2873,6 +2900,7 @@ export function removeClientUpdate(me: User, bookingId: string, updateId: string
     assert(canRunClientPortal(me, b), 'Only the entry’s Operation team member, Super Admin or a portal manager can remove updates.')
     const u = b.clientUpdates?.find((x) => x.id === updateId)
     assert(u, 'Update not found.')
+    archiveDeleted(d, me.id, { module: 'Client portal', kind: 'Client update', label: `${u.title} · ${b.bookingId}`, data: { bookingId: b.bookingId, ...u } })
     b.clientUpdates = b.clientUpdates!.filter((x) => x.id !== updateId)
     b.updatedAt = nowIso()
     audit(d, me.id, 'CLIENT_UPDATE_REMOVE', `${b.bookingId}: ${u.title}`)

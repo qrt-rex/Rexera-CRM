@@ -858,6 +858,29 @@ export interface CandidateApplication {
   selectedBy?: string
 }
 
+/**
+ * A copy of something a person deleted, made just before it was removed (src/lib/recycle.ts). It waits on the IT Support
+ * dashboard (Deleted files) — downloadable as CSV, Excel or JSON — until IT Support deletes it for good. Stored files
+ * (PDFs, images) that were part of it are kept until then too.
+ */
+export interface DeletedItem {
+  id: string
+  /** where it was deleted: CRM entries, Leads, HR, Assets … */
+  module: string
+  /** what it was: Document, Lead, Refund, Task … */
+  kind: string
+  /** its name, e.g. the file name or "RX-2026-000123 · Asha Foods" */
+  label: string
+  /** how many records the copy holds (a bulk delete keeps them all) */
+  rows: number
+  /** the record(s) exactly as they were */
+  data: unknown
+  /** stored files that belonged to it (not removed until IT Support deletes this copy) */
+  files?: FileRef[]
+  deletedBy: string
+  deletedAt: string
+}
+
 /** An offer / joining letter sent to a candidate by email or WhatsApp — written by the live server (server/hrLetters.mjs). */
 export interface CandidateLetter {
   id: string
@@ -1128,6 +1151,8 @@ export interface DB {
   clientMessages?: ClientMessage[]
   /** offer / joining letters sent to candidates, newest first */
   candidateLetters?: CandidateLetter[]
+  /** backups of everything deleted, waiting for IT Support's review (newest first) */
+  deletedItems?: DeletedItem[]
   clientAccounts?: ClientAccount[]
   clientActivity?: ClientActivity[]
   mediaItems?: MediaItem[]

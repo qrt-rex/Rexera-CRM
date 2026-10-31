@@ -5,6 +5,7 @@ import { ActionError, userName } from './actions'
 import { deleteFile } from './files'
 import { nowIso, uid } from './format'
 import { isLive, mediaFileProblem, mediaProblems, mediaTypeLabel } from '../../supabase/media-rules.mjs'
+import { archiveDeleted } from './recycle'
 
 /**
  * Digital Media Dashboard → Media Function. One record per piece of media, shown wherever it is published: company
@@ -145,11 +146,12 @@ export async function removeMediaFile(me: User, id: string, fileId: string) {
   mutate((d) => {
     const m = d.mediaItems!.find((x) => x.id === id)!
     const at = nowIso()
+    archiveDeleted(d, me.id, { module: 'Digital Media', kind: 'File', label: `${file.name} · #${m.serial} ${m.title}`, data: { media: `#${m.serial} ${m.title}`, ...file } })
     m.files = m.files.filter((x) => x.id !== fileId)
     m.updatedAt = at; m.updatedBy = me.id
     m.history.push({ at, by: me.id, action: `Removed ${file.name}` })
   })
-  await deleteFile(fileId).catch(() => undefined)
+  // the stored file stays until IT Support deletes the backup (Deleted files)
 }
 
 /** Work status: the assignee marks Pending / Completed; On hold (pause) and back is for media managers. */
@@ -176,8 +178,9 @@ export async function deleteMedia(me: User, id: string) {
   const m = getDb().mediaItems?.find((x) => x.id === id)
   assert(m, 'Media record not found.')
   mutate((d) => {
+    archiveDeleted(d, me.id, { module: 'Digital Media', kind: 'Media', label: `#${m.serial} ${m.title}`, data: m })
     d.mediaItems = (d.mediaItems ?? []).filter((x) => x.id !== id)
     log(d, me.id, 'MEDIA_DELETE', `#${m.serial} ${m.title}`)
   })
-  for (const f of m.files) await deleteFile(f.id).catch(() => undefined)
+  // the stored files stay until IT Support deletes the backup (Deleted files)
 }

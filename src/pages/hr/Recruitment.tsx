@@ -141,7 +141,7 @@ export default function Recruitment() {
               meta={view.ds && <span className="text-xs text-mute">{view.ds.fileName}{view.ds.sheet ? ` · sheet “${view.ds.sheet}”` : ''} · imported {ago(view.ds.importedAt)} by {userName(db, view.ds.importedBy)}</span>}
               actions={view.ds && manage && <>
                 <Button size="sm" variant="ghost" icon={Pencil} onClick={() => { setRename(view.ds!); setNewName(view.ds!.name) }}>Rename</Button>
-                <Button size="sm" variant="ghost" icon={Trash2} className="text-bad" onClick={async () => { if (await confirm('Delete this table?', `${view.ds!.name} (${view.ds!.rows.length} rows) will be removed from this browser.`, true)) { await deleteDataset(view.ds!.id); toast('success', 'Table deleted') } }}>Delete</Button>
+                <Button size="sm" variant="ghost" icon={Trash2} className="text-bad" onClick={async () => { if (await confirm('Delete this table?', `${view.ds!.name} (${view.ds!.rows.length} rows) will be removed from this browser.`, true)) { await deleteDataset(view.ds!.id, { by: me.id, ds: view.ds! }); toast('success', 'Table deleted') } }}>Delete</Button>
               </>} />
           )}
         </div>

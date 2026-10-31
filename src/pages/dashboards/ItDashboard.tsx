@@ -18,6 +18,7 @@ import { ago, downloadCsv, fmtDateTime, today } from '../../lib/format'
 import { Avatar, Badge, Button, Card, Checkbox, cx, Input, Modal, Select, Textarea, Toggle, useConfirm, useRun, useToast } from '../../components/ui'
 import { Greeting, LoginLogoutCard, Section, ViewAll } from './widgets'
 import { UserActivity } from '../../components/UserActivity'
+import { DeletedFiles } from '../../components/DeletedFiles'
 
 type Tone = 'navy' | 'green' | 'orange' | 'red' | 'violet' | 'blue' | 'amber' | 'gray' | 'cyan'
 const chip: Record<Tone, string> = {
@@ -128,6 +129,9 @@ export function ItDashboard() {
 
       {/* every page, click and action of every person — the IT team's alone */}
       <UserActivity />
+
+      {/* a backup of everything deleted anywhere in the CRM, until IT Support deletes it for good */}
+      <DeletedFiles compact />
 
       <div className="grid gap-6 xl:grid-cols-3">
         <Section title="Health check" subtitle={health ? `${health.length} checks · ${warnings} to review` : 'Running…'} icon={Stethoscope} className="xl:col-span-2"
