@@ -8,7 +8,7 @@ import { isMaster } from '../lib/rbac'
 import { leadTakers, visibleLeads } from '../lib/actions'
 import { blutec, type BlutecCampaign } from '../lib/dialer'
 import { CALL_OUTCOMES, LEAD_STATUS } from '../lib/workflow'
-import { fmtDate, fmtTime, today } from '../lib/format'
+import { fmtDate, fmtTime, maskPhone, today } from '../lib/format'
 import { AGENT_STATES, agentActivity, callKpis, callsOn, dispositionCounts, hhmm, pendingCallbacks, type LiveCall } from '../lib/callStats'
 import { MiniStat } from '../pages/dashboards/widgets'
 import { Badge, Button, Card, CardHeader, cx, EmptyState, Modal, Select } from './ui'
@@ -132,7 +132,7 @@ function CallbackList({ leads, onOpen }: { leads: Lead[]; onOpen?: (l: Lead) => 
         <li key={l.id} className="flex items-center gap-3 px-5 py-3">
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-semibold">{l.name}{l.company ? ` · ${l.company}` : ''}</span>
-            <span className="block truncate text-xs text-mute">{l.phone} · {LEAD_STATUS[l.status].label}{l.service ? ` · ${l.service}` : ''}</span>
+            <span className="block truncate text-xs text-mute">{maskPhone(l.phone)} · {LEAD_STATUS[l.status].label}{l.service ? ` · ${l.service}` : ''}</span>
           </span>
           <Badge tone={l.followUp! < t ? 'red' : l.followUp === t ? 'amber' : 'blue'}>{l.followUp! < t ? 'Overdue · ' : ''}{fmtDate(l.followUp)}</Badge>
           {onOpen && <Button size="sm" variant="ghost" onClick={() => onOpen(l)}>Open</Button>}

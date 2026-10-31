@@ -181,6 +181,8 @@ export function rolesOf(u: User): Role[] {
 /** Super Admin and IT Support hold every permission and can open every dashboard. */
 export const MASTER_ROLES: Role[] = ['superadmin', 'it']
 export const isMaster = (u: User) => rolesOf(u).some((r) => MASTER_ROLES.includes(r))
+/** Sales people and team leaders see clients' numbers masked (+91 XXXXXXXX78); they call through the dialer. */
+export const seesMaskedPhones = (u: User) => rolesOf(u).every((r) => r === 'sales' || r === 'teamlead')
 
 /**
  * Who edits the Scheme Checker rules: Super Admin, and the Operation team while they hold eligibility.manage. IT

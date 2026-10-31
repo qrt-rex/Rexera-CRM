@@ -8,7 +8,8 @@ import { useDb } from '../lib/store'
 import { useAuth, useMe } from '../lib/auth'
 import { userName } from '../lib/actions'
 import { addClientFollowUp, canEditClientEntry, canMakeClientEntry, CLIENT_ENTRY_STATUS, createClientEntry, emptyEntry, ENTRY_STATUSES, entryProblems, followUpDue, openEntryForLead, updateClientEntry, visibleClientEntries, type ClientEntryForm } from '../lib/clientEntries'
-import { downloadCsv, fmtDate, fmtDateTime, fmtTime, inr, today, ymd } from '../lib/format'
+import { downloadCsv, fmtDate, fmtDateTime, fmtTime, inr, maskPhone, today, ymd } from '../lib/format'
+import { seesMaskedPhones } from '../lib/rbac'
 import { Badge, Button, cx, EmptyState, Input, Modal, Select, Tabs, Td, Textarea, Th, useConfirm, useRun, useSubmitting } from './ui'
 import { PhoneInput } from './fields'
 
@@ -107,6 +108,7 @@ export function ClientFollowUpForm({ entry, onDone }: { entry: ClientEntry; onDo
 /** One entry's details and follow-up history. */
 function EntryDetails({ entry }: { entry: ClientEntry }) {
   const db = useDb()
+  const me = useMe()
   const row = (k: string, v: ReactNode) => <div><dt className="text-[11px] font-semibold uppercase text-mute">{k}</dt><dd className="text-sm">{v}</dd></div>
   return (
     <div className="space-y-4">
@@ -114,7 +116,7 @@ function EntryDetails({ entry }: { entry: ClientEntry }) {
         {row('Date', fmtDate(entry.date))}
         {row('Client', entry.clientName)}
         {row('Company', entry.companyName)}
-        {row('Number', <span className="font-mono">{entry.phone}</span>)}
+        {row('Number', <span className="font-mono">{seesMaskedPhones(me) ? maskPhone(entry.phone) : entry.phone}</span>)}
         {row('Scheme', entry.scheme)}
         {row('Pitched price', inr(entry.pitchedPrice))}
         {row('Status', <Badge tone={CLIENT_ENTRY_STATUS[entry.status].tone}>{CLIENT_ENTRY_STATUS[entry.status].label}</Badge>)}
@@ -222,7 +224,7 @@ export function ClientEntriesPanel({ lead, full }: { lead: boolean; full?: boole
               <div className="flex items-start gap-2">
                 <button onClick={() => setOpen({ id: e.id, follow: false })} className="min-w-0 flex-1 text-left">
                   <span className="block truncate font-semibold">{e.clientName}</span>
-                  <span className="block truncate text-xs text-mute">{e.companyName} · <span className="font-mono">{e.phone}</span></span>
+                  <span className="block truncate text-xs text-mute">{e.companyName} · <span className="font-mono">{seesMaskedPhones(me) ? maskPhone(e.phone) : e.phone}</span></span>
                 </button>
                 {status(e)}
               </div>
@@ -251,7 +253,7 @@ export function ClientEntriesPanel({ lead, full }: { lead: boolean; full?: boole
                   <Td>
                     <button onClick={() => setOpen({ id: e.id, follow: false })} className="block max-w-full truncate text-left font-semibold hover:underline">{e.clientName}</button>
                     <span className="block truncate text-xs text-mute">{e.companyName}</span>
-                    <span className="block font-mono text-[11px] text-mute">{e.phone}</span>
+                    <span className="block font-mono text-[11px] text-mute">{seesMaskedPhones(me) ? maskPhone(e.phone) : e.phone}</span>
                   </Td>
                   <Td><span className="line-clamp-2 text-xs">{e.scheme}</span><span className="block font-semibold tabular-nums">{inr(e.pitchedPrice)}</span></Td>
                   <Td>{status(e)}<span className="mt-1 block text-[11px] text-mute">{fmtDate(e.date)}</span><span className="block text-[11px] text-mute">{followUp(e)}</span></Td>

@@ -50,6 +50,11 @@ export const initials = (name: string) =>
 // ---------- validators ----------
 export const normPhone = (p: string) => p.replace(/\D/g, '').replace(/^(91|0)(?=\d{10}$)/, '').slice(-10)
 export const isPhone = (p: string) => /^[6-9]\d{9}$/.test(normPhone(p))
+/** A client's number as sales people see it: the country code and the last two digits only — +91 XXXXXXXX78. */
+export const maskPhone = (p?: string | null) => {
+  const d = normPhone(p ?? '')
+  return d.length < 4 ? (p ? 'XXXXXXXXXX' : '') : `+91 ${'X'.repeat(d.length - 2)}${d.slice(-2)}`
+}
 export const isEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e)
 export const isPan = (p: string) => /^[A-Z]{5}\d{4}[A-Z]$/.test(p.toUpperCase())
 export const isGstin = (g: string) => /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(g.toUpperCase())
