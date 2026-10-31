@@ -4,7 +4,7 @@
 import { randomBytes } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 import { formOpen, normMobile, sniffType } from '../supabase/form-rules.mjs'
-import { istToday, WHATSAPP_FORM_VARS, WHATSAPP_INVOICE_VARS, templateValues, workflowSettings } from '../supabase/workflow-rules.mjs'
+import { istToday, MAX_WHATSAPP_MESSAGE, mayWhatsappClient, WHATSAPP_FORM_VARS, WHATSAPP_INVOICE_VARS, WHATSAPP_NOTIFY_VARS, templateValues, workflowSettings } from '../supabase/workflow-rules.mjs'
 import { sendTemplate, welcomeWhatsapp, whatsappProblem } from './whatsapp.mjs'
 
 const reply = (status, body) => ({ status, body })
@@ -125,6 +125,44 @@ export async function sendFormLink(env, authorization, raw, { clients, fetchImpl
     bodyValues: templateValues(WHATSAPP_FORM_VARS, { client_name: String(p.clientName ?? '').slice(0, 120) || 'Sir / Madam', form: f.name, link, company: co?.value?.name || 'Rexera' }),
   }, fetchImpl)
   await admin.from('audit_log').insert({ at: new Date(now).toISOString(), by_user: me.id, action: `FORM_LINK_WHATSAPP_${res.status}`, detail: `${f.name} → ${res.to ?? p.phone ?? '—'}${res.error ? ` (${res.error})` : ''}` })
+  return reply(200, { success: res.status === 'SENT', ...res })
+}
+
+/**
+ * POST /api/whatsapp/notify — { bookingId, message }: a message to the entry's client on WhatsApp (Interakt client
+ * notification template). Only the Operation, Admin and Legal teams, and only for an entry they can open; the number is
+ * always the one saved on the entry. Without a template the answer is NOT_CONFIGURED and the screen opens WhatsApp instead.
+ */
+export async function sendClientWhatsapp(env, authorization, raw, { clients, fetchImpl, now = Date.now() } = {}) {
+  let p
+  try { p = JSON.parse(raw || '{}') } catch { return no(400, 'Bad request.') }
+  const auth = await signedIn(env, authorization, clients)
+  if (auth.error) return auth.error
+  const { admin, asCaller, me } = auth
+  const [{ data: u }, { data: extra }] = await Promise.all([
+    admin.from('app_users').select('role').eq('id', me.id).maybeSingle(),
+    admin.from('user_extra_roles').select('role').eq('user_id', me.id),
+  ])
+  if (!mayWhatsappClient([u?.role, ...(extra ?? []).map((x) => x.role)])) return no(403, 'Only the Operation, Admin and Legal teams can message clients on WhatsApp.')
+  if (typeof p.bookingId !== 'string' || !p.bookingId) return no(422, 'Which file?')
+  const message = String(p.message ?? '').replace(/[\u0000-\u0009\u000b-\u001f]/g, ' ').trim()
+  if (message.length < 3) return no(422, 'Write the message first.')
+  if (message.length > MAX_WHATSAPP_MESSAGE) return no(422, `Keep the message under ${MAX_WHATSAPP_MESSAGE} characters.`)
+  const { data: b } = await asCaller.from('bookings').select('id, booking_code, company_name, contact_person, mobile').eq('id', p.bookingId).maybeSingle()
+  if (!b) return no(403, 'You can’t open this file.')
+  if (limited(me.id, now)) return no(429, 'Too many messages in the last hour — please try again later.')
+  const [{ data: ws }, { data: co }] = await Promise.all([
+    admin.from('app_settings').select('value').eq('key', 'workflow').maybeSingle(),
+    admin.from('app_settings').select('value').eq('key', 'company').maybeSingle(),
+  ])
+  const w = workflowSettings(ws?.value ?? undefined)
+  const problem = whatsappProblem(env, w.whatsapp.notifyTemplate, b.mobile)
+  if (problem) return reply(200, { success: false, ...problem, to: b.mobile ?? '' })
+  const res = await sendTemplate(env, {
+    phone: b.mobile, template: w.whatsapp.notifyTemplate, language: w.whatsapp.language, callbackData: `notify:${b.id}`,
+    bodyValues: templateValues(WHATSAPP_NOTIFY_VARS, { client_name: b.contact_person || b.company_name, reference: b.booking_code, message, company: co?.value?.name || 'Rexera' }),
+  }, fetchImpl)
+  await admin.from('audit_log').insert({ at: new Date(now).toISOString(), by_user: me.id, action: `CLIENT_WHATSAPP_${res.status}`, detail: `${b.booking_code} → ${res.to ?? b.mobile ?? '—'}: ${message.slice(0, 120)}${res.error ? ` (${res.error})` : ''}` })
   return reply(200, { success: res.status === 'SENT', ...res })
 }
 

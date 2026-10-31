@@ -28,5 +28,10 @@ export const WELCOME_PLACEHOLDERS: string[]
 export const WHATSAPP_WELCOME_VARS: string[]
 export const WHATSAPP_INVOICE_VARS: string[]
 export const WHATSAPP_FORM_VARS: string[]
+export const WHATSAPP_NOTIFY_VARS: string[]
 export function templateValues(names: string[], vars: Record<string, string | number | undefined>): string[]
+export const WHATSAPP_NOTIFY_ROLES: string[]
+export function mayWhatsappClient(roles: string[] | undefined): boolean
+export const MAX_WHATSAPP_MESSAGE: number
+export function whatsappLink(mobile: string | undefined | null, text: string): string
 export type { Role }

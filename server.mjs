@@ -16,7 +16,7 @@ import { createClient } from '@supabase/supabase-js'
 import { jobsAuthorized, runJobs } from './server/jobs.mjs'
 import { getPublicForm, submitPublicForm } from './server/forms.mjs'
 import { submitJobApplication } from './server/apply.mjs'
-import { sendFormLink, sendInvoice, sendWelcomeNow } from './server/share.mjs'
+import { sendClientWhatsapp, sendFormLink, sendInvoice, sendWelcomeNow } from './server/share.mjs'
 import { whatsappConfigured } from './server/whatsapp.mjs'
 import { incentiveReport, reportConfig } from './server/incentives.mjs'
 import { blutecEnv, handleBlutec } from './supabase/functions/_shared/blutec.ts'
@@ -725,7 +725,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   // sending to clients from a CRM screen (Supabase sign-in): invoice PDF by email / WhatsApp, WhatsApp welcome
-  if ((pathname === '/api/invoices/send' || pathname === '/api/whatsapp/welcome' || pathname === '/api/forms/share') && req.method === 'POST') {
+  if ((pathname === '/api/invoices/send' || pathname === '/api/whatsapp/welcome' || pathname === '/api/whatsapp/notify' || pathname === '/api/forms/share') && req.method === 'POST') {
     let raw
     try { raw = await readRawBody(req, 8_000_000) } catch { return sendJson(res, 413, { success: false, message: 'The invoice PDF is too large.' }) }
     try {
@@ -733,7 +733,9 @@ const server = http.createServer(async (req, res) => {
         ? await sendInvoice(getEnv, req.headers.authorization, raw, { deliverEmail: deliverClientEmail })
         : pathname === '/api/forms/share'
           ? await sendFormLink(getEnv, req.headers.authorization, raw, { appUrl: `https://${String(req.headers.host || '').replace(/[^\w.:-]/g, '')}` })
-          : await sendWelcomeNow(getEnv, req.headers.authorization, raw)
+          : pathname === '/api/whatsapp/notify'
+            ? await sendClientWhatsapp(getEnv, req.headers.authorization, raw)
+            : await sendWelcomeNow(getEnv, req.headers.authorization, raw)
       return sendJson(res, r.status, r.body)
     } catch (e) {
       console.error(`[${pathname}] ${e.message}`)
