@@ -7,11 +7,12 @@ import { MessageClientModal, MessageLog, NextMessage } from '../../components/Cl
 import { mayMessage } from '../../lib/clientMessages'
 import type { MessageStageId } from '../../../supabase/message-rules.mjs'
 import { ClientPortalCard } from '../../components/ClientPortalPanel'
+import { RefundRequestModal, RefundsCard } from '../../components/Refunds'
 import { WhatsappClientButton } from '../../components/WhatsappClient'
 import { openBookingPdf } from '../../lib/bookingPdf'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
-import { addComboService, addComment, addComplimentaryService, addDocuments, addPayment, addRefund, commissionNow, deleteRefund, needsPriceSplit, addTask, canEditBooking, canEmailClient, canForwardAdminStages, canRunClientPortal, canMoveStage, deleteDocument, deleteTask, invoiceFromBooking, moveStage, PAYMENT_MODES, setCommission, setDeduction, setPaymentTds, setRefundStatus, toggleTask, userName, verifyPayment, visibleBookings, visibleDocuments, visibleTasks } from '../../lib/actions'
+import { addComboService, addComment, addComplimentaryService, addDocuments, addPayment, addRefund, commissionNow, deleteRefund, needsPriceSplit, addTask, canEditBooking, canEmailClient, canForwardAdminStages, canRequestRefund, canRunClientPortal, canMoveStage, deleteDocument, deleteTask, invoiceFromBooking, moveStage, PAYMENT_MODES, setCommission, setDeduction, setPaymentTds, setRefundStatus, toggleTask, userName, verifyPayment, visibleBookings, visibleDocuments, visibleTasks } from '../../lib/actions'
 import { STAGES, STAGE_OUTCOMES, stageLabel } from '../../lib/workflow'
 import { ago, bookingMoney, fmtDate, fmtDateTime, gstSplit, inr, today } from '../../lib/format'
 import { isStageOnlyAdmin, roleLabel } from '../../lib/rbac'
@@ -41,6 +42,7 @@ export default function BookingDetail() {
   const [mail, setMail] = useState(false)
   // WhatsApp / email to the client: null = closed, '' = the composer on its first open message
   const [message, setMessage] = useState<MessageStageId | '' | null>(null)
+  const [refund, setRefund] = useState(false)
   const b = visibleBookings(db, me).find((x) => x.id === id)
   if (!b) return <Card><EmptyState icon={FileText} title="CRM entry not found" text="It doesn't exist or isn't visible to you." action={<Link to="/bookings"><Button>All CRM entries</Button></Link>} /></Card>
   const m = bookingMoney(b)
@@ -61,6 +63,7 @@ export default function BookingDetail() {
             <Button variant="outline" icon={FileText} onClick={() => run(() => openBookingPdf(db, b))}>PDF</Button>
             {mayMessage(db, me, { kind: 'booking', b }) && <Button variant="accent" icon={MessageCircle} onClick={() => setMessage('')}>Message client</Button>}
             {canEmailClient(db, me, b) && <Button variant="outline" icon={Mail} onClick={() => setMail(true)}>Detailed email</Button>}
+            {canRequestRefund(db, me, b) && <Button variant="outline" icon={Undo2} onClick={() => setRefund(true)}>Refund</Button>}
             <WhatsappClientButton b={b} />
             {canEditBooking(db, me, b) && <Link to={`/bookings/${b.id}/edit`}><Button variant="outline" icon={Pencil}>Edit</Button></Link>}
             {can('billing.create', 'billing.manage') && !invoices.length && !['PENDING_TL', 'REJECTED'].includes(b.status) && (
@@ -114,6 +117,7 @@ export default function BookingDetail() {
         </Card>
       )}
       {message !== null && <MessageClientModal target={{ kind: 'booking', b }} stage={message || undefined} onClose={() => setMessage(null)} />}
+      {refund && <RefundRequestModal b={b} onClose={() => setRefund(false)} />}
       {tab === 'legacy' && <LegacyRecord id={b.id} />}
       {mail && <ClientEmailComposer b={b} onClose={() => setMail(false)} />}
     </div>
@@ -203,7 +207,7 @@ function Overview({ id }: { id: string }) {
         </div>
       </Card>
       {can('bookings.accounts') && <CommissionCard id={b.id} />}
-      {can('refunds.manage') && <RefundsCard id={b.id} />}
+      <RefundsCard b={b} />
       <Modal open={payOpen} onClose={() => setPayOpen(false)} title={`Add part payment ${b.payments.length + 1}`} subtitle="A new instalment on this same CRM entry — it counts in the scorecard and collections of the month it was paid in."
         footer={<><Button variant="outline" onClick={() => setPayOpen(false)}>Cancel</Button><Button onClick={async () => { if (await run(() => addPayment(me, b.id, { ...pay, tdsPct: pay.tds ? pay.tdsPct : undefined }), 'Payment added')) { setPayOpen(false); setPay(blankPay) } }}>Add payment</Button></>}>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -257,61 +261,6 @@ function CommissionCard({ id }: { id: string }) {
           <Input label="Commission %" type="number" min={5} max={30} step={0.5} value={f.pct} onChange={(e) => setF({ ...f, pct: Number(e.target.value) })} hint="Between 5% and 30% — worked out on what the client has paid (before GST)" />
         </div>}
       </Modal>
-    </Card>
-  )
-}
-
-/** Accounts only: money paid back to the client — pending until it is refunded. */
-function RefundsCard({ id }: { id: string }) {
-  const me = useMe()
-  const run = useRun()
-  const [confirm, node] = useConfirm()
-  const b = useBooking(id)
-  const [add, setAdd] = useState<{ amount: number; date: string; reason: string } | null>(null)
-  const [done, setDone] = useState<{ refundId: string; refundedOn: string; mode: string; ref: string } | null>(null)
-  const list = b.refunds ?? []
-  return (
-    <Card className="overflow-hidden xl:col-span-2">
-      <CardHeader title="Refunds" subtitle="Accounts only · whether the client's money was paid back" icon={Undo2}
-        action={<Button size="sm" variant="soft" icon={Plus} onClick={() => setAdd({ amount: 0, date: today(), reason: '' })}>Refund entry</Button>} />
-      {!list.length ? <p className="px-5 py-4 text-sm text-mute">No refunds on this client.</p> : (
-        <Table>
-          <thead><tr><Th>Date</Th><Th>Reason</Th><Th className="text-right">Amount</Th><Th>Status</Th><Th /></tr></thead>
-          <tbody>
-            {list.map((r) => (
-              <tr key={r.id}>
-                <Td className="text-xs">{fmtDate(r.date)}</Td>
-                <Td className="text-sm">{r.reason}</Td>
-                <Td className="text-right font-bold tabular-nums">{inr(r.amount)}</Td>
-                <Td>{r.status === 'REFUNDED' ? <span><Badge tone="green">Refunded</Badge><span className="block text-[11px] text-mute">{fmtDate(r.refundedOn)} · {r.mode}{r.ref ? ` · ${r.ref}` : ''}</span></span> : <Badge tone="amber">Not refunded yet</Badge>}</Td>
-                <Td className="text-right">
-                  {r.status === 'PENDING'
-                    ? <span className="flex justify-end gap-1"><Button size="sm" variant="success" icon={Check} onClick={() => setDone({ refundId: r.id, refundedOn: today(), mode: 'NEFT', ref: '' })}>Refunded</Button>
-                      <Button size="sm" variant="ghost" icon={Trash2} aria-label="Delete refund" onClick={async () => { if (await confirm('Delete this refund entry?', `${inr(r.amount)} · ${r.reason}`, true)) run(() => deleteRefund(me, b.id, r.id), 'Deleted') }} /></span>
-                    : <Button size="sm" variant="ghost" onClick={() => run(() => setRefundStatus(me, b.id, r.id, null), 'Marked not refunded')}>Undo</Button>}
-                </Td>
-              </tr>
-            ))}
-          </tbody>
-        </Table>
-      )}
-      <Modal open={!!add} onClose={() => setAdd(null)} title="Refund entry" size="sm"
-        footer={<><Button variant="outline" onClick={() => setAdd(null)}>Cancel</Button><Button onClick={async () => { if (add && await run(() => addRefund(me, b.id, add), 'Refund entry saved')) setAdd(null) }}>Save</Button></>}>
-        {add && <div className="grid gap-3">
-          <Input label="Amount to refund (₹)" required type="number" min={0} value={add.amount || ''} onChange={(e) => setAdd({ ...add, amount: Number(e.target.value) })} hint={`Client paid ${inr(bookingMoney(b).collected)} in all`} />
-          <Input label="Date" type="date" value={add.date} onChange={(e) => setAdd({ ...add, date: e.target.value })} />
-          <Textarea label="Reason" required rows={2} value={add.reason} onChange={(e) => setAdd({ ...add, reason: e.target.value })} />
-        </div>}
-      </Modal>
-      <Modal open={!!done} onClose={() => setDone(null)} title="Mark as refunded" size="sm"
-        footer={<><Button variant="outline" onClick={() => setDone(null)}>Cancel</Button><Button onClick={async () => { if (done && await run(() => setRefundStatus(me, b.id, done.refundId, done), 'Marked refunded')) setDone(null) }}>Save</Button></>}>
-        {done && <div className="grid gap-3">
-          <Input label="Refunded on" type="date" max={today()} value={done.refundedOn} onChange={(e) => setDone({ ...done, refundedOn: e.target.value })} />
-          <Select label="Mode" value={done.mode} onChange={(e) => setDone({ ...done, mode: e.target.value })}>{PAYMENT_MODES.map((x) => <option key={x}>{x}</option>)}</Select>
-          <Input label="UTR / cheque no." value={done.ref} onChange={(e) => setDone({ ...done, ref: e.target.value })} />
-        </div>}
-      </Modal>
-      {node}
     </Card>
   )
 }

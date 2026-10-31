@@ -51,7 +51,7 @@ export const MODULES: ModuleDef[] = [
   { key: 'media-posts', path: '/media/posts', label: 'Posts', desc: 'Every post created in Digital Media', icon: Megaphone, tone: 'violet', perms: ['media.manage'], group: 'Digital Media' },
   { key: 'media-flyers', path: '/media/flyers', label: 'Flyers', desc: 'Every flyer and poster created in Digital Media', icon: Images, tone: 'orange', perms: ['media.manage'], group: 'Digital Media' },
   { key: 'billing', path: '/billing', label: 'Invoice / Bill', desc: 'GST invoices, proforma and receivables', icon: IndianRupee, tone: 'amber', perms: ['billing.own', 'billing.create', 'billing.manage'], group: 'Finance' },
-  { key: 'refunds', path: '/refunds', label: 'Refunds', desc: 'Refund entries — paid back to the client or not', icon: Undo2, tone: 'red', perms: ['refunds.manage'], group: 'Finance' },
+  { key: 'refunds', path: '/refunds', label: 'Refunds', desc: 'Refund requests and the refund report: pending, approved, rejected, completed with proof', icon: Undo2, tone: 'red', perms: ['refunds.manage', 'refunds.request'], group: 'Finance' },
   { key: 'commission', path: '/commission', label: 'Commission', desc: 'CA / DSA commission — owed and paid, with PDF export', icon: BadgePercent, tone: 'violet', perms: ['bookings.accounts'], group: 'Finance' },
   { key: 'attendance', path: '/attendance', label: 'Attendance Board', desc: 'Live day status and history', icon: UserCheck, tone: 'green', perms: [], group: 'People' },
   { key: 'leave', path: '/leave', label: 'Leave', desc: 'Request my leave, approve requests', icon: CalendarCheck2, tone: 'violet', perms: [], group: 'People' },

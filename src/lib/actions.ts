@@ -1935,45 +1935,96 @@ export function setCommissionPaid(me: User, id: string, paid: { paidOn: string; 
   })
 }
 
-// ------------------------------------------------------------ refunds (Accounts only)
-/** Accounts records money to be paid back to a client (pending until it is actually refunded). */
+// ------------------------------------------------------------ refunds: Sales, Team Leaders, Operations, Legal, Admin ask; Accounts decides and pays
+/** Who may ask for a refund on this entry: anyone who can open it with refunds.request — and Accounts. */
+export const canRequestRefund = (d: DB, me: User, b: Booking) => has(me, 'refunds.request', 'refunds.manage') && visibleBookings(d, me).some((x) => x.id === b.id)
+/** Money already asked back (everything but rejected requests). */
+export const refundsOpen = (b: Booking) => round2((b.refunds ?? []).filter((x) => x.status !== 'REJECTED').reduce((t, x) => t + x.amount, 0))
+const refundLine = (b: Booking, amount: number) => `${b.bookingId} · ${b.companyName} · ₹${round2(amount).toLocaleString('en-IN')}`
+const accountsTeam = (d: DB) => d.users.filter((u) => u.active && rolesOf(u).includes('accounts')).map((u) => u.id)
+
+/**
+ * A refund request: the payments it concerns, the reason and supporting documents. It goes straight to the Accounts
+ * team (Accounts Dashboard → Refund requests); only Accounts approves, rejects and pays it back.
+ */
+export function requestRefund(me: User, id: string, r: { amount: number; reason: string; paymentIds: string[]; documents?: FileRef[] }) {
+  mutate((d) => {
+    const b = findB(d, id)
+    assert(canRequestRefund(d, me, b), 'You can’t ask for a refund on this CRM entry.')
+    assert(r.amount > 0, 'Enter the refund amount.')
+    assert(r.reason.trim().length >= 5, 'Write the reason for the refund.')
+    const paid = b.payments.filter((p) => r.paymentIds.includes(p.id))
+    assert(!b.payments.length || paid.length, 'Pick the payment(s) to refund.')
+    const collected = round2(b.payments.reduce((t, p) => t + p.total, 0)), open = refundsOpen(b)
+    assert(round2(open + r.amount) <= collected, `Refunds can’t be more than the client paid (₹${collected.toLocaleString('en-IN')}; ₹${open.toLocaleString('en-IN')} already asked for or refunded).`)
+    const at = nowIso()
+    ;(b.refunds ??= []).push({
+      id: uid('rf-'), amount: round2(r.amount), date: today(), reason: r.reason.trim(), status: 'PENDING', by: me.id, at, paymentIds: paid.map((p) => p.id),
+      ...(r.documents?.length ? { documents: r.documents } : {}), history: [{ at, by: me.id, action: 'REQUESTED', note: r.reason.trim() }],
+    })
+    audit(d, me.id, 'REFUND_REQUEST', `${refundLine(b, r.amount)}: ${r.reason.trim()}`)
+    notify(d, accountsTeam(d).filter((u) => u !== me.id), 'Refund request', `${refundLine(b, r.amount)} — asked by ${me.name}`, '/refunds', 'action')
+  })
+}
+/** Accounts records a refund itself (it starts as a request like any other). */
 export function addRefund(me: User, id: string, r: { amount: number; date: string; reason: string }) {
   need(me, 'refunds.manage')
-  mutate((d) => {
-    const b = findB(d, id)
-    assert(r.amount > 0, 'Enter the refund amount.')
-    assert(r.date, 'Enter the date.')
-    assert(r.reason.trim().length >= 3, 'Enter the reason for the refund.')
-    const collected = round2(b.payments.reduce((t, p) => t + p.total, 0))
-    const already = round2((b.refunds ?? []).reduce((t, x) => t + x.amount, 0))
-    assert(round2(already + r.amount) <= collected, `Refunds cannot be more than what the client paid (₹${collected}; ₹${already} already refunded or pending).`)
-    ;(b.refunds ??= []).push({ id: uid('rf-'), amount: round2(r.amount), date: r.date, reason: r.reason.trim(), status: 'PENDING', by: me.id, at: nowIso() })
-    b.updatedAt = nowIso()
-    audit(d, me.id, 'REFUND_ADD', `${b.bookingId} ₹${round2(r.amount)}`)
-  })
+  const b = getDb().bookings.find((x) => x.id === id)
+  requestRefund(me, id, { amount: r.amount, reason: r.reason, paymentIds: b?.payments.map((p) => p.id) ?? [] })
 }
-/** Accounts marks a refund as paid back (date, mode, UTR / cheque no.), or back to pending. */
-export function setRefundStatus(me: User, id: string, refundId: string, done: { refundedOn: string; mode: string; ref: string } | null) {
+/** Accounts approves or rejects a request (a rejection needs the reason, shown to the person who asked). */
+export function reviewRefund(me: User, id: string, refundId: string, decision: 'APPROVE' | 'REJECT', note: string) {
   need(me, 'refunds.manage')
   mutate((d) => {
     const b = findB(d, id)
     const r = b.refunds?.find((x) => x.id === refundId)
     assert(r, 'Refund not found.')
+    assert(r.status === 'PENDING', 'Only a pending request can be approved or rejected.')
+    assert(decision === 'APPROVE' || note.trim().length >= 3, 'Write why the refund is rejected.')
+    const at = nowIso()
+    Object.assign(r, { status: decision === 'APPROVE' ? 'APPROVED' : 'REJECTED', reviewNote: note.trim() || undefined, reviewedBy: me.id, reviewedAt: at })
+    ;(r.history ??= []).push({ at, by: me.id, action: decision === 'APPROVE' ? 'APPROVED' : 'REJECTED', ...(note.trim() ? { note: note.trim() } : {}) })
+    audit(d, me.id, decision === 'APPROVE' ? 'REFUND_APPROVE' : 'REFUND_REJECT', `${refundLine(b, r.amount)}${note.trim() ? `: ${note.trim()}` : ''}`)
+    notify(d, [r.by], decision === 'APPROVE' ? 'Refund approved' : 'Refund rejected', `${refundLine(b, r.amount)}${note.trim() ? ` — ${note.trim()}` : ''}`, `/bookings/${b.id}`, decision === 'APPROVE' ? 'success' : 'warning')
+  })
+}
+/**
+ * Accounts pays the refund back: date, mode, transaction ID and proof (receipt, screenshot or bank confirmation) are
+ * all required. `null` reopens a completed refund (back to approved).
+ */
+export function setRefundStatus(me: User, id: string, refundId: string, done: { refundedOn: string; mode: string; ref: string; proof: FileRef[] } | null) {
+  need(me, 'refunds.manage')
+  mutate((d) => {
+    const b = findB(d, id)
+    const r = b.refunds?.find((x) => x.id === refundId)
+    assert(r, 'Refund not found.')
+    const at = nowIso()
     if (done) {
+      assert(r.status === 'APPROVED' || r.status === 'PENDING', r.status === 'REJECTED' ? 'A rejected request can’t be paid.' : 'This refund is already completed.')
       assert(done.refundedOn && done.refundedOn <= today(), 'Enter the date it was refunded (not in the future).')
-      Object.assign(r, { status: 'REFUNDED', refundedOn: done.refundedOn, mode: done.mode, ref: done.ref.trim() || undefined })
-    } else Object.assign(r, { status: 'PENDING', refundedOn: undefined, mode: undefined, ref: undefined })
-    b.updatedAt = nowIso()
-    audit(d, me.id, 'REFUND_STATUS', `${b.bookingId} ₹${r.amount}: ${r.status}`)
+      assert(done.ref.trim().length >= 3, 'Enter the refund transaction ID (UTR / cheque no.).')
+      assert(done.proof.length > 0, 'Attach the proof of the refund (receipt, screenshot or bank confirmation).')
+      if (r.status === 'PENDING') {
+        Object.assign(r, { reviewedBy: me.id, reviewedAt: at })
+        ;(r.history ??= []).push({ at, by: me.id, action: 'APPROVED' })
+      }
+      Object.assign(r, { status: 'REFUNDED', refundedOn: done.refundedOn, mode: done.mode, ref: done.ref.trim(), proof: done.proof, completedBy: me.id, completedAt: at })
+      ;(r.history ??= []).push({ at, by: me.id, action: 'COMPLETED', note: `${done.mode} · ${done.ref.trim()}` })
+      notify(d, [r.by], 'Refund completed', `${refundLine(b, r.amount)} — ${done.mode} · ${done.ref.trim()}`, `/bookings/${b.id}`, 'success')
+    } else {
+      assert(r.status === 'REFUNDED', 'Only a completed refund can be reopened.')
+      Object.assign(r, { status: 'APPROVED', refundedOn: undefined, mode: undefined, ref: undefined, proof: undefined, completedBy: undefined, completedAt: undefined })
+      ;(r.history ??= []).push({ at, by: me.id, action: 'REOPENED' })
+    }
+    audit(d, me.id, 'REFUND_STATUS', `${refundLine(b, r.amount)}: ${r.status}`)
   })
-}
-export function deleteRefund(me: User, id: string, refundId: string) {
+}export function deleteRefund(me: User, id: string, refundId: string) {
   need(me, 'refunds.manage')
   mutate((d) => {
     const b = findB(d, id)
     const r = b.refunds?.find((x) => x.id === refundId)
     assert(r, 'Refund not found.')
-    assert(r.status === 'PENDING', 'A refund already paid back can’t be deleted — mark it pending first.')
+    assert(r.status === 'PENDING' || r.status === 'REJECTED', 'Only a pending or rejected request can be deleted.')
     archiveDeleted(d, me.id, { module: 'CRM entries', kind: 'Refund', label: `${b.bookingId} · ₹${r.amount}`, data: { bookingId: b.bookingId, company: b.companyName, ...r } })
     b.refunds = b.refunds!.filter((x) => x.id !== refundId)
     audit(d, me.id, 'REFUND_DELETE', `${b.bookingId} ₹${r.amount}`)

@@ -28,7 +28,8 @@ export function AccountsDashboard() {
   const month = collections(db, salesIds, monthStart())
   const totals = pipelineTotals(db)
   const rev = revenueByMonth(db)
-  const refundsPending = db.bookings.reduce((n, b) => n + (b.refunds ?? []).filter((r) => r.status === 'PENDING').length, 0)
+  const refundRequests = db.bookings.flatMap((b) => (b.refunds ?? []).filter((r) => r.status === 'PENDING' || r.status === 'APPROVED').map((r) => ({ b, r }))).sort((x, y) => x.r.at.localeCompare(y.r.at))
+  const refundsPending = refundRequests.filter(({ r }) => r.status === 'PENDING').length
   const commissionsPending = db.bookings.filter((b) => b.commission && b.commission.status !== 'PAID').length
 
   return (
@@ -44,16 +45,27 @@ export function AccountsDashboard() {
         <Tile to="/bookings" icon={Briefcase} label="CRM Entries" desc="View and edit every entry, payments & deductions" tone="violet" />
         <Tile to="/approvals" icon={BadgeCheck} label="Client files" desc="Approve, reject or put on hold" tone="amber" badge={waiting.length} highlight={waiting.length > 0} />
         <Tile to="/billing" icon={IndianRupee} label="Invoice / Bill" desc="GST invoices & receivables" tone="green" />
-        <Tile to="/refunds" icon={Undo2} label="Refunds" desc="Paid back to the client or not" tone="red" badge={refundsPending} />
+        <Tile to="/refunds" icon={Undo2} label="Refunds" desc="Requests to review, approve and pay · refund report" tone="red" badge={refundsPending} highlight={refundsPending > 0} />
         <Tile to="/commission" icon={BadgePercent} label="Commission" desc="CA / DSA commission — owed and paid" tone="violet" badge={commissionsPending} />
         <Tile to="/reports" icon={BarChart3} label="Reports" desc="Collections, outstanding, exports" tone="navy" />
         <Tile to="/leave?new=1" icon={CalendarCheck2} label="Request my leave" tone="violet" />
         <Tile to="/attendance" icon={UserCheck} label="Attendance Board" tone="green" />
       </TileGrid>
       <div className="mt-6 grid gap-6 xl:grid-cols-3">
-        <Section title="Client files waiting for you" subtitle="Approve sends the file to Legal" icon={ClipboardCheck} className="xl:col-span-2" action={<ViewAll to="/approvals" />}>
-          {waiting.length ? waiting.slice(0, 6).map((b) => <BookingRow key={b.id} b={b} />) : <EmptyState icon={CheckCircle2} title="All clear" text="No files are waiting for accounts." />}
-        </Section>
+        <div className="space-y-6 xl:col-span-2">
+          <Section title="Client files waiting for you" subtitle="Approve sends the file to Legal" icon={ClipboardCheck} action={<ViewAll to="/approvals" />}>
+            {waiting.length ? waiting.slice(0, 6).map((b) => <BookingRow key={b.id} b={b} />) : <EmptyState icon={CheckCircle2} title="All clear" text="No files are waiting for accounts." />}
+          </Section>
+          {/* refund requests from Sales, Team Leaders, Operations, Legal and Admin: only Accounts approves and pays */}
+          <Section title="Refund requests" subtitle={`${refundsPending} to review · ${refundRequests.length - refundsPending} approved, waiting to be paid`} icon={Undo2} action={<ViewAll to="/refunds?tab=PENDING" />}>
+            {refundRequests.length ? refundRequests.slice(0, 6).map(({ b, r }) => (
+              <Link key={r.id} to={`/bookings/${b.id}`} className="flex items-center gap-3 border-b border-line/60 px-5 py-3 last:border-0 hover:bg-card2/60">
+                <span className="min-w-0 flex-1"><b className="block truncate text-sm">{b.companyName}</b><span className="block truncate text-xs text-mute">{b.bookingId} · {r.reason}</span></span>
+                <span className="text-right"><b className="block text-sm tabular-nums">{inr(r.amount)}</b><span className={r.status === 'PENDING' ? 'text-[11px] font-semibold text-warn' : 'text-[11px] font-semibold text-info'}>{r.status === 'PENDING' ? 'To review' : 'Approved · to pay'}</span></span>
+              </Link>
+            )) : <EmptyState icon={CheckCircle2} title="No refund requests" text="Requests made on a client’s CRM entry appear here." />}
+          </Section>
+        </div>
         <div className="space-y-6">
           <LoginLogoutCard />
           <Section title="Money overview" icon={IndianRupee}>

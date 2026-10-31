@@ -6,7 +6,7 @@ export type Perm =
   | 'bookings.approve_tl' | 'bookings.accounts' | 'bookings.legal' | 'bookings.process' | 'bookings.admin'
   | 'content.view' | 'content.manage' | 'salesinfo.manage' | 'schemes.view' | 'schemes.manage'
   | 'broadcasts.view' | 'broadcasts.manage'
-  | 'billing.own' | 'billing.create' | 'billing.manage' | 'refunds.manage'
+  | 'billing.own' | 'billing.create' | 'billing.manage' | 'refunds.manage' | 'refunds.request'
   | 'workflow.manage' | 'forms.manage' | 'followup.manage' | 'saleskit.manage' | 'eligibility.manage' | 'website.manage' | 'portal.manage' | 'portal.view'
   | 'team.progress' | 'team.assign'
   | 'attendance.all' | 'leave.approve'
@@ -271,13 +271,28 @@ export interface Refund {
   /** the day the refund was asked for / agreed */
   date: string
   reason: string
-  status: 'PENDING' | 'REFUNDED'
+  /** PENDING: waiting for Accounts · APPROVED · REJECTED · REFUNDED: completed (paid back, with proof) */
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'REFUNDED'
   refundedOn?: string
   mode?: string
-  /** UTR / cheque no. */
+  /** refund transaction ID: UTR / cheque no. */
   ref?: string
+  /** who asked for it (Sales, Team Leader, Operations, Legal, Admin or Accounts) and when */
   by: string
   at: string
+  /** the client's payments it refunds */
+  paymentIds?: string[]
+  /** supporting documents from the person who asked */
+  documents?: FileRef[]
+  /** proof the money went back: receipt, transaction screenshot, bank confirmation (required to complete) */
+  proof?: FileRef[]
+  reviewNote?: string
+  reviewedBy?: string
+  reviewedAt?: string
+  completedBy?: string
+  completedAt?: string
+  /** every step: requested, approved / rejected, completed, reopened */
+  history?: { at: string; by: string; action: 'REQUESTED' | 'APPROVED' | 'REJECTED' | 'COMPLETED' | 'REOPENED'; note?: string }[]
 }
 
 export interface Approval { id: string; level: string; action: string; by: string; at: string; remark: string }

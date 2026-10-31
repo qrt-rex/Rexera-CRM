@@ -250,6 +250,11 @@ export function upgradeDb(d: DB): DB {
     for (const r of ['operations', 'admin'] as const) d.rolePerms[r] = [...new Set([...(d.rolePerms[r] ?? []), 'portal.view' as Perm])]
     d.upgrades.push('portal-view-1')
   }
+  if (!d.upgrades.includes('refunds-request-1')) {
+    // Sales, Team Leaders, Operations, Legal and Admin ask for refunds; Accounts decides (the live CRM: its migration)
+    for (const r of ['sales', 'teamlead', 'operations', 'legal', 'admin'] as const) d.rolePerms[r] = [...new Set([...(d.rolePerms[r] ?? []), 'refunds.request' as Perm])]
+    d.upgrades.push('refunds-request-1')
+  }
   if (!d.upgrades.includes('portal-view-legal-1')) {
     // the Legal team sees the client portal too (the live CRM: its migration)
     d.rolePerms.legal = [...new Set([...(d.rolePerms.legal ?? []), 'portal.view' as Perm])]

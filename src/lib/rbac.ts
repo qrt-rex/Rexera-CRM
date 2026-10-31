@@ -72,7 +72,8 @@ export const PERM_GROUPS: { group: string; perms: { id: Perm; label: string }[] 
       { id: 'billing.own', label: 'See own invoices' },
       { id: 'billing.create', label: 'Create proforma / invoices' },
       { id: 'billing.manage', label: 'All invoices, payments & cancel' },
-      { id: 'refunds.manage', label: 'Refund entries (Accounts)' },
+      { id: 'refunds.manage', label: 'Refunds: approve, reject and complete (Accounts only)' },
+      { id: 'refunds.request', label: 'Refunds: ask for a refund on a client and follow it (Sales, Team Leaders, Operations, Legal, Admin)' },
     ],
   },
   {
@@ -118,15 +119,15 @@ const common: Perm[] = ['broadcasts.view', 'messages.use', 'schemes.view', 'cont
 
 export const DEFAULT_ROLE_PERMS: Record<Role, Perm[]> = {
   superadmin: [...ALL_PERMS],
-  admin: [...common, 'bookings.all', 'bookings.admin', 'content.manage', 'salesinfo.manage', 'schemes.manage', 'employees.view', 'documents.forms', 'reports.view', 'followup.manage', 'forms.manage', 'workflow.manage', 'portal.view'],
+  admin: [...common, 'bookings.all', 'bookings.admin', 'content.manage', 'salesinfo.manage', 'schemes.manage', 'employees.view', 'documents.forms', 'reports.view', 'followup.manage', 'forms.manage', 'workflow.manage', 'portal.view', 'refunds.request'],
   accounts: [...common, 'bookings.all', 'bookings.accounts', 'billing.create', 'billing.manage', 'refunds.manage', 'reports.view', 'reports.export'],
-  legal: [...common, 'bookings.all', 'bookings.legal', 'documents.forms', 'leave.approve', 'reports.view', 'portal.view'],
-  operations: [...common, 'bookings.all', 'bookings.process', 'content.manage', 'salesinfo.manage', 'schemes.manage', 'employees.view', 'documents.forms', 'reports.view', 'events.manage', 'forms.manage', 'saleskit.manage', 'eligibility.manage', 'portal.view'],
+  legal: [...common, 'bookings.all', 'bookings.legal', 'documents.forms', 'leave.approve', 'reports.view', 'portal.view', 'refunds.request'],
+  operations: [...common, 'bookings.all', 'bookings.process', 'content.manage', 'salesinfo.manage', 'schemes.manage', 'employees.view', 'documents.forms', 'reports.view', 'events.manage', 'forms.manage', 'saleskit.manage', 'eligibility.manage', 'portal.view', 'refunds.request'],
   teamlead: [
     ...common, 'salesinfo.manage', 'leads.own', 'leads.assign', 'dialer.use', 'bookings.create', 'bookings.own', 'bookings.team', 'bookings.approve_tl',
-    'billing.own', 'billing.create', 'team.progress', 'team.assign', 'documents.forms', 'leave.approve', 'reports.view',
+    'billing.own', 'billing.create', 'team.progress', 'team.assign', 'documents.forms', 'leave.approve', 'reports.view', 'refunds.request',
   ],
-  sales: [...common, 'leads.own', 'dialer.use', 'bookings.create', 'bookings.own', 'billing.own', 'billing.create', 'documents.forms'],
+  sales: [...common, 'leads.own', 'dialer.use', 'bookings.create', 'bookings.own', 'billing.own', 'billing.create', 'documents.forms', 'refunds.request'],
   hr: [
     ...common, 'attendance.all', 'leave.approve', 'employees.view', 'employees.manage', 'events.manage', 'broadcasts.manage',
     'templates.manage', 'reports.view', 'reports.export', 'audit.view',
