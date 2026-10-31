@@ -48,13 +48,14 @@ export default function Login() {
     try {
       const r = await loginStep1(login, password)
       setToken(r.token); setDevCode(r.devCode); setEmail(r.email); setStep('code'); setCode(['', '', '', '', '', ''])
+      // The code is shown on screen only in developer mode. In a real build, showing it whenever email fails let anyone
+      // who knew a password skip the second step.
+      const undelivered = DEV_MODE
+        ? `Email could not be sent (developer mode). Your 6-digit verification code is: ${r.devCode}`
+        : 'We could not email your code right now. Please try again in a minute, or contact IT Support.'
       sendOtpEmailClient(r.email, r.devCode).then((res) => {
-        if (!res.delivered) {
-          setOtpNotice(`Render Free tier blocks outbound email ports. Your 6-digit verification code is: ${r.devCode}`)
-        }
-      }).catch(() => {
-        setOtpNotice(`Render Free tier blocks outbound email ports. Your 6-digit verification code is: ${r.devCode}`)
-      })
+        if (!res.delivered) setOtpNotice(undelivered)
+      }).catch(() => setOtpNotice(undelivered))
     } catch (e) { setErr(e instanceof Error ? e.message : 'Sign-in failed') }
     finally { setBusy(false) }
   }

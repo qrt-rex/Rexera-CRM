@@ -105,7 +105,7 @@ function Composer({ target, stage }: { target: Target; stage: MessageStageId }) 
       <div className="grid gap-4 lg:grid-cols-2">
         {box('WHATSAPP', <>
           <Textarea label={`Message (${wa.length}/900)`} rows={9} maxLength={900} value={wa} onChange={(e) => setWa(e.target.value)} />
-          <p className="text-[11px] text-mute">Goes in the approved WhatsApp template: “Dear {'{name}'}, {'<this message>'} — {db.settings.companyName || 'Rexera'}”. Line breaks become spaces.</p>
+          <p className="text-[11px] text-mute">Goes in the approved WhatsApp template: “Dear {'{name}'}, an update on your file {'{file no.}'}: {'<this message>'} — {db.settings.companyName || 'Rexera'}”. Line breaks become spaces.</p>
         </>, !contact.phone, waBusy, wa)}
         {box('EMAIL', <>
           <Input label="Subject" value={subject} maxLength={200} onChange={(e) => setSubject(e.target.value)} />

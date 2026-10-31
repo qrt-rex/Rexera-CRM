@@ -27,7 +27,7 @@ const now = Date.UTC(2026, 9, 31, 6, 0)
 const tables = () => ({
   app_users: [{ id: 'u-s1', role: 'sales', team_lead_id: 'u-tl1', phone: '9800000001', email: 'rahul@rexera.test' }, { id: 'u-acc', role: 'accounts' }, { id: 'u-op1', role: 'operations', email: 'sneha@rexera.test' }, { id: 'u-s2', role: 'sales' }],
   user_extra_roles: [],
-  app_settings: [{ key: 'company', value: { name: 'Rexera' } }, { key: 'workflow', value: { whatsapp: { updateTemplate: 'client_update', language: 'en' } } }],
+  app_settings: [{ key: 'company', value: { name: 'Rexera' } }, { key: 'workflow', value: { whatsapp: { notifyTemplate: 'client_update', language: 'en' } } }],
   bookings: [{ id: 'bk-1', booking_code: 'RX-2026-000123', company_name: 'Asha Foods', contact_person: 'Asha', email: 'asha@foods.test', mobile: '9876500001', status: 'PENDING_LEGAL', stage: 1, created_by: 'u-s1', team_lead_id: 'u-tl1' }],
   client_entries: [{ id: 'ce-1', client_name: 'Bina', company_name: 'Bina Tech', phone: '9876500002', email: null, status: 'HOT', owner_id: 'u-s1' }],
   client_messages: [], audit_log: [],
@@ -59,7 +59,7 @@ assert.equal(mails.length, before)
 r = await send(t, 'u-acc', { stage: 'ACCOUNT_CLEARED', channel: 'EMAIL', bookingId: 'bk-1', subject: 'Account cleared', body: 'Again', requestId: 'cm-req-0002' }, { now: now + 60_000 })
 assert.equal(r.status, 409)
 // …but WhatsApp is a separate button and goes through
-r = await send(t, 'u-acc', { stage: 'ACCOUNT_CLEARED', channel: 'WHATSAPP', bookingId: 'bk-1', body: 'Your account is cleared.\nNow with Legal.' }, { now: now + 60_000, env: { INTERAKT_API_KEY: 'k' }, fetchImpl: async (_url, init) => { const b = JSON.parse(init.body); assert.equal(b.template.name, 'client_update'); assert.deepEqual(b.template.bodyValues, ['Asha', 'Your account is cleared. Now with Legal.', 'Rexera']); assert.equal(b.phoneNumber, '9876500001'); return { ok: true, json: async () => ({ result: true, id: 'wa-1' }) } } })
+r = await send(t, 'u-acc', { stage: 'ACCOUNT_CLEARED', channel: 'WHATSAPP', bookingId: 'bk-1', body: 'Your account is cleared.\nNow with Legal.' }, { now: now + 60_000, env: { INTERAKT_API_KEY: 'k' }, fetchImpl: async (_url, init) => { const b = JSON.parse(init.body); assert.equal(b.template.name, 'client_update'); assert.deepEqual(b.template.bodyValues, ['Asha', 'RX-2026-000123', 'Your account is cleared. Now with Legal.', 'Rexera']); assert.equal(b.phoneNumber, '9876500001'); return { ok: true, json: async () => ({ result: true, id: 'wa-1' }) } } })
 assert.equal(r.body.status, 'SENT', r.body.message)
 assert.equal(t.client_messages.at(-1).provider_id, 'wa-1')
 

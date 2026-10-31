@@ -140,7 +140,7 @@ function Setup() {
   const db = useDb()
   const [health, setHealth] = useState<{ smtpConfigured?: boolean; whatsappConfigured?: boolean } | null>(null)
   useEffect(() => { fetch('/api/health').then((r) => r.json()).then(setHealth, () => setHealth({})) }, [])
-  const tpl = db.settings.workflow?.whatsapp?.updateTemplate
+  const tpl = db.settings.workflow?.whatsapp?.notifyTemplate
   const row = (ok: boolean | undefined, title: string, text: string) => (
     <li className="flex items-start gap-3 px-5 py-4">
       {ok ? <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-ok" /> : <TriangleAlert className="mt-0.5 size-5 shrink-0 text-warn" />}
@@ -154,7 +154,7 @@ function Setup() {
         {row(CLOUD, 'Live CRM', CLOUD ? 'Connected — messages go through the live server.' : 'This copy is not connected to the live server: messages can only be recorded here.')}
         {row(!!health?.smtpConfigured, 'Email', health === null ? 'Checking…' : health.smtpConfigured ? 'The mail server is set up.' : 'Not set up: add SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS (and SMTP_FROM) — or RESEND_API_KEY — in Render → Environment, then redeploy.')}
         {row(!!health?.whatsappConfigured, 'WhatsApp (Interakt)', health === null ? 'Checking…' : health.whatsappConfigured ? 'The Interakt key is set.' : 'Not set up: add INTERAKT_API_KEY (Interakt → Settings → Developer Settings) in Render → Environment, then redeploy.')}
-        {row(!!tpl, 'WhatsApp “client update” template', tpl ? `Using “${tpl}”.` : 'In Interakt → Templates create a Utility template with 3 variables — e.g. “Dear {{1}}, {{2}} — {{3}}” ({{1}} client name, {{2}} the message, {{3}} our company) — wait for Meta’s approval, then enter its name in Workflow settings → WhatsApp → Client update template.')}
+        {row(!!tpl, 'WhatsApp “client notification” template', tpl ? `Using “${tpl}”.` : 'In Interakt → Templates create a Utility template with 4 variables — e.g. “Dear {{1}}, an update on your file {{2}}: {{3}} — {{4}}” ({{1}} client name, {{2}} file number, {{3}} the message, {{4}} our company) — wait for Meta’s approval, then enter its name in Workflow settings → WhatsApp → Client notification template.')}
       </ul>
       <p className="border-t border-line px-5 py-3 text-xs text-mute"><Link to="/workflow-settings" className="font-semibold text-brand-ink hover:underline">Workflow settings → WhatsApp</Link> (Admin)</p>
     </Card>

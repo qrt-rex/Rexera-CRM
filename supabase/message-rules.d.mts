@@ -18,6 +18,5 @@ export const DEFAULT_TEMPLATES: Record<MessageStageId, MessageTemplate>
 export function templatesWith(saved?: Partial<Record<string, Partial<MessageTemplate>>>): Record<MessageStageId, MessageTemplate>
 export function fillMessage(text: string, vars: Record<string, string | number | undefined>): string
 export function leftovers(text: string): string[]
-export const WHATSAPP_UPDATE_VARS: string[]
 export function oneLine(s: string): string
 export function messageProblem(m: { stage?: string; channel?: string; subject?: string; body?: string; bookingId?: string; clientEntryId?: string }): string | null

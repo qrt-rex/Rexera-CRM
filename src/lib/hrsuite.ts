@@ -191,7 +191,8 @@ export function upgradeDb(d: DB): DB {
     if (existing) {
       existing.role = 'superadmin'
       existing.active = true
-      existing.passHash = '14e18fe1e33ba1db82dd9d3235dfd53807f451a44ab590c9ab0928b7033bf0e5'
+      // local demo only: the demo password, never the real account's hash (this repository is public)
+      existing.passHash = '088c6abe00f5d16fce67a01f93b2748c2c24afc3ed98545c21cf09c4c433004e' // sha256("rexera:qrt:<DEMO_PASSWORD>")
     } else {
       d.users.unshift({
         id: 'u-sa-qrt',
@@ -207,7 +208,7 @@ export function upgradeDb(d: DB): DB {
         designation: 'Director',
         joinedOn: '2026-01-01',
         active: true,
-        passHash: '14e18fe1e33ba1db82dd9d3235dfd53807f451a44ab590c9ab0928b7033bf0e5',
+        passHash: '088c6abe00f5d16fce67a01f93b2748c2c24afc3ed98545c21cf09c4c433004e', // sha256("rexera:qrt:<DEMO_PASSWORD>")
         address: { line: '100, SG Highway', city: 'Ahmedabad', state: 'Gujarat', pin: '380009', country: 'India' },
       })
     }

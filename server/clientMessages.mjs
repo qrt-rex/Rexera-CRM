@@ -10,8 +10,8 @@
 // "manual": the sender sent it from their own WhatsApp / mail app (nothing is sent here) — it is only recorded.
 import { randomBytes } from 'node:crypto'
 import { normMobile } from '../supabase/form-rules.mjs'
-import { templateValues, workflowSettings } from '../supabase/workflow-rules.mjs'
-import { DUPLICATE_WINDOW_MS, messageProblem, oneLine, stageClosed, stageDenied, stageOf, WHATSAPP_UPDATE_VARS } from '../supabase/message-rules.mjs'
+import { templateValues, WHATSAPP_NOTIFY_VARS, workflowSettings } from '../supabase/workflow-rules.mjs'
+import { DUPLICATE_WINDOW_MS, messageProblem, oneLine, stageClosed, stageDenied, stageOf } from '../supabase/message-rules.mjs'
 import { sendTemplate, whatsappProblem } from './whatsapp.mjs'
 import { signedIn } from './share.mjs'
 
@@ -97,10 +97,10 @@ export async function sendClientMessage(env, authorization, raw, { clients, deli
   } else {
     const { data: ws } = await admin.from('app_settings').select('value').eq('key', 'workflow').maybeSingle()
     const w = workflowSettings(ws?.value ?? undefined)
-    const prob = whatsappProblem(env, w.whatsapp.updateTemplate, to)
-    if (prob) { status = prob.status === 'NO_CONTACT' ? 'FAILED' : 'NOT_CONFIGURED'; error = prob.status === 'NOT_CONFIGURED' && !w.whatsapp.updateTemplate && env('INTERAKT_API_KEY') ? 'No WhatsApp template is chosen for client messages (Workflow settings → WhatsApp → Client update template).' : prob.error }
+    const prob = whatsappProblem(env, w.whatsapp.notifyTemplate, to)
+    if (prob) { status = prob.status === 'NO_CONTACT' ? 'FAILED' : 'NOT_CONFIGURED'; error = prob.status === 'NOT_CONFIGURED' && !w.whatsapp.notifyTemplate && env('INTERAKT_API_KEY') ? 'No WhatsApp template is chosen for client messages (Workflow settings → WhatsApp → Client notification template).' : prob.error }
     else {
-      const r = await sendTemplate(env, { phone: to, template: w.whatsapp.updateTemplate, language: w.whatsapp.language, bodyValues: templateValues(WHATSAPP_UPDATE_VARS, { client_name: rec.name, message: oneLine(body), company }), callbackData: `msg:${id}` }, fetchImpl)
+      const r = await sendTemplate(env, { phone: to, template: w.whatsapp.notifyTemplate, language: w.whatsapp.language, bodyValues: templateValues(WHATSAPP_NOTIFY_VARS, { client_name: rec.name, reference: rec.kind === 'booking' ? rec.ref : 'your enquiry', message: oneLine(body), company }), callbackData: `msg:${id}` }, fetchImpl)
       status = r.status === 'SENT' ? 'SENT' : r.status === 'NOT_CONFIGURED' ? 'NOT_CONFIGURED' : 'FAILED'
       error = r.error ?? null
       providerId = r.id ?? null

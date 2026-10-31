@@ -2,8 +2,8 @@
 // Nothing leaves this computer: Interakt, the mail server and Supabase are fakes.
 import assert from 'node:assert/strict'
 import { sendTemplate, welcomeWhatsapp } from './whatsapp.mjs'
-import { sendFormLink, sendInvoice, sendWelcomeNow } from './share.mjs'
-import { workflowSettings } from '../supabase/workflow-rules.mjs'
+import { sendClientWhatsapp, sendFormLink, sendInvoice, sendWelcomeNow } from './share.mjs'
+import { mayWhatsappClient, whatsappLink, workflowSettings } from '../supabase/workflow-rules.mjs'
 
 const env = (vars) => (k) => vars[k] ?? ''
 const KEY = { INTERAKT_API_KEY: 'aW50ZXJha3Qtc2VjcmV0' }
@@ -173,4 +173,37 @@ assert.equal(ik.calls[0].body.template.name, 'form_link')
 assert.deepEqual(ik.calls[0].body.template.bodyValues, ['Asha', 'KYC details', 'https://crm.example.test/f/tok_ABCDEFGHIJKLMNOPQRSTUV12', 'Rexera'], 'the link points at this CRM')
 s = formSetup([form], '')
 assert.equal((await sendFormLink(env(KEY), 'Bearer x', JSON.stringify({ formId: 'frm-1', phone: '9876500001' }), { clients: s.clients, now })).body.status, 'NOT_CONFIGURED', 'no form-link template: said so')
-console.log('✓ WhatsApp (Interakt): template requests, welcome once per file, invoice PDF by email + WhatsApp, form links, access checks')
+// ---------------------------------------------------------------- the WhatsApp button on a CRM entry (Operation, Admin, Legal)
+const notifySetup = ({ role, extra = [], visible = ['b1'], template = 'client_update' } = {}) => {
+  const admin = fake({ ...tables(), app_users: [{ id: 'u1', role }], user_extra_roles: extra.map((r) => ({ user_id: 'u1', role: r })),
+    app_settings: [{ key: 'workflow', value: { whatsapp: { notifyTemplate: template, language: 'en' } } }, { key: 'company', value: { name: 'Rexera' } }] })
+  return { admin, clients: { admin, asCaller: fake({ bookings: tables().bookings.filter((x) => visible.includes(x.id)) }), me: { id: 'u1', name: 'Staff', active: true } } }
+}
+const note = (x) => JSON.stringify({ bookingId: 'b1', message: 'Your DPR is ready for review.', ...x })
+for (const role of ['sales', 'teamlead', 'accounts', 'hr', 'it', 'support', 'superadmin', 'digitalmedia']) {
+  s = notifySetup({ role })
+  assert.equal((await sendClientWhatsapp(env(KEY), 'Bearer x', note(), { clients: s.clients })).status, 403, `${role} may not message clients`)
+}
+s = notifySetup({ role: 'sales', extra: ['legal'] })
+ik = fakeInterakt()
+assert.equal((await sendClientWhatsapp(env(KEY), 'Bearer x', note(), { clients: s.clients, fetchImpl: ik.fetchImpl, now })).body.status, 'SENT', 'an extra Legal role is enough')
+s = notifySetup({ role: 'operations', visible: [] })
+assert.equal((await sendClientWhatsapp(env(KEY), 'Bearer x', note(), { clients: s.clients })).status, 403, 'an entry the caller cannot open')
+s = notifySetup({ role: 'admin' })
+assert.equal((await sendClientWhatsapp(env(KEY), 'Bearer x', note({ message: ' ' }), { clients: s.clients })).status, 422, 'an empty message')
+for (const role of ['operations', 'admin', 'legal']) {
+  s = notifySetup({ role })
+  ik = fakeInterakt()
+  res = await sendClientWhatsapp(env(KEY), 'Bearer x', note({ phone: '9000000000' }), { clients: s.clients, fetchImpl: ik.fetchImpl, now })
+  assert.equal(res.body.status, 'SENT', `${role} may message the client`)
+  assert.equal(ik.calls[0].body.phoneNumber, row.mobile, 'always the number saved on the entry, never one sent by the screen')
+  assert.deepEqual(ik.calls[0].body.template.bodyValues, ['Asha', 'RX-1', 'Your DPR is ready for review.', 'Rexera'])
+  assert.ok(s.admin.t.audit_log.some((x) => x.action === 'CLIENT_WHATSAPP_SENT' && x.by_user === 'u1'))
+}
+s = notifySetup({ role: 'operations', template: '' })
+res = await sendClientWhatsapp(env(KEY), 'Bearer x', note(), { clients: s.clients, now })
+assert.equal(res.body.status, 'NOT_CONFIGURED', 'no template: the screen opens WhatsApp instead')
+assert.equal(whatsappLink('+91 98765 43210', 'Hi & bye'), 'https://wa.me/919876543210?text=Hi%20%26%20bye')
+assert.equal(whatsappLink('12345', 'Hi'), '', 'no link without a valid mobile')
+assert.equal(mayWhatsappClient(['sales', 'operations']), true); assert.equal(mayWhatsappClient(['superadmin', 'it']), false)
+console.log('✓ WhatsApp (Interakt): template requests, welcome once per file, invoice PDF by email + WhatsApp, form links, client button (Ops/Admin/Legal only), access checks')

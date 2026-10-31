@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { CheckCircle2, Eye, EyeOff, FileUp, Flag, Megaphone, Pencil, Plus, ShieldCheck, Trash2, UserRoundCheck, X } from 'lucide-react'
+import { CheckCircle2, Eye, EyeOff, FileUp, Flag, Megaphone, MessageCircle, Pencil, Plus, ShieldCheck, Trash2, UserRoundCheck, X } from 'lucide-react'
 import { ADMIN_STAGES } from '../../supabase/workflow-rules.mjs'
 import { CLIENT_DOC_STATUS, projectProgress, reviewSteps } from '../../supabase/portal-rules.mjs'
 import type { AdminStageId, Booking, FileRef, Milestone, MilestoneTask } from '../lib/types'
@@ -10,6 +10,7 @@ import { isMaster, rolesOf } from '../lib/rbac'
 import {
   canRunClientPortal, clientDocState, publishClientUpdate, removeClientUpdate, removeMilestone, reviewClientDoc, saveMilestone, setClientDocInternal, setClientDocs, setMilestoneTask, userName,
 } from '../lib/actions'
+import { useWhatsappClient } from './WhatsappClient'
 import { DOC_TYPES } from '../lib/files'
 import { fmtDate, fmtDateTime, today } from '../lib/format'
 import { FileField, FileLink } from './FileField'
@@ -38,6 +39,8 @@ export function ClientPortalCard({ b }: { b: Booking }) {
   const progress = projectProgress(b.milestones)
   const shown = projectProgress(b.milestones, true)
   const uploadsOf = (cat: AdminStageId) => (b.clientUploads ?? []).filter((u) => u.category === cat).sort((x, y) => y.at.localeCompare(x.at))
+  // WhatsApp to the client: Operation, Admin and Legal teams only
+  const wa = useWhatsappClient(b)
 
   return (
     <Card className="overflow-hidden xl:col-span-2">
@@ -66,6 +69,8 @@ export function ClientPortalCard({ b }: { b: Booking }) {
                   {w.internalNote && <span className="mt-0.5 block text-[11px] text-warn"><b>Internal:</b> {w.internalNote}</span>}
                 </span>
                 <Badge tone={info.tone}>{info.label}</Badge>
+                {wa.may && (st === 'PENDING_UPLOAD' || st === 'RESUBMISSION') && <Button size="sm" variant="ghost" icon={MessageCircle} aria-label={`Remind the client about ${s.short} on WhatsApp`} title="Remind on WhatsApp"
+                  onClick={() => wa.open(`Please upload your ${s.short} ${st === 'RESUBMISSION' ? 'again ' : ''}for file ${b.bookingId}.${w.clientRemark && st === 'RESUBMISSION' ? `\nWhat to change: ${w.clientRemark}` : ''}`)} />}
                 {mayReview && reviewSteps(st).includes('START') && <Button size="sm" onClick={() => run(() => reviewClientDoc(me, b.id, s.id, 'START'), 'Review started')}>Start review</Button>}
                 {mayReview && reviewSteps(st).includes('APPROVE') && <>
                   <Button size="sm" icon={CheckCircle2} onClick={() => setReview({ cat: s.id, step: 'APPROVE', remark: '' })}>Approve</Button>
@@ -115,6 +120,7 @@ export function ClientPortalCard({ b }: { b: Booking }) {
       {/* ---------------------------------------------------------------- updates published to the client */}
       <div className="flex flex-wrap items-center gap-2 border-t border-line px-5 py-3">
         <p className="mr-auto text-sm font-bold">Updates to the client <span className="font-normal text-mute">· shown in their portal</span></p>
+        {wa.may && <Button size="sm" variant="outline" icon={MessageCircle} onClick={() => wa.open()}>WhatsApp client</Button>}
         {may && <Button size="sm" variant="outline" icon={Megaphone} onClick={() => setUpd({ title: '', text: '' })}>Publish update</Button>}
       </div>
       {(b.clientUpdates ?? []).length > 0 && (
@@ -123,6 +129,8 @@ export function ClientPortalCard({ b }: { b: Booking }) {
             <li key={u.id} className="flex items-start gap-3 px-5 py-3 text-sm">
               <span className="min-w-0 flex-1"><b>{u.title}</b><span className="block whitespace-pre-line text-xs text-ink/80">{u.text}</span>
                 <span className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-mute">{fmtDateTime(u.at)} · {userName(db, u.by)}{u.file && <FileLink file={u.file} />}</span></span>
+              {wa.may && <Button size="sm" variant="ghost" icon={MessageCircle} aria-label={`Send update ${u.title} on WhatsApp`} title="Send on WhatsApp"
+                onClick={() => wa.open(`Update on your file ${b.bookingId}: ${u.title}\n${u.text}`)} />}
               {may && <Button size="sm" variant="ghost" icon={Trash2} aria-label={`Remove update ${u.title}`} onClick={async () => { if (await confirm('Remove update?', 'The client will no longer see it.', true)) run(() => removeClientUpdate(me, b.id, u.id), 'Update removed') }} />}
             </li>
           ))}
@@ -189,6 +197,7 @@ export function ClientPortalCard({ b }: { b: Booking }) {
           <FileField label="File (optional)" accept={DOC_TYPES} acceptLabel="PDF or image, up to 5 MB" value={upd.file} onChange={(f) => setUpd({ ...upd, file: f })} />
         </div>}
       </Modal>
+      {wa.node}
       {confirmNode}
     </Card>
   )

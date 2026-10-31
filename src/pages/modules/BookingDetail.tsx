@@ -7,6 +7,7 @@ import { MessageClientModal, MessageLog, NextMessage } from '../../components/Cl
 import { mayMessage } from '../../lib/clientMessages'
 import type { MessageStageId } from '../../../supabase/message-rules.mjs'
 import { ClientPortalCard } from '../../components/ClientPortalPanel'
+import { WhatsappClientButton } from '../../components/WhatsappClient'
 import { openBookingPdf } from '../../lib/bookingPdf'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
@@ -60,6 +61,7 @@ export default function BookingDetail() {
             <Button variant="outline" icon={FileText} onClick={() => run(() => openBookingPdf(db, b))}>PDF</Button>
             {mayMessage(db, me, { kind: 'booking', b }) && <Button variant="accent" icon={MessageCircle} onClick={() => setMessage('')}>Message client</Button>}
             {canEmailClient(db, me, b) && <Button variant="outline" icon={Mail} onClick={() => setMail(true)}>Detailed email</Button>}
+            <WhatsappClientButton b={b} />
             {canEditBooking(db, me, b) && <Link to={`/bookings/${b.id}/edit`}><Button variant="outline" icon={Pencil}>Edit</Button></Link>}
             {can('billing.create', 'billing.manage') && !invoices.length && !['PENDING_TL', 'REJECTED'].includes(b.status) && (
               <Button variant="outline" icon={Receipt} onClick={async () => { const inv = await run(() => invoiceFromBooking(me, b.id, can('billing.manage') ? 'TAX' : 'PROFORMA'), 'Invoice raised'); if (typeof inv === 'string') nav(`/billing/${inv}`) }}>Raise invoice</Button>

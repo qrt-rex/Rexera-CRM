@@ -146,8 +146,7 @@ export function fillMessage(text, vars) {
 export const leftovers = (text) => [...new Set((String(text).match(/\{(\w+)\}/g) ?? []))]
 
 // ------------------------------------------------------------------ WhatsApp (Interakt)
-/** The approved "client update" template's {{1}}, {{2}}, {{3}}: client name, the message, our company. */
-export const WHATSAPP_UPDATE_VARS = ['client_name', 'message', 'company']
+// Messages go in the approved "client notification" template (Workflow settings → notifyTemplate, WHATSAPP_NOTIFY_VARS).
 /** WhatsApp template values can't hold line breaks: one line, at most 900 characters. */
 export const oneLine = (s) => String(s ?? '').replace(/\s*\n+\s*/g, ' ').replace(/\s{2,}/g, ' ').trim().slice(0, 900)
 

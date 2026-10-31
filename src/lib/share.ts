@@ -1,4 +1,6 @@
-import type { DB, Invoice, InvoiceShare, User } from './types'
+import type { Booking, DB, Invoice, InvoiceShare, User } from './types'
+import { whatsappLink } from '../../supabase/workflow-rules.mjs'
+import { CLOUD } from './cloud'
 import type { ClientEmailRequest } from '../../supabase/functions/_shared/client-email.mjs'
 import { fmtDate, inr, invoiceTotals, isEmail } from './format'
 import { invoiceFileName, invoicePdf } from './invoicePdf'
@@ -15,6 +17,34 @@ export { serverPost }
 export async function requestWelcomeWhatsapp(bookingId: string) {
   const r = await serverPost<{ result: { status: string; to: string; error?: string } | null }>('/api/whatsapp/welcome', { bookingId })
   return r.result
+}
+
+/**
+ * A message to the entry's client on WhatsApp. On the live CRM with a client notification template it goes straight
+ * through Interakt ('SENT'); otherwise WhatsApp (app or Web) opens with the client's number and the message typed in
+ * ('OPENED'), and the person presses send there. The server and the button both allow only Operation, Admin and Legal.
+ */
+/** Where clients sign in to follow their file (the website's client portal). */
+export const CLIENT_PORTAL_URL = String(import.meta.env.VITE_CLIENT_PORTAL_URL || 'https://websiterexera.vercel.app/portal')
+
+export async function whatsappClient(b: Pick<Booking, 'id' | 'mobile'>, message: string): Promise<'SENT' | 'OPENED'> {
+  const link = whatsappLink(b.mobile, message)
+  // a tab opened before any await isn't stopped by the pop-up blocker; closed again if Interakt sends it
+  const tab = link ? window.open('about:blank', '_blank') : null
+  try {
+    if (CLOUD) {
+      const r = await serverPost<{ success: boolean; status: InvoiceShare['status']; error?: string }>('/api/whatsapp/notify', { bookingId: b.id, message })
+      if (r.status === 'SENT') { tab?.close(); return 'SENT' }
+      if (r.status === 'NO_CONTACT') throw new Error('This entry has no valid 10-digit mobile number — add it first.')
+      if (r.status !== 'NOT_CONFIGURED') throw new Error(r.error || 'WhatsApp could not send the message — try again.')
+    }
+    if (!link) throw new Error('This entry has no valid 10-digit mobile number — add it first.')
+    if (tab) { tab.opener = null; tab.location.href = link } else window.location.href = link
+    return 'OPENED'
+  } catch (e) {
+    tab?.close()
+    throw e
+  }
 }
 
 /** A Document Form Builder link to the client on WhatsApp (Interakt form-link template). */

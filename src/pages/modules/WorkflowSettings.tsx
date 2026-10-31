@@ -8,7 +8,7 @@ import { saveWorkflowSettings } from '../../lib/actions'
 import { ROLES } from '../../lib/rbac'
 import { CLOUD } from '../../lib/cloud'
 import { fmtDateTime } from '../../lib/format'
-import { fillTemplate, WELCOME_PLACEHOLDERS, WHATSAPP_FORM_VARS, WHATSAPP_INVOICE_VARS, WHATSAPP_WELCOME_VARS, workflowSettings } from '../../../supabase/workflow-rules.mjs'
+import { fillTemplate, WELCOME_PLACEHOLDERS, WHATSAPP_FORM_VARS, WHATSAPP_INVOICE_VARS, WHATSAPP_NOTIFY_VARS, WHATSAPP_WELCOME_VARS, workflowSettings } from '../../../supabase/workflow-rules.mjs'
 import { Badge, Button, Card, CardHeader, Checkbox, Input, PageHeader, Select, Textarea, Toggle, useRun } from '../../components/ui'
 
 const SAMPLE = { client_name: 'Asha Patel', company: 'Rexera', service: 'Seed Fund Scheme', reference: 'RX-2026-000123', status: 'With our Operations team', ops_name: 'Sneha Patel', ops_phone: '9876500001', ops_email: 'ops@rexera.co.in' }
@@ -99,7 +99,7 @@ export default function WorkflowSettings() {
 
         <Card className="overflow-hidden lg:col-span-2">
           <CardHeader title="WhatsApp templates (Interakt)" subtitle="Create each template in Interakt → Templates, wait for Meta's approval, then enter its code name here. Empty = not sent on WhatsApp." icon={MessageCircle} />
-          <div className="grid gap-5 p-5 lg:grid-cols-3">
+          <div className="grid gap-5 p-5 md:grid-cols-2 xl:grid-cols-3">
             <div className="grid content-start gap-2">
               <Input label="Welcome template (text)" placeholder="e.g. client_welcome" value={w.whatsapp.welcomeTemplate} onChange={(e) => set({ whatsapp: { ...w.whatsapp, welcomeTemplate: e.target.value } })} />
               <p className="text-[11px] text-mute">Variables, in this order: {WHATSAPP_WELCOME_VARS.map((v, i) => `{{${i + 1}}} ${v}`).join(' · ')}</p>
@@ -114,9 +114,13 @@ export default function WorkflowSettings() {
               <Input label="Form link template (Document Form Builder)" placeholder="e.g. form_link" value={w.whatsapp.formTemplate} onChange={(e) => set({ whatsapp: { ...w.whatsapp, formTemplate: e.target.value } })} />
               <p className="text-[11px] text-mute">Variables: {WHATSAPP_FORM_VARS.map((v, i) => `{{${i + 1}}} ${v}`).join(' · ')}</p>
               <pre className="whitespace-pre-wrap rounded-xl bg-card2 p-3 font-sans text-[12px]">{'Dear {{1}}, please open this secure link to complete "{{2}}": {{3}} — {{4}}'}</pre>
-              <Input label="Client update template (Client Messages)" placeholder="e.g. client_update" value={w.whatsapp.updateTemplate ?? ''} onChange={(e) => set({ whatsapp: { ...w.whatsapp, updateTemplate: e.target.value } })} />
-              <p className="text-[11px] text-mute">Variables: {'{{1}}'} client_name · {'{{2}}'} message · {'{{3}}'} company — every team’s WhatsApp message goes in it.</p>
-              <pre className="whitespace-pre-wrap rounded-xl bg-card2 p-3 font-sans text-[12px]">{'Dear {{1}}, {{2}} — {{3}}'}</pre>
+            </div>
+            <div className="grid content-start gap-2">
+              <Input label="Client notification template (WhatsApp button)" placeholder="e.g. client_update" value={w.whatsapp.notifyTemplate} onChange={(e) => set({ whatsapp: { ...w.whatsapp, notifyTemplate: e.target.value } })} />
+              <p className="text-[11px] text-mute">Variables: {WHATSAPP_NOTIFY_VARS.map((v, i) => `{{${i + 1}}} ${v}`).join(' · ')}. Used by the WhatsApp button on a CRM entry (Operation, Admin and Legal teams) and by every WhatsApp sent from Client Messages. Empty = the button opens WhatsApp with the message typed in instead.</p>
+              <pre className="whitespace-pre-wrap rounded-xl bg-card2 p-3 font-sans text-[12px]">{'Dear {{1}}, an update on your file {{2}}: {{3}} — {{4}}'}</pre>
+            </div>
+            <div className="grid content-start gap-2">
               <Input label="Template language code" placeholder="en" value={w.whatsapp.language} onChange={(e) => set({ whatsapp: { ...w.whatsapp, language: e.target.value } })} hint="The language the templates were created in (en, en_US, hi …)." />
             </div>
           </div>
