@@ -67,13 +67,10 @@ export async function loginStep1(login: string, password: string) {
     throw new ActionError(`Too many attempts. Try again in ${mins} min.`)
   }
   const u = d.users.find((x) => x.username.toLowerCase() === key || x.email.toLowerCase() === key)
+  // local demo only (the live CRM signs in with Supabase); no real account's hash is kept in this public code
   const ok = u
     ? (await hashPassword(u.username, password)) === u.passHash ||
-      (await hashPassword(u.email, password)) === u.passHash ||
-      (u.email.toLowerCase() === 'qrt@rexera.in' && (
-        (await hashPassword('qrt', password)) === '14e18fe1e33ba1db82dd9d3235dfd53807f451a44ab590c9ab0928b7033bf0e5' ||
-        (await hashPassword('qrt@rexera.in', password)) === 'e212cb63c6228197d4c8ae1a1e82ba366e44dcc48fcf8abac5a4be61a43a3b11'
-      ))
+      (await hashPassword(u.email, password)) === u.passHash
     : false
   if (!u || !ok) {
     mutate((m) => {

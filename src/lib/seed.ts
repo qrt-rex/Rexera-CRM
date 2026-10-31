@@ -9,23 +9,10 @@ export const SEED_VERSION = 6
 /** Password for the extra sample accounts (local demo only — change or remove before any real use). */
 export const DEMO_PASSWORD = 'Rexera@2026'
 
-/**
- * Company sign-in accounts. Only SHA-256 hashes of the agreed passwords are kept here, never the
- * passwords themselves (hash = sha256("rexera:<username>:<password>"), see lib/crypto.ts).
- */
-const PRESET_HASHES: Record<string, string> = {
-  superadmin: '6bb511d5f4d9a868caaac6077860d9d660204b4996fcb08ef79314b9404fe808',
-  qrt: '14e18fe1e33ba1db82dd9d3235dfd53807f451a44ab590c9ab0928b7033bf0e5',
-  'qrt@rexera.in': 'e212cb63c6228197d4c8ae1a1e82ba366e44dcc48fcf8abac5a4be61a43a3b11',
-  admin: 'c0d44c22cddc33e8fd6b6236bad908b3a1a68c9e1f223b76484eed06555258c5',
-  hr: '6ef17e0e44865676e1dc7a3ae239af168876547e5d92db0000f35bfcfcd03f83',
-  'hr.in': 'fd6d9fabfd45513242d037faea66bfe70a04139fca113ede005f118aff2f3c2a',
-  legal: '7052a4468cb9adb82f8f347d87d4f422d1ab91be4e25d8281422be31858f8437',
-  sales: '5254c0154ae93cf5f3d4b3118e10e6087cd5c30278d78e1292b4dbc93933ce9c',
-  it: '93a51d36276b2da859cd06d855eb9f37c98dbcad4fab4323cd7f540d1716bc0e',
-  support: '25238f269956cbdc28489ee06ed8f4a9ee4ab6b8665660b38aea2d5853b2a939',
-  ot: 'c93b9710653fcf6cfa95fbcb00201e486819b3d09c8198905d202eca83a34f63',
-}
+// Company sign-in accounts for the local demo. Security: the real accounts' password hashes used to live here. This repository is public and the hashes were
+// unsalted SHA-256, so they could be cracked offline. Local/demo data now uses DEMO_PASSWORD for every account;
+// real sign-in is Supabase Auth only. (The live passwords for these accounts must be changed once.)
+const PRESET_HASHES: Record<string, string> = {}
 /** Accounts with their own password (the login demo panel fills only their email). */
 export const PRESET_USERS = new Set(Object.keys(PRESET_HASHES))
 const EMAILS: Record<string, string> = {

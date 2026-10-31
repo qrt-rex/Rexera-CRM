@@ -147,6 +147,7 @@ function sendJson(res, statusCode, data) {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'X-Content-Type-Options': 'nosniff',
   })
   res.end(JSON.stringify(data))
 }
@@ -191,7 +192,7 @@ if (jobsEvery >= 5) setInterval(() => runScheduledJobs('timer'), jobsEvery * 60_
 async function handleWebsiteLead(req, res) {
   let raw
   try { raw = await readRawBody(req, 64_000) } catch { return sendJson(res, 413, { success: false, message: 'Payload too large' }) }
-  const ip = String(req.headers['x-forwarded-for'] ?? req.socket.remoteAddress ?? '').split(',')[0].trim()
+  const ip = clientIp(req)
   try {
     const r = await receiveWebsiteLead(getEnv, { contentType: req.headers['content-type'], raw, ip, headerKey: req.headers['x-website-key'] })
     if (r.status !== 200) console.warn(`[website lead] ${r.status}: ${r.body.message}`)
@@ -405,7 +406,17 @@ async function signedInEmail(authorization) {
   const { data } = await sb.auth.getUser(token).catch(() => ({ data: null }))
   return data?.user?.email ?? null
 }
-const clientIp = (req) => String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '?'
+/**
+ * The caller's IP for rate limits. Render sits behind Cloudflare, which overwrites CF-Connecting-IP; the first
+ * X-Forwarded-For entry is whatever the caller sent (spoofable), so only the last one (added by the proxy) is used.
+ */
+function clientIp(req) {
+  const h = req.headers
+  const trusted = String(h['cf-connecting-ip'] || h['true-client-ip'] || '').trim()
+  if (trusted) return trusted
+  const hops = String(h['x-forwarded-for'] || '').split(',').map((s) => s.trim()).filter(Boolean)
+  return hops[hops.length - 1] || req.socket.remoteAddress || '?'
+}
 function overLimit(key, max, windowMs) {
   const now = Date.now()
   const hits = (sendLog.get(key) || []).filter((t) => now - t < windowMs)
@@ -486,7 +497,7 @@ async function handleAiChat(req, res) {
   if (mailAdmin() && !(req.headers.authorization && await crmUser(getEnv, req.headers.authorization).catch(() => null))) {
     return sendJson(res, 401, { success: false, message: 'Sign in to the CRM to use the assistant.' })
   }
-  const ip = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '?'
+  const ip = clientIp(req)
   const limited = aiOverLimit(ip, { hourly: Number(getEnv('AI_HOURLY_LIMIT', '150')), daily: Number(getEnv('AI_DAILY_LIMIT', '1500')) })
   if (limited) return sendJson(res, 429, { success: false, message: limited })
   const r = await answerAi(body, aiConfig((k) => getEnv(k)))
@@ -496,6 +507,15 @@ async function handleAiChat(req, res) {
 // -------------------------------------------------------------
 // Static File Serving with SPA fallback
 // -------------------------------------------------------------
+// no framing by other sites (clickjacking), no MIME sniffing, HTTPS only, no full URLs in the Referer
+const SECURITY_HEADERS = {
+  'X-Frame-Options': 'SAMEORIGIN',
+  'Content-Security-Policy': "frame-ancestors 'self'",
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Strict-Transport-Security': 'max-age=31536000',
+}
+
 function serveStaticFile(req, res, pathname) {
   let relativePath = pathname
   if (relativePath === '/' || relativePath === '') {
@@ -516,6 +536,7 @@ function serveStaticFile(req, res, pathname) {
       : 'public, max-age=31536000, immutable'
 
     res.writeHead(200, {
+      ...SECURITY_HEADERS,
       'Content-Type': contentType,
       'Cache-Control': cacheControl,
     })
@@ -527,6 +548,7 @@ function serveStaticFile(req, res, pathname) {
   const indexHtml = path.join(DIST_DIR, 'index.html')
   if (fs.existsSync(indexHtml)) {
     res.writeHead(200, {
+      ...SECURITY_HEADERS,
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'no-cache, must-revalidate',
     })
@@ -658,7 +680,10 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (pathname === '/api/users/password' && req.method === 'POST') {
-    return handleSetPassword(req, res).catch((err) => sendJson(res, 502, { success: false, message: err.message }))
+    return handleSetPassword(req, res).catch((err) => {
+      console.error(`[users/password] ${err.message}`)
+      sendJson(res, 502, { success: false, message: 'The password could not be changed right now — please try again.' })
+    })
   }
 
   // Blutec webhooks: IVR "interested" leads, and dialer call.completed (the finished call in the lead's history)
@@ -669,7 +694,7 @@ const server = http.createServer(async (req, res) => {
   // public job applications (no sign-in): the server checks and saves them, and tells HR
   const applyMatch = pathname.match(/^\/api\/apply\/([A-Za-z0-9_-]{6,64})$/)
   if (applyMatch && req.method === 'POST') {
-    const ip = String(req.headers['x-forwarded-for'] ?? req.socket.remoteAddress ?? '').split(',')[0].trim()
+    const ip = clientIp(req)
     let raw
     try { raw = await readRawBody(req, 64_000) } catch { return sendJson(res, 413, { success: false, message: 'Too large.' }) }
     try {
@@ -684,7 +709,7 @@ const server = http.createServer(async (req, res) => {
   // public client forms (no sign-in): read the form / send the answers
   const formMatch = pathname.match(/^\/api\/forms\/([A-Za-z0-9_-]{8,80})(\/submit)?$/)
   if (formMatch) {
-    const ip = String(req.headers['x-forwarded-for'] ?? req.socket.remoteAddress ?? '').split(',')[0].trim()
+    const ip = clientIp(req)
     try {
       if (!formMatch[2] && req.method === 'GET') { const r = await getPublicForm(getEnv, formMatch[1], parsedUrl.searchParams.get('mobile'), ip); return sendJson(res, r.status, r.body) }
       if (formMatch[2] && req.method === 'POST') {
@@ -712,7 +737,7 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, r.status, r.body)
     } catch (e) {
       console.error(`[${pathname}] ${e.message}`)
-      return sendJson(res, 502, { success: false, message: `Sending failed: ${e.message}` })
+      return sendJson(res, 502, { success: false, message: 'Sending failed — please try again in a minute.' })
     }
   }
 
@@ -748,13 +773,16 @@ const server = http.createServer(async (req, res) => {
       if (!url || !secret.startsWith('sb_secret_')) return sendJson(res, 503, { success: false, message: 'The CRM is not connected yet.' })
       const r = await retryWebsiteLead(createClient(url, secret, { auth: { persistSession: false, autoRefreshToken: false } }), who, body)
       return sendJson(res, r.status, r.body)
-    } catch (e) { return sendJson(res, 502, { success: false, message: e.message }) }
+    } catch (e) {
+      console.error(`[website lead retry] ${e.message}`)
+      return sendJson(res, 502, { success: false, message: 'The lead could not be saved right now — please try again.' })
+    }
   }
 
   // client portal: the Super Admin manages access; clients read and upload only through here (server/portal.mjs)
   const portalMatch = pathname.match(/^\/api\/(portal|portal-admin)\/([a-z-]{2,20})$/)
   if (portalMatch && (req.method === 'POST' || req.method === 'GET')) {
-    const ip = String(req.headers['x-forwarded-for'] ?? req.socket.remoteAddress ?? '').split(',')[0].trim()
+    const ip = clientIp(req)
     let body = {}
     if (req.method === 'POST') {
       try { body = JSON.parse((await readRawBody(req, 8_000_000)) || '{}') } catch { return sendJson(res, 400, { success: false, message: 'Bad request or file too large (5 MB).' }) }
