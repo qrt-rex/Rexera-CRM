@@ -68,7 +68,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       const actions: Item[] = [
         ...(can('leads.admin') ? [{ id: 'a-lead', label: 'CRM Leads', sub: 'All leads, uploads, website leads', icon: UserPlus, to: '/leads', group: 'Actions' as const, score: 0 }] : []),
         ...(can('bookings.create') ? [{ id: 'a-entry', label: 'New CRM entry', sub: 'Book a client with advance', icon: Plus, to: '/bookings/new', group: 'Actions' as const, score: 0 }] : []),
-        ...(can('dialer.use') ? [{ id: 'a-dial', label: 'Dialer', sub: 'Call your queue', icon: Phone, to: '/dialer', group: 'Actions' as const, score: 0 }] : []),
+        ...(can('dialer.use') ? [{ id: 'a-dial', label: 'Dialer', sub: 'Call your queue', icon: Phone, to: '/dialer?tab=calls', group: 'Actions' as const, score: 0 }] : []),
         { id: 'a-dash', label: 'My dashboard', sub: roleLabel(me.role), icon: LayoutDashboard, to: `/dashboard/${me.role}`, group: 'Actions' as const, score: 0 },
       ]
       const recent = readRecent().map((r) => ({ ...r, icon: iconFor(r.to) }))

@@ -46,9 +46,9 @@ export type AgentState = 'AVAILABLE' | 'ON_CALL' | 'WRAP_UP' | 'BREAK' | 'OFFLIN
 export const AGENT_STATES: { id: AgentState; label: string; color: string }[] = [
   { id: 'AVAILABLE', label: 'Available', color: '#16a34a' },
   { id: 'ON_CALL', label: 'On Call', color: '#2563eb' },
-  { id: 'WRAP_UP', label: 'Wrap Up', color: '#eab308' },
-  { id: 'BREAK', label: 'Breaks / Away', color: '#f97316' },
-  { id: 'OFFLINE', label: 'Offline', color: '#94a3b8' },
+  { id: 'WRAP_UP', label: 'Wrap Up', color: '#ca8a04' },
+  { id: 'BREAK', label: 'Breaks / Away', color: '#ea580c' },
+  { id: 'OFFLINE', label: 'Offline', color: '#64748b' },
 ]
 /** What the dialer on this computer knows right now (a call ringing / on, or ended and the outcome not saved yet). */
 export interface LiveCall { state: 'ON_CALL' | 'WRAP_UP'; since: number }
@@ -64,7 +64,7 @@ export function agentActivity(db: DB, user: User, calls: Call[], now: number, li
   const s = db.sessions.find((x) => x.userId === user.id && x.date === day)
   const secs = (a: number, b: number) => Math.max(0, Math.round((b - a) / 1000))
   const dur: Record<AgentState, number> = { AVAILABLE: 0, ON_CALL: 0, WRAP_UP: 0, BREAK: 0, OFFLINE: 0 }
-  if (!s) return { dur, state: (live?.state ?? 'OFFLINE') as AgentState, since: live?.since, started: false }
+  if (!s) return { dur, state: (live?.state ?? 'OFFLINE') as AgentState, since: live?.since, started: false, breaks: 0 }
   const start = new Date(s.loginAt).getTime()
   const end = s.logoutAt ? new Date(s.logoutAt).getTime() : now
   const breaks = s.breaks ?? []
@@ -77,8 +77,14 @@ export function agentActivity(db: DB, user: User, calls: Call[], now: number, li
   const lastChange = Math.min(now, Math.max(start, ...breaks.map((b) => (b.end ? new Date(b.end).getTime() : 0)), ...calls.map((c) => new Date(c.at).getTime())))
   const state: AgentState = live?.state ?? (s.logoutAt ? 'OFFLINE' : openBreak ? 'BREAK' : 'AVAILABLE')
   const since = live?.since ?? (s.logoutAt ? end : openBreak ? new Date(openBreak.start).getTime() : lastChange)
-  return { dur, state, since, started: true }
+  return { dur, state, since, started: true, breaks: breaks.length }
 }
 
-/** 3725 → "01:02" (hours:minutes). */
-export const hhmm = (sec: number) => `${String(Math.floor(sec / 3600)).padStart(2, '0')}:${String(Math.floor((sec % 3600) / 60)).padStart(2, '0')}`
+/** 3725 → "01:02:05" (hours:minutes:seconds). */
+export const hms = (sec: number) => [Math.floor(sec / 3600), Math.floor((sec % 3600) / 60), Math.floor(sec % 60)].map((n) => String(n).padStart(2, '0')).join(':')
+
+/** Every call the agent made (from the leads given), newest first — the dialer's call history. */
+export const callsBy = (leads: Lead[], userId: string): AgentCall[] =>
+  leads.flatMap((l) => l.calls.filter((c) => c.by === userId).map((c) => ({ ...c, lead: l }))).sort((a, b) => b.at.localeCompare(a.at))
+/** Click-to-call through Blutec (it has a Blutec reference or status), or dialled from the agent's own phone. */
+export const callType = (c: Call) => (c.id.startsWith('bt-') || !!c.callStatus ? 'Click-to-call' : 'Own phone')

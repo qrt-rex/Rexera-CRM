@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Briefcase, CircleCheck, CircleDashed, ClipboardList, Flame, History, LayoutDashboard, Pause, Phone, PhoneCall, PhoneOff, Play, Radio, RefreshCcw, Settings2, Square, Timer, UserPlus } from 'lucide-react'
+import { Briefcase, CalendarClock, CircleDashed, ClipboardList, Flame, History, LayoutDashboard, Pause, Phone, PhoneCall, PhoneOff, Play, Radio, RefreshCcw, Settings2, Square, UserPlus } from 'lucide-react'
 import type { CallOutcome, Lead } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
@@ -9,12 +9,10 @@ import { CALL_OUTCOMES, dispositionToStatus, FOLLOW_UP_LEAD, LEAD_STATUS, OPEN_L
 import { addDays, fmtDate, fmtDateTime, fmtTime, inr, maskPhone, normPhone, today, ymd } from '../../lib/format'
 import { blutec, dialerKey, ivrKey, KEYLESS, DialerError, FINAL_STATUSES, isHot, type AgentConnect, type BlutecStatus, type CallStatus, type Ivr, type IvrCall, type IvrStats } from '../../lib/dialer'
 import { isMaster, rolesOf } from '../../lib/rbac'
-import { Badge, Button, Card, CardHeader, cx, EmptyState, Input, Modal, PageHeader, Table, Tabs, Td, Textarea, Th, useConfirm, useRun, useToast } from '../../components/ui'
+import { Badge, Button, Card, CardHeader, cx, EmptyState, Input, Modal, Table, Tabs, Td, Textarea, Th, useConfirm, useRun, useToast } from '../../components/ui'
 import { DialerCampaigns } from '../../components/DialerCampaigns'
-import { salesNumbers } from '../../lib/metrics'
-import { MiniStat } from '../dashboards/widgets'
 import { CallWindow } from '../../components/CallWindow'
-import { DialerDashboard } from '../../components/DialerDashboard'
+import { AgentStatusMenu, CallbacksView, CallHistory, DialerDashboard, DialerTitle, useAgentPick } from '../../components/DialerDashboard'
 import type { LiveCall } from '../../lib/callStats'
 import { ClientEntryForLead } from '../../components/ClientEntry'
 import { CLIENT_ENTRY_STATUS, openEntryForLead } from '../../lib/clientEntries'
@@ -68,34 +66,44 @@ export default function Dialer() {
   const { can } = useAuth()
   const [params, setParams] = useSearchParams()
   const roles = rolesOf(me)
-  // Calls are for sales people (sales / team leader); IVR campaigns are for Super Admin only; the dashboard is for
-  // sales people (their own) and anyone who may see other people's calls
+  // Calls are for sales people (sales / team leader); IVR campaigns are for Super Admin only; the dashboard, call
+  // history and callbacks are for sales people (their own) and anyone who may see other people's calls
   const showCalls = roles.some((r) => r === 'sales' || r === 'teamlead')
   const showIvr = roles.includes('superadmin')
   const showDash = showCalls || isMaster(me) || can('leads.manage', 'team.progress')
   const tabs = [
-    ...(showCalls ? [{ id: 'calls', label: 'Calls', icon: PhoneCall }] : []),
-    ...(showIvr ? [{ id: 'ivr', label: 'IVR campaigns', icon: Radio }] : []),
     ...(showDash ? [{ id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard }] : []),
+    ...(showCalls ? [{ id: 'calls', label: 'Dialing', icon: PhoneCall }] : []),
+    ...(showDash ? [{ id: 'history', label: 'Call History', icon: History }, { id: 'callbacks', label: 'Callbacks', icon: CalendarClock }] : []),
+    ...(showIvr ? [{ id: 'ivr', label: 'IVR campaigns', icon: Radio }] : []),
   ]
-  const tab = tabs.find((x) => x.id === params.get('tab'))?.id ?? tabs[0]?.id ?? null
+  // a link to one lead (search, notification) and the old "queue" link open the dialing screen
+  const asked = params.get('tab') === 'queue' || (!params.get('tab') && params.get('lead')) ? 'calls' : params.get('tab')
+  const tab = tabs.find((x) => x.id === asked)?.id ?? tabs[0]?.id ?? null
+  const go = (t: string) => setParams({ tab: t })
   const bt = useBlutec()
+  const pick = useAgentPick()
   /** the call on this computer (for the dashboard's status), and a lead the dashboard asked to open */
   const [live, setLive] = useState<LiveCall | null>(null)
   const [focus, setFocus] = useState<{ id: string; at: number } | null>(null)
+  const openLead = showCalls ? (l: Lead) => { setFocus({ id: l.id, at: Date.now() }); go('calls') } : undefined
   return (
     <div>
-      <PageHeader title={tab === 'ivr' && !showCalls ? 'IVR' : 'Dialer'} icon={tab === 'ivr' ? Radio : Phone}
-        subtitle={tab === 'ivr' ? 'IVR campaigns through Blutec: live stats and hot prospects' : tab === 'dashboard' ? 'Today’s calls, outcomes, campaigns, callbacks and time in each state'
-          : 'Click-to-call through Blutec — follow-ups due come first, then new leads'}
-        actions={tab && <>
-          {tab !== 'dashboard' && <ConnectionPill bt={bt} ivr={tab === 'ivr'} />}
-          {tabs.length > 1 && <Tabs value={tab} onChange={(t) => setParams(t === tabs[0]!.id ? {} : { tab: t })} tabs={tabs} />}
-        </>} />
+      {tab && (
+        <div className="mb-5 flex flex-wrap items-center gap-2 border-b border-line pb-4">
+          {tabs.length > 1 && <Tabs value={tab} onChange={go} tabs={tabs} />}
+          <span className="ml-auto flex flex-wrap items-center gap-2">
+            {(showCalls || tab === 'ivr') && <ConnectionPill bt={bt} ivr={tab === 'ivr'} />}
+            {showCalls && <AgentStatusMenu live={live} />}
+          </span>
+        </div>
+      )}
       {/* the calls stay mounted on the other tabs, so a call in progress (and its window) carries on */}
       {showCalls && <div hidden={tab !== 'calls'}><CallsTab bt={bt} onLive={setLive} focus={focus} /></div>}
-      {tab === 'ivr' && <><IvrTab bt={bt} manage /><DialerCampaigns /></>}
-      {tab === 'dashboard' && <DialerDashboard live={live} onOpenLead={showCalls ? (l) => { setFocus({ id: l.id, at: Date.now() }); setParams({}) } : undefined} />}
+      {tab === 'dashboard' && <DialerDashboard pick={pick} live={live} onStart={showCalls ? () => go('calls') : undefined} onCallbacks={() => go('callbacks')} onOpenLead={openLead} />}
+      {tab === 'history' && <CallHistory pick={pick} onOpenLead={openLead} />}
+      {tab === 'callbacks' && <CallbacksView pick={pick} onOpenLead={openLead} />}
+      {tab === 'ivr' && <><DialerTitle title="IVR Campaigns" subtitle="IVR campaigns through Blutec: live stats and hot prospects" /><IvrTab bt={bt} manage /><DialerCampaigns /></>}
       {!tab && <Card><EmptyState icon={Phone} title="Dialer is for sales people" text="Calls are used by sales people and team leaders; IVR campaigns are run by the Super Admin." /></Card>}
     </div>
   )
@@ -109,9 +117,10 @@ function ConnectionPill({ bt, ivr }: { bt: ReturnType<typeof useBlutec>; ivr: bo
   return (
     <>
       {/* signed in with Supabase there are no keys to enter: the pill only shows the status */}
-      <button onClick={() => { if (KEYLESS) bt.check(); else setOpen(true) }} title={KEYLESS ? 'Check again' : 'Dialer connection'} className={cx('flex h-10 items-center gap-2 rounded-xl border px-3 text-xs font-semibold', ok ? 'border-ok/30 bg-ok-soft text-ok' : 'border-warn/30 bg-warn-soft text-warn')}>
-        {bt.loading ? <CircleDashed className="size-4 animate-spin" /> : ok ? <CircleCheck className="size-4" /> : <Settings2 className="size-4" />}
-        {bt.loading ? 'Checking dialer…' : ivr ? (ok ? 'Blutec IVR connected' : 'IVR not connected') : ok ? 'Blutec connected' : 'Dialer not connected'}
+      <button onClick={() => { if (KEYLESS) bt.check(); else setOpen(true) }} title={KEYLESS ? (ok ? 'Blutec connected · check again' : 'Not connected — “Call now” uses your phone · check again') : 'Dialer connection'}
+        className={cx('flex h-9 items-center gap-2 rounded-full border px-3.5 text-xs font-semibold', ok ? 'border-ok/30 bg-ok-soft text-ok' : 'border-warn/30 bg-warn-soft text-warn')}>
+        {bt.loading ? <CircleDashed className="size-3.5 animate-spin" /> : ok ? <span className="size-2 rounded-full bg-current" /> : <Settings2 className="size-3.5" />}
+        {bt.loading ? 'Checking…' : ivr ? (ok ? 'IVR: Ready' : 'IVR: Not connected') : ok ? 'Dialer: Ready' : 'Dialer: Phone mode'}
       </button>
       <Modal open={open && !KEYLESS} onClose={() => setOpen(false)} title="Blutec dialer connection" size="lg" footer={<><Button variant="outline" icon={RefreshCcw} onClick={bt.check}>Check again</Button><Button onClick={() => setOpen(false)}>Close</Button></>}>
         <div className="space-y-3 text-sm">
@@ -142,18 +151,32 @@ function CallsTab({ bt, onLive, focus }: { bt: ReturnType<typeof useBlutec>; onL
   const toast = useToast()
   const [confirm, confirmNode] = useConfirm()
   const t = today()
-  const queue = useMemo(() => visibleLeads(db, me)
+  const allQueue = useMemo(() => visibleLeads(db, me)
     .filter((l) => OPEN_LEAD.includes(l.status) && l.assignedTo === me.id)
     .sort((a, b) => {
       const da = a.followUp && a.followUp <= t ? 0 : a.status === 'NEW' ? 1 : 2
       const dbb = b.followUp && b.followUp <= t ? 0 : b.status === 'NEW' ? 1 : 2
       return da - dbb || (a.followUp ?? '').localeCompare(b.followUp ?? '')
     }), [db, me, t])
+  /** the campaign being dialled: the leads of one source (website, an IVR campaign, an uploaded list…), or all */
+  const [campaign, setCampaign] = useState('')
+  const campaigns = useMemo(() => {
+    const m = new Map<string, { n: number; due: number }>()
+    for (const l of allQueue) {
+      const k = l.source || 'Other'
+      const x = m.get(k) ?? { n: 0, due: 0 }
+      x.n++
+      if (l.followUp && l.followUp <= t) x.due++
+      m.set(k, x)
+    }
+    return [...m.entries()].map(([name, x]) => ({ name, ...x })).sort((a, b) => b.n - a.n)
+  }, [allQueue, t])
+  const queue = useMemo(() => (campaign ? allQueue.filter((l) => (l.source || 'Other') === campaign) : allQueue), [allQueue, campaign])
   // a link to one lead (search, notification) opens it at the top of the queue
   const [params] = useSearchParams()
   const [currentId, setCurrentId] = useState<string | null>(() => params.get('lead'))
   const current = queue.find((l) => l.id === currentId) ?? queue[0]
-  useEffect(() => { if (focus) setCurrentId(focus.id) }, [focus])
+  useEffect(() => { if (focus) { setCampaign(''); setCurrentId(focus.id) } }, [focus])
   /** The call in progress (Blutec click-to-call, or the person's own phone): drives the floating call window. */
   const [call, setCall] = useState<{ leadId: string; startedAt: number; endedAt?: number; phone: boolean } | null>(null)
   const [winHidden, setWinHidden] = useState(false)
@@ -197,7 +220,6 @@ function CallsTab({ bt, onLive, focus }: { bt: ReturnType<typeof useBlutec>; onL
   const callStatus = !call ? '' : ended ? 'Call ended' : call.phone ? 'On call · your phone'
     : !live ? 'Placing the call…' : live.status === 'waiting_for_a_free_line' ? 'All lines busy — retrying'
       : live.status === 'accepted' || live.status === 'initiated' ? 'Ringing your phone…' : live.status.replace(/_/g, ' ')
-  const n = salesNumbers(db, me)
   const myCallsToday = db.leads.flatMap((l) => l.calls.filter((c) => c.by === me.id && ymd(c.at) === t).map((c) => ({ ...c, lead: l }))).sort((a, b) => b.at.localeCompare(a.at))
   const reset = () => { if (poll.current) clearInterval(poll.current); if (retry.current) clearTimeout(retry.current); poll.current = null; retry.current = null; setLive(null); setCall(null); setWinHidden(false) }
   const startPhoneCall = (l: Lead) => { setCall({ leadId: l.id, startedAt: Date.now(), phone: true }); setWinHidden(false); setWinTab('entry') }
@@ -245,12 +267,24 @@ function CallsTab({ bt, onLive, focus }: { bt: ReturnType<typeof useBlutec>; onL
 
   return (
     <div>
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <MiniStat label="In my queue" value={queue.length} icon={PhoneCall} />
-        <MiniStat label="Follow-ups due" value={n.followUps} icon={Flame} tone="amber" />
-        <MiniStat label="Calls today" value={n.callsToday} icon={History} tone="green" />
-        <MiniStat label="Talk time today" value={`${Math.round(myCallsToday.reduce((s, c) => s + c.durationSec, 0) / 60)} min`} icon={Timer} tone="violet" />
-      </div>
+      <Card className="mx-auto mb-6 max-w-5xl p-5">
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <h3 className="flex-1 text-lg font-bold">Select a Campaign</h3>
+          <span className={cx('flex items-center gap-1.5 text-sm font-medium', bt.status?.dialer ? 'text-ok' : 'text-warn')}><Radio className="size-4" />{bt.status?.dialer ? 'Dialer Connected' : 'Phone mode — calls go from your phone'}</span>
+        </div>
+        {!allQueue.length ? <p className="py-6 text-center text-sm text-mute">No leads assigned to you</p> : (
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {[{ name: '', n: allQueue.length, due: campaigns.reduce((s, c) => s + c.due, 0) }, ...campaigns].map((c) => (
+              <button key={c.name || '*'} onClick={() => { setCampaign(c.name); setCurrentId(null) }} disabled={!!call}
+                title={call ? 'Finish the call (and save its outcome) first' : undefined}
+                className={cx('rounded-xl border px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-60', campaign === c.name ? 'border-brand bg-brand-soft ring-2 ring-brand/15' : 'border-line hover:border-brand/40 hover:bg-card2')}>
+                <span className="block truncate text-sm font-bold">{c.name || 'All my leads'}</span>
+                <span className="mt-0.5 block text-xs text-mute">{c.n} lead{c.n === 1 ? '' : 's'}{c.due ? <> · <b className="text-bad">{c.due} due</b></> : ''}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </Card>
       <div className="grid gap-6 xl:grid-cols-[340px_1fr_320px]">
         <Card className="overflow-hidden xl:max-h-[70vh] xl:overflow-y-auto">
           <CardHeader title="Queue" subtitle={`${queue.length} leads`} />
