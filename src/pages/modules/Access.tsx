@@ -239,6 +239,15 @@ function SettingsTab() {
           <p className="text-mute">{db.settings.loginCode !== false
             ? 'On: after the password, a 6-digit code is emailed and must be entered. This needs a mail service on the live server (RESEND_API_KEY on Render) — without one nobody receives the code.'
             : 'Off: everyone signs in with their username / email and password only. Turn it back on once the code emails arrive.'}</p>
+          {db.settings.loginCode !== false && <>
+            <label className="flex items-center justify-between gap-3 border-t border-line pt-3 font-semibold">
+              Show the code on screen when it can't be emailed (developer mode)
+              <Toggle checked={db.settings.loginCodeOnScreen === true} label="Show the code on screen" onChange={(v) => run(() => updateSettings(me, { loginCodeOnScreen: v }), v ? 'Developer mode on — the code shows on the sign-in screen when email fails' : 'Developer mode off — the code is only emailed')} />
+            </label>
+            <p className={db.settings.loginCodeOnScreen ? 'text-warn' : 'text-mute'}>{db.settings.loginCodeOnScreen
+              ? 'On: if the code email fails, the 6-digit code is shown on the sign-in screen. Anyone who knows a password then gets in without email access — turn this off once emails work.'
+              : 'Off: the code is only sent by email.'}</p>
+          </>}
         </div>
       </Card>
       <Card className="overflow-hidden">

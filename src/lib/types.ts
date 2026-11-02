@@ -940,6 +940,8 @@ export interface Settings {
   dayLock?: boolean
   /** false: sign in with the password only (no 6-digit email code) — e.g. while no mail service is set up */
   loginCode?: boolean
+  /** developer mode on the live CRM: when the code can't be emailed, it is shown on the sign-in screen */
+  loginCodeOnScreen?: boolean
   branches?: Branch[]
   breakPolicy?: BreakPolicy
   /** automatic lead assignment (round robin): new website / CSV / manual leads go to these people in turn */
