@@ -99,6 +99,16 @@ export default function WorkflowSettings() {
 
         <Card className="overflow-hidden lg:col-span-2">
           <CardHeader title="WhatsApp templates (Interakt)" subtitle="Create each template in Interakt → Templates, wait for Meta's approval, then enter its code name here. Empty = not sent on WhatsApp." icon={MessageCircle} />
+          {/* whose number clients see: the company's WhatsApp Business number, or each CRM user's own WhatsApp */}
+          <div className="grid gap-2 border-b border-line p-5 sm:grid-cols-[minmax(0,22rem)_1fr] sm:items-center">
+            <Select label="Send WhatsApp messages to clients from" value={w.whatsapp.sendFrom ?? 'company'} onChange={(e) => set({ whatsapp: { ...w.whatsapp, sendFrom: e.target.value as 'company' | 'own' } })}>
+              <option value="company">The company WhatsApp number (Interakt, sent automatically)</option>
+              <option value="own">Each person’s own WhatsApp number</option>
+            </Select>
+            <p className="text-xs text-mute">{(w.whatsapp.sendFrom ?? 'company') === 'own'
+              ? 'Every WhatsApp button (client messages, WhatsApp client, offer / joining letters) opens the sender’s own WhatsApp — phone app or WhatsApp Web — with the client’s number and the message ready, so clients get it from that person’s number. Each send is recorded with who sent it. Ask everyone to add their mobile number in Profile.'
+              : 'Messages go from the company’s WhatsApp Business number through Interakt, using the approved templates below.'}</p>
+          </div>
           <div className="grid gap-5 p-5 md:grid-cols-2 xl:grid-cols-3">
             <div className="grid content-start gap-2">
               <Input label="Welcome template (text)" placeholder="e.g. client_welcome" value={w.whatsapp.welcomeTemplate} onChange={(e) => set({ whatsapp: { ...w.whatsapp, welcomeTemplate: e.target.value } })} />

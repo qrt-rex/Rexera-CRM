@@ -5,6 +5,7 @@ import { ActionError } from './actions'
 import { CLOUD } from './cloud'
 import { getSupabase } from './supabase'
 import { BOOKING_STATUS, STAGES } from './workflow'
+import { workflowSettings } from '../../supabase/workflow-rules.mjs'
 import { CLIENT_ENTRY_STATUS } from './clientEntries'
 import { normPhone, nowIso, uid } from './format'
 import {
@@ -128,6 +129,13 @@ export async function sendMessage(me: User, t: Target, x: SendInput): Promise<Se
     return { ok: false, status: 'ERROR', message: 'The CRM server could not be reached — check the message log before trying again.' }
   }
 }
+
+/**
+ * Workflow settings → WhatsApp → Send from: each person's own WhatsApp. Then every WhatsApp button opens the sender's own
+ * WhatsApp (phone app or WhatsApp Web) with the client's number and the message ready, so the client gets it from the
+ * person's own number; the CRM records it as sent from their app.
+ */
+export const whatsappFromOwn = (d: DB) => workflowSettings(d.settings.workflow).whatsapp.sendFrom === 'own'
 
 /** Open WhatsApp / the mail app with the message ready (the person sends it themselves). */
 export const whatsappLink = (phone: string, text: string) => `https://wa.me/91${phone}?text=${encodeURIComponent(text)}`

@@ -56,7 +56,8 @@ export const DEFAULT_WORKFLOW = {
   schemeAlertRoles: ['admin', 'operations'],
   opsContact: { name: '', phone: '', email: '' },
   // Interakt template names (approved by Meta in the Interakt dashboard); empty = not set up, nothing is sent
-  whatsapp: { welcomeTemplate: '', invoiceTemplate: '', formTemplate: '', notifyTemplate: '', language: 'en' },
+  // sendFrom: 'company' = the business number (Interakt) · 'own' = each person's own WhatsApp (opens with the message ready)
+  whatsapp: { welcomeTemplate: '', invoiceTemplate: '', formTemplate: '', notifyTemplate: '', language: 'en', sendFrom: 'company' },
 }
 /** The settings with every missing value filled from the defaults. */
 export const workflowSettings = (w) => ({

@@ -6,6 +6,8 @@ import { fmtDate, inr, invoiceTotals, isEmail } from './format'
 import { invoiceFileName, invoicePdf } from './invoicePdf'
 import { invoiceBranch } from './branches'
 import { serverPost } from './serverApi'
+import { whatsappFromOwn } from './clientMessages'
+import { getDb } from './store'
 
 /**
  * Sending to clients through the live server (server/share.mjs): the server checks this person's own sign-in, and
@@ -32,7 +34,8 @@ export async function whatsappClient(b: Pick<Booking, 'id' | 'mobile'>, message:
   // a tab opened before any await isn't stopped by the pop-up blocker; closed again if Interakt sends it
   const tab = link ? window.open('about:blank', '_blank') : null
   try {
-    if (CLOUD) {
+    // 'own' WhatsApp: straight to the person's own WhatsApp, never the company number
+    if (CLOUD && !whatsappFromOwn(getDb())) {
       const r = await serverPost<{ success: boolean; status: InvoiceShare['status']; error?: string }>('/api/whatsapp/notify', { bookingId: b.id, message })
       if (r.status === 'SENT') { tab?.close(); return 'SENT' }
       if (r.status === 'NO_CONTACT') throw new Error('This entry has no valid 10-digit mobile number — add it first.')

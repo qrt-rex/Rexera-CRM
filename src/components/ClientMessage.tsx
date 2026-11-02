@@ -4,7 +4,7 @@ import type { Booking, ClientMessage as Msg } from '../lib/types'
 import { useDb } from '../lib/store'
 import { useMe } from '../lib/auth'
 import { userName } from '../lib/actions'
-import { contactOf, draftFor, lastSent, mailLink, messagesFor, newRequestId, sendMessage, stagesOpen, whatsappLink, type SendResult, type Target } from '../lib/clientMessages'
+import { contactOf, draftFor, lastSent, mailLink, messagesFor, newRequestId, sendMessage, stagesOpen, whatsappFromOwn, whatsappLink, type SendResult, type Target } from '../lib/clientMessages'
 import { fmtDateTime, ago } from '../lib/format'
 import { leftovers, MESSAGE_STATUS, stageOf, type Channel, type MessageStageId } from '../../supabase/message-rules.mjs'
 import { Badge, Button, cx, EmptyState, Input, Modal, Textarea, useSubmitting, useToast } from './ui'
@@ -62,6 +62,7 @@ function Composer({ target, stage }: { target: Target; stage: MessageStageId }) 
   const [result, setResult] = useState<Partial<Record<Channel, SendResult>>>({})
   const [waBusy, waOnce] = useSubmitting()
   const [mailBusy, mailOnce] = useSubmitting()
+  const ownWa = whatsappFromOwn(db)
   const autoWelcome = target.kind === 'booking' && stage === 'LEGAL_CLEARED' && target.b.welcome?.email?.status === 'SENT'
 
   const send = (ch: Channel, manual = false) => (ch === 'WHATSAPP' ? waOnce : mailOnce)(async () => {
@@ -76,7 +77,7 @@ function Composer({ target, stage }: { target: Target; stage: MessageStageId }) 
     // a new id for the next (deliberate) send of this channel
     if (r.ok || r.status !== 'ERROR') setIds((x) => ({ ...x, [ch]: newRequestId() }))
   })
-  const both = async () => { await send('WHATSAPP'); await send('EMAIL') }
+  const both = async () => { await send('WHATSAPP', ownWa); await send('EMAIL') }
 
   const box = (ch: Channel, editor: ReactNode, missing: boolean, busy: boolean, text: string) => {
     const r = result[ch], last = lastSent(db, target, stage, ch), Icon = CH[ch].icon
@@ -90,10 +91,14 @@ function Composer({ target, stage }: { target: Target; stage: MessageStageId }) 
         {last && <p className="mt-2 text-[11px] text-mute">Already sent {ago(last.at)} by {userName(db, last.by)} ({MESSAGE_STATUS[last.status].label.toLowerCase()})</p>}
         {r && <p className={cx('mt-2 flex items-start gap-1.5 text-xs font-semibold', r.ok ? 'text-ok' : 'text-bad')}>{r.ok ? <CheckCircle2 className="mt-0.5 size-3.5 shrink-0" /> : <XCircle className="mt-0.5 size-3.5 shrink-0" />}{r.message}</p>}
         <div className="mt-3 flex flex-wrap gap-2">
-          <Button icon={Send} loading={busy} disabled={missing || left.length > 0} className={cx('flex-1', ch === 'WHATSAPP' && 'bg-ok hover:opacity-90')} onClick={() => send(ch)}>{CH[ch].send}</Button>
+          {/* WhatsApp from each person's own number (Workflow settings): their WhatsApp opens with the message ready */}
+          {ch === 'WHATSAPP' && ownWa
+            ? <Button icon={SendHorizontal} loading={busy} disabled={missing || left.length > 0} className="flex-1 bg-ok hover:opacity-90" onClick={() => send(ch, true)}>Send from my WhatsApp</Button>
+            : <Button icon={Send} loading={busy} disabled={missing || left.length > 0} className={cx('flex-1', ch === 'WHATSAPP' && 'bg-ok hover:opacity-90')} onClick={() => send(ch)}>{CH[ch].send}</Button>}
           {/* no WhatsApp / mail service on the server (or it failed): send it yourself — it is still recorded */}
-          {r && !r.ok && r.status !== 'ERROR' && !missing && <Button variant="outline" icon={SendHorizontal} disabled={busy || left.length > 0} onClick={() => send(ch, true)}>{CH[ch].own}</Button>}
+          {!(ch === 'WHATSAPP' && ownWa) && r && !r.ok && r.status !== 'ERROR' && !missing && <Button variant="outline" icon={SendHorizontal} disabled={busy || left.length > 0} onClick={() => send(ch, true)}>{CH[ch].own}</Button>}
         </div>
+        {ch === 'WHATSAPP' && ownWa && <p className="mt-2 text-[11px] text-mute">Goes from your own WhatsApp{me.phone ? ` (+91 ${me.phone})` : ''} — WhatsApp opens with the client’s number and this message; press send there.{!me.phone && ' Add your mobile number in Profile so it shows who sent it.'}</p>}
       </section>
     )
   }
@@ -105,7 +110,7 @@ function Composer({ target, stage }: { target: Target; stage: MessageStageId }) 
       <div className="grid gap-4 lg:grid-cols-2">
         {box('WHATSAPP', <>
           <Textarea label={`Message (${wa.length}/900)`} rows={9} maxLength={900} value={wa} onChange={(e) => setWa(e.target.value)} />
-          <p className="text-[11px] text-mute">Goes in the approved WhatsApp template: “Dear {'{name}'}, an update on your file {'{file no.}'}: {'<this message>'} — {db.settings.companyName || 'Rexera'}”. Line breaks become spaces.</p>
+          {!ownWa && <p className="text-[11px] text-mute">Goes in the approved WhatsApp template: “Dear {'{name}'}, an update on your file {'{file no.}'}: {'<this message>'} — {db.settings.companyName || 'Rexera'}”. Line breaks become spaces.</p>}
         </>, !contact.phone, waBusy, wa)}
         {box('EMAIL', <>
           <Input label="Subject" value={subject} maxLength={200} onChange={(e) => setSubject(e.target.value)} />
@@ -136,7 +141,7 @@ export function LogRow({ m, record }: { m: Msg; record?: ReactNode }) {
         <Icon className={cx('mt-0.5 size-4 shrink-0', m.channel === 'WHATSAPP' ? 'text-ok' : 'text-info')} />
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-2"><b>{stageOf(m.stage)?.label ?? m.stage}</b><Badge tone={st.tone}>{st.label}</Badge>{record}</span>
-          <span className="block truncate text-xs text-mute">{m.channel === 'WHATSAPP' ? `+91 ${m.to}` : m.to} · {userName(db, m.by)} · {fmtDateTime(m.at)}</span>
+          <span className="block truncate text-xs text-mute">{m.channel === 'WHATSAPP' ? `+91 ${m.to}` : m.to} · {userName(db, m.by)}{m.status === 'MANUAL' && m.channel === 'WHATSAPP' && db.users.find((u) => u.id === m.by)?.phone ? ` (from +91 ${db.users.find((u) => u.id === m.by)!.phone})` : ''} · {fmtDateTime(m.at)}</span>
           {m.error && <span className="block text-xs text-bad">{m.error}</span>}
         </span>
         <ChevronDown className={cx('mt-1 size-4 shrink-0 text-mute transition', open && 'rotate-180')} />

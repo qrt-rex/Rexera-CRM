@@ -6,7 +6,7 @@ import { useMe } from '../lib/auth'
 import { userName } from '../lib/actions'
 import { draftBody, letterPdf, type LetterData } from '../lib/letters'
 import { contactOfCandidate, LETTER_CHOICES, letterDataFor, lettersFor, newLetterRequestId, selectCandidate, sendCandidateLetter, type LetterChoice, type LetterResult } from '../lib/hrLetters'
-import { mailLink, whatsappLink } from '../lib/clientMessages'
+import { mailLink, whatsappFromOwn, whatsappLink } from '../lib/clientMessages'
 import { fmtDateTime } from '../lib/format'
 import { Badge, Button, Card, CardHeader, cx, Input, Modal, Textarea, useRun, useSubmitting, useToast } from './ui'
 
@@ -104,7 +104,7 @@ export function SendLetterModal({ c, kind, onClose }: { c: CandidateApplication;
             fields={<><Input label="Subject" value={subject} onChange={(e) => setSubject(e.target.value)} /><Textarea label="Message (the PDF is attached)" rows={6} value={mailText} onChange={(e) => setMailText(e.target.value)} /></>}
             send={(manual, requestId) => sendCandidateLetter(me, c, { kind, channel: 'EMAIL', subject, body: mailText, pdf: manual ? undefined : pdf(), fileName, manual, requestId })}
             fallback={() => { download(); window.open(mailLink(contact.email!, subject, `${mailText}\n\n(Please attach ${fileName} — it was just downloaded.)`), '_blank') }} fallbackLabel="Send from my mail app" />
-          <Channel icon={MessageCircle} title="WhatsApp" to={contact.phone && `+91 ${contact.phone}`} blocked={missing}
+          <Channel icon={MessageCircle} title="WhatsApp" to={contact.phone && `+91 ${contact.phone}`} blocked={missing} own={whatsappFromOwn(db)}
             fields={<Textarea label="Message (a 7-day link to the PDF is added)" rows={3} value={waText} onChange={(e) => setWaText(e.target.value)} />}
             send={(manual, requestId) => sendCandidateLetter(me, c, { kind, channel: 'WHATSAPP', body: waText, pdf: manual ? undefined : pdf(), fileName, manual, requestId })}
             fallback={() => { download(); window.open(whatsappLink(contact.phone!, `${waText}\n(The letter PDF is attached.)`), '_blank') }} fallbackLabel="Send from my WhatsApp" />
@@ -121,9 +121,9 @@ export function SendLetterModal({ c, kind, onClose }: { c: CandidateApplication;
 }
 
 /** One channel's send button, with the result and — when the server can't send — "send from my own app" (recorded). */
-function Channel({ icon: Icon, title, to, blocked, fields, send, fallback, fallbackLabel }: {
+function Channel({ icon: Icon, title, to, blocked, fields, send, fallback, fallbackLabel, own }: {
   icon: typeof Mail; title: string; to?: string; blocked: string; fields: ReactNode
-  send: (manual: boolean, requestId: string) => Promise<LetterResult>; fallback: () => void; fallbackLabel: string
+  send: (manual: boolean, requestId: string) => Promise<LetterResult>; fallback: () => void; fallbackLabel: string; own?: boolean
 }) {
   const toast = useToast()
   const [requestId, setRequestId] = useState(newLetterRequestId)
@@ -144,7 +144,9 @@ function Channel({ icon: Icon, title, to, blocked, fields, send, fallback, fallb
       <p className="mb-2 flex items-center gap-2 text-sm font-bold"><Icon className="size-4 text-brand-ink" />{title}<span className={cx('ml-auto truncate text-xs font-normal', to ? 'text-mute' : 'text-bad')}>{to ?? 'not on the application'}</span></p>
       <div className="grid gap-2">{fields}</div>
       <div className="mt-2 flex flex-wrap gap-2">
-        <Button size="sm" icon={Send} loading={busy} disabled={!to || !!blocked} onClick={() => run(false)}>Send {title === 'Email' ? 'email' : 'WhatsApp'}</Button>
+        {/* each person's own WhatsApp (Workflow settings): the letter PDF downloads and their WhatsApp opens with the message */}
+        {own ? <Button size="sm" icon={Send} loading={busy} disabled={!to || !!blocked} onClick={() => run(true)}>{fallbackLabel}</Button>
+          : <Button size="sm" icon={Send} loading={busy} disabled={!to || !!blocked} onClick={() => run(false)}>Send {title === 'Email' ? 'email' : 'WhatsApp'}</Button>}
         {result && !result.ok && result.status !== 'ERROR' && to && <Button size="sm" variant="outline" icon={Icon} disabled={!!blocked} onClick={() => run(true)}>{fallbackLabel}</Button>}
       </div>
       {result && <p className={cx('mt-1.5 text-xs', result.ok ? 'text-ok' : 'text-warn')}>{result.message}</p>}

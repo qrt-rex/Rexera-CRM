@@ -209,7 +209,8 @@ export interface WorkflowSettings {
   /** document types each Admin may handle and upload (user id → stages); a person not listed may do all five */
   adminStageAccess?: Record<string, AdminStageId[]>
   /** Interakt template names (approved by Meta); empty = WhatsApp not set up for that message */
-  whatsapp: { welcomeTemplate: string; invoiceTemplate: string; formTemplate: string; notifyTemplate: string; language: string }
+  /** sendFrom: the company's business number (Interakt), or each person's own WhatsApp ('own') */
+  whatsapp: { welcomeTemplate: string; invoiceTemplate: string; formTemplate: string; notifyTemplate: string; language: string; sendFrom?: 'company' | 'own' }
 }
 
 // ------------------------------------------------------------------ Document Form Builder (client links)

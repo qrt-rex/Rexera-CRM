@@ -1812,7 +1812,7 @@ export function saveWorkflowSettings(me: User, w: WorkflowSettings) {
       // document permissions are set on the Operations Dashboard: keep what is stored, not this page's copy
       ...w, adminStageAccess: d.settings.workflow?.adminStageAccess, welcomeEmail: { subject: w.welcomeEmail.subject.trim(), body: w.welcomeEmail.body.trim() }, welcomeWhatsapp: w.welcomeWhatsapp.trim(),
       opsContact: { name: w.opsContact.name.trim(), phone: w.opsContact.phone ? normPhone(w.opsContact.phone) : '', email: w.opsContact.email.trim() },
-      whatsapp: { welcomeTemplate: tpl(w.whatsapp.welcomeTemplate), invoiceTemplate: tpl(w.whatsapp.invoiceTemplate), formTemplate: tpl(w.whatsapp.formTemplate), notifyTemplate: tpl(w.whatsapp.notifyTemplate), language: w.whatsapp.language.trim() },
+      whatsapp: { welcomeTemplate: tpl(w.whatsapp.welcomeTemplate), invoiceTemplate: tpl(w.whatsapp.invoiceTemplate), formTemplate: tpl(w.whatsapp.formTemplate), notifyTemplate: tpl(w.whatsapp.notifyTemplate), language: w.whatsapp.language.trim(), sendFrom: w.whatsapp.sendFrom === 'own' ? 'own' : 'company' },
     }
     audit(d, me.id, 'WORKFLOW_SETTINGS', `follow-up every ${w.fileReminderDays} days · pitch deck every ${w.precheckDays} · welcome ${w.welcomeAuto ? 'automatic' : 'manual'}`)
   })
