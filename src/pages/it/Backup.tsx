@@ -5,6 +5,7 @@ import { useMe } from '../../lib/auth'
 import { userName } from '../../lib/actions'
 import { createSnapshot, deleteSnapshot, downloadBackup, listSnapshots, readBackupFile, restoreBackup, restoreSnapshot, type SnapshotInfo } from '../../lib/itops'
 import { fmtDateTime } from '../../lib/format'
+import { CLOUD } from '../../lib/cloud'
 import { Badge, Button, Card, CardHeader, Checkbox, EmptyState, Input, Modal, PageHeader, useConfirm, useRun } from '../../components/ui'
 
 const kb = (n: number) => (n > 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`)
@@ -75,10 +76,10 @@ export default function Backup() {
         </Card>
 
         <Card className="overflow-hidden">
-          <CardHeader title="Snapshots in this browser" subtitle="Last 10 kept · one automatic snapshot a day" icon={Camera} />
+          <CardHeader title={CLOUD ? 'Snapshot' : 'Snapshots in this browser'} subtitle={CLOUD ? 'Saved as a backup file on this computer' : 'Last 10 kept · one automatic snapshot a day'} icon={Camera} />
           <div className="p-5"><Button className="w-full" variant="soft" icon={Camera} loading={busy === 'snap'} onClick={doSnapshot}>Take snapshot now</Button></div>
           <ul className="max-h-72 divide-y divide-line/70 overflow-y-auto border-t border-line">
-            {!snaps.list.length && <li className="p-5 text-sm text-mute">No snapshots yet.</li>}
+            {!snaps.list.length && <li className="p-5 text-sm text-mute">{CLOUD ? 'All CRM data lives in Supabase (with its own daily backups); nothing is kept in this browser. A snapshot downloads a backup file — keep it safe.' : 'No snapshots yet.'}</li>}
             {snaps.list.map((s) => (
               <li key={s.id} className="flex items-center gap-2 px-5 py-2.5">
                 <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{s.label}</p><p className="text-[11px] text-mute">{fmtDateTime(s.at)} · {kb(s.bytes)}</p></div>

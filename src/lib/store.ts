@@ -49,7 +49,11 @@ async function idbPut(value: DB) {
 
 // ------------------------------------------------------------------ load / save
 export async function initStore() {
-  if (CLOUD) return reloadFromCloud(true)
+  if (CLOUD) {
+    // Supabase is the only copy: anything an older browser-only build left here is removed
+    try { localStorage.removeItem(LEGACY_KEY); indexedDB.deleteDatabase(IDB_NAME) } catch { /* nothing kept */ }
+    return reloadFromCloud(true)
+  }
   let loaded: DB | undefined
   try {
     loaded = await idbGet()

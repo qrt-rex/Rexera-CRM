@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import type { Role } from '../../lib/types'
 import { approxDataBytes, storageBackend, useDb } from '../../lib/store'
+import { CLOUD } from '../../lib/cloud'
 import { useAuth, useMe } from '../../lib/auth'
 import { updateUser, userName } from '../../lib/actions'
 import { SetPasswordModal } from '../../components/SetPasswordModal'
@@ -107,7 +108,7 @@ export function ItDashboard() {
       <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-mute">One-click actions</h2>
       <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
         <Action icon={Stethoscope} tone="green" label="Run health check" hint="Storage, passwords, owners, backups" busy={busy === 'health'} onClick={check} />
-        <Action icon={Camera} tone="cyan" label="Snapshot now" hint="Saved in this browser · restore any time" busy={busy === 'snap'} onClick={() => doAndRecheck('snap', () => createSnapshot(me, 'Snapshot from IT dashboard'), 'Snapshot saved')} />
+        <Action icon={Camera} tone="cyan" label="Snapshot now" hint={CLOUD ? 'Downloads a backup file to this computer' : 'Saved in this browser · restore any time'} busy={busy === 'snap'} onClick={() => doAndRecheck('snap', () => createSnapshot(me, 'Snapshot from IT dashboard'), 'Snapshot saved')} />
         <Action icon={Download} tone="navy" label="Download backup" hint="Encrypted file of all data" onClick={() => { setPass(''); setBackupOpen(true) }} />
         <Action icon={UserCog} tone="violet" label="Assign access" hint="Role, extra roles, active" onClick={() => setAssignOpen(true)} />
         <Action icon={KeyRound} tone="orange" label="API keys" hint="Create, rotate, revoke" to="/api-keys" />

@@ -9,6 +9,7 @@ import { DEMO_PASSWORD, SEED_VERSION } from './seed'
 import { listDatasets, saveDatasets, type Dataset } from './imports'
 import { addDays, fmtDate, nowIso, uid, ymd } from './format'
 import { cloudConfig, pingCloud } from './supabase'
+import { CLOUD } from './cloud'
 import { exportFiles, fileRefsIn, importFiles, putFiles, storageRoom, storedLegacyIds, type StoredFile } from './files'
 
 function needMaster(me: User) {
@@ -182,12 +183,17 @@ async function snapTx<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => ID
   })
 }
 export type SnapshotInfo = Omit<Snapshot, 'payload'>
+/** With Supabase no CRM data is kept in the browser: older in-browser snapshots are cleared, none are listed. */
+const dropBrowserSnapshots = () => { try { indexedDB.deleteDatabase(SNAP_DB) } catch { /* nothing kept */ } }
 export async function listSnapshots(): Promise<SnapshotInfo[]> {
+  if (CLOUD) { dropBrowserSnapshots(); return [] }
   const all = (await snapTx<Snapshot[]>('readonly', (s) => s.getAll() as IDBRequest<Snapshot[]>)) ?? []
   return all.map(({ payload: _p, ...rest }) => rest).sort((a, b) => b.at.localeCompare(a.at))
 }
+/** With Supabase a snapshot is a backup file downloaded to this computer (Supabase keeps its own daily backups). */
 export async function createSnapshot(me: User, label: string, kind: 'SNAPSHOT' | 'AUTO_SNAPSHOT' = 'SNAPSHOT') {
   needMaster(me)
+  if (CLOUD) { void label; void kind; return downloadBackup(me) }
   const { missing: _none, ...snap } = await buildBackup(me)
   const payload = JSON.stringify(snap)
   await snapTx('readwrite', (s) => { s.put({ id: uid('snap-'), at: nowIso(), by: me.id, label, bytes: payload.length, payload } satisfies Snapshot) })
@@ -265,7 +271,7 @@ export async function deleteSnapshot(me: User, id: string) {
 }
 /** Takes a snapshot when the last one is more than a day old (run when IT opens the dashboard). */
 export async function autoSnapshotIfDue(me: User) {
-  if (!isMaster(me)) return false
+  if (!isMaster(me) || CLOUD) return false
   const last = (await listSnapshots())[0]
   if (last && Date.now() - new Date(last.at).getTime() < 86400000) return false
   await createSnapshot(me, 'Automatic daily snapshot', 'AUTO_SNAPSHOT')
