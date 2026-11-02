@@ -20,7 +20,7 @@ function Example({ s }: { s: PfSettings }) {
   return (
     <Card className="overflow-hidden">
       <CardHeader title="Worked example" subtitle="With no loss of pay" icon={Calculator} />
-      <div className="space-y-1 p-5 text-sm">
+      <div className="space-y-1 p-4 text-sm">
         <Input label="Monthly salary (₹)" type="number" min={0} value={ctc || ''} onChange={(e) => setCtc(Number(e.target.value))} className="mb-3" />
         {line(`Basic (${s.basicPct}%)`, x.basic)}
         {line(`HRA (${s.hraPct}% of basic)`, x.hra)}
@@ -64,11 +64,11 @@ export default function Pf() {
         <MiniStat label="Employer share (EPF + EPS)" value={inr(totals.er)} icon={ShieldCheck} tone="green" />
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
-        <div className="space-y-6">
+      <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
+        <div className="space-y-5">
           <Card className="overflow-hidden">
             <CardHeader title="Salary structure & PF" subtitle={hr ? 'Only HR can change these' : 'Read-only — only HR can change these'} icon={hr ? ShieldCheck : Lock} />
-            <fieldset disabled={!hr} className="grid gap-4 p-5 disabled:opacity-80">
+            <fieldset disabled={!hr} className="grid gap-4 p-4 disabled:opacity-80">
               <div className="grid grid-cols-2 gap-3">
                 <Input label="Basic (% of salary)" type="number" step="0.5" value={s.basicPct} onChange={(e) => setS({ ...s, basicPct: Number(e.target.value) })} />
                 <Input label="HRA (% of basic)" type="number" step="0.5" value={s.hraPct} onChange={(e) => setS({ ...s, hraPct: Number(e.target.value) })} />
@@ -90,7 +90,7 @@ export default function Pf() {
           <Example s={s} />
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-5">
           <Card className="overflow-hidden">
             <CardHeader title={`Contributions · ${monthLabel(month)}`} subtitle={payroll ? `From payroll (${payroll.status.toLowerCase()})` : 'Calculate this month in Payroll first'} icon={Landmark} />
             {!rows.length ? <EmptyState icon={Landmark} title="No PF data for this month" text="PF figures come from the month's calculated payroll." /> : (

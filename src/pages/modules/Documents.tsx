@@ -32,10 +32,10 @@ export default function Documents() {
   return (
     <div>
       <PageHeader title="Document Forms" subtitle="Collect, upload and verify client documents — one slot for each document, with notes" icon={FileText} />
-      <div className="mb-6 grid gap-6 lg:grid-cols-3">
+      <div className="mb-5 grid gap-5 lg:grid-cols-3">
         <Card className="overflow-hidden lg:col-span-2">
           <CardHeader title="Client" subtitle="Pick the client, then fill in their details and upload each document" icon={UserRound} />
-          <div className="p-5">
+          <div className="p-4">
             <SearchSelect label="Client (CRM entry)" value={bookingId} clearable placeholder="Search by company, CRM ID or contact…" emptyText="No client matches"
               onChange={(v) => setParams(v ? { client: v } : {})}
               options={bookings.map((x) => ({ value: x.id, label: `${x.companyName} · ${x.bookingId}`, hint: [x.contactPerson, x.mobile, x.serviceName].filter(Boolean).join(' · ') }))} />
@@ -46,14 +46,14 @@ export default function Documents() {
           <CardHeader title="Missing KYC" subtitle="Active files without Aadhaar, company PAN, passport / photo or KYC" icon={FileCheck2} />
           <ul className="max-h-72 divide-y divide-line/70 overflow-y-auto">
             {missing.map((x) => <li key={x.id}><button onClick={() => setParams({ client: x.id })} className="w-full px-5 py-2.5 text-left hover:bg-card2"><span className="block text-sm font-semibold">{x.companyName}</span><span className="text-xs text-mute">{x.bookingId} · {userName(db, x.opsMemberId ?? x.createdBy)}</span></button></li>)}
-            {!missing.length && <li className="p-5 text-sm text-mute">All active files have KYC. 👍</li>}
+            {!missing.length && <li className="p-4 text-sm text-mute">All active files have KYC. 👍</li>}
           </ul>
         </Card>
       </div>
 
-      {b ? <DocumentForm key={b.id} b={b} /> : <Card className="mb-6"><EmptyState icon={FilePlus2} title="Pick a client to fill their document form" text="COI, GST, MSME, Aadhaar, company PAN, bank statement, ITR, pitch deck, MOU, AOA, passport / photo, CMA and other documents." /></Card>}
+      {b ? <DocumentForm key={b.id} b={b} /> : <Card className="mb-5"><EmptyState icon={FilePlus2} title="Pick a client to fill their document form" text="COI, GST, MSME, Aadhaar, company PAN, bank statement, ITR, pitch deck, MOU, AOA, passport / photo, CMA and other documents." /></Card>}
 
-      <Card className="mt-6 overflow-hidden">
+      <Card className="mt-5 overflow-hidden">
         <div className="flex flex-wrap items-center gap-3 border-b border-line p-4">
           <Tabs value={tab} onChange={setTab} tabs={[{ id: 'PENDING', label: 'To verify', count: docs.filter((d) => (d.status ?? 'PENDING') === 'PENDING').length }, { id: 'VERIFIED', label: 'Verified' }, { id: 'REJECTED', label: 'Rejected' }, { id: 'all', label: 'All', count: docs.length }]} />
           <SearchBox value={q} onChange={setQ} className="min-w-52 flex-1" />
@@ -111,12 +111,12 @@ function DocumentForm({ b }: { b: Booking }) {
     <Card className="overflow-hidden">
       <CardHeader title={`Document form · ${b.companyName}`} subtitle={`${done} of ${DOC_FORM.length} documents collected · ${b.bookingId}`} icon={FileText}
         action={<div className="w-40"><Progress value={(done / DOC_FORM.length) * 100} tone={done === DOC_FORM.length ? 'green' : 'orange'} /></div>} />
-      <div className="flex flex-wrap items-end gap-3 border-b border-line px-5 py-4">
+      <div className="flex flex-wrap items-end gap-3 border-b border-line px-4 py-3">
         <SearchSelect label="Find a document" value={pick} onChange={setPick} clearable className="w-full sm:max-w-md" placeholder="Type a document name — Aadhaar, PAN, ITR, pitch deck…"
           emptyText="No document type matches — use Other documents" options={slots.map((s) => ({ value: s.cat, label: s.title, hint: `${s.cat === s.title ? '' : `${s.cat} · `}${status(s.cat)}` }))} />
         {pick && <Button size="sm" variant="ghost" onClick={() => setPick('')}>Show all documents</Button>}
       </div>
-      <div className={cx('grid gap-4 p-5', !pick && 'md:grid-cols-2 xl:grid-cols-3')}>
+      <div className={cx('grid gap-4 p-4', !pick && 'md:grid-cols-2 xl:grid-cols-3')}>
         {shown.map((s) => <DocSlot key={s.cat} b={b} cat={s.cat} title={s.title} hint={s.hint} noteRequired={s.cat === OTHER} className={cx(!pick && s.cat === OTHER && 'md:col-span-2 xl:col-span-3')} />)}
       </div>
     </Card>

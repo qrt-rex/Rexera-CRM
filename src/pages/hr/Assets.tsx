@@ -218,7 +218,7 @@ function InventoryTab() {
         <MiniStat label="Low on stock" value={items.filter(lowStock).length} icon={AlertTriangle} tone="red" />
         <MiniStat label="Stock value" value={inr(items.reduce((s, i) => s + i.qty * (i.unitCost ?? 0), 0))} icon={IndianRupee} tone="violet" />
       </div>
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
         <Card className="overflow-hidden">
           <div className="flex flex-wrap gap-2 border-b border-line p-4">
             <SearchBox value={q} onChange={setQ} placeholder="Search items…" className="min-w-56 flex-1" />
@@ -343,7 +343,7 @@ function ExpensesTab() {
         <MiniStat label="Entries" value={inMonth.length} icon={Receipt} />
         <MiniStat label="vs last month" value={prev ? `${total(inMonth) >= prev ? '+' : ''}${Math.round(((total(inMonth) - prev) / prev) * 100)}%` : '—'} icon={History} tone={total(inMonth) > prev ? 'red' : 'green'} />
       </div>
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
         <Card className="overflow-hidden">
           <div className="flex flex-wrap gap-2 border-b border-line p-4">
             <input type="month" value={month} max={today().slice(0, 7)} onChange={(e) => e.target.value && setMonth(e.target.value)} aria-label="Month" className="h-10 rounded-xl border border-line bg-card px-3 text-sm" />
@@ -377,7 +377,7 @@ function ExpensesTab() {
             </Table>
           )}
         </Card>
-        <div className="space-y-6 self-start">
+        <div className="space-y-5 self-start">
         <Card className="overflow-hidden">
           <CardHeader title="By branch" subtitle={`${monthLabel} · every expense`} icon={Building2} />
           <ul className="divide-y divide-line/70 text-sm">
@@ -390,7 +390,7 @@ function ExpensesTab() {
         </Card>
         <Card className="overflow-hidden">
           <CardHeader title="Where the money went" subtitle={`${monthLabel}${branch ? ` · ${branch === COMMON ? 'common' : branchCode(db, branch)}` : ''}`} icon={IndianRupee} />
-          <ul className="space-y-3 p-5">
+          <ul className="space-y-3 p-4">
             {byCat.map((x) => (
               <li key={x.c}>
                 <div className="mb-1 flex justify-between text-xs"><button className="font-semibold hover:underline" onClick={() => setCat(cat === x.c ? '' : x.c)}>{x.c}</button><span className="tabular-nums">{inr(x.v)}</span></div>

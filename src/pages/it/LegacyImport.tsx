@@ -69,7 +69,7 @@ export default function LegacyImport() {
       <PageHeader title="Import from old CRM" subtitle="Bring every client file, payment, comment, user, invoice and uploaded file over from the old PHP CRM — exactly as it was" icon={DatabaseZap} />
 
       {done && (
-        <Card className="mb-6 border-ok/40 p-5">
+        <Card className="mb-5 border-ok/40 p-4">
           <div className="flex flex-wrap items-center gap-4">
             <span className="grid size-12 place-items-center rounded-2xl bg-ok-soft text-ok"><CheckCircle2 className="size-6" /></span>
             <div className="min-w-0 flex-1">
@@ -82,10 +82,10 @@ export default function LegacyImport() {
         </Card>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-5 lg:grid-cols-3">
         <Card className="overflow-hidden lg:col-span-2">
           <CardHeader title="1 · Choose the old CRM dump" subtitle="The .sql file(s) exported from phpMyAdmin — the CRM database (u417368936_crm), and the billing database (u417368936_bill) too if you have it" icon={FileCode2} />
-          <div className="space-y-4 p-5">
+          <div className="space-y-4 p-4">
             <input ref={input} type="file" multiple accept=".sql,application/sql,text/plain" className="hidden" onChange={(e) => { const f = [...(e.target.files ?? [])]; e.target.value = ''; if (f.length) pick(f) }} />
             <div className="flex flex-wrap items-center gap-3">
               <Button icon={Upload} loading={busy === 'read'} onClick={() => input.current?.click()}>{file ? 'Choose different files' : 'Choose .sql file(s)'}</Button>
@@ -98,7 +98,7 @@ export default function LegacyImport() {
         </Card>
         <Card className="overflow-hidden">
           <CardHeader title="Never imported" icon={ShieldOff} />
-          <ul className="space-y-2 p-5 text-sm text-mute">
+          <ul className="space-y-2 p-4 text-sm text-mute">
             <li>• Passwords — the old system stored them as plain text</li>
             <li>• Login tokens, magic links, OTP codes, trusted IPs</li>
             <li>• Web-server files in the uploads folder (.htaccess, index.html)</li>
@@ -112,7 +112,7 @@ export default function LegacyImport() {
             {Object.entries(report.imported).map(([k, v]) => <Stat key={k} label={LABELS[k] ?? k} value={v.toLocaleString('en-IN')} icon={DatabaseZap} tone={k === 'clientFiles' ? 'violet' : 'navy'} />)}
           </div>
 
-          <Card className="mb-6 overflow-hidden">
+          <Card className="mb-5 overflow-hidden">
             <CardHeader title="2 · Verification — old CRM vs. what will be imported" subtitle="Every count and rupee total is recomputed from the imported records" icon={ListChecks}
               action={failed.length ? <Badge tone="red">{failed.length} mismatch</Badge> : <Badge tone="green">All {report.checks.length} match</Badge>} />
             <Table>
@@ -128,7 +128,7 @@ export default function LegacyImport() {
             </Table>
           </Card>
 
-          <div className="mb-6 grid gap-6 lg:grid-cols-2">
+          <div className="mb-5 grid gap-5 lg:grid-cols-2">
             <Card className="overflow-hidden">
               <CardHeader title="How old statuses are read" subtitle="The original text is always kept on the file" icon={Repeat} />
               <ul className="max-h-80 divide-y divide-line/70 overflow-y-auto text-sm">
@@ -156,16 +156,16 @@ export default function LegacyImport() {
           </div>
 
           {(report.notes.length > 0 || report.skipped.length > 0) && (
-            <Card className="mb-6 overflow-hidden">
+            <Card className="mb-5 overflow-hidden">
               <CardHeader title="Notes" icon={TriangleAlert} />
-              <ul className="space-y-1.5 p-5 text-sm">
+              <ul className="space-y-1.5 p-4 text-sm">
                 {report.notes.map((n) => <li key={n}>• {n}</li>)}
                 {report.skipped.map((n) => <li key={n} className="text-mute">• Skipped: {n}</li>)}
               </ul>
             </Card>
           )}
 
-          <Card className="mb-6 flex flex-wrap items-center gap-4 p-5">
+          <Card className="mb-5 flex flex-wrap items-center gap-4 p-4">
             <div className="min-w-0 flex-1">
               <p className="font-bold">3 · Import</p>
               <p className="text-sm text-mute">{failed.length ? 'Import is blocked until every check matches.' : 'A snapshot of today’s data is saved first. The checks run again during the import; if anything differs, nothing changes.'}</p>
@@ -226,9 +226,9 @@ function AttachFiles() {
   const s = picked?.plan.stats
   const pct = progress && progress.totalBytes ? Math.round((progress.bytes / progress.totalBytes) * 100) : 0
   return (
-    <Card className="mb-6 overflow-hidden">
+    <Card className="mb-5 overflow-hidden">
       <CardHeader title="4 · Attach the uploaded files" subtitle="Payment screenshots, client documents and signed agreements from the old CRM’s uploads folder — each goes to its client file" icon={Paperclip} />
-      <div className="space-y-4 p-5">
+      <div className="space-y-4 p-4">
         <input ref={(el) => { folder.current = el; el?.setAttribute('webkitdirectory', '') }} type="file" multiple className="hidden"
           onChange={(e) => { const f = [...(e.target.files ?? [])]; e.target.value = ''; if (f.length) choose(f) }} />
         {!imported ? (
@@ -299,7 +299,7 @@ function UnlinkedFiles() {
   const { slice, pager } = usePaged(list, 25, [q])
   if (!all.length) return null
   return (
-    <Card className="mb-6 overflow-hidden">
+    <Card className="mb-5 overflow-hidden">
       <CardHeader title="Unlinked old CRM files" subtitle={`${all.length.toLocaleString('en-IN')} uploads no client file refers to (replaced screenshots, deleted entries) — kept so nothing is lost`} icon={Archive}
         action={<SearchBox value={q} onChange={setQ} placeholder="Search file name…" className="w-56" />} />
       <Table>

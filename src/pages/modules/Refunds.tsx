@@ -78,7 +78,7 @@ export default function Refunds() {
                   {accounts && <Td className="text-right"><RefundActions b={b} r={r} /></Td>}
                   <Td><Button size="sm" variant="ghost" icon={History} aria-label="History" title="History" onClick={() => setOpen(open === r.id ? null : r.id)} /></Td>
                 </tr>,
-                open === r.id && <tr key={`${r.id}-h`}><td colSpan={accounts ? 10 : 9} className="bg-card2/40 px-5 py-3"><RefundDetails r={r} /></td></tr>,
+                open === r.id && <tr key={`${r.id}-h`}><td colSpan={accounts ? 10 : 9} className="bg-card2/40 px-4 py-2.5"><RefundDetails r={r} /></td></tr>,
               ])}
             </tbody>
           </Table>

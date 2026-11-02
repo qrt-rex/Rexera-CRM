@@ -56,7 +56,7 @@ export function ClientDocReport() {
   })))
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
         <Stat label="Clients" value={rows.length} icon={Users} sub={`${rows.filter((r) => r.portal === 'ACTIVE').length} with portal`} onClick={() => setState('')} />
         <Stat label="Requested" value={sum('requested')} icon={ClipboardList} tone="blue" />
@@ -69,7 +69,7 @@ export function ClientDocReport() {
       <Card className="overflow-hidden">
         <CardHeader title="Client-wise documents" icon={UserRoundCheck} subtitle="Documents asked from each client in the portal, and where they are"
           action={<Button size="sm" variant="outline" icon={Download} onClick={exportCsv} disabled={!shown.length}>CSV</Button>} />
-        <div className="flex flex-wrap items-center gap-2 border-b border-line px-5 py-3">
+        <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2.5">
           <SearchBox value={q} onChange={setQ} placeholder="Search client or entry…" className="min-w-56 flex-1" />
           <Select aria-label="Document" value={doc} onChange={(e) => setDoc(e.target.value as AdminStageId | '')} className="w-44"><option value="">All documents</option>{ADMIN_STAGES.map((s) => <option key={s.id} value={s.id}>{s.short}</option>)}</Select>
           <Select aria-label="Show" value={state} onChange={(e) => setState(e.target.value as typeof state)} className="w-48">

@@ -169,8 +169,8 @@ function PreviewModal({ form, onClose, fields }: { form: Pick<DocForm, 'name' | 
   const fl = fields ?? (form as DocForm).fields ?? []
   return (
     <Modal open onClose={onClose} title="What the client sees" size="lg" footer={<Button onClick={onClose}>Close</Button>}>
-      <div className="rounded-2xl bg-[#F5F7FB] p-5 text-[#111827]">
-        <div className="rounded-2xl bg-white p-5">
+      <div className="rounded-2xl bg-[#F5F7FB] p-4 text-[#111827]">
+        <div className="rounded-2xl bg-white p-4">
           <h2 className="text-xl font-extrabold">{form.name || 'Untitled form'}</h2>
           {form.description && <p className="mt-1 text-sm text-[#4B5563]">{form.description}</p>}
           {form.instructions && <div className="mt-3 whitespace-pre-line rounded-xl bg-[#EEF2FB] p-3 text-sm">{form.instructions}</div>}
@@ -216,7 +216,7 @@ function FormBuilder({ init, id, onClose }: { init: FormInput; id?: string; onCl
         {f.kind === 'UPLOAD' && <div className="sm:col-span-2"><FileField label="Document the client downloads" required accept={`${DOC_TYPES},${RESUME_TYPES}`} acceptLabel="PDF, image or Word" value={f.document} onChange={(document) => set({ document })} /></div>}
       </div>
 
-      <div className="mt-6">
+      <div className="mt-5">
         <p className="mb-2 text-sm font-bold">Fields {f.kind === 'UPLOAD' && <span className="font-normal text-mute">— a “Completed document” upload is added automatically</span>}</p>
         <div className="space-y-2">
           {f.fields.map((x, i) => (

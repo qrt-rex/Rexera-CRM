@@ -55,10 +55,10 @@ export default function Backup() {
   return (
     <div>
       <PageHeader title="Data Backup & Restore" subtitle="Everything in the CRM plus imported recruitment tables, in one file" icon={DatabaseBackup} />
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-5 lg:grid-cols-3">
         <Card className="overflow-hidden">
           <CardHeader title="Download a backup" icon={Download} />
-          <div className="space-y-4 p-5">
+          <div className="space-y-4 p-4">
             <Checkbox checked={encrypt} onChange={setEncrypt} label={<span className="flex items-center gap-1.5"><Lock className="size-3.5" />Encrypt with a passphrase (recommended)</span>} />
             {encrypt && <Input label="Passphrase" type="password" autoComplete="new-password" value={pass} onChange={(e) => setPass(e.target.value)} hint="At least 8 characters. Without it the backup can't be opened — keep it safe." />}
             <p className="text-xs text-mute">Backups contain password hashes and client data. Encrypted files use AES-256.</p>
@@ -68,7 +68,7 @@ export default function Backup() {
 
         <Card className="overflow-hidden">
           <CardHeader title="Restore from a file" icon={Upload} />
-          <div className="space-y-4 p-5">
+          <div className="space-y-4 p-4">
             <input ref={input} type="file" accept=".json,application/json" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) pickFile(f) }} />
             <p className="text-sm text-mute">Pick a Rexera backup (.json). The file is checked before anything changes, and a snapshot of today's data is saved first.</p>
             <Button className="w-full" variant="outline" icon={Upload} onClick={() => input.current?.click()}>Choose backup file</Button>
@@ -77,9 +77,9 @@ export default function Backup() {
 
         <Card className="overflow-hidden">
           <CardHeader title={CLOUD ? 'Snapshot' : 'Snapshots in this browser'} subtitle={CLOUD ? 'Saved as a backup file on this computer' : 'Last 10 kept · one automatic snapshot a day'} icon={Camera} />
-          <div className="p-5"><Button className="w-full" variant="soft" icon={Camera} loading={busy === 'snap'} onClick={doSnapshot}>Take snapshot now</Button></div>
+          <div className="p-4"><Button className="w-full" variant="soft" icon={Camera} loading={busy === 'snap'} onClick={doSnapshot}>Take snapshot now</Button></div>
           <ul className="max-h-72 divide-y divide-line/70 overflow-y-auto border-t border-line">
-            {!snaps.list.length && <li className="p-5 text-sm text-mute">{CLOUD ? 'All CRM data lives in Supabase (with its own daily backups); nothing is kept in this browser. A snapshot downloads a backup file — keep it safe.' : 'No snapshots yet.'}</li>}
+            {!snaps.list.length && <li className="p-4 text-sm text-mute">{CLOUD ? 'All CRM data lives in Supabase (with its own daily backups); nothing is kept in this browser. A snapshot downloads a backup file — keep it safe.' : 'No snapshots yet.'}</li>}
             {snaps.list.map((s) => (
               <li key={s.id} className="flex items-center gap-2 px-5 py-2.5">
                 <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{s.label}</p><p className="text-[11px] text-mute">{fmtDateTime(s.at)} · {kb(s.bytes)}</p></div>
@@ -95,7 +95,7 @@ export default function Backup() {
         </Card>
       </div>
 
-      <Card className="mt-6 overflow-hidden">
+      <Card className="mt-5 overflow-hidden">
         <CardHeader title="Backup history" icon={History} />
         {!db.backupLog.length ? <EmptyState icon={History} title="No backups yet" /> : (
           <ul className="divide-y divide-line/70 text-sm">

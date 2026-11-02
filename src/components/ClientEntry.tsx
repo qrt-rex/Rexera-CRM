@@ -200,7 +200,7 @@ export function ClientEntriesPanel({ lead, full }: { lead: boolean; full?: boole
   const owner = (e: ClientEntry) => (e.ownerId === me.id ? 'Me' : userName(db, e.ownerId))
   return (
     <>
-      <div className="flex flex-wrap items-end gap-2 border-b border-line px-5 py-3">
+      <div className="flex flex-wrap items-end gap-2 border-b border-line px-4 py-2.5">
         <Tabs value={view} onChange={setView} tabs={[
           { id: 'open', label: 'Open', count: counts.open }, { id: 'due', label: 'Follow-ups due', count: counts.due },
           { id: 'converted', label: 'Converted', count: counts.converted }, { id: 'all', label: 'All', count: counts.all },

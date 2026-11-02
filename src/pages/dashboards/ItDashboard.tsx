@@ -96,7 +96,7 @@ export function ItDashboard() {
         </div>
       )}
 
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-6">
+      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-6">
         <Stat icon={Users} tone="navy" label="Active accounts" value={`${active.length}`} sub={`${db.users.length - active.length} inactive`} />
         <Stat icon={Activity} tone="green" label="Signed in today" value={`${signedToday}`} sub={`of ${active.length}`} />
         <Stat icon={ShieldAlert} tone={locked.length ? 'red' : 'amber'} label="Locked / failed" value={`${locked.length} / ${fails.reduce((s, [, f]) => s + f.count, 0)}`} sub="sign-ins" />
@@ -106,7 +106,7 @@ export function ItDashboard() {
       </div>
 
       <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-mute">One-click actions</h2>
-      <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+      <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
         <Action icon={Stethoscope} tone="green" label="Run health check" hint="Storage, passwords, owners, backups" busy={busy === 'health'} onClick={check} />
         <Action icon={Camera} tone="cyan" label="Snapshot now" hint={CLOUD ? 'Downloads a backup file to this computer' : 'Saved in this browser · restore any time'} busy={busy === 'snap'} onClick={() => doAndRecheck('snap', () => createSnapshot(me, 'Snapshot from IT dashboard'), 'Snapshot saved')} />
         <Action icon={Download} tone="navy" label="Download backup" hint="Encrypted file of all data" onClick={() => { setPass(''); setBackupOpen(true) }} />
@@ -135,12 +135,12 @@ export function ItDashboard() {
       {/* a backup of everything deleted anywhere in the CRM, until IT Support deletes it for good */}
       <DeletedFiles compact />
 
-      <div className="grid gap-6 xl:grid-cols-3">
+      <div className="grid gap-5 xl:grid-cols-3">
         <Section title="Health check" subtitle={health ? `${health.length} checks · ${warnings} to review` : 'Running…'} icon={Stethoscope} className="xl:col-span-2"
           action={<Button size="sm" variant="ghost" icon={RefreshCcw} onClick={check}>Re-run</Button>}>
           <ul className="divide-y divide-line/70">
             {(health ?? []).map((h) => (
-              <li key={h.id} className="flex items-start gap-3 px-5 py-3">
+              <li key={h.id} className="flex items-start gap-3 px-4 py-2.5">
                 {h.level === 'ok' ? <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-ok" /> : h.level === 'warn' ? <AlertTriangle className="mt-0.5 size-5 shrink-0 text-warn" /> : <XCircle className="mt-0.5 size-5 shrink-0 text-bad" />}
                 <div className="min-w-0 flex-1"><p className="text-sm font-semibold">{h.title}</p><p className="text-xs text-mute">{h.detail}</p></div>
                 {h.fix && <Button size="sm" variant="soft" loading={busy === 'fix-' + h.id} onClick={() => doAndRecheck('fix-' + h.id, () => h.fix!.run(me), `${h.title}: fixed`)}>{h.fix.label}</Button>}
@@ -149,7 +149,7 @@ export function ItDashboard() {
             {health === null && <li className="px-5 py-6 text-sm text-mute">Checking the system…</li>}
           </ul>
         </Section>
-        <div className="space-y-6">
+        <div className="space-y-5">
           <Section title="Security watch" icon={ShieldAlert}>
             <ul className="divide-y divide-line/70">
               {fails.map(([login, f]) => (
@@ -158,7 +158,7 @@ export function ItDashboard() {
                   {f.until && new Date(f.until) > new Date() ? <Badge tone="red"><Lock className="size-3" />locked</Badge> : <Badge tone="amber">{f.count} failed</Badge>}
                 </li>
               ))}
-              {!fails.length && <li className="px-5 py-4 text-sm text-mute">No failed sign-ins. 🔒</li>}
+              {!fails.length && <li className="px-4 py-3 text-sm text-mute">No failed sign-ins. 🔒</li>}
             </ul>
           </Section>
           <LoginLogoutCard />
@@ -176,7 +176,7 @@ export function ItDashboard() {
                 {u.grants.length > 0 && <Badge tone="green">+{u.grants.length}</Badge>}{u.denies.length > 0 && <Badge tone="red">−{u.denies.length}</Badge>}
               </li>
             ))}
-            {!custom.length && <li className="px-5 py-4 text-sm text-mute">Nobody has extra roles or per-person permissions — everyone uses their role's defaults.</li>}
+            {!custom.length && <li className="px-4 py-3 text-sm text-mute">Nobody has extra roles or per-person permissions — everyone uses their role's defaults.</li>}
           </ul>
         </Section>
         <Section title="Sign-in & access events" icon={Activity} action={<ViewAll to="/audit" />}>

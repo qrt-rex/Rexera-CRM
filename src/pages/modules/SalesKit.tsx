@@ -68,7 +68,7 @@ export default function SalesKit() {
             const isOpen = open === x.id, c = closing(x)
             return (
               <Card key={x.id} className="overflow-hidden">
-                <button className="flex w-full flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4 text-left hover:bg-card2/50" onClick={() => setOpen(isOpen ? null : x.id)} aria-expanded={isOpen}>
+                <button className="flex w-full flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 text-left hover:bg-card2/50" onClick={() => setOpen(isOpen ? null : x.id)} aria-expanded={isOpen}>
                   <span className="min-w-0 flex-1 basis-64">
                     <span className="flex flex-wrap items-center gap-2"><b className="text-[15px]">{x.name}</b><Badge tone="violet">{x.category}</Badge>{c && <Badge tone={c.tone}>{c.text}</Badge>}</span>
                     <span className="mt-0.5 block truncate text-xs text-mute">{[x.organisation, x.schemeType, x.applicableFor].filter(Boolean).join(' · ')}</span>
@@ -78,7 +78,7 @@ export default function SalesKit() {
                   {isOpen ? <ChevronUp className="size-4 text-mute" /> : <ChevronDown className="size-4 text-mute" />}
                 </button>
                 {isOpen && (
-                  <div className="border-t border-line px-5 py-4">
+                  <div className="border-t border-line px-4 py-3">
                     <div className="grid gap-4 md:grid-cols-3">
                       {([['Benefits', x.benefits], ['Focus sectors', x.sectors], ['Eligibility', x.eligibility]] as const).map(([k, v]) => (
                         <div key={k}><p className="text-[11px] font-bold uppercase tracking-wider text-mute">{k}</p><p className="mt-1 whitespace-pre-line text-sm">{v || '—'}</p></div>

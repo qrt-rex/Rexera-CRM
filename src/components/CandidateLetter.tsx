@@ -25,14 +25,14 @@ export function SelectedCandidates({ onOpen }: { onOpen: (id: string) => void })
   const target = send ? db.candidates.find((c) => c.id === send.id && c.selected) : undefined
   if (!picked.length) return null
   return (
-    <Card className="mb-6 overflow-hidden border-ok/30">
+    <Card className="mb-5 overflow-hidden border-ok/30">
       <CardHeader title="Selected candidates" icon={UserCheck} subtitle={`${picked.length} selected — send each an offer or joining letter by email or WhatsApp. Untick a candidate to take them off this list.`} />
       <ul className="divide-y divide-line/70">
         {picked.map((c) => {
           const sent = lettersFor(db, c.id)
           const last = (k: LetterChoice) => sent.find((l) => l.kind === k && (l.status === 'SENT' || l.status === 'MANUAL'))
           return (
-            <li key={c.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
+            <li key={c.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
               <button className="min-w-0 flex-1 text-left" onClick={() => onOpen(c.id)}>
                 <p className="truncate font-semibold hover:underline">{c.name}</p>
                 <p className="truncate text-xs text-mute">{[c.position, c.branch].filter(Boolean).join(' · ') || '—'} · {c.email} · {c.phone}</p>

@@ -98,7 +98,7 @@ export function SalesDashboard({ lead }: { lead: boolean }) {
         }
       />
 
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <MiniStat label="Leads to call" value={n.toCall} icon={PhoneCall} tone="navy" />
         <MiniStat label="Follow-ups due" value={n.followUps} icon={CalendarCheck2} tone="amber" />
         <MiniStat label="Calls today" value={n.callsToday} icon={Phone} tone="green" />
@@ -129,16 +129,16 @@ export function SalesDashboard({ lead }: { lead: boolean }) {
       </TileGrid>
 
       {/* sales person → dialer → client entry → follow-ups → CRM entry */}
-      <Section id="client-entries" className="mt-6" title={lead ? 'Client entries · me and my team' : 'My client entries'} subtitle="Filled in the dialer during the call — follow up, then convert to a CRM entry once the payment is received" icon={ClipboardList}>
+      <Section id="client-entries" className="mt-5" title={lead ? 'Client entries · me and my team' : 'My client entries'} subtitle="Filled in the dialer during the call — follow up, then convert to a CRM entry once the payment is received" icon={ClipboardList}>
         <ClientEntriesPanel lead={lead} />
       </Section>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-3">
-        <div className="space-y-6">
+      <div className="mt-5 grid gap-5 xl:grid-cols-3">
+        <div className="space-y-5">
           <LoginLogoutCard />
           <UpcomingEvents limit={3} />
         </div>
-        <div className="space-y-6 xl:col-span-2">
+        <div className="space-y-5 xl:col-span-2">
           {lead && (
             <Section title="Waiting for my approval" subtitle="CRM entries submitted by your team" icon={ClipboardCheck} action={<ViewAll to="/approvals" />}>
               {waiting.length ? waiting.slice(0, 5).map((b) => <BookingRow key={b.id} b={b} />) : <EmptyState icon={ClipboardCheck} title="Nothing waiting" text="New CRM entries from your team appear here." />}
@@ -148,7 +148,7 @@ export function SalesDashboard({ lead }: { lead: boolean }) {
             {!mine.length ? <EmptyState icon={Briefcase} title="No CRM entries yet" text="Convert a client entry once the payment is received." /> : (
               <ul className="divide-y divide-line/70">
                 {mine.slice(0, 5).map((b) => (
-                  <li key={b.id} className="px-5 py-4">
+                  <li key={b.id} className="px-4 py-3">
                     <div className="mb-3 flex flex-wrap items-center gap-2">
                       <Link to={`/bookings/${b.id}`} className="font-bold hover:underline"><ClientSerial b={b} />{b.companyName}</Link>
                       <BookingStatusBadge b={b} />

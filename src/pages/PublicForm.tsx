@@ -58,7 +58,7 @@ export default function PublicFormPage() {
   return (
     <div className="min-h-screen bg-[#F5F7FB] px-4 py-8 text-[#111827]">
       <div className="mx-auto max-w-2xl">
-        <div className="mb-6 flex justify-center"><Logo fixed /></div>
+        <div className="mb-5 flex justify-center"><Logo fixed /></div>
         <div className="rounded-2xl border border-[#E5E7EB] bg-white p-6 shadow-sm sm:p-8">
           {state.kind === 'loading' && <p className="flex items-center justify-center gap-2 py-10 text-sm text-[#6B7280]"><Loader2 className="size-4 animate-spin" />Opening the form…</p>}
           {state.kind === 'error' && <div className="py-6 text-center"><h1 className="text-xl font-extrabold">Form unavailable</h1><p className="mt-2 text-sm text-[#6B7280]">{state.message}</p></div>}
@@ -91,10 +91,10 @@ export default function PublicFormPage() {
                   <Download className="size-5" /><span className="flex-1">Download: {state.form.document.name}</span><span className="text-xs font-normal text-[#6B7280]">link valid for 1 hour</span>
                 </a>
               )}
-              <div className="mt-6"><FormRenderer fields={state.form.fields} values={values} files={files} errors={errors} disabled={busy}
+              <div className="mt-5"><FormRenderer fields={state.form.fields} values={values} files={files} errors={errors} disabled={busy}
                 onValue={(id, v) => setValues((x) => ({ ...x, [id]: v }))} onFiles={(id, f) => setFiles((x) => ({ ...x, [id]: f }))} /></div>
               {(errors._form || errors._files) && <p role="alert" className="mt-4 rounded-xl bg-[#FEF2F2] px-4 py-2.5 text-sm font-semibold text-[#DC2626]">{errors._form ?? errors._files}</p>}
-              <button disabled={busy} className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#F47B20] text-base font-bold text-white hover:bg-[#df6a12] disabled:opacity-60">
+              <button disabled={busy} className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#F47B20] text-base font-bold text-white hover:bg-[#df6a12] disabled:opacity-60">
                 {busy ? <Loader2 className="size-5 animate-spin" /> : <Send className="size-5" />}{busy ? 'Sending…' : 'Submit'}
               </button>
               <p className="mt-3 text-center text-[11px] text-[#9CA3AF]">Your answers and files are sent securely to our team only.</p>

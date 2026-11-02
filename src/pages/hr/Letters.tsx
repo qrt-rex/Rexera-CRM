@@ -55,10 +55,10 @@ export default function Letters() {
     <div>
       <PageHeader title="Letters" subtitle="Generate an offer, joining, internship or experience letter on the company letterhead and download it as PDF" icon={FilePen}
         actions={<Tabs value={kind} onChange={(t) => { setParams({ type: t }); setEdited(false) }} tabs={LETTER_KINDS.map((k) => ({ id: k.id, label: k.label }))} />} />
-      <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
+      <div className="grid gap-5 xl:grid-cols-[420px_minmax(0,1fr)]">
         <Card className="overflow-hidden">
           <CardHeader title="Details" subtitle="Pick an employee to fill these in, or type them" icon={FilePen} />
-          <div className="grid gap-4 p-5 sm:grid-cols-2">
+          <div className="grid gap-4 p-4 sm:grid-cols-2">
             <Select label="Fill from employee" value={employee} onChange={(e) => fillFrom(e.target.value)} className="sm:col-span-2">
               <option value="">— New person (type below) —</option>
               {people.map((u) => <option key={u.id} value={u.id}>{u.name} · {u.designation}{u.active ? '' : ' (left)'}</option>)}
@@ -85,7 +85,7 @@ export default function Letters() {
         <Card className="flex flex-col overflow-hidden">
           <CardHeader title={LETTER_KINDS.find((k) => k.id === kind)!.title} subtitle={edited ? 'Edited by you — changes to the details no longer update the text' : 'Text updates as you fill the details; you can edit it before downloading'} icon={FilePen}
             action={edited && <Button size="sm" variant="ghost" icon={RotateCcw} onClick={() => setEdited(false)}>Reset text</Button>} />
-          <div className="flex flex-1 flex-col gap-4 p-5">
+          <div className="flex flex-1 flex-col gap-4 p-4">
             <textarea value={body} onChange={(e) => { setBody(e.target.value); setEdited(true) }} aria-label="Letter text"
               className="min-h-[420px] flex-1 resize-y rounded-xl border border-line bg-card p-4 font-serif text-[15px] leading-relaxed outline-none focus:border-brand focus:ring-4 focus:ring-brand/10" />
             {missing && <p className="text-xs text-warn">{missing}</p>}

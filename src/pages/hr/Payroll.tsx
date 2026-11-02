@@ -150,7 +150,7 @@ export default function Payroll() {
       {saved && (
         <Card className="mt-5 overflow-hidden">
           <CardHeader title="History" icon={History} />
-          <ol className="space-y-2 p-5 text-sm">
+          <ol className="space-y-2 p-4 text-sm">
             {[...saved.history].reverse().map((h, i) => <li key={i}><b>{h.action.toLowerCase()}</b> <span className="text-mute">· {userName(db, h.by)} · {fmtDateTime(h.at)}{h.note ? ` · ${h.note}` : ''}</span></li>)}
           </ol>
         </Card>

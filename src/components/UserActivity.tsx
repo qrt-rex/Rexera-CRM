@@ -62,11 +62,11 @@ export function UserActivity() {
   let lastDay = ''
 
   return (
-    <Card className="mb-6 overflow-hidden">
+    <Card className="mb-5 overflow-hidden">
       <CardHeader title="User activity — every click" icon={MousePointerClick}
         subtitle="Every page, click, choice, form and action result of every person. Only the IT Support team sees this — typed text and passwords are never recorded."
         action={<span className="flex items-center gap-2 text-xs text-mute"><Toggle checked={live} onChange={setLive} label="Live" />Live</span>} />
-      <div className="flex flex-wrap items-end gap-2 border-b border-line px-5 py-3">
+      <div className="flex flex-wrap items-end gap-2 border-b border-line px-4 py-2.5">
         <label className="text-[11px] font-semibold text-mute">From<input type="date" max={today()} value={from} onChange={(e) => setFrom(e.target.value)} className={cx(ctl, 'block')} /></label>
         <label className="text-[11px] font-semibold text-mute">To<input type="date" max={today()} min={from} value={to} onChange={(e) => setTo(e.target.value)} className={cx(ctl, 'block')} /></label>
         <label className="text-[11px] font-semibold text-mute">Person
@@ -87,7 +87,7 @@ export function UserActivity() {
         }}>Clear &gt; 90 days</Button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 border-b border-line px-5 py-3 text-sm sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 border-b border-line px-4 py-2.5 text-sm sm:grid-cols-4">
         <span><b className="block text-lg tabular-nums">{rows.length}{more ? '+' : ''}</b><span className="text-xs text-mute">events shown</span></span>
         <span><b className="block text-lg tabular-nums">{people.length}</b><span className="text-xs text-mute">people</span></span>
         <span><b className={cx('block text-lg tabular-nums', failed > 0 && 'text-bad')}>{failed}</b><span className="text-xs text-mute">failed actions</span></span>

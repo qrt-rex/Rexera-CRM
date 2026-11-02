@@ -83,13 +83,13 @@ export default function Schemes() {
             const st = schemeState(s, t), left = schemeDaysLeft(s, t), dur = schemeDuration(s)
             return (
               <Card key={s.id} className="flex flex-col overflow-hidden transition hover:-translate-y-0.5 hover:shadow-pop anim-fade-up" style={{ animationDelay: `${i * 40}ms` }}>
-                <div className="relative bg-gradient-to-br from-[#2E3A8C] to-[#4b5bc4] p-5 text-white">
+                <div className="relative bg-gradient-to-br from-[#2E3A8C] to-[#4b5bc4] p-4 text-white">
                   <span className="flex flex-wrap gap-1.5">{manage && <Badge tone="orange" className="bg-white/90">{s.category}</Badge>}<Badge tone={STATE[st].tone} className="bg-white/90">{STATE[st].label}</Badge></span>
                   <h3 className="mt-3 text-lg font-extrabold">{s.title}</h3>
                   {s.price != null && <p className="mt-1 text-2xl font-extrabold text-[#F4A12A]">{inr(s.price)}</p>}
                   {manage && s.benefit && <p className="mt-1 text-sm font-semibold text-white/85">{s.benefit}</p>}
                 </div>
-                <div className="flex flex-1 flex-col p-5 text-sm">
+                <div className="flex flex-1 flex-col p-4 text-sm">
                   {s.startDate && s.endDate && (
                     <p className="mb-3 flex items-center gap-2 rounded-xl bg-card2 px-3 py-2 text-xs">
                       <CalendarRange className="size-4 text-brand-ink" />

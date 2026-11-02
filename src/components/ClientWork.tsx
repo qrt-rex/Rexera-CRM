@@ -29,7 +29,7 @@ export function ClientWorkRow({ b, showDocs = false }: { b: Booking; showDocs?: 
   const [docsOpen, setDocsOpen] = useState(false)
   const [pending, setPending] = useState<PendingDoc[]>([])
   return (
-    <li className="px-5 py-4">
+    <li className="px-4 py-3">
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <Link to={`/bookings/${b.id}`} className="font-bold hover:underline"><ClientSerial b={b} />{b.companyName}</Link>
         <BookingStatusBadge b={b} />

@@ -23,16 +23,16 @@ export function Greeting({ subtitle, right }: { subtitle?: string; right?: React
   const h = new Date().getHours()
   const hello = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
   return (
-    <div className="relative mb-6 overflow-hidden rounded-3xl bg-gradient-to-br from-[#2E3A8C] via-[#33408F] to-[#4453b5] p-6 text-white shadow-xl shadow-brand/25 anim-fade-up sm:p-7">
+    <div className="relative mb-5 overflow-hidden rounded-xl bg-gradient-to-br from-[#2E3A8C] via-[#33408F] to-[#4453b5] px-4 py-3 text-white shadow-md shadow-brand/20 anim-fade-up">
       {/* decorative blobs */}
       <div className="pointer-events-none absolute -right-10 -top-16 size-64 rounded-full bg-white/10 blur-sm" />
       <div className="pointer-events-none absolute -bottom-20 right-40 size-48 rounded-full bg-[#F47B20]/25 blur-2xl" />
       <div className="pointer-events-none absolute left-1/3 -top-8 size-32 rounded-full bg-white/5 blur-xl" />
-      <div className="relative flex flex-wrap items-center gap-5">
+      <div className="relative flex flex-wrap items-center gap-4">
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/70">{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
-          <h2 className="mt-1 text-2xl font-extrabold sm:text-3xl">{hello}, {me.name.split(' ')[0]} 👋</h2>
-          <p className="mt-1 text-sm text-white/80">{subtitle ?? `${roleLabel(me.role)} · ${me.department}`}</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+          <h2 className="mt-0.5 text-xl font-extrabold sm:text-2xl">{hello}, {me.name.split(' ')[0]} 👋</h2>
+          <p className="mt-0.5 text-[13px] text-white/80">{subtitle ?? `${roleLabel(me.role)} · ${me.department}`}</p>
         </div>
         {right}
       </div>
@@ -74,17 +74,17 @@ export function Tile({ to, onClick, icon: Icon, label, desc, tone = 'navy', badg
         onClick={handleTileClick}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleTileClick() } }}
         className={cx(
-          'group flex cursor-pointer items-center gap-4 rounded-2xl border border-line bg-card p-4 text-left transition-all duration-200',
-          'shadow-card hover:shadow-lg hover:-translate-y-1 hover:border-line/80 active:translate-y-0 active:shadow-card select-none',
+          'group flex cursor-pointer items-center gap-3 rounded-xl border border-line bg-card px-3.5 py-3 text-left transition-all duration-200',
+          'shadow-card hover:shadow-pop hover:-translate-y-0.5 hover:border-brand/30 active:translate-y-0 active:shadow-card select-none',
           className,
         )}
       >
-        <span className={cx('grid size-12 shrink-0 place-items-center rounded-2xl transition-all duration-200 group-hover:scale-110 group-hover:shadow-md', highlight ? 'bg-accent text-white shadow-accent/30' : chip[tone])}>
-          <Icon className="size-6" />
+        <span className={cx('grid size-10 shrink-0 place-items-center rounded-lg transition-all duration-200 group-hover:scale-105', highlight ? 'bg-accent text-white shadow-accent/30' : chip[tone])}>
+          <Icon className="size-5" />
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-2">
-            <span className="truncate text-[15px] font-bold">{label}</span>
+            <span className="truncate text-sm font-bold">{label}</span>
           </span>
           {desc && <span className="block truncate text-xs text-mute">{desc}</span>}
         </span>
@@ -99,12 +99,12 @@ export function Tile({ to, onClick, icon: Icon, label, desc, tone = 'navy', badg
             onClick={handleChevronClick}
             aria-label="More options"
             aria-expanded={open}
-            className="grid size-8 shrink-0 place-items-center rounded-xl text-mute transition-all duration-200 hover:bg-card2 hover:text-ink hover:shadow-sm"
+            className="grid size-7 shrink-0 place-items-center rounded-lg text-mute transition-all duration-200 hover:bg-card2 hover:text-ink hover:shadow-sm"
           >
             {open ? <ChevronDown className="size-5 text-accent" /> : <ChevronRight className="size-5" />}
           </button>
         ) : (
-          <span className="grid size-8 shrink-0 place-items-center text-mute transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-ink">
+          <span className="grid size-7 shrink-0 place-items-center text-mute transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-ink">
             <ChevronRight className="size-5" />
           </span>
         )}
@@ -112,7 +112,7 @@ export function Tile({ to, onClick, icon: Icon, label, desc, tone = 'navy', badg
 
       {/* dropdown sub-actions */}
       {open && subActions && subActions.length > 0 && (
-        <div className="absolute right-2 top-full z-40 mt-1 min-w-[210px] overflow-hidden rounded-2xl border border-line bg-card py-1.5 shadow-2xl backdrop-blur anim-fade-up">
+        <div className="absolute right-2 top-full z-40 mt-1 min-w-[210px] overflow-hidden rounded-xl border border-line bg-card py-1.5 shadow-2xl backdrop-blur anim-fade-up">
           {subActions.map((a, i) => {
             const actionCls = 'flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-medium transition-colors hover:bg-card2 hover:text-accent cursor-pointer'
             const content = (
@@ -147,7 +147,7 @@ export function Tile({ to, onClick, icon: Icon, label, desc, tone = 'navy', badg
 
 export function TileGrid({ children, cols = 3 }: { children: ReactNode; cols?: 2 | 3 | 4 }) {
   const c = { 2: 'sm:grid-cols-2', 3: 'sm:grid-cols-2 xl:grid-cols-3', 4: 'sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4' }[cols]
-  return <div className={cx('grid gap-4', c)}>{children}</div>
+  return <div className={cx('grid gap-3', c)}>{children}</div>
 }
 
 /** Re-renders every `ms` while `active` (for live timers). */
@@ -296,8 +296,8 @@ export function UpcomingEvents({ limit = 4 }: { limit?: number }) {
           {list.map((e) => {
             const d = new Date(e.date + 'T00:00:00')
             return (
-              <li key={e.id} className="flex items-center gap-3 px-5 py-3">
-                <span className="grid w-11 shrink-0 rounded-xl bg-card2 py-1 text-center leading-tight">
+              <li key={e.id} className="flex items-center gap-3 px-4 py-2.5">
+                <span className="grid w-10 shrink-0 rounded-lg bg-card2 py-0.5 text-center leading-tight">
                   <span className="text-[10px] font-bold uppercase text-accent">{d.toLocaleDateString('en-IN', { month: 'short' })}</span>
                   <span className="text-lg font-extrabold">{d.getDate()}</span>
                 </span>
@@ -322,7 +322,7 @@ export function RecentActivity({ limit = 6, userIds }: { limit?: number; userIds
     <Section title="Recent activity" icon={Clock} action={<ViewAll to="/audit" />}>
       <ul className="divide-y divide-line/70">
         {list.map((a) => (
-          <li key={a.id} className="flex items-start gap-3 px-5 py-3 text-sm">
+          <li key={a.id} className="flex items-start gap-3 px-4 py-2.5 text-[13px]">
             <span className="mt-1.5 size-2 shrink-0 rounded-full bg-accent" />
             <span className="min-w-0 flex-1"><b>{userName(db, a.by)}</b> <span className="text-mute">{a.detail}</span></span>
             <span className="shrink-0 text-[11px] text-mute">{ago(a.at)}</span>
@@ -335,9 +335,10 @@ export function RecentActivity({ limit = 6, userIds }: { limit?: number; userIds
 
 export function MiniStat({ label, value, tone = 'navy', icon: Icon }: { label: string; value: ReactNode; tone?: Tone; icon: LucideIcon }) {
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-line bg-card p-3 shadow-card transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 hover:border-line/80 cursor-default">
-      <span className={cx('grid size-10 place-items-center rounded-xl transition-transform duration-200 hover:scale-110', chip[tone])}><Icon className="size-5" /></span>
-      <div className="min-w-0"><p className="truncate text-[11px] font-semibold text-mute">{label}</p><p className="text-lg font-extrabold tabular-nums">{value}</p></div>
+    <div className="flex min-w-0 items-center gap-3 rounded-xl border border-line bg-card p-2.5 shadow-card transition-all duration-200 hover:shadow-pop hover:-translate-y-0.5 cursor-default sm:p-3">
+      {/* on phones three of these share a row: the number gets the room */}
+      <span className={cx('hidden size-9 shrink-0 place-items-center rounded-lg min-[420px]:grid', chip[tone])}><Icon className="size-5" /></span>
+      <div className="min-w-0"><p className="truncate text-[11px] font-semibold text-mute">{label}</p><p className="truncate text-base font-extrabold tabular-nums sm:text-lg">{value}</p></div>
     </div>
   )
 }

@@ -33,7 +33,7 @@ export default function WorkflowSettings() {
       <PageHeader title="Workflow Settings" subtitle="Reminders, the client welcome message and alerts — no code changes needed" icon={Settings2}
         actions={<Button icon={Save} onClick={() => run(() => saveWorkflowSettings(me, w), 'Workflow settings saved')}>Save</Button>} />
 
-      <div className="mb-6 grid gap-4 md:grid-cols-3">
+      <div className="mb-5 grid gap-4 md:grid-cols-3">
         <Card className="p-4"><p className="flex items-center gap-2 text-sm font-bold"><Clock className="size-4" />Scheduled job</p>
           {!CLOUD ? <p className="mt-1 text-xs text-mute">Browser mode: reminders run while someone has the CRM open.</p>
             : <><Badge tone={jobsOk ? 'green' : 'red'} className="mt-2">{jobsOk ? 'Running' : jobs ? 'Not run in 2 hours' : 'Never run'}</Badge>
@@ -49,10 +49,10 @@ export default function WorkflowSettings() {
         </Card>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-5 lg:grid-cols-2">
         <Card className="overflow-hidden">
           <CardHeader title="Reminders" icon={BellRing} />
-          <div className="grid gap-4 p-5">
+          <div className="grid gap-4 p-4">
             <Input label="File follow-up: repeat every (days)" type="number" min={1} max={90} value={w.fileReminderDays} onChange={(e) => set({ fileReminderDays: Number(e.target.value) })} hint="For files Legal approves from now on (15 by default). Change one file on its Workflow tab." />
             <Select label="Pitch Deck reminder: every" value={w.precheckDays} onChange={(e) => set({ precheckDays: Number(e.target.value) })}>
               <option value={3}>3 days (default)</option><option value={4}>4 days</option>
@@ -70,7 +70,7 @@ export default function WorkflowSettings() {
 
         <Card className="overflow-hidden">
           <CardHeader title="Operations contact in the welcome message" subtitle="Empty: the file's Operations person" icon={KeyRound} />
-          <div className="grid gap-4 p-5">
+          <div className="grid gap-4 p-4">
             <Input label="Name" value={w.opsContact.name} onChange={(e) => set({ opsContact: { ...w.opsContact, name: e.target.value } })} />
             <Input label="Phone" value={w.opsContact.phone} onChange={(e) => set({ opsContact: { ...w.opsContact, phone: e.target.value } })} />
             <Input label="Email" type="email" value={w.opsContact.email} onChange={(e) => set({ opsContact: { ...w.opsContact, email: e.target.value } })} />
@@ -80,7 +80,7 @@ export default function WorkflowSettings() {
         <Card className="overflow-hidden lg:col-span-2">
           <CardHeader title="Client welcome message" subtitle="Sent once when Legal approves a file and it moves to Operations" icon={Sparkles}
             action={<label className="flex items-center gap-2 text-sm"><Toggle checked={w.welcomeAuto} onChange={(v) => set({ welcomeAuto: v })} label="Send automatically" />Send automatically</label>} />
-          <div className="grid gap-5 p-5 lg:grid-cols-2">
+          <div className="grid gap-5 p-4 lg:grid-cols-2">
             <div className="grid gap-3">
               <Input label="Email subject" value={w.welcomeEmail.subject} onChange={(e) => set({ welcomeEmail: { ...w.welcomeEmail, subject: e.target.value } })} />
               <Textarea label="Email message" rows={12} value={w.welcomeEmail.body} onChange={(e) => set({ welcomeEmail: { ...w.welcomeEmail, body: e.target.value } })} />
@@ -100,7 +100,7 @@ export default function WorkflowSettings() {
         <Card className="overflow-hidden lg:col-span-2">
           <CardHeader title="WhatsApp templates (Interakt)" subtitle="Create each template in Interakt → Templates, wait for Meta's approval, then enter its code name here. Empty = not sent on WhatsApp." icon={MessageCircle} />
           {/* whose number clients see: the company's WhatsApp Business number, or each CRM user's own WhatsApp */}
-          <div className="grid gap-2 border-b border-line p-5 sm:grid-cols-[minmax(0,22rem)_1fr] sm:items-center">
+          <div className="grid gap-2 border-b border-line p-4 sm:grid-cols-[minmax(0,22rem)_1fr] sm:items-center">
             <Select label="Send WhatsApp messages to clients from" value={w.whatsapp.sendFrom ?? 'company'} onChange={(e) => set({ whatsapp: { ...w.whatsapp, sendFrom: e.target.value as 'company' | 'own' } })}>
               <option value="company">The company WhatsApp number (Interakt, sent automatically)</option>
               <option value="own">Each person’s own WhatsApp number</option>
@@ -109,7 +109,7 @@ export default function WorkflowSettings() {
               ? 'Every WhatsApp button (client messages, WhatsApp client, offer / joining letters) opens the sender’s own WhatsApp — phone app or WhatsApp Web — with the client’s number and the message ready, so clients get it from that person’s number. Each send is recorded with who sent it. Ask everyone to add their mobile number in Profile.'
               : 'Messages go from the company’s WhatsApp Business number through Interakt, using the approved templates below.'}</p>
           </div>
-          <div className="grid gap-5 p-5 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-5 p-4 md:grid-cols-2 xl:grid-cols-3">
             <div className="grid content-start gap-2">
               <Input label="Welcome template (text)" placeholder="e.g. client_welcome" value={w.whatsapp.welcomeTemplate} onChange={(e) => set({ whatsapp: { ...w.whatsapp, welcomeTemplate: e.target.value } })} />
               <p className="text-[11px] text-mute">Variables, in this order: {WHATSAPP_WELCOME_VARS.map((v, i) => `{{${i + 1}}} ${v}`).join(' · ')}</p>
@@ -137,7 +137,7 @@ export default function WorkflowSettings() {
         </Card>
       </div>
 
-      <Card className="mt-6 flex flex-wrap gap-2 p-4">
+      <Card className="mt-5 flex flex-wrap gap-2 p-4">
         <Link to="/forms"><Button variant="outline" icon={FileSignature}>Document Form Builder</Button></Link>
         <Link to="/schemes"><Button variant="outline" icon={Sparkles}>Schemes</Button></Link>
         <Link to="/ops-desk"><Button variant="outline" icon={BellRing}>Operations Dashboard</Button></Link>

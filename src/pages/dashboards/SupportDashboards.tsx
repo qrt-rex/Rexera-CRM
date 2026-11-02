@@ -28,15 +28,15 @@ export function SupportDashboard() {
   return (
     <div>
       <Greeting subtitle="Customer Support · help clients with status, documents and payments" />
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Active client files" value={activeFiles.length} icon={Briefcase} tone="violet" />
         <Stat label="Waiting on client / hold" value={waiting.length} icon={PauseCircle} tone="orange" />
         <Stat label="Missing KYC documents" value={missingKyc.length} icon={FileText} tone="amber" />
         <Stat label="Overdue files" value={overdue.length} icon={AlertTriangle} tone="red" />
       </div>
 
-      <Section title="Client lookup" subtitle="Search by name, mobile, email or booking ID to answer a client quickly" icon={Search} className="mb-6">
-        <div className="p-5">
+      <Section title="Client lookup" subtitle="Search by name, mobile, email or booking ID to answer a client quickly" icon={Search} className="mb-5">
+        <div className="p-4">
           <div className="relative">
             <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-mute" />
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="e.g. 98765… or Shah Agro or RX-2026-000125" aria-label="Client lookup"
@@ -72,12 +72,12 @@ export function SupportDashboard() {
         <Tile to="/leave?new=1" icon={CalendarCheck2} label="Request my leave" tone="violet" />
       </TileGrid>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-3">
+      <div className="mt-5 grid gap-5 xl:grid-cols-3">
         <Section title="Clients to follow up" subtitle="On hold or waiting on the client" icon={Headphones} className="xl:col-span-2" action={<ViewAll to="/bookings?status=ON_HOLD" />}>
           {!waiting.length ? <EmptyState icon={Headphones} title="Nobody waiting" /> : (
             <ul className="divide-y divide-line/70">
               {waiting.map((b) => (
-                <li key={b.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
+                <li key={b.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
                   <div className="min-w-0 flex-1">
                     <Link to={`/bookings/${b.id}`} className="font-semibold hover:underline"><ClientSerial b={b} />{b.companyName}</Link>
                     <p className="text-xs text-mute">{b.contactPerson} · {b.mobile} · {b.holdReason ?? 'On hold'} · updated {ago(b.updatedAt)}</p>
@@ -88,11 +88,11 @@ export function SupportDashboard() {
             </ul>
           )}
         </Section>
-        <div className="space-y-6">
+        <div className="space-y-5">
           <LoginLogoutCard />
         </div>
       </div>
-      <p className="mt-6 text-xs text-mute">Signed in as {roleLabel(me.role)}. Client files are view-only here; add a comment on a file to pass a client's message to the team.</p>
+      <p className="mt-5 text-xs text-mute">Signed in as {roleLabel(me.role)}. Client files are view-only here; add a comment on a file to pass a client's message to the team.</p>
     </div>
   )
 }

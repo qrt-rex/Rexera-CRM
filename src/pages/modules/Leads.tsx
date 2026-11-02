@@ -287,7 +287,7 @@ function LeadDetails({ lead }: { lead: Lead }) {
   ]
   const upload = lead.uploadId ? db.leadUploads?.find((u) => u.id === lead.uploadId) : undefined
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 text-sm">
         {facts.filter(([, v]) => v).map(([k, v]) => (
           <div key={k} className="rounded-xl bg-card2 px-3 py-2"><p className="text-[11px] text-mute">{k}</p><p className="truncate font-semibold" title={v}>{v}</p></div>

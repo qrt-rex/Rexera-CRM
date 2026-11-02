@@ -77,7 +77,7 @@ function Editor({ stage, tpl, edited }: { stage: MessageStageId; tpl: MessageTem
       <Card className="overflow-hidden">
         <CardHeader title={s.label} subtitle={`${s.desc} · sent by: ${s.teams.map((t) => roleLabel(t as never)).join(', ')} (and Super Admin / IT)`} icon={Users}
           action={edited && <span className="text-[11px] text-mute">edited {edited.updatedAt ? fmtDateTime(edited.updatedAt) : ''} by {userName(db, edited.updatedBy)}</span>} />
-        <div className="space-y-3 p-5">
+        <div className="space-y-3 p-4">
           <div className="flex flex-wrap gap-1"><span className="mr-1 text-xs font-semibold text-mute">Insert:</span>{PLACEHOLDERS.map(([k, l]) => <button key={k} type="button" title={l} onClick={() => insert(k)} className="rounded-md bg-accent-soft px-1.5 py-0.5 font-mono text-[11px] text-accent hover:brightness-95">{`{${k}}`}</button>)}</div>
           <Input label="Email subject" value={f.subject} maxLength={200} onFocus={() => setFocus('subject')} onChange={(e) => setF({ ...f, subject: e.target.value })} />
           <div className="grid gap-4 xl:grid-cols-2">
@@ -95,7 +95,7 @@ function Editor({ stage, tpl, edited }: { stage: MessageStageId; tpl: MessageTem
       </Card>
       <Card className="overflow-hidden">
         <CardHeader title="Preview" subtitle="With a sample client — the sender sees it filled for the real client and can edit it before sending" icon={CheckCircle2} />
-        <div className="grid gap-4 p-5 xl:grid-cols-2">
+        <div className="grid gap-4 p-4 xl:grid-cols-2">
           <div className="rounded-2xl bg-card2 p-4 text-sm"><p className="mb-1 flex items-center gap-1.5 text-xs font-bold text-ok"><MessageCircle className="size-3.5" />WhatsApp</p><p>Dear {SAMPLE.client_name}, {fillMessage(f.whatsapp || f.email, SAMPLE).replace(/\s*\n+\s*/g, ' ')} — {db.settings.companyName || 'Rexera'}</p></div>
           <div className="rounded-2xl bg-card2 p-4 text-sm"><p className="mb-1 flex items-center gap-1.5 text-xs font-bold text-info"><Mail className="size-3.5" />{fillMessage(f.subject, SAMPLE)}</p><p className="whitespace-pre-line">{fillMessage(f.email, SAMPLE)}</p></div>
         </div>
@@ -142,7 +142,7 @@ function Setup() {
   useEffect(() => { fetch('/api/health').then((r) => r.json()).then(setHealth, () => setHealth({})) }, [])
   const tpl = db.settings.workflow?.whatsapp?.notifyTemplate
   const row = (ok: boolean | undefined, title: string, text: string) => (
-    <li className="flex items-start gap-3 px-5 py-4">
+    <li className="flex items-start gap-3 px-4 py-3">
       {ok ? <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-ok" /> : <TriangleAlert className="mt-0.5 size-5 shrink-0 text-warn" />}
       <span className="min-w-0 flex-1"><b className="text-sm">{title}</b><span className="block text-xs text-mute">{text}</span></span>
     </li>
@@ -156,7 +156,7 @@ function Setup() {
         {row(!!health?.whatsappConfigured, 'WhatsApp (Interakt)', health === null ? 'Checking…' : health.whatsappConfigured ? 'The Interakt key is set.' : 'Not set up: add INTERAKT_API_KEY (Interakt → Settings → Developer Settings) in Render → Environment, then redeploy.')}
         {row(!!tpl, 'WhatsApp “client notification” template', tpl ? `Using “${tpl}”.` : 'In Interakt → Templates create a Utility template with 4 variables — e.g. “Dear {{1}}, an update on your file {{2}}: {{3}} — {{4}}” ({{1}} client name, {{2}} file number, {{3}} the message, {{4}} our company) — wait for Meta’s approval, then enter its name in Workflow settings → WhatsApp → Client notification template.')}
       </ul>
-      <p className="border-t border-line px-5 py-3 text-xs text-mute"><Link to="/workflow-settings" className="font-semibold text-brand-ink hover:underline">Workflow settings → WhatsApp</Link> (Admin)</p>
+      <p className="border-t border-line px-4 py-2.5 text-xs text-mute"><Link to="/workflow-settings" className="font-semibold text-brand-ink hover:underline">Workflow settings → WhatsApp</Link> (Admin)</p>
     </Card>
   )
 }

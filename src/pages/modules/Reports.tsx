@@ -63,13 +63,13 @@ export default function Reports() {
       <Tabs className="mb-5 w-fit max-w-full" value={tab} onChange={(t) => setParams({ tab: t })} tabs={tabs} />
 
       {tab === 'overview' && (
-        <div className="grid gap-6 xl:grid-cols-3">
+        <div className="grid gap-5 xl:grid-cols-3">
           <div className="grid gap-3 sm:grid-cols-2 xl:col-span-3 xl:grid-cols-4">
             {[['Quoted (with GST)', inr(totals.quoted)], ['Collected', inr(totals.collected)], ['Outstanding', inr(totals.outstanding)], ['Avg. turnaround', `${turnaround} days`]].map(([k, v]) => <Card key={k} className="p-4"><p className="text-xs font-semibold text-mute">{k}</p><p className="mt-1 text-xl font-extrabold">{v}</p></Card>)}
           </div>
-          <Card className="overflow-hidden xl:col-span-2"><CardHeader title="Collections · 12 months" icon={TrendingUp} /><div className="p-5"><Bars data={rev} format={inrShort} highlightLast height={220} /></div></Card>
-          <Card className="overflow-hidden"><CardHeader title="Files by status" /><div className="p-5"><Donut data={(Object.keys(BOOKING_STATUS) as (keyof typeof BOOKING_STATUS)[]).map((k) => ({ label: BOOKING_STATUS[k].label, value: books.filter((b) => b.status === k).length })).filter((x) => x.value)} /></div></Card>
-          <Card className="overflow-hidden xl:col-span-3"><CardHeader title="Stage-wise files in processing" /><div className="p-5"><HBars data={byStage} /></div></Card>
+          <Card className="overflow-hidden xl:col-span-2"><CardHeader title="Collections · 12 months" icon={TrendingUp} /><div className="p-4"><Bars data={rev} format={inrShort} highlightLast height={220} /></div></Card>
+          <Card className="overflow-hidden"><CardHeader title="Files by status" /><div className="p-4"><Donut data={(Object.keys(BOOKING_STATUS) as (keyof typeof BOOKING_STATUS)[]).map((k) => ({ label: BOOKING_STATUS[k].label, value: books.filter((b) => b.status === k).length })).filter((x) => x.value)} /></div></Card>
+          <Card className="overflow-hidden xl:col-span-3"><CardHeader title="Stage-wise files in processing" /><div className="p-4"><HBars data={byStage} /></div></Card>
         </div>
       )}
 
@@ -93,16 +93,16 @@ export default function Reports() {
       )}
 
       {tab === 'revenue' && (
-        <div className="grid gap-6 lg:grid-cols-2">
-          <Card className="overflow-hidden lg:col-span-2"><CardHeader title="Monthly collections (with GST)" icon={TrendingUp} /><div className="p-5"><Bars data={rev} format={inrShort} height={240} highlightLast /></div></Card>
-          <Card className="overflow-hidden"><CardHeader title="Net of GST" /><div className="space-y-2 p-5 text-sm">
+        <div className="grid gap-5 lg:grid-cols-2">
+          <Card className="overflow-hidden lg:col-span-2"><CardHeader title="Monthly collections (with GST)" icon={TrendingUp} /><div className="p-4"><Bars data={rev} format={inrShort} height={240} highlightLast /></div></Card>
+          <Card className="overflow-hidden"><CardHeader title="Net of GST" /><div className="space-y-2 p-4 text-sm">
             {(() => { const base = books.reduce((s, b) => s + bookingMoney(b).collectedBase, 0); const gst = totals.collected - base; const ded = books.reduce((s, b) => s + (b.payments.length ? b.deduction : 0), 0); return <>
               <div className="flex justify-between"><span className="text-mute">Collected incl. GST</span><b>{inr(totals.collected)}</b></div>
               <div className="flex justify-between"><span className="text-mute">GST payable</span><b className="text-bad">− {inr(gst)}</b></div>
               <div className="flex justify-between"><span className="text-mute">Service deductions</span><b className="text-bad">− {inr(ded)}</b></div>
               <div className="flex justify-between border-t border-line pt-2 text-base"><span>Net revenue</span><b className="text-ok">{inr(base - ded)}</b></div></> })()}
           </div></Card>
-          <Card className="overflow-hidden"><CardHeader title="Top services by revenue" /><div className="p-5"><HBars data={byService.slice(0, 6).map((s) => ({ label: s.label, value: Math.round(s.collected) }))} format={inrShort} /></div></Card>
+          <Card className="overflow-hidden"><CardHeader title="Top services by revenue" /><div className="p-4"><HBars data={byService.slice(0, 6).map((s) => ({ label: s.label, value: Math.round(s.collected) }))} format={inrShort} /></div></Card>
         </div>
       )}
 
@@ -118,7 +118,7 @@ export default function Reports() {
               const conv = db.leads.filter((l) => l.assignedTo === u.id && l.status === 'CONVERTED').length
               const grade = pct >= 100 ? 'A+' : pct >= 75 ? 'A' : pct >= 50 ? 'B' : pct >= 25 ? 'C' : 'D'
               return (
-                <Card key={u.id} className="print-area p-5">
+                <Card key={u.id} className="print-area p-4">
                   <div className="flex items-center gap-3"><Avatar name={u.name} photo={u.photo} size={48} /><div className="flex-1"><p className="font-bold">{u.name}</p><p className="text-xs text-mute">{roleLabel(u.role)} · {new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</p></div>
                     <span className="grid size-12 place-items-center rounded-2xl bg-brand text-lg font-extrabold text-white">{grade}</span></div>
                   <div className="mt-4 grid grid-cols-3 gap-2 text-center">
@@ -139,7 +139,7 @@ export default function Reports() {
       {tab === 'export' && (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {exports.map(([label, fn]) => (
-            <Card key={label} className="flex items-center gap-4 p-5">
+            <Card key={label} className="flex items-center gap-4 p-4">
               <span className="grid size-11 place-items-center rounded-xl bg-brand-soft text-brand-ink"><FileBarChart className="size-5" /></span>
               <span className="flex-1 font-semibold">{label}</span>
               <Button size="sm" variant="outline" icon={Download} onClick={fn}>CSV</Button>

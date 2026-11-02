@@ -140,7 +140,7 @@ function BookingFormBody() {
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_330px]">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_330px]">
         <div className="space-y-4">
           {/* client and payment contact in one block, three fields a row on wide screens (less scrolling) */}
           <Block title="Client company & payment contact" icon={Building2}>
@@ -264,11 +264,11 @@ function BookingFormBody() {
           {/* optional, so folded away until needed (the files stay picked while it is closed) */}
           {!existing && (
             <details className="group overflow-hidden rounded-2xl border border-line bg-card shadow-card">
-              <summary className="flex cursor-pointer list-none items-center gap-3 px-5 py-4 text-sm font-bold">
+              <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 text-sm font-bold">
                 <FileText className="size-5 text-brand-ink" />Company documents <span className="font-normal text-mute">— optional: PAN card, GSTIN, CRM / QT / Agreement{docs.length ? ` · ${docs.length} added` : ''}</span>
                 <span className="ml-auto text-xs font-semibold text-brand-ink group-open:hidden">Add</span>
               </summary>
-              <div className="border-t border-line p-5"><DocUploader value={docs} onChange={setDocs} categories={COMPANY_DOCS} label="Documents" /></div>
+              <div className="border-t border-line p-4"><DocUploader value={docs} onChange={setDocs} categories={COMPANY_DOCS} label="Documents" /></div>
             </details>
           )}
         </div>
@@ -276,7 +276,7 @@ function BookingFormBody() {
         <aside className="lg:sticky lg:top-24 lg:self-start">
           <Card className="overflow-hidden">
             <CardHeader title="Summary" icon={Calculator} />
-            <div className="space-y-2.5 p-5 text-sm">
+            <div className="space-y-2.5 p-4 text-sm">
               <Row k="Lead closed by" v={f.closedBy === me.id ? `${me.name} (me)` : userName(db, f.closedBy)} />
               <Row k="Booking type" v={<b>{BOOKING_TYPES.find((t) => t.id === f.bookingType)?.label}</b>} />
               {rows.filter((r) => r.s).map((r, i) => <Row key={i} k={r.s!.name} v={r.price ? inr(r.price) : <span className="text-mute">0</span>} />)}
@@ -320,7 +320,7 @@ function PickClientEntry() {
         ) : (
           <ul className="divide-y divide-line/70">
             {list.map((e) => (
-              <li key={e.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
+              <li key={e.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
                 <span className="min-w-0 flex-1">
                   <span className="block font-semibold">{e.clientName} · {e.companyName}</span>
                   <span className="block text-xs text-mute">{fmtDate(e.date)} · {e.scheme} · pitched {inr(e.pitchedPrice)} · {CLIENT_ENTRY_STATUS[e.status].label}</span>

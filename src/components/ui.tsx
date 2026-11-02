@@ -15,7 +15,7 @@ export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Bool
 
 // ------------------------------------------------------------------ Button
 type BtnVariant = 'primary' | 'accent' | 'outline' | 'ghost' | 'danger' | 'success' | 'soft'
-const btnBase = 'inline-flex shrink-0 select-none items-center justify-center gap-2 rounded-xl font-semibold transition-all disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap active:scale-[.98]'
+const btnBase = 'inline-flex shrink-0 select-none items-center justify-center gap-1.5 rounded-lg font-semibold transition-all disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap active:scale-[.98]'
 const btnVariants: Record<BtnVariant, string> = {
   primary: 'bg-brand text-white hover:bg-brand-hover shadow-sm',
   accent: 'bg-accent text-white hover:bg-accent-hover shadow-sm shadow-accent/30',
@@ -25,7 +25,7 @@ const btnVariants: Record<BtnVariant, string> = {
   success: 'bg-ok text-white hover:opacity-90',
   soft: 'bg-brand-soft text-brand-ink hover:brightness-95',
 }
-const btnSizes = { sm: 'h-8 px-3 text-xs', md: 'h-10 px-4 text-sm', lg: 'h-12 px-6 text-base' }
+const btnSizes = { sm: 'h-8 px-2.5 text-xs', md: 'h-9 px-3.5 text-sm', lg: 'h-11 px-5 text-sm' }
 
 export function Button({ variant = 'primary', size = 'md', icon: Icon, loading, className, children, ...rest }:
   ButtonHTMLAttributes<HTMLButtonElement> & { variant?: BtnVariant; size?: keyof typeof btnSizes; icon?: LucideIcon; loading?: boolean }) {
@@ -42,7 +42,7 @@ export function Button({ variant = 'primary', size = 'md', icon: Icon, loading, 
 export function IconButton({ icon: Icon, label, badge, className, ...rest }: ButtonHTMLAttributes<HTMLButtonElement> & { icon: LucideIcon; label: string; badge?: number }) {
   const blocked = useBlocked(label, Icon)
   return (
-    <button aria-label={label} title={blocked ? deniedText(blocked) : label} {...rest} disabled={rest.disabled || !!blocked} className={cx('relative grid size-10 place-items-center rounded-xl text-mute hover:bg-card2 hover:text-ink transition-colors disabled:opacity-50 disabled:pointer-events-none', className)}>
+    <button aria-label={label} title={blocked ? deniedText(blocked) : label} {...rest} disabled={rest.disabled || !!blocked} className={cx('relative grid size-9 place-items-center rounded-lg text-mute hover:bg-card2 hover:text-ink transition-colors disabled:opacity-50 disabled:pointer-events-none', className)}>
       {blocked ? <Lock className="size-5" /> : <Icon className="size-5" />}
       {!!badge && <span className="absolute -right-0.5 -top-0.5 grid min-w-5 h-5 place-items-center rounded-full bg-bad px-1 text-[10px] font-bold text-white ring-2 ring-card">{badge > 99 ? '99+' : badge}</span>}
     </button>
@@ -53,21 +53,21 @@ export function IconButton({ icon: Icon, label, badge, className, ...rest }: But
 export function Field({ label, required, hint, error, children, className }: { label?: string; required?: boolean; hint?: string; error?: string; children: ReactNode; className?: string }) {
   return (
     <label className={cx('block', className)}>
-      {label && <span className="mb-1.5 block text-xs font-semibold text-mute">{label}{required && <span className="text-bad"> *</span>}</span>}
+      {label && <span className="mb-1 block text-xs font-semibold text-mute">{label}{required && <span className="text-bad"> *</span>}</span>}
       {children}
       {error ? <span className="mt-1 block text-xs text-bad">{error}</span> : hint ? <span className="mt-1 block text-xs text-mute">{hint}</span> : null}
     </label>
   )
 }
-const ctl = 'w-full min-w-0 rounded-xl border border-line bg-card px-3 text-sm text-ink placeholder:text-mute/70 outline-none transition hover:border-mute/40 focus:border-brand focus:ring-4 focus:ring-brand/10 disabled:cursor-not-allowed disabled:opacity-60'
+const ctl = 'w-full min-w-0 rounded-lg border border-line bg-card px-3 text-sm text-ink placeholder:text-mute/70 outline-none transition hover:border-mute/40 focus:border-brand focus:ring-3 focus:ring-brand/12 disabled:cursor-not-allowed disabled:opacity-60'
 export function Input({ label, required, hint, error, className, ...rest }: InputHTMLAttributes<HTMLInputElement> & { label?: string; hint?: string; error?: string }) {
-  return <Field label={label} required={required} hint={hint} error={error} className={className}><input required={required} {...rest} className={cx(ctl, 'h-10')} /></Field>
+  return <Field label={label} required={required} hint={hint} error={error} className={className}><input required={required} {...rest} className={cx(ctl, 'h-9')} /></Field>
 }
 export function Select({ label, required, hint, error, className, children, ...rest }: SelectHTMLAttributes<HTMLSelectElement> & { label?: string; hint?: string; error?: string }) {
-  return <Field label={label} required={required} hint={hint} error={error} className={className}><select required={required} {...rest} className={cx(ctl, 'h-10 pr-8')}>{children}</select></Field>
+  return <Field label={label} required={required} hint={hint} error={error} className={className}><select required={required} {...rest} className={cx(ctl, 'h-9 pr-8')}>{children}</select></Field>
 }
 export function Textarea({ label, required, hint, error, className, ...rest }: TextareaHTMLAttributes<HTMLTextAreaElement> & { label?: string; hint?: string; error?: string }) {
-  return <Field label={label} required={required} hint={hint} error={error} className={className}><textarea required={required} rows={3} {...rest} className={cx(ctl, 'py-2.5 resize-y')} /></Field>
+  return <Field label={label} required={required} hint={hint} error={error} className={className}><textarea required={required} rows={3} {...rest} className={cx(ctl, 'py-2 resize-y')} /></Field>
 }
 export interface SearchOption { value: string; label: string; hint?: string }
 /**
@@ -100,7 +100,7 @@ export function SearchSelect({ label, required, hint, error, value, onChange, op
   }
   return (
     <div ref={box} className={cx('relative block', className)}>
-      {label && <label htmlFor={id} className="mb-1.5 block text-xs font-semibold text-mute">{label}{required && <span className="text-bad"> *</span>}</label>}
+      {label && <label htmlFor={id} className="mb-1 block text-xs font-semibold text-mute">{label}{required && <span className="text-bad"> *</span>}</label>}
       <div className="relative">
         <svg className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-mute" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
         <input id={id} role="combobox" aria-expanded={open} aria-controls={`${id}-list`} aria-autocomplete="list" autoComplete="off"
@@ -108,11 +108,11 @@ export function SearchSelect({ label, required, hint, error, value, onChange, op
           value={open ? q : picked?.label ?? ''} placeholder={picked && open ? picked.label : placeholder}
           onFocus={() => { setOpen(true); setActive(0) }} onClick={() => setOpen(true)}
           onChange={(e) => { setQ(e.target.value); setOpen(true); setActive(0) }} onKeyDown={key}
-          className={cx(ctl, 'h-10 pl-9', clearable && value ? 'pr-9' : 'pr-3', error && 'border-bad')} />
+          className={cx(ctl, 'h-9 pl-9', clearable && value ? 'pr-9' : 'pr-3', error && 'border-bad')} />
         {clearable && value && <button type="button" aria-label="Clear" onClick={() => { onChange(''); setQ('') }} className="absolute right-2 top-1/2 grid size-6 -translate-y-1/2 place-items-center rounded-md text-mute hover:bg-card2 hover:text-ink"><X className="size-4" /></button>}
       </div>
       {open && (
-        <ul id={`${id}-list`} role="listbox" className="absolute z-40 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-line bg-card py-1 shadow-pop">
+        <ul id={`${id}-list`} role="listbox" className="absolute z-40 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-line bg-card py-1 shadow-pop">
           {!shown.length ? <li className="px-3 py-2 text-sm text-mute">{emptyText}</li> : shown.map((o, i) => (
             <li key={o.value} id={`${id}-o${i}`} role="option" aria-selected={o.value === value}
               onMouseDown={(e) => e.preventDefault()} onClick={() => pick(o)} onMouseEnter={() => setActive(i)}
@@ -145,14 +145,14 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
 
 // ------------------------------------------------------------------ Surfaces
 export function Card({ className, children, ...rest }: { className?: string; children: ReactNode } & HTMLAttributes<HTMLDivElement>) {
-  return <div {...rest} className={cx('min-w-0 rounded-2xl border border-line bg-card shadow-card', className)}>{children}</div>
+  return <div {...rest} className={cx('min-w-0 rounded-xl border border-line bg-card shadow-card', className)}>{children}</div>
 }
 export function CardHeader({ title, subtitle, icon: Icon, action, className }: { title: ReactNode; subtitle?: ReactNode; icon?: LucideIcon; action?: ReactNode; className?: string }) {
   return (
-    <div className={cx('flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line px-4 py-3.5 sm:px-5 sm:py-4', className)}>
-      {Icon && <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-brand-soft text-brand-ink"><Icon className="size-[18px]" /></span>}
+    <div className={cx('flex min-h-14 flex-wrap items-center gap-x-3 gap-y-2 border-b border-line px-4 py-2.5', className)}>
+      {Icon && <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand-soft text-brand-ink"><Icon className="size-4" /></span>}
       <div className="min-w-[10rem] flex-1">
-        <h3 className="truncate text-[15px] font-bold leading-snug">{title}</h3>
+        <h3 className="truncate text-sm font-bold leading-snug">{title}</h3>
         {subtitle && <p className="line-clamp-2 text-xs leading-relaxed text-mute">{subtitle}</p>}
       </div>
       {action}
@@ -202,8 +202,8 @@ export function Progress({ value, tone = 'navy', className }: { value: number; t
 
 export function EmptyState({ icon: Icon, title, text, action }: { icon: LucideIcon; title: string; text?: string; action?: ReactNode }) {
   return (
-    <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
-      <span className="mb-4 grid size-14 place-items-center rounded-2xl bg-brand-soft text-brand-ink"><Icon className="size-7" /></span>
+    <div className="flex flex-col items-center justify-center px-6 py-10 text-center">
+      <span className="mb-3 grid size-12 place-items-center rounded-xl bg-brand-soft text-brand-ink"><Icon className="size-6" /></span>
       <h4 className="font-bold">{title}</h4>
       {text && <p className="mt-1 max-w-sm text-sm text-mute">{text}</p>}
       {action && <div className="mt-4">{action}</div>}
@@ -217,11 +217,11 @@ export function Skeleton({ className }: { className?: string }) {
 
 export function PageHeader({ title, subtitle, icon: Icon, actions }: { title: string; subtitle?: string; icon?: LucideIcon; actions?: ReactNode }) {
   return (
-    <div className="mb-6 flex flex-wrap items-start gap-x-4 gap-y-3 anim-fade-up sm:items-center">
-      {Icon && <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-brand to-[#4b5bc4] text-white shadow-lg shadow-brand/25 sm:size-12"><Icon className="size-6" /></span>}
+    <div className="mb-5 flex flex-wrap items-start gap-x-3 gap-y-3 anim-fade-up sm:items-center">
+      {Icon && <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand to-[#4b5bc4] text-white shadow-md shadow-brand/20"><Icon className="size-5" /></span>}
       <div className="min-w-[12rem] flex-1">
-        <h1 className="text-xl font-extrabold leading-tight tracking-tight sm:text-2xl">{title}</h1>
-        {subtitle && <p className="mt-0.5 max-w-3xl text-sm leading-relaxed text-mute">{subtitle}</p>}
+        <h1 className="text-lg font-extrabold leading-tight tracking-tight sm:text-xl">{title}</h1>
+        {subtitle && <p className="mt-0.5 max-w-3xl text-[13px] leading-snug text-mute">{subtitle}</p>}
       </div>
       {actions && <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">{actions}</div>}
     </div>
@@ -231,12 +231,12 @@ export function PageHeader({ title, subtitle, icon: Icon, actions }: { title: st
 /** A count card; with `to` (a page) or `onClick` the whole card opens the list behind the number. */
 export function Stat({ label, value, icon: Icon, tone = 'navy', sub, trend, to, onClick }: { label: string; value: ReactNode; icon: LucideIcon; tone?: Tone; sub?: ReactNode; trend?: number; to?: string; onClick?: () => void }) {
   const card = (
-    <Card className={cx('h-full p-4 transition hover:-translate-y-0.5 hover:shadow-pop', (to || onClick) && 'cursor-pointer hover:border-brand/40')}>
+    <Card className={cx('h-full p-3.5 transition hover:-translate-y-0.5 hover:shadow-pop', (to || onClick) && 'cursor-pointer hover:border-brand/40')}>
       <div className="flex items-start gap-3">
-        <span className={cx('grid size-11 shrink-0 place-items-center rounded-xl', toneCls[tone])}><Icon className="size-5" /></span>
+        <span className={cx('grid size-10 shrink-0 place-items-center rounded-lg', toneCls[tone])}><Icon className="size-5" /></span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-xs font-semibold text-mute">{label}</p>
-          <p className="mt-0.5 text-2xl font-extrabold tracking-tight tabular-nums">{value}</p>
+          <p className="mt-0.5 text-xl font-extrabold tracking-tight tabular-nums">{value}</p>
           <div className="mt-0.5 flex items-center gap-2 text-[11px] text-mute">
             {trend !== undefined && <span className={cx('font-bold', trend >= 0 ? 'text-ok' : 'text-bad')}>{trend >= 0 ? '↑' : '↓'} {Math.abs(trend)}%</span>}
             {sub}
@@ -245,18 +245,18 @@ export function Stat({ label, value, icon: Icon, tone = 'navy', sub, trend, to, 
       </div>
     </Card>
   )
-  if (to) return <Link to={to} aria-label={`${label}: ${typeof value === 'string' || typeof value === 'number' ? value : ''} — open the list`} className="block rounded-2xl focus-visible:outline-2 focus-visible:outline-brand">{card}</Link>
-  if (onClick) return <button type="button" onClick={onClick} className="block w-full rounded-2xl text-left focus-visible:outline-2 focus-visible:outline-brand">{card}</button>
+  if (to) return <Link to={to} aria-label={`${label}: ${typeof value === 'string' || typeof value === 'number' ? value : ''} — open the list`} className="block rounded-xl focus-visible:outline-2 focus-visible:outline-brand">{card}</Link>
+  if (onClick) return <button type="button" onClick={onClick} className="block w-full rounded-xl text-left focus-visible:outline-2 focus-visible:outline-brand">{card}</button>
   return card
 }
 
 // ------------------------------------------------------------------ Tabs
 export function Tabs<T extends string>({ tabs, value, onChange, className }: { tabs: { id: T; label: string; count?: number; icon?: LucideIcon }[]; value: T; onChange: (v: T) => void; className?: string }) {
   return (
-    <div role="tablist" className={cx('flex max-w-full gap-1 overflow-x-auto rounded-xl border border-line bg-card2 p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden', className)}>
+    <div role="tablist" className={cx('flex max-w-full gap-0.5 overflow-x-auto rounded-lg border border-line bg-card2 p-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden', className)}>
       {tabs.map((t) => (
         <button key={t.id} role="tab" aria-selected={value === t.id} onClick={() => onChange(t.id)}
-          className={cx('flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold whitespace-nowrap transition focus-visible:outline-offset-0',
+          className={cx('flex h-8 shrink-0 items-center gap-1.5 rounded-md px-3 text-[13px] font-semibold whitespace-nowrap transition focus-visible:outline-offset-0',
             value === t.id ? 'bg-card text-ink shadow-sm' : 'text-mute hover:text-ink')}>
           {t.icon && <t.icon className="size-4" />}
           {t.label}
@@ -294,15 +294,15 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
   const w = { sm: 'max-w-md', md: 'max-w-xl', lg: 'max-w-3xl', xl: 'max-w-5xl' }[size]
   return createPortal(
     <div className="fixed inset-0 z-[80] flex items-end justify-center bg-[#0b1020]/50 p-0 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div role="dialog" aria-modal="true" aria-labelledby={id} className={cx('anim-pop flex max-h-[94dvh] w-full flex-col rounded-t-3xl border border-line bg-card shadow-pop sm:max-h-[92vh] sm:rounded-3xl', w)}>
-        <div className="flex items-start gap-3 border-b border-line px-4 py-4 sm:px-6">
+      <div role="dialog" aria-modal="true" aria-labelledby={id} className={cx('anim-pop flex max-h-[94dvh] w-full flex-col rounded-t-2xl border border-line bg-card shadow-pop sm:max-h-[92vh] sm:rounded-2xl', w)}>
+        <div className="flex items-start gap-3 border-b border-line px-4 py-3 sm:px-5">
           <div className="min-w-0 flex-1">
-            <h2 id={id} className="text-base font-bold leading-snug sm:text-lg">{title}</h2>
+            <h2 id={id} className="text-base font-bold leading-snug">{title}</h2>
             {subtitle && <p className="mt-0.5 text-sm leading-relaxed text-mute">{subtitle}</p>}
           </div>
           <IconButton icon={X} label="Close" onClick={onClose} className="-mr-2 shrink-0" />
         </div>
-        <div className="min-h-0 overflow-y-auto px-4 py-5 sm:px-6">{children}</div>
+        <div className="min-h-0 overflow-y-auto px-4 py-4 sm:px-5">{children}</div>
         {footer && <div className="flex flex-wrap justify-end gap-2 border-t border-line px-4 py-3.5 sm:px-6 sm:py-4">{footer}</div>}
       </div>
     </div>,
@@ -316,11 +316,11 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
   return createPortal(
     <div className="fixed inset-0 z-[70] flex justify-end bg-[#0b1020]/40 backdrop-blur-[2px]" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <aside role="dialog" aria-modal="true" className={cx('anim-slide flex h-full w-full flex-col border-l border-line bg-card shadow-pop', width)}>
-        <div className="flex items-start gap-3 border-b border-line px-4 py-4 sm:px-6">
-          <div className="min-w-0 flex-1"><h2 className="text-base font-bold leading-snug sm:text-lg">{title}</h2>{subtitle && <div className="mt-0.5 text-sm text-mute">{subtitle}</div>}</div>
+        <div className="flex items-start gap-3 border-b border-line px-4 py-3 sm:px-5">
+          <div className="min-w-0 flex-1"><h2 className="text-base font-bold leading-snug">{title}</h2>{subtitle && <div className="mt-0.5 text-sm text-mute">{subtitle}</div>}</div>
           <IconButton icon={X} label="Close" onClick={onClose} className="-mr-2 shrink-0" />
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">{children}</div>
         {footer && <div className="flex flex-wrap justify-end gap-2 border-t border-line px-4 py-3.5 sm:px-6 sm:py-4">{footer}</div>}
       </aside>
     </div>,
@@ -358,7 +358,7 @@ export function Menu({ trigger, children, align = 'right', width = 'w-64' }: { t
       <div onClick={toggle}>{trigger(open)}</div>
       {at && createPortal(
         <div ref={menu} role="menu" style={{ position: 'fixed', top: at.top, left: at.left, right: at.right, transform: at.up ? 'translateY(-100%)' : undefined }}
-          className={cx('anim-pop z-[80] overflow-hidden rounded-2xl border border-line bg-card text-left shadow-pop', width)}>
+          className={cx('anim-pop z-[80] overflow-hidden rounded-xl border border-line bg-card text-left shadow-pop', width)}>
           {children(() => setAt(null))}
         </div>,
         document.body,
@@ -368,7 +368,7 @@ export function Menu({ trigger, children, align = 'right', width = 'w-64' }: { t
 }
 export function MenuItem({ icon: Icon, children, onClick, danger }: { icon?: LucideIcon; children: ReactNode; onClick?: () => void; danger?: boolean }) {
   return (
-    <button role="menuitem" onClick={onClick} className={cx('flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-card2', danger ? 'text-bad' : 'text-ink')}>
+    <button role="menuitem" onClick={onClick} className={cx('flex w-full items-center gap-3 px-3.5 py-2 text-left text-sm hover:bg-card2', danger ? 'text-bad' : 'text-ink')}>
       {Icon && <Icon className="size-4 opacity-70" />}{children}
     </button>
   )
@@ -463,13 +463,13 @@ export function Table({ children, className }: { children: ReactNode; className?
 }
 export function Th({ children, className, onClick, sorted }: { children?: ReactNode; className?: string; onClick?: () => void; sorted?: 'asc' | 'desc' | false }) {
   return (
-    <th onClick={onClick} className={cx('sticky top-0 z-[1] whitespace-nowrap border-b border-line bg-card2 px-4 py-2.5 text-left text-[11px] font-bold uppercase tracking-wide text-mute', onClick && 'cursor-pointer select-none hover:text-ink', className)}>
+    <th onClick={onClick} className={cx('sticky top-0 z-[1] whitespace-nowrap border-b border-line bg-card2 px-3 py-2 text-left text-[11px] font-bold uppercase tracking-wide text-mute', onClick && 'cursor-pointer select-none hover:text-ink', className)}>
       {children}{sorted ? (sorted === 'asc' ? ' ↑' : ' ↓') : ''}
     </th>
   )
 }
 export function Td({ children, className, colSpan }: { children?: ReactNode; className?: string; colSpan?: number }) {
-  return <td colSpan={colSpan} className={cx('border-b border-line/70 px-4 py-3 align-middle', className)}>{children}</td>
+  return <td colSpan={colSpan} className={cx('border-b border-line/70 px-3 py-2.5 align-middle', className)}>{children}</td>
 }
 
 export function SearchBox({ value, onChange, placeholder = 'Search…', className }: { value: string; onChange: (v: string) => void; placeholder?: string; className?: string }) {
@@ -477,7 +477,7 @@ export function SearchBox({ value, onChange, placeholder = 'Search…', classNam
     <div className={cx('relative', className)}>
       <svg className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-mute" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
       <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} aria-label={placeholder}
-        className="h-10 w-full min-w-0 rounded-xl border border-line bg-card pl-9 pr-3 text-sm outline-none transition placeholder:text-mute/70 hover:border-mute/40 focus:border-brand focus:ring-4 focus:ring-brand/10" />
+        className="h-9 w-full min-w-0 rounded-lg border border-line bg-card pl-9 pr-3 text-sm outline-none transition placeholder:text-mute/70 hover:border-mute/40 focus:border-brand focus:ring-3 focus:ring-brand/12" />
     </div>
   )
 }
@@ -492,7 +492,7 @@ export function usePaged<T>(items: T[], size: number, deps: unknown[]) {
   const p = Math.min(page, pages - 1)
   const slice = items.slice(p * size, p * size + size)
   const pager = items.length > size ? (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3 text-sm">
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-2.5 text-[13px]">
       <span className="text-mute">{(p * size + 1).toLocaleString('en-IN')}–{Math.min(items.length, p * size + size).toLocaleString('en-IN')} of {items.length.toLocaleString('en-IN')}</span>
       <span className="flex items-center gap-2">
         <Button size="sm" variant="outline" disabled={p === 0} onClick={() => setPage(0)}>First</Button>

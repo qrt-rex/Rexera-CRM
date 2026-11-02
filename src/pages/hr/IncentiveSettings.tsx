@@ -29,10 +29,10 @@ export default function IncentiveSettings() {
           <Button variant="outline" onClick={() => setF(toDraft(DEFAULT_INCENTIVE))}>Load defaults</Button>
           <Button icon={Save} onClick={() => run(() => saveIncentiveRules(me, f), 'Saved as a new version — recalculate open payrolls to apply')}>Save new version</Button>
         </>} />
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-5 lg:grid-cols-2">
         <Card className="overflow-hidden">
           <CardHeader title="Eligibility, daily & weekly" />
-          <div className="grid gap-4 p-5 sm:grid-cols-2">
+          <div className="grid gap-4 p-4 sm:grid-cols-2">
             <Input label="Eligible at salary ×" type="number" step="0.1" disabled={!manage} value={f.eligibilityMultiple} onChange={num('eligibilityMultiple')} hint="Below this, no incentive at all" className="sm:col-span-2" />
             <Input label="Daily threshold (₹)" type="number" disabled={!manage} value={f.dailyThreshold} onChange={num('dailyThreshold')} />
             <Input label="Daily %" type="number" step="0.1" disabled={!manage} value={f.dailyPct} onChange={num('dailyPct')} />
@@ -43,7 +43,7 @@ export default function IncentiveSettings() {
         </Card>
         <Card className="overflow-hidden">
           <CardHeader title="Monthly slabs" subtitle="% of the whole month's collections" />
-          <div className="space-y-2 p-5">
+          <div className="space-y-2 p-4">
             {f.slabs.map((s, i) => (
               <div key={i} className="flex items-center gap-2 text-sm">
                 <span className="w-20 shrink-0 text-mute">{i === 0 ? 'Under' : s.upTo == null ? 'From' : 'Up to'}</span>
@@ -62,12 +62,12 @@ export default function IncentiveSettings() {
           </div>
         </Card>
       </div>
-      <Card className="mt-6 overflow-hidden">
+      <Card className="mt-5 overflow-hidden">
         <CardHeader title="Version history" icon={History} />
         <ul className="divide-y divide-line/70 text-sm">
-          {db.incentiveHistory.length === 0 && <li className="px-5 py-4 text-mute">No earlier versions.</li>}
+          {db.incentiveHistory.length === 0 && <li className="px-4 py-3 text-mute">No earlier versions.</li>}
           {db.incentiveHistory.map((h) => (
-            <li key={h.version + h.updatedAt} className="flex flex-wrap justify-between gap-2 px-5 py-3">
+            <li key={h.version + h.updatedAt} className="flex flex-wrap justify-between gap-2 px-4 py-2.5">
               <span><b>v{h.version}</b> <span className="text-mute">· eligible ×{h.eligibilityMultiple} · daily {h.dailyPct}% ≥ {inr(h.dailyThreshold)} · weekly {h.weeklyPct}% ≥ {inr(h.weeklyThreshold)} · {h.slabs.length} slabs</span></span>
               <span className="text-xs text-mute">{h.updatedBy === 'system' ? 'default' : `${userName(db, h.updatedBy)} · ${fmtDateTime(h.updatedAt)}`}</span>
             </li>

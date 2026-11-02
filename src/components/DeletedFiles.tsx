@@ -42,12 +42,12 @@ export function DeletedFiles({ compact = false }: { compact?: boolean }) {
   }
 
   return (
-    <Card className="mb-6 overflow-hidden">
+    <Card className="mb-5 overflow-hidden">
       <CardHeader title="Deleted files" icon={Trash2}
         subtitle={`${items.length} backup${items.length === 1 ? '' : 's'} waiting for review — kept with their files until you delete them here`}
         action={picked.length > 0 && <Button size="sm" variant="danger" icon={Trash} onClick={() => purge(picked)}>Delete {picked.length} for good</Button>} />
       {items.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 border-b border-line px-5 py-3">
+        <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2.5">
           <SearchBox value={q} onChange={setQ} placeholder="Search name, type, module, person…" className="min-w-56 flex-1" />
           <Select aria-label="Module" value={mod} onChange={(e) => setMod(e.target.value)} className="w-48"><option value="">All modules</option>{modules.map((m) => <option key={m} value={m}>{m}</option>)}</Select>
         </div>

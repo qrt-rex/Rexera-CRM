@@ -70,7 +70,7 @@ export default function CloudIncentives() {
         </>} />
 
       {error && (
-        <Card className="mb-5 border-bad/40 p-5">
+        <Card className="mb-5 border-bad/40 p-4">
           <p className="font-bold text-bad">Couldn't load the report from Supabase</p>
           <p className="mt-1 text-sm text-mute">{error.message}</p>
           {error.code === 'NO_KEY' && (

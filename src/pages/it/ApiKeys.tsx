@@ -58,7 +58,7 @@ export default function ApiKeys() {
         )}
       </Card>
 
-      <Card className="mt-5 p-5">
+      <Card className="mt-5 p-4">
         <p className="mb-3 flex items-center gap-2 font-bold"><TestTube2 className="size-4" />Check a key</p>
         <div className="flex flex-wrap gap-2">
           <input value={test} onChange={(e) => { setTest(e.target.value); setTestResult(null) }} placeholder="rx_live_…" className="h-10 min-w-64 flex-1 rounded-xl border border-line bg-card px-3 font-mono text-sm" aria-label="Key to check" />

@@ -80,7 +80,7 @@ export default function Assign() {
               <CardHeader title={u.name} subtitle={`${items.length} client(s) · ${inr(items.reduce((s, b) => s + bookingMoney(b).collected, 0))} collected`} />
               <ul className="divide-y divide-line/70">
                 {items.map((b) => <li key={b.id} className="flex items-center gap-2 px-5 py-2.5"><Link to={`/bookings/${b.id}`} className="min-w-0 flex-1 truncate text-sm font-semibold hover:underline"><ClientSerial b={b} />{b.companyName}</Link><BookingStatusBadge b={b} /></li>)}
-                {!items.length && <li className="px-5 py-4 text-sm text-mute">No clients yet.</li>}
+                {!items.length && <li className="px-4 py-3 text-sm text-mute">No clients yet.</li>}
               </ul>
             </Card>
           ))}

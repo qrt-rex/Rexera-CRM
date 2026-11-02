@@ -74,7 +74,7 @@ export default function Content() {
         </div>
       )}
       {fromMedia.length > 0 && (
-        <div className="mb-6">
+        <div className="mb-5">
           <p className="mb-3 flex items-center gap-2 text-sm font-bold"><Clapperboard className="size-4 text-accent" />From the Digital Media Dashboard
             {can('media.manage') && <Link to="/digital-media" className="text-xs font-semibold text-brand-ink hover:underline">Manage media</Link>}</p>
           <div className={CARD_GRID}>
@@ -93,13 +93,13 @@ export default function Content() {
               </Card>
             ))}
           </div>
-          {list.length > 0 && <p className="mt-6 mb-3 text-sm font-bold">{tab === 'FLYER' ? 'Flyers' : 'Posts'} made here</p>}
+          {list.length > 0 && <p className="mt-5 mb-3 text-sm font-bold">{tab === 'FLYER' ? 'Flyers' : 'Posts'} made here</p>}
         </div>
       )}
       {!list.length ? (!fromMedia.length && <Card><EmptyState icon={Images} title={allPosts.length || mediaOf(tab).length ? 'Nothing matches the filters' : 'Nothing here yet'} /></Card>) : tab === 'SALES_INFO' ? (
         <div className="grid gap-4 lg:grid-cols-2">
           {list.map((p) => (
-            <Card key={p.id} className="p-5">
+            <Card key={p.id} className="p-4">
               <div className="flex items-start gap-3">
                 <span className="grid size-10 place-items-center rounded-xl bg-accent-soft text-accent"><Lightbulb className="size-5" /></span>
                 <div className="min-w-0 flex-1"><h3 className="font-bold">{p.title}</h3><p className="text-xs text-mute">{userName(db, p.by)} · {ago(p.createdAt)}</p></div>

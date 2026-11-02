@@ -50,7 +50,7 @@ export function ClientPortalCard({ b }: { b: Booking }) {
           : canManagePortalLogins(me) && <Link to={`/client-portal?invite=${b.id}`}><Button size="sm" variant="outline">Create portal login</Button></Link>} />
 
       {/* ---------------------------------------------------------------- documents asked from the client */}
-      <div className="flex flex-wrap items-center gap-2 border-t border-line px-5 py-3">
+      <div className="flex flex-wrap items-center gap-2 border-t border-line px-4 py-2.5">
         <p className="mr-auto text-sm font-bold">Documents from the client <span className="font-normal text-mute">· {asked.length} requested</span></p>
         {may && <Button size="sm" variant="outline" icon={FileUp} onClick={() => setPick(asked.map((s) => s.id))}>Choose documents</Button>}
       </div>
@@ -60,7 +60,7 @@ export function ClientPortalCard({ b }: { b: Booking }) {
             const w = b.clientDocs![s.id]!, st = clientDocState(b, s.id)!, info = CLIENT_DOC_STATUS[st], ups = uploadsOf(s.id)
             const mayReview = may || w.assignee === me.id
             return (
-              <li key={s.id} className="flex flex-wrap items-start gap-3 px-5 py-3 text-sm">
+              <li key={s.id} className="flex flex-wrap items-start gap-3 px-4 py-2.5 text-sm">
                 <span className="min-w-0 flex-1">
                   <b>{s.short}</b>
                   <span className="block text-[11px] text-mute">Requested {fmtDate(w.assignedAt)} by {userName(db, w.assignedBy)}{w.assignee ? ` · handled by ${userName(db, w.assignee)}` : ''}{w.reviewedAt ? ` · reviewed ${fmtDateTime(w.reviewedAt)} by ${userName(db, w.reviewedBy)}` : ''}</span>
@@ -85,7 +85,7 @@ export function ClientPortalCard({ b }: { b: Booking }) {
       )}
 
       {/* ---------------------------------------------------------------- milestones */}
-      <div className="flex flex-wrap items-center gap-2 border-t border-line px-5 py-3">
+      <div className="flex flex-wrap items-center gap-2 border-t border-line px-4 py-2.5">
         <p className="mr-auto text-sm font-bold">Milestones <span className="font-normal text-mute">· {progress == null ? 'none yet' : `${progress}% done${shown != null && shown !== progress ? ` (client sees ${shown}%)` : ''}`}</span></p>
         {may && <Button size="sm" variant="outline" icon={Plus} onClick={() => setMs({ title: '', due: '', status: 'PENDING', visible: true, note: '', tasks: [] })}>Add milestone</Button>}
       </div>
@@ -95,7 +95,7 @@ export function ClientPortalCard({ b }: { b: Booking }) {
           {b.milestones!.map((m) => {
             const s = MS_STATUS.find((x) => x.id === m.status)!
             return (
-              <li key={m.id} className="px-5 py-3 text-sm">
+              <li key={m.id} className="px-4 py-2.5 text-sm">
                 <div className="flex flex-wrap items-center gap-2">
                   <Flag className={cx('size-4', m.status === 'DONE' ? 'text-ok' : 'text-mute')} />
                   <b className="min-w-0 flex-1">{m.title}</b>
@@ -118,7 +118,7 @@ export function ClientPortalCard({ b }: { b: Booking }) {
       )}
 
       {/* ---------------------------------------------------------------- updates published to the client */}
-      <div className="flex flex-wrap items-center gap-2 border-t border-line px-5 py-3">
+      <div className="flex flex-wrap items-center gap-2 border-t border-line px-4 py-2.5">
         <p className="mr-auto text-sm font-bold">Updates to the client <span className="font-normal text-mute">· shown in their portal</span></p>
         {wa.may && <Button size="sm" variant="outline" icon={MessageCircle} onClick={() => wa.open()}>WhatsApp client</Button>}
         {may && <Button size="sm" variant="outline" icon={Megaphone} onClick={() => setUpd({ title: '', text: '' })}>Publish update</Button>}
@@ -126,7 +126,7 @@ export function ClientPortalCard({ b }: { b: Booking }) {
       {(b.clientUpdates ?? []).length > 0 && (
         <ul className="divide-y divide-line/70 border-t border-line/70">
           {[...b.clientUpdates!].reverse().map((u) => (
-            <li key={u.id} className="flex items-start gap-3 px-5 py-3 text-sm">
+            <li key={u.id} className="flex items-start gap-3 px-4 py-2.5 text-sm">
               <span className="min-w-0 flex-1"><b>{u.title}</b><span className="block whitespace-pre-line text-xs text-ink/80">{u.text}</span>
                 <span className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-mute">{fmtDateTime(u.at)} · {userName(db, u.by)}{u.file && <FileLink file={u.file} />}</span></span>
               {wa.may && <Button size="sm" variant="ghost" icon={MessageCircle} aria-label={`Send update ${u.title} on WhatsApp`} title="Send on WhatsApp"

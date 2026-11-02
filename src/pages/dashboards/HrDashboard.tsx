@@ -115,7 +115,7 @@ export function HrDashboard() {
   const canDocs = can('documents.forms')
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* 1. greeting banner */}
       <section className="relative overflow-hidden rounded-3xl border border-sky-200/60 bg-gradient-to-br from-sky-100 via-indigo-50 to-violet-100 px-6 pt-6 dark:border-white/10 dark:from-sky-950 dark:via-indigo-950 dark:to-violet-950 sm:px-8">
         <Cloud className="m-drift pointer-events-none absolute left-[38%] top-4 w-16 text-white/90 dark:text-white/10" />
@@ -166,7 +166,7 @@ export function HrDashboard() {
       {canAttendance && <LateBreakAlerts />}
 
       {/* 3. middle row */}
-      <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-5 lg:grid-cols-2 xl:grid-cols-3">
         {canAttendance && <AttendanceOverview week={data.week} />}
         {canLeave && (
           <Panel title="Leave Requests" icon={CalendarCheck2} action={<ViewAll to="/leave" />}>
@@ -217,13 +217,13 @@ export function HrDashboard() {
       </div>
 
       {/* 4. quick actions + login card */}
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
         <QuickActions />
         <LoginLogoutCard />
       </div>
 
       {/* 5. bottom row */}
-      <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-5 lg:grid-cols-2 xl:grid-cols-3">
         {canPeople && <Distribution dist={data.dist} total={data.active.length} />}
         {canPeople && (
           <Panel title="Recent Joiners" icon={UserPlus} action={<ViewAll to="/employees" />}>
@@ -275,7 +275,7 @@ function Kpi({ to, tone, icon: Icon, label, value, hint, mascot, delay, ring }: 
   const n = useCountUp(value)
   const p = PASTEL[tone]
   return (
-    <Link to={to} className={cx('group relative block min-h-40 overflow-hidden rounded-2xl border bg-gradient-to-br p-5 shadow-card transition hover:-translate-y-1 hover:shadow-pop anim-fade-up', p.card)}
+    <Link to={to} className={cx('group relative block min-h-40 overflow-hidden rounded-2xl border bg-gradient-to-br p-4 shadow-card transition hover:-translate-y-1 hover:shadow-pop anim-fade-up', p.card)}
       style={{ animationDelay: `${delay}ms` }}>
       <span className={cx('grid size-11 place-items-center rounded-xl shadow-sm', p.chip)}><Icon className="size-5" /></span>
       <p className="mt-3 text-sm font-semibold text-ink/75">{label}</p>
@@ -454,7 +454,7 @@ function QuickActions() {
   ]
   const shown = items.filter((i) => i.show)
   return (
-    <section className="rounded-2xl border border-line bg-card p-5 shadow-card anim-fade-up">
+    <section className="rounded-2xl border border-line bg-card p-4 shadow-card anim-fade-up">
       <h2 className="mb-4 text-[15px] font-bold">Quick Actions</h2>
       <div className="grid grid-cols-[repeat(auto-fit,minmax(118px,1fr))] gap-3">
         {shown.map((a) => (

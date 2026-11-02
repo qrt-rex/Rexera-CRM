@@ -72,10 +72,10 @@ export default function BreakSettings() {
           <Button variant="outline" icon={RotateCcw} onClick={() => setF(toDraft(DEFAULT_BREAK))}>Load defaults</Button>
           <Button icon={Save} onClick={() => run(() => saveBreakPolicy(me, f), 'Break time saved')}>Save</Button>
         </>} />
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-5 lg:grid-cols-2">
         <Card className="overflow-hidden">
           <CardHeader title="Company lunch break" subtitle={len > 0 ? `${len} minutes · pause and resume inside the window` : 'The end must be after the start'} icon={Coffee} />
-          <div className="grid gap-4 p-5 sm:grid-cols-2">
+          <div className="grid gap-4 p-4 sm:grid-cols-2">
             <Input label="Break starts" type="time" disabled={!manage} value={f.start} onChange={(e) => set({ start: e.target.value })} />
             <Input label="Break ends (expected return)" type="time" disabled={!manage} value={f.end} onChange={(e) => set({ end: e.target.value })} />
             <Select label="Time zone" disabled={!manage} value={zoneOption(f.timeZone)} onChange={(e) => set({ timeZone: e.target.value })} hint="Break times are in this zone" className="sm:col-span-2">
@@ -98,17 +98,17 @@ export default function BreakSettings() {
             </label>
           </div>
         </Card>
-        <div className="space-y-6">
+        <div className="space-y-5">
           <Card className="overflow-hidden">
             <CardHeader title="Late warning to the employee" icon={ShieldAlert} />
-            <div className="p-5">
+            <div className="p-4">
               <Textarea label="Message" rows={3} maxLength={300} disabled={!manage} value={f.warnMessage} onChange={(e) => set({ warnMessage: e.target.value })}
                 hint="Shown as a pop-up notification and on the employee's break banner" />
             </div>
           </Card>
           <Card className="overflow-hidden">
             <CardHeader title="What happens every working day" icon={BellRing} />
-            <ol className="space-y-3 p-5 text-sm">
+            <ol className="space-y-3 p-4 text-sm">
               {steps.map((s) => (
                 <li key={s.text} className="flex gap-3">
                   <span className="w-24 shrink-0 font-bold tabular-nums">{s.time}</span>
@@ -121,7 +121,7 @@ export default function BreakSettings() {
         </div>
       </div>
 
-      <Card className="mt-6 overflow-hidden">
+      <Card className="mt-5 overflow-hidden">
         <CardHeader title="Employee shifts" icon={Clock}
           subtitle="People whose break, time zone or off days differ from the company. Everyone else follows the company break."
           action={manage && <Button size="sm" variant="soft" icon={Plus} onClick={() => setEditing('')}>Add shift</Button>} />
@@ -130,7 +130,7 @@ export default function BreakSettings() {
             {shifts.map((u) => {
               const p = breakFor(u, db)
               return (
-                <li key={u.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
+                <li key={u.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
                   <Avatar name={u.name} photo={u.photo} size={36} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-semibold">{u.name}</span>

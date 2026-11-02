@@ -214,7 +214,7 @@ function Home() {
       {!p ? <Card className="p-6 text-sm text-mute">No project is linked to your account yet. Your Rexera contact will add it.</Card> : (
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="grid min-w-0 content-start gap-5">
-            <Card className="p-5">
+            <Card className="p-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-mute">{p.code}</p>
               <h2 className="text-lg font-extrabold">{p.company}</h2>
               <p className="text-sm text-mute">{p.service} · since {fmtDate(p.since)}</p>
@@ -235,7 +235,7 @@ function Home() {
               <CardHeader title="Recent activity" icon={Clock3} />
               <ul className="divide-y divide-line/70">
                 {me.activity.slice(0, 12).map((a, i) => <li key={i} className="px-5 py-2 text-xs"><span className="text-mute">{fmtDateTime(a.at)}</span><span className="block font-semibold">{a.text}</span>{a.detail && <span className="block text-mute">{a.detail}</span>}</li>)}
-                {!me.activity.length && <li className="px-5 py-3 text-xs text-mute">Nothing yet.</li>}
+                {!me.activity.length && <li className="px-4 py-2.5 text-xs text-mute">Nothing yet.</li>}
               </ul>
             </Card>
           </div>
@@ -272,12 +272,12 @@ function Documents({ p, onChange, toast }: { p: PProject; onChange: () => Promis
     <Card className="overflow-hidden">
       <CardHeader title="Your documents" icon={FileText} subtitle="Upload what we ask for — our team reviews each file" />
       <input ref={input} type="file" accept={ACCEPT} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void upload(f) }} />
-      {!p.docs.length ? <p className="px-5 py-4 text-sm text-mute">Nothing to upload right now.</p> : (
+      {!p.docs.length ? <p className="px-4 py-3 text-sm text-mute">Nothing to upload right now.</p> : (
         <ul className="divide-y divide-line/70">
           {p.docs.map((d) => {
             const s = CLIENT_DOC_STATUS[d.status]
             return (
-              <li key={d.category} className="flex flex-wrap items-start gap-3 px-5 py-3">
+              <li key={d.category} className="flex flex-wrap items-start gap-3 px-4 py-2.5">
                 <span className="min-w-0 flex-1">
                   <b className="text-sm">{d.label}</b>
                   {d.remark && <span className={cx('mt-1 block rounded-lg px-2.5 py-1.5 text-xs', d.status === 'RESUBMISSION' ? 'bg-bad-soft text-bad' : 'bg-card2')}>{d.remark}</span>}
@@ -300,7 +300,7 @@ function Milestones({ p }: { p: PProject }) {
   return (
     <Card className="overflow-hidden">
       <CardHeader title="Milestones" icon={Flag} />
-      <ol className="px-5 py-3">
+      <ol className="px-4 py-2.5">
         {p.milestones.map((m, i) => (
           <li key={m.id} className="relative flex gap-3 pb-4 last:pb-0">
             {i < p.milestones.length - 1 && <span className="absolute left-[11px] top-6 h-full w-px bg-line" />}
@@ -321,7 +321,7 @@ function Updates({ p, toast }: { p: PProject; toast: Toast }) {
       <CardHeader title="Updates from the team" icon={Megaphone} />
       <ul className="divide-y divide-line/70">
         {p.updates.map((u) => (
-          <li key={u.id} className="px-5 py-3 text-sm"><p className="flex flex-wrap items-baseline gap-2"><b>{u.title}</b><span className="text-xs text-mute">{fmtDateTime(u.at)}</span></p>
+          <li key={u.id} className="px-4 py-2.5 text-sm"><p className="flex flex-wrap items-baseline gap-2"><b>{u.title}</b><span className="text-xs text-mute">{fmtDateTime(u.at)}</span></p>
             <p className="mt-1 whitespace-pre-line text-ink/85">{u.text}</p>
             {u.file && <button type="button" onClick={() => openPortalFile(u.file!.id, toast)} className="mt-1 text-xs font-semibold text-brand-ink hover:underline">{u.file.name}</button>}</li>
         ))}
@@ -337,7 +337,7 @@ function FromRexera({ media, toast }: { media: Me['media']; toast: Toast }) {
       <CardHeader title="From Rexera" icon={Megaphone} subtitle="Posts, flyers and videos for you" />
       <ul className="divide-y divide-line/70">
         {media.map((m) => (
-          <li key={m.id} className="px-5 py-3 text-sm">
+          <li key={m.id} className="px-4 py-2.5 text-sm">
             <p className="flex flex-wrap items-baseline gap-2"><b>{m.title}</b><span className="text-xs text-mute">{m.scheme} · {fmtDate(m.at)}</span></p>
             {m.description && <p className="mt-1 whitespace-pre-line text-ink/85">{m.description}</p>}
             <span className="mt-1 flex flex-wrap gap-x-3">{m.files.map((f) => <button key={f.id} type="button" onClick={() => openPortalFile(f.id, toast)} className="text-xs font-semibold text-brand-ink hover:underline">{f.name} <span className="font-normal text-mute">· {fileSize(f.size)}</span></button>)}</span>
@@ -351,7 +351,7 @@ function FromRexera({ media, toast }: { media: Me['media']; toast: Toast }) {
 function ContactCard({ person }: { person: PPerson | null }) {
   if (!person) return null
   return (
-    <Card className="p-5">
+    <Card className="p-4">
       <p className="text-xs font-semibold uppercase tracking-wide text-mute">Your contact at Rexera</p>
       <p className="mt-1 font-bold">{person.name}</p>
       {person.phone && <a href={`tel:${person.phone}`} className="mt-1 flex items-center gap-2 text-sm text-brand-ink hover:underline"><Phone className="size-4" />{person.phone}</a>}
@@ -373,7 +373,7 @@ function Profile({ me, onSaved, toast }: { me: Me; onSaved: () => Promise<void>;
   return (
     <Card className="overflow-hidden">
       <CardHeader title="Your profile" icon={UserIcon} subtitle={me.account.email} />
-      <form className="grid gap-3 p-5" onSubmit={(e) => { e.preventDefault(); void save() }}>
+      <form className="grid gap-3 p-4" onSubmit={(e) => { e.preventDefault(); void save() }}>
         <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} />
         <Input label="Mobile" inputMode="numeric" value={phone} onChange={(e) => setPhone(e.target.value)} />
         <Textarea label="Message to the team (optional)" rows={3} value={message} onChange={(e) => setMessage(e.target.value)} hint="e.g. a change to your company details" />

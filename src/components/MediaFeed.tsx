@@ -23,7 +23,7 @@ export function MediaFeed() {
   if (!list.length) return null
   const m = list.find((x) => x.id === open)
   return (
-    <Card className="mt-6 overflow-hidden">
+    <Card className="mt-5 overflow-hidden">
       <CardHeader title="Company media" subtitle="Latest posts, flyers and videos from the Digital Media team" icon={Clapperboard}
         action={<Link to="/digital-media" className="text-xs font-semibold text-brand-ink hover:underline">Digital Media Dashboard</Link>} />
       <ul className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">

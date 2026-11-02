@@ -277,7 +277,7 @@ export function BookingRow({ b, showActions = true, onDone }: { b: Booking; show
   const db = useDb()
   const m = bookingMoney(b)
   return (
-    <div className="flex flex-col gap-3 border-b border-line/70 px-5 py-4 last:border-0 md:flex-row md:items-center">
+    <div className="flex flex-col gap-3 border-b border-line/70 px-4 py-3 last:border-0 md:flex-row md:items-center">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <Link to={`/bookings/${b.id}`} className="font-bold hover:text-brand-ink hover:underline">{b.companyName}</Link>

@@ -99,7 +99,7 @@ export default function Audit() {
           </Table>
         )}
         {pager}
-        <p className="flex items-center gap-1.5 border-t border-line px-5 py-3 text-xs text-mute"><ShieldCheck className="size-3.5" />Written automatically by the CRM as people work; no one can change or delete an entry. The newest {db.audit.length} entries are shown here — older ones stay in the database.</p>
+        <p className="flex items-center gap-1.5 border-t border-line px-4 py-2.5 text-xs text-mute"><ShieldCheck className="size-3.5" />Written automatically by the CRM as people work; no one can change or delete an entry. The newest {db.audit.length} entries are shown here — older ones stay in the database.</p>
       </Card>
     </div>
   )

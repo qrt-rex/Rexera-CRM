@@ -65,7 +65,7 @@ export function WorkProgress() {
   }, 'Excel downloaded')
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <Card className="flex flex-wrap items-end gap-3 p-4">
         <Tabs value={period} onChange={setPeriod} tabs={[{ id: 'week', label: 'This week' }, { id: 'month', label: 'This month' }, { id: 'year', label: 'This year' }, { id: 'custom', label: 'Date range' }]} />
         {period === 'custom' && <>

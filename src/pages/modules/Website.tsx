@@ -47,7 +47,7 @@ function ContentTab() {
   const [key, setKey] = useState<SiteKey>('hero')
   const s = siteSection(key)
   return (
-    <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
+    <div className="grid gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
       <Card className="self-start overflow-hidden">
         <ul className="divide-y divide-line/70">
           {SITE_SECTIONS.map((x) => {
@@ -87,7 +87,7 @@ function SectionEditor({ s }: { s: SiteSection }) {
         {isChanged(r) && !dirty && <Button size="sm" variant="ghost" icon={Undo2} onClick={async () => { if (await confirm('Discard the unpublished changes?', 'This part goes back to what is live on the website.', true)) { run(() => discardSiteDraft(me, s.key), 'Changes discarded'); setV(structuredClone(r?.published ?? emptyContent(s))) } }}>Discard draft</Button>}
         <Button size="sm" icon={Save} disabled={!dirty || problems.length > 0} onClick={() => run(() => saveSiteDraft(me, s.key, v), 'Draft saved — publish it to put it on the website')}>Save draft</Button>
       </span>} />
-      <div className="space-y-4 p-5">
+      <div className="space-y-4 p-4">
         <p className="text-xs text-mute">{r?.updatedAt ? `Draft saved ${fmtDateTime(r.updatedAt)} by ${userName(db, r.updatedBy)}` : 'Not saved yet'}{r?.publishedAt ? ` · live version from ${fmtDateTime(r.publishedAt)}` : ' · not on the website yet'}{isChanged(r) ? ' · the draft has unpublished changes' : ''}</p>
         {s.kind === 'object' ? <Fields fields={s.fields} o={(v as Obj) ?? {}} onChange={(p) => setV({ ...(v as Obj), ...p })} />
           : <>
@@ -192,14 +192,14 @@ function PublishTab() {
   const rows = db.siteContent ?? []
   const pending = rows.filter(isChanged)
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
+    <div className="grid gap-5 lg:grid-cols-2">
       <Card className="overflow-hidden">
         <CardHeader title="Waiting to be published" subtitle="Saved drafts that are not on the website yet" icon={Send}
           action={pending.length > 0 && <Button icon={Send} onClick={async () => { if (await confirm(`Publish ${pending.length} part(s) to the website?`, pending.map((r) => siteSection(r.key).label).join(', '))) run(() => publishSite(me), 'Published — the website shows it within a minute') }}>Publish all</Button>} />
         {!pending.length ? <EmptyState icon={Send} title="Everything is live" text="Saved drafts appear here until you publish them." /> : (
           <ul className="divide-y divide-line/70">
             {pending.map((r) => (
-              <li key={r.key} className="flex items-center gap-3 px-5 py-3 text-sm">
+              <li key={r.key} className="flex items-center gap-3 px-4 py-2.5 text-sm">
                 <span className="flex-1"><b>{siteSection(r.key).label}</b><span className="block text-[11px] text-mute">Draft {fmtDateTime(r.updatedAt)} by {userName(db, r.updatedBy)} · {r.publishedAt ? `live version ${fmtDateTime(r.publishedAt)}` : 'never published'}</span></span>
                 <Button size="sm" variant="outline" icon={Send} onClick={() => run(() => publishSite(me, [r.key]), `${siteSection(r.key).label} published`)}>Publish</Button>
               </li>
@@ -238,7 +238,7 @@ function LeadsTab() {
   const log = db.webLeadLog ?? []
   const retry = (id: string) => run(async () => { const r = await serverPost<{ message: string }>('/api/website-lead/retry', { id, phone: phone[id] || undefined }); return r.message })
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <Card className="overflow-hidden">
         <CardHeader title="Leads from the website" subtitle="Every form on the website creates (or updates) a lead in CRM Leads — work them there" icon={Inbox}
           action={<Link to="/leads"><Button size="sm" variant="outline">Open CRM Leads</Button></Link>} />
@@ -312,10 +312,10 @@ const { content } = await res.json()
   <button>Send</button>
 </form>`
   return (
-    <div className="grid gap-6 xl:grid-cols-2">
+    <div className="grid gap-5 xl:grid-cols-2">
       <Card className="overflow-hidden">
         <CardHeader title="1 · Show the CRM's content on your website" subtitle="Your website reads what you publish here — public, read-only, updated within a minute" icon={Plug} />
-        <div className="space-y-3 p-5 text-sm">
+        <div className="space-y-3 p-4 text-sm">
           <p><b>GET</b> <code className="rounded bg-card2 px-1.5 py-0.5">{origin}/api/site/content</code> <Button size="sm" variant="ghost" icon={Copy} aria-label="Copy" onClick={() => copy(`${origin}/api/site/content`)} /></p>
           <pre className="overflow-x-auto rounded-xl bg-card2 p-3 text-[12px]">{fetchSnippet}</pre>
           <p className="text-xs text-mute">Items you switch off ("Show on the website") are left out. Images uploaded here are served from public links.</p>
@@ -323,7 +323,7 @@ const { content } = await res.json()
       </Card>
       <Card className="overflow-hidden">
         <CardHeader title="2 · Send every website form to CRM Leads" subtitle="Any form can post here — plain HTML or JavaScript (JSON)" icon={Inbox} />
-        <div className="space-y-3 p-5 text-sm">
+        <div className="space-y-3 p-4 text-sm">
           <p><b>POST</b> <code className="rounded bg-card2 px-1.5 py-0.5">{origin}/api/website-lead</code> <Button size="sm" variant="ghost" icon={Copy} aria-label="Copy" onClick={() => copy(`${origin}/api/website-lead`)} /></p>
           <pre className="overflow-x-auto rounded-xl bg-card2 p-3 text-[12px]">{formSnippet}</pre>
           <ul className="list-disc space-y-1 pl-5 text-xs text-mute">

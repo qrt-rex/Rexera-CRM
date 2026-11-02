@@ -91,7 +91,7 @@ export function SuperAdminDashboard() {
 
       {/* every branch at a glance — each opens its own branch dashboard */}
       {branchList(db).length > 0 && (
-        <div className="mb-6">
+        <div className="mb-5">
           <div className="mb-3 flex items-center justify-between">
             <p className="flex items-center gap-2 font-bold"><Building2 className="size-5 text-brand-ink" />Branches</p>
             <Link to="/dashboard/branchdirector" className="text-xs font-bold text-brand-ink hover:underline">All branches dashboard →</Link>
@@ -102,16 +102,16 @@ export function SuperAdminDashboard() {
 
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_280px]">
         {/* left column: tiles, then the charts straight under them (no empty gap beside the taller side column) */}
-        <div className="min-w-0 space-y-6">
+        <div className="min-w-0 space-y-5">
           <div className="grid content-start gap-4 sm:grid-cols-2">
             {tiles.map((t) => <Tile key={t.label} {...t} />)}
           </div>
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="grid gap-5 lg:grid-cols-2">
             <Section title="Collections · last 6 months" icon={TrendingUp} className="lg:col-span-2">
-              <div className="p-5"><Bars data={rev} format={inrShort} highlightLast height={210} /></div>
+              <div className="p-4"><Bars data={rev} format={inrShort} highlightLast height={210} /></div>
             </Section>
-            <Section title="Client files by status" icon={Sparkles}><div className="p-5"><Donut data={pipeline} label="Files by status" /></div></Section>
-            <Section title="Top performers this month" icon={Trophy}><div className="p-5"><HBars data={performers} format={inrShort} /></div></Section>
+            <Section title="Client files by status" icon={Sparkles}><div className="p-4"><Donut data={pipeline} label="Files by status" /></div></Section>
+            <Section title="Top performers this month" icon={Trophy}><div className="p-4"><HBars data={performers} format={inrShort} /></div></Section>
           </div>
           <RecentActivity limit={7} />
         </div>
@@ -141,7 +141,7 @@ export function SuperAdminDashboard() {
         </aside>
       </div>
 
-      <p className="mt-6 flex items-center gap-2 text-xs text-mute"><UserPlus className="size-3.5" />Tip: open any role’s dashboard from “All dashboards” to see exactly what that team sees.</p>
+      <p className="mt-5 flex items-center gap-2 text-xs text-mute"><UserPlus className="size-3.5" />Tip: open any role’s dashboard from “All dashboards” to see exactly what that team sees.</p>
       <CreateUserModal open={newUser} onClose={() => setNewUser(false)} />
     </div>
   )

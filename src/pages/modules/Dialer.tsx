@@ -267,7 +267,7 @@ function CallsTab({ bt, onLive, focus }: { bt: ReturnType<typeof useBlutec>; onL
 
   return (
     <div>
-      <Card className="mx-auto mb-6 max-w-5xl p-5">
+      <Card className="mx-auto mb-5 max-w-5xl p-4">
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <h3 className="flex-1 text-lg font-bold">Select a Campaign</h3>
           <span className={cx('flex items-center gap-1.5 text-sm font-medium', bt.status?.dialer ? 'text-ok' : 'text-warn')}><Radio className="size-4" />{bt.status?.dialer ? 'Dialer Connected' : 'Phone mode — calls go from your phone'}</span>
@@ -285,7 +285,7 @@ function CallsTab({ bt, onLive, focus }: { bt: ReturnType<typeof useBlutec>; onL
           </div>
         )}
       </Card>
-      <div className="grid gap-6 xl:grid-cols-[340px_1fr_320px]">
+      <div className="grid gap-5 xl:grid-cols-[340px_1fr_320px]">
         <Card className="overflow-hidden xl:max-h-[70vh] xl:overflow-y-auto">
           <CardHeader title="Queue" subtitle={`${queue.length} leads`} />
           {!queue.length && <EmptyState icon={PhoneCall} title="Queue is empty" text="Great work! Add leads or ask your team leader for more." />}
@@ -340,14 +340,14 @@ function CallsTab({ bt, onLive, focus }: { bt: ReturnType<typeof useBlutec>; onL
             {/* the outcome opens only once the call has ended, and must be saved before moving on */}
             {awaitingOutcome && call?.leadId === current.id ? (
               !windowOpen && (
-                <div className="mt-6 border-t border-line pt-5">
+                <div className="mt-5 border-t border-line pt-5">
                   <h4 className="mb-1 font-bold">Call outcome <span className="text-bad">*</span></h4>
                   <p className="mb-3 text-xs text-mute">The call has ended — save its outcome to go to the next client.</p>
                   <CallLogger lead={current} seconds={secs} suggested={suggested} refId={live?.refId || undefined} onDone={afterSave} {...callExtras} />
                 </div>
               )
             ) : (
-              <p className="mt-6 rounded-xl border border-dashed border-line px-4 py-3 text-center text-sm text-mute">
+              <p className="mt-5 rounded-xl border border-dashed border-line px-4 py-3 text-center text-sm text-mute">
                 {call?.leadId === current.id ? 'On call — the call outcome opens when the call ends.' : 'Call the client — the call outcome opens here as soon as the call ends.'}
               </p>
             )}
@@ -388,7 +388,7 @@ function CallsTab({ bt, onLive, focus }: { bt: ReturnType<typeof useBlutec>; onL
                 <p className="text-xs text-mute">{fmtTime(c.at)} · {CALL_OUTCOMES.find((o) => o.id === c.outcome)?.label} · {Math.round(c.durationSec / 60)} min</p>
               </li>
             ))}
-            {!myCallsToday.length && <li className="p-5 text-sm text-mute">No calls yet today.</li>}
+            {!myCallsToday.length && <li className="p-4 text-sm text-mute">No calls yet today.</li>}
           </ul>
         </Card>
       </div>
@@ -461,9 +461,9 @@ function IvrTab({ bt, manage }: { bt: ReturnType<typeof useBlutec>; manage: bool
   const cur = ivrs?.find((x) => x.id === sel)
   const st = stats?.broadcast_status ?? cur?.broadcast_status
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {error && <p className="rounded-xl bg-bad-soft px-4 py-2 text-sm text-bad">{error}</p>}
-      <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
+      <div className="grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)]">
         <Card className="overflow-hidden">
           <CardHeader title="IVR campaigns" subtitle={ivrs ? `${ivrs.length} campaign(s)` : 'Loading…'} icon={Radio} action={<Button size="sm" variant="ghost" icon={RefreshCcw} aria-label="Refresh" onClick={load} />} />
           <ul className="max-h-[60vh] overflow-y-auto">
@@ -473,7 +473,7 @@ function IvrTab({ bt, manage }: { bt: ReturnType<typeof useBlutec>; manage: bool
                 <Badge tone={x.broadcast_status === 'running' ? 'green' : x.broadcast_status === 'paused' ? 'amber' : 'gray'}>{x.broadcast_status}</Badge>
               </button></li>
             ))}
-            {ivrs && !ivrs.length && <li className="p-5 text-sm text-mute">No IVR campaigns in Blutec yet.</li>}
+            {ivrs && !ivrs.length && <li className="p-4 text-sm text-mute">No IVR campaigns in Blutec yet.</li>}
           </ul>
         </Card>
         <Card className="overflow-hidden">
@@ -490,7 +490,7 @@ function IvrTab({ bt, manage }: { bt: ReturnType<typeof useBlutec>; manage: bool
               <div className="mb-1 flex justify-between text-[11px] font-semibold text-mute"><span>DIAL PROGRESS</span><span className="tabular-nums">{short(stats.dialed)} / {short(stats.total_leads)} · {stats.total_leads ? Math.round((stats.dialed / stats.total_leads) * 100) : 0}%</span></div>
               <div className="h-2 overflow-hidden rounded-full bg-card2"><div className="h-full rounded-full bg-ok transition-all" style={{ width: `${stats.total_leads ? Math.min(100, (stats.dialed / stats.total_leads) * 100) : 0}%` }} /></div>
             </div>
-            <div className="grid grid-cols-2 gap-3 p-5 sm:grid-cols-3 xl:grid-cols-5">
+            <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 xl:grid-cols-5">
               {([['Queued', stats.queued], ['Dialing', stats.dialing], ['Completed', stats.completed], ['Interested', stats.interested], ['Total leads', stats.total_leads]] as [string, number][]).map(([k, v]) => (
                 <div key={k} className={cx('rounded-xl p-3', k === 'Interested' ? 'bg-warn-soft' : 'bg-card2')}><p className="text-[11px] uppercase text-mute">{k}</p><p className="text-xl font-extrabold tabular-nums" title={(v ?? 0).toLocaleString('en-IN')}>{short(v)}</p></div>
               ))}

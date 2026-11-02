@@ -34,7 +34,7 @@ export function AutomationAlerts() {
     </Card>
   )
   return (
-    <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       <Box title="Follow-ups (15-day)" icon={CalendarClock} n={follow.length} empty="No follow-ups due in the next 3 days.">
         {follow.map((b) => <Row key={b.id} b={b} sub={`${userName(db, b.opsMemberId)} · last ${b.followUp!.lastOn ? fmtDate(b.followUp!.lastOn) : '—'}`} right={due(b.followUp!.nextOn)} />)}
       </Box>
@@ -74,7 +74,7 @@ export function AdminProgressOverview() {
     return (drill.stage ? [drill.stage] : ADMIN_STAGES.map((s) => s.id)).some((sid) => { const w = b.adminWork![sid]; return w && w.status !== 'NOT_NEEDED' && (w.assignee || b.adminId || '') === drill.userId })
   }) : []
   return (
-    <Card className="mb-6 overflow-hidden">
+    <Card className="mb-5 overflow-hidden">
       <CardHeader title="Admin Progress Overview" subtitle="Done / assigned per stage (done = approved or completed; not-needed stages and rejected files left out) · click a figure for the cases" icon={BarChart3}
         action={<select value={who} onChange={(e) => setWho(e.target.value)} aria-label="Admin employee" className="h-9 rounded-xl border border-line bg-card px-3 text-sm">
           <option value="">All Admin employees</option>{all.map((r) => <option key={r.userId} value={r.userId}>{userName(db, r.userId)}</option>)}

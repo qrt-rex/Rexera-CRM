@@ -88,7 +88,7 @@ function PayslipView({ run, row, onBack }: { run: PayrollRun; row: PayRow; onBac
             <div key={k} className="flex justify-between gap-3 border-b border-[#E3E6EB] py-1"><span className="text-[#6B7280]">{k}</span><span className="font-semibold">{v}</span></div>
           ))}
         </div>
-        <div className="grid gap-6 px-7 sm:grid-cols-2">
+        <div className="grid gap-5 px-7 sm:grid-cols-2">
           {[['Earnings', earnings, totalE], ['Deductions', deductions, totalD]].map(([title, items, total]) => (
             <div key={title as string}>
               <p className="mb-2 rounded-lg bg-[#ECEEFB] px-3 py-1.5 text-xs font-bold uppercase text-[#2E3A8C]">{title as string}</p>
@@ -97,7 +97,7 @@ function PayslipView({ run, row, onBack }: { run: PayrollRun; row: PayRow; onBac
             </div>
           ))}
         </div>
-        <div className="m-7 rounded-2xl bg-[#2E3A8C] p-5 text-white">
+        <div className="m-7 rounded-2xl bg-[#2E3A8C] p-4 text-white">
           <p className="text-xs uppercase tracking-wider text-white/70">Net pay</p>
           <p className="text-3xl font-extrabold">{inr(net)}</p>
           <p className="text-xs text-white/80">{rupeesInWords(net)}</p>

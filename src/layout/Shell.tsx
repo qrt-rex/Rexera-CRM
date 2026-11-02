@@ -131,9 +131,9 @@ export function Shell() {
       <div className={cx('fixed inset-0 z-40 bg-black/40 lg:hidden', mobileNav ? 'block' : 'hidden')} onClick={() => setMobileNav(false)} />
       <aside className={cx('no-print fixed inset-y-0 left-0 z-50 flex shrink-0 flex-col border-r border-line transition-[transform,width] duration-200 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0',
         hrMode ? 'bg-gradient-to-b from-sky-50 via-sky-100/70 to-indigo-50 dark:from-[#0f1830] dark:via-[#111c38] dark:to-[#141a33]' : 'bg-card',
-        mini ? 'w-[72px]' : hrMode ? 'w-64' : 'w-[272px]',
+        mini ? 'w-[68px]' : 'w-60',
         mobileNav ? 'translate-x-0' : '-translate-x-full')}>
-        <div className={cx('flex h-16 items-center', mini ? 'justify-center' : 'justify-between px-5')}>
+        <div className={cx('flex h-14 shrink-0 items-center', mini ? 'justify-center' : 'justify-between px-4')}>
           <Link to={`/dashboard/${me.role}`} aria-label="Home" title={mini ? 'Dashboard' : undefined}>{mini ? <Mark className="h-9" /> : <Logo />}</Link>
           <button className="lg:hidden text-mute" onClick={() => setMobileNav(false)} aria-label="Close menu"><X className="size-5" /></button>
         </div>
@@ -142,31 +142,31 @@ export function Shell() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Header */}
-        <header className="no-print sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-line bg-card/85 px-4 backdrop-blur-xl sm:px-6">
+        <header className="no-print sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-line bg-card/90 px-3 backdrop-blur-xl sm:gap-3 sm:px-5">
           <button className="text-mute lg:hidden" onClick={() => setMobileNav(true)} aria-label="Open menu"><MenuIcon className="size-6" /></button>
           <button onClick={toggleSidebar} aria-label={collapsed ? 'Show the full menu' : 'Hide the menu (icons only)'} title={collapsed ? 'Show the full menu' : 'Hide the menu (icons only)'} aria-pressed={collapsed}
-            className="-ml-1 hidden size-10 shrink-0 place-items-center rounded-xl text-mute hover:bg-card2 hover:text-ink lg:grid">
+            className="-ml-1 hidden size-9 shrink-0 place-items-center rounded-lg text-mute hover:bg-card2 hover:text-ink lg:grid">
             {collapsed ? <PanelLeftOpen className="size-5" /> : <PanelLeftClose className="size-5" />}
           </button>
-          <h1 className="hidden min-w-0 truncate text-lg font-extrabold tracking-tight md:block md:w-64">{title}</h1>
-          <button onClick={() => setPalette(true)} className="mx-auto flex h-10 w-full max-w-md items-center gap-3 rounded-xl border border-line bg-card2 px-3.5 text-sm text-mute transition hover:border-brand/50 hover:bg-card hover:shadow-card">
+          <h1 className="hidden min-w-0 max-w-64 shrink truncate whitespace-nowrap text-base font-extrabold tracking-tight md:block">{title}</h1>
+          <button onClick={() => setPalette(true)} className="mx-auto flex h-9 w-full min-w-0 max-w-md items-center gap-2.5 rounded-lg border border-line bg-card2 px-3 text-sm text-mute transition hover:border-brand/50 hover:bg-card hover:shadow-card">
             <Search className="size-4 shrink-0 text-mute" />
             <span className="flex-1 truncate text-left">{hrMode ? 'Search employees, leads, pages…' : 'Search clients, leads, people…'}</span>
             <kbd className="hidden rounded-md border border-line bg-card px-1.5 py-0.5 text-[10px] font-semibold sm:inline">Ctrl K</kbd>
           </button>
-          <div className="flex items-center gap-1">
-            <button onClick={cycleTheme} title={`Theme: ${theme}`} aria-label="Change theme" className="hidden size-10 place-items-center rounded-xl text-mute hover:bg-card2 hover:text-ink sm:grid"><ThemeIcon className="size-5" /></button>
+          <div className="flex shrink-0 items-center gap-0.5">
+            <button onClick={cycleTheme} title={`Theme: ${theme}`} aria-label="Change theme" className="hidden size-9 place-items-center rounded-lg text-mute hover:bg-card2 hover:text-ink sm:grid"><ThemeIcon className="size-5" /></button>
             {MESSAGES_ENABLED && can('messages.use') && (
-              <Link to="/messages" aria-label="Messages" className="relative hidden size-10 place-items-center rounded-xl text-mute hover:bg-card2 hover:text-ink sm:grid">
+              <Link to="/messages" aria-label="Messages" className="relative hidden size-9 place-items-center rounded-lg text-mute hover:bg-card2 hover:text-ink sm:grid">
                 <Mail className="size-5" />
                 {unread.messages > 0 && <span className="absolute -right-0.5 -top-0.5 grid h-5 min-w-5 place-items-center rounded-full bg-bad px-1 text-[10px] font-bold text-white ring-2 ring-card">{unread.messages}</span>}
               </Link>
             )}
             <BellMenu />
-            <button onClick={() => setHelp(true)} aria-label="Help" title="Help" className="hidden size-10 place-items-center rounded-xl text-mute hover:bg-card2 hover:text-ink sm:grid"><HelpCircle className="size-5" /></button>
+            <button onClick={() => setHelp(true)} aria-label="Help" title="Help" className="hidden size-9 place-items-center rounded-lg text-mute hover:bg-card2 hover:text-ink sm:grid"><HelpCircle className="size-5" /></button>
             {/* the calendar (events, holidays, deadlines) sits here, next to the profile */}
             <Menu width="w-72" trigger={(open) => (
-              <button aria-label="Calendar" title="Calendar" aria-expanded={open} className={cx('relative grid size-10 place-items-center rounded-xl hover:bg-card2 hover:text-ink', open ? 'bg-card2 text-ink' : 'text-mute')}>
+              <button aria-label="Calendar" title="Calendar" aria-expanded={open} className={cx('relative grid size-9 place-items-center rounded-lg hover:bg-card2 hover:text-ink', open ? 'bg-card2 text-ink' : 'text-mute')}>
                 <CalendarDays className="size-5" />
                 <span className="absolute bottom-1.5 right-1.5 text-[8px] font-bold leading-none text-accent">{new Date().getDate()}</span>
               </button>
@@ -175,9 +175,9 @@ export function Shell() {
             </Menu>
             <Menu width="w-72" trigger={(open) => (
               <button className="ml-1 flex items-center gap-2 rounded-full py-1 pl-1 pr-2 hover:bg-card2" aria-expanded={open} aria-label="Account menu">
-                <Avatar name={me.name} photo={me.photo} size={36} />
+                <Avatar name={me.name} photo={me.photo} size={32} />
                 <span className="hidden text-left leading-tight lg:block">
-                  <span className="block max-w-32 truncate text-sm font-bold">{me.name}</span>
+                  <span className="block max-w-32 truncate text-[13px] font-bold">{me.name}</span>
                   <span className="block text-[11px] text-mute">{roleLabel(me.role)}</span>
                 </span>
                 <ChevronDown className="hidden size-4 text-mute lg:block" />
@@ -201,7 +201,7 @@ export function Shell() {
           </div>
         </header>
 
-        <main id="main" className="mx-auto w-full max-w-[1500px] flex-1 px-4 py-6 sm:px-6 lg:px-8">
+        <main id="main" className="mx-auto w-full max-w-[1680px] flex-1 px-3 py-4 sm:px-5 sm:py-5 lg:px-6">
           <BreakBanner />
           <BreakPrompt />
           {loc.pathname.startsWith('/dashboard') && <OverdueLeadsBanner />}
@@ -265,7 +265,7 @@ function Sidebar({ mini, onExpand }: { mini: boolean; onExpand: () => void }) {
   })
   const visible = MODULES.filter((m) => canSee(m, can, me) && !m.hrOnly && !['attendance', 'notifications', 'security', 'users', 'system', 'inbox'].includes(m.key))
   const groups = [...new Set(visible.map((m) => m.group))]
-  const item = cx('relative flex min-w-0 items-center gap-3 rounded-xl py-2 text-sm font-semibold transition focus-visible:outline-offset-0', mini ? 'justify-center px-0' : 'px-3')
+  const item = cx('relative flex min-w-0 items-center gap-2.5 rounded-lg py-1.5 text-[13px] font-semibold transition focus-visible:outline-offset-0', mini ? 'justify-center px-0 py-2' : 'px-2.5')
   // the page you're on: tinted, with a slim brand marker on the left edge
   const active = 'bg-brand-soft text-brand-ink before:absolute before:inset-y-1.5 before:-left-1 before:w-1 before:rounded-r-full before:bg-brand'
   const idle = 'text-ink/80 hover:bg-card2 hover:text-ink'
@@ -299,7 +299,7 @@ function Sidebar({ mini, onExpand }: { mini: boolean; onExpand: () => void }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-3 pb-3" aria-label="Main">
+      <nav className="min-h-0 flex-1 space-y-px overflow-y-auto px-2.5 pb-3" aria-label="Main">
         <NavLink to={`/dashboard/${me.role}`} className={({ isActive }) => cx(item, isActive ? active : idle)}><Home className="size-[18px]" />Dashboard</NavLink>
         <NavLink to="/attendance" className={({ isActive }) => cx(item, isActive ? active : idle)}><UserCheck className="size-[18px]" />Attendance Board</NavLink>
         {isMaster(me) && (
@@ -314,7 +314,7 @@ function Sidebar({ mini, onExpand }: { mini: boolean; onExpand: () => void }) {
         {groups.map((g) => (
           <SideGroup key={g} label={g} open={openGroups[g] ?? true} onToggle={() => toggle(g)}>
             {visible.filter((m) => m.group === g).map((m) => (
-              <NavLink key={m.key} to={m.path} className={() => cx(item, 'py-1.5 text-[13px]', loc.pathname.startsWith(m.path) ? active : idle)}>
+              <NavLink key={m.key} to={m.path} className={() => cx(item, loc.pathname.startsWith(m.path) ? active : idle)}>
                 <m.icon className="size-4 opacity-80" /><span className="flex-1">{moduleLabel(m, me)}</span>
                 {m.key === 'leads' && <LeadsBadge />}
               </NavLink>
@@ -322,7 +322,7 @@ function Sidebar({ mini, onExpand }: { mini: boolean; onExpand: () => void }) {
           </SideGroup>
         ))}
       </nav>
-      <div className="space-y-0.5 border-t border-line p-3">
+      <div className="space-y-px border-t border-line p-2.5">
         <NavLink to="/settings" className={({ isActive }) => cx(item, isActive ? active : idle)}><Settings className="size-5" />Profile Settings</NavLink>
         <NavLink to="/inbox" className={({ isActive }) => cx(item, isActive ? active : idle)}>
           <Mail className="size-5" /><span className="flex-1">Email</span>
@@ -368,7 +368,7 @@ function HrSidebar({ mini }: { mini: boolean }) {
   const unread = useUnread()
   const loc = useLocation()
   const here = loc.pathname + loc.search
-  const item = cx('relative flex items-center gap-3 rounded-xl py-2 text-[13px] font-semibold transition', mini ? 'justify-center px-0' : 'px-3')
+  const item = cx('relative flex items-center gap-2.5 rounded-lg py-1.5 text-[13px] font-semibold transition', mini ? 'justify-center px-0 py-2' : 'px-2.5')
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <nav className={cx('min-h-0 flex-1 space-y-0.5 overflow-y-auto pb-3', mini ? 'px-2.5' : 'px-3')} aria-label="HR">

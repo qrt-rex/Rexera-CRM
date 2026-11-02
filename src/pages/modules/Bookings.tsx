@@ -97,7 +97,7 @@ export default function Bookings() {
         { id: 'crm', label: 'CRM entries', icon: Briefcase, count: all.length }, { id: 'client', label: 'Client entries', icon: ClipboardList, count: entryCount },
       ]} />}
       {view === 'client' ? <Card className="overflow-hidden"><ClientEntriesPanel lead={rolesOf(me).includes('teamlead')} full /></Card> : <>
-      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="mb-5 grid grid-cols-3 gap-2 sm:gap-3">
         <MiniStat label="Quoted (with GST)" value={inr(totals.quoted)} icon={IndianRupee} />
         <MiniStat label="Collected" value={inr(totals.collected)} icon={Wallet} tone="green" />
         <MiniStat label="Outstanding" value={inr(totals.outstanding)} icon={AlertCircle} tone="red" />
@@ -152,7 +152,7 @@ export default function Bookings() {
           </Table>
         ) : (
           <Table>
-            <thead><tr><Th>Client</Th><Th>Service</Th><Th>Status · stage</Th><Th className="w-52">Payment</Th><Th>Owner</Th><Th>Created</Th></tr></thead>
+            <thead><tr><Th className="min-w-56">Client</Th><Th>Service</Th><Th>Status · stage</Th><Th className="w-52">Payment</Th><Th>Owner</Th><Th>Created</Th></tr></thead>
             <tbody>
               {slice.map((b) => (
                 <tr key={b.id} className="hover:bg-card2/60">

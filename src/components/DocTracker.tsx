@@ -84,7 +84,7 @@ export function DocTracker() {
   })))
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* report cards: totals over the Admins listed below */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
         <Stat label="Total documents assigned" value={tot('assigned')} icon={FileStack} tone="navy" />

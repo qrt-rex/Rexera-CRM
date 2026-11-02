@@ -30,7 +30,7 @@ export default function Broadcasts() {
             const size = audienceSize(b.audience)
             return (
               <Card key={b.id} className={`overflow-hidden border-l-4 ${b.priority === 'URGENT' ? 'border-l-bad' : b.priority === 'HIGH' ? 'border-l-accent' : 'border-l-brand'}`}>
-                <div className="flex flex-wrap items-start gap-4 p-5">
+                <div className="flex flex-wrap items-start gap-4 p-4">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2"><h3 className="text-lg font-bold">{b.title}</h3>
                       <Badge tone={b.priority === 'URGENT' ? 'red' : b.priority === 'HIGH' ? 'orange' : 'navy'}>{b.priority.toLowerCase()}</Badge>

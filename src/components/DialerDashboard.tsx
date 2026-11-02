@@ -240,7 +240,7 @@ function CallbackList({ leads, onOpen }: { leads: Lead[]; onOpen?: (l: Lead) => 
   return (
     <ul className="divide-y divide-line/70">
       {leads.map((l) => (
-        <li key={l.id} className="flex items-center gap-3 px-5 py-3">
+        <li key={l.id} className="flex items-center gap-3 px-4 py-2.5">
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-semibold">{l.name}{l.company ? ` · ${l.company}` : ''}</span>
             <span className="block truncate text-xs text-mute">{maskPhone(l.phone)} · {LEAD_STATUS[l.status].label}{l.service ? ` · ${l.service}` : ''}</span>
@@ -433,7 +433,7 @@ export function CallHistory({ pick, onOpenLead }: { pick: AgentPick; onOpenLead?
     <div className="space-y-5">
       <DialerTitle title="Call History" subtitle={`${self ? 'Your' : 'Their'} complete call records (${all.length.toLocaleString('en-IN')} calls)`}
         right={<>{picker}<Button variant="outline" icon={Download} onClick={exportCsv} disabled={!rows.length} aria-label="Export to Excel (CSV)" title="Export to Excel (CSV)" /></>} />
-      <Card className="space-y-4 p-4 sm:p-5">
+      <Card className="space-y-4 p-4 sm:p-4">
         <SearchBox value={q} onChange={setQ} placeholder={masked ? 'Search by name, lead code or the last digits of the number…' : 'Search by phone number, name or lead code…'} />
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
           <Input label="Date From" type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} />

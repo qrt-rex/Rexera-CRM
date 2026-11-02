@@ -24,7 +24,7 @@ export function DigitalMediaDashboard() {
         <Tile to="/media/flyers" icon={Images} label="Flyers" desc="Every flyer and poster created here" tone="orange" badge={flyers} />
         {late > 0 && <Tile to="/digital-media" icon={Megaphone} label="Late media" desc="Past their assignment date" tone="red" badge={late} highlight />}
       </TileGrid>
-      <div className="mt-6"><DigitalMedia /></div>
+      <div className="mt-5"><DigitalMedia /></div>
     </div>
   )
 }

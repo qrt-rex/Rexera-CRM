@@ -52,7 +52,7 @@ export default function BookingDetail() {
   return (
     <div>
       <button onClick={() => nav(-1)} className="mb-4 flex items-center gap-1.5 text-sm text-mute hover:text-ink"><ArrowLeft className="size-4" />Back</button>
-      <Card className="mb-6 overflow-hidden">
+      <Card className="mb-5 overflow-hidden">
         <div className="flex flex-wrap items-start gap-4 p-6">
           <span className="grid size-14 place-items-center rounded-2xl bg-gradient-to-br from-brand to-[#5b6ee1] text-white"><Building2 className="size-7" /></span>
           <div className="min-w-0 flex-1">
@@ -101,7 +101,7 @@ export default function BookingDetail() {
       ]} />
       {tab === 'overview' && <Overview id={b.id} />}
       {tab === 'workflow' && (
-        <div className="grid gap-6 xl:grid-cols-2">
+        <div className="grid gap-5 xl:grid-cols-2">
           {/* an Admin set up in Operations Dashboard → Team sees only their own stages */}
           {!isStageOnlyAdmin(db, me) && <><WelcomeCard b={b} /><FollowUpCard b={b} /></>}
           <AdminChecklist b={b} />
@@ -174,13 +174,13 @@ function Overview({ id }: { id: string }) {
   if (b.startupContact) details.push(['Startup contact', [b.startupContact.phone, b.startupContact.email].filter(Boolean).join(' · ')])
   if (b.billing) details.push(['Invoice to', [b.billing.name, b.billing.pan, b.billing.gstin, b.billing.contact, b.billing.email].filter(Boolean).join(' · ')])
   return (
-    <div className="grid gap-6 xl:grid-cols-3">
+    <div className="grid gap-5 xl:grid-cols-3">
       <Card className="overflow-hidden">
         <CardHeader title="Client details" icon={Building2} />
         <dl className="divide-y divide-line/70 text-sm">
           {details.map(([k, v]) => <div key={k} className="flex justify-between gap-3 px-5 py-2.5"><dt className="shrink-0 text-mute">{k}</dt><dd className="min-w-0 break-words text-right font-medium" title={v}>{v}</dd></div>)}
         </dl>
-        {b.remarks && <div className="border-t border-line px-5 py-3"><p className="text-[11px] font-semibold text-mute">Remarks</p><p className="whitespace-pre-line text-sm">{b.remarks}</p></div>}
+        {b.remarks && <div className="border-t border-line px-4 py-2.5"><p className="text-[11px] font-semibold text-mute">Remarks</p><p className="whitespace-pre-line text-sm">{b.remarks}</p></div>}
       </Card>
       {(b.services?.length ?? 0) > 0 && <ServicesCard id={b.id} />}
       <Card className="overflow-hidden xl:col-span-2">
@@ -205,7 +205,7 @@ function Overview({ id }: { id: string }) {
             ))}
           </tbody>
         </Table>
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-line px-5 py-3 text-sm">
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-line px-4 py-2.5 text-sm">
           <span className="text-mute">Service deduction: <b className="text-ink">{inr(b.deduction)}</b></span>
           {can('bookings.accounts') && (ded === null
             ? <button className="text-xs font-semibold text-brand-ink hover:underline" onClick={() => setDed(b.deduction)}>Edit deduction</button>
@@ -259,7 +259,7 @@ function CommissionCard({ id }: { id: string }) {
           <div className="flex justify-between px-5 py-2.5"><dt className="text-mute">Rate</dt><dd className="font-semibold">{c.pct}%</dd></div>
           <div className="flex justify-between px-5 py-2.5"><dt className="text-mute">On collections so far</dt><dd className="font-bold">{inr(commissionNow(b))}</dd></div>
         </dl>
-      ) : <p className="px-5 py-4 text-sm text-mute">No commission on this client.</p>}
+      ) : <p className="px-4 py-3 text-sm text-mute">No commission on this client.</p>}
       <Modal open={!!f} onClose={() => setF(null)} title="Commission to CA / DSA" size="sm"
         footer={<>{c && <Button variant="ghost" className="mr-auto text-bad" onClick={async () => { if (await run(() => setCommission(me, b.id, null), 'Commission removed')) setF(null) }}>Remove</Button>}<Button variant="outline" onClick={() => setF(null)}>Cancel</Button><Button onClick={async () => { if (f && await run(() => setCommission(me, b.id, f), 'Commission saved')) setF(null) }}>Save</Button></>}>
         {f && <div className="grid gap-3">
@@ -346,10 +346,10 @@ function Processing({ id }: { id: string }) {
   }, [b.stageHistory])
 
   return (
-    <div className="grid gap-6 xl:grid-cols-3">
+    <div className="grid gap-5 xl:grid-cols-3">
       <Card className="overflow-hidden xl:col-span-2">
         <CardHeader title="Processing stages" subtitle={b.opsMemberId ? `Now: ${stageLabel(b.stage, b.stageOutcome)}${b.stageReason ? ` — ${b.stageReason}` : ''} · allowed up to stage ${b.maxStage} · Admin and the Operation team can update stages` : 'Starts once Legal assigns Operations'} icon={FolderKanban} />
-        <div className="p-5">
+        <div className="p-4">
           <StageTrack b={b} />
           <ol className="mt-5 space-y-2">
             {STAGES.map((s, i) => {
@@ -382,7 +382,7 @@ function Processing({ id }: { id: string }) {
           </ol>
         </div>
       </Card>
-      <div className="space-y-6">
+      <div className="space-y-5">
         <Card className="overflow-hidden">
           <CardHeader title="Tasks & follow-ups" icon={ListTodo} />
           <ul className="divide-y divide-line/70">
@@ -393,7 +393,7 @@ function Processing({ id }: { id: string }) {
                 <button aria-label="Delete task" onClick={() => deleteTask(me, b.id, t.id)} className="text-mute hover:text-bad"><Trash2 className="size-3.5" /></button>
               </li>
             ))}
-            {!visibleTasks(db, me, b).length && <li className="px-5 py-4 text-sm text-mute">No tasks yet.</li>}
+            {!visibleTasks(db, me, b).length && <li className="px-4 py-3 text-sm text-mute">No tasks yet.</li>}
           </ul>
           <div className="flex gap-2 border-t border-line p-3">
             <input value={task} onChange={(e) => setTask(e.target.value)} placeholder="New task…" className="h-9 min-w-0 flex-1 rounded-lg border border-line bg-card px-3 text-sm" onKeyDown={(e) => { if (e.key === 'Enter' && task.trim()) { run(() => addTask(me, b.id, task, due || undefined)); setTask('') } }} />
@@ -403,7 +403,7 @@ function Processing({ id }: { id: string }) {
         </Card>
         <Card className="overflow-hidden">
           <CardHeader title="Stage history" subtitle="Time spent per stage" icon={History} />
-          <ol className="space-y-3 p-5">
+          <ol className="space-y-3 p-4">
             {timeIn.slice().reverse().map((h, i) => (
               <li key={i} className="flex gap-3 text-sm"><CircleDot className="mt-0.5 size-4 shrink-0 text-accent" />
                 <div><p className="font-semibold">{stageLabel(h.stage, h.outcome)} <span className="font-normal text-mute">· {h.days} day(s)</span></p><p className="text-xs text-mute">{userName(db, h.by)} · {fmtDateTime(h.at)}{h.note ? ` · ${h.note}` : ''}</p></div>
@@ -442,7 +442,7 @@ function Documents({ id }: { id: string }) {
         <DocUploader label="Add documents" value={pending} onChange={setPending} onUpload={async (list) => { const ok = !!(await run(() => addDocuments(me, b.id, list), `${list.length} document(s) added`)); if (ok) setUploading(false); return ok }} />
       </Modal>
       {!docs.length ? <EmptyState icon={FileText} title="No documents yet" text="Upload KYC, company documents, certificates, pitch deck or financials." action={<Button icon={Upload} onClick={() => setUploading(true)}>Upload</Button>} /> : (
-        <div className="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
           {docs.map((d) => (
             <div key={d.id} className={cx('flex items-start gap-3 rounded-xl border p-3', d.status === 'PENDING' ? 'border-warn/40 bg-warn-soft/30' : 'border-line')}>
               <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-info-soft text-info"><FileText className="size-5" /></span>
@@ -478,7 +478,7 @@ function LegacyRecord({ id }: { id: string }) {
   ]
   const show = (k: string, v: string | null) => (empty || (v != null && v.trim() !== '')) && (!q || `${k} ${v ?? ''}`.toLowerCase().includes(q.toLowerCase()))
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <Card className="flex flex-wrap items-center gap-3 p-4">
         <Archive className="size-5 text-mute" />
         <p className="min-w-0 flex-1 text-sm text-mute">Imported from the old CRM. Values are shown exactly as stored there; times are as the old database wrote them.</p>
@@ -497,7 +497,7 @@ function LegacyRecord({ id }: { id: string }) {
                   <dd className="min-w-0 flex-1 whitespace-pre-wrap break-words">{v == null ? <i className="text-mute">NULL</i> : v === '' ? <i className="text-mute">(empty)</i> : v}</dd>
                 </div>
               ))}
-              {!entries.length && <p className="px-5 py-4 text-mute">No fields match.</p>}
+              {!entries.length && <p className="px-4 py-3 text-mute">No fields match.</p>}
             </dl>
           </Card>
         )
@@ -525,14 +525,14 @@ function Timeline({ id }: { id: string }) {
   return (
     <Card className="overflow-hidden">
       <CardHeader title="Timeline & comments" subtitle="Type @username to notify someone" icon={MessageSquare} />
-      <div className="flex gap-3 border-b border-line p-5">
+      <div className="flex gap-3 border-b border-line p-4">
         <Avatar name={me.name} photo={me.photo} />
         <div className="flex-1">
           <Textarea rows={2} placeholder="Write a comment… e.g. @operations documents received" value={text} onChange={(e) => setText(e.target.value)} />
           <div className="mt-2 flex justify-end"><Button size="sm" icon={Send} onClick={async () => { if (await run(() => addComment(me, b.id, text), 'Comment added')) setText('') }}>Comment</Button></div>
         </div>
       </div>
-      <ol className="space-y-5 p-5">
+      <ol className="space-y-5 p-4">
         {items.map((it) => {
           const u = db.users.find((x) => x.id === it.by)
           return (

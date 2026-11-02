@@ -56,9 +56,9 @@ export function WelcomeCard({ b }: { b: Booking }) {
     <Card className="overflow-hidden">
       <CardHeader title="Client welcome message" subtitle="Sent once when Legal approves the file and it moves to Operations" icon={Send}
         action={<Button size="sm" variant="ghost" icon={Eye} onClick={() => setPreview(true)}>Preview</Button>} />
-      {!w ? <p className="px-5 py-4 text-sm text-mute">Starts when Legal approves the file.</p> : (
+      {!w ? <p className="px-4 py-3 text-sm text-mute">Starts when Legal approves the file.</p> : (
         <div className="divide-y divide-line/70 text-sm">
-          <div className="flex flex-wrap items-center gap-3 px-5 py-3">
+          <div className="flex flex-wrap items-center gap-3 px-4 py-2.5">
             <Mail className="size-4 text-mute" />
             <span className="min-w-0 flex-1"><b>Email</b> <span className="text-mute">to {w.email.to || b.email || '—'}</span>
               <span className="block text-[11px] text-mute">
@@ -68,7 +68,7 @@ export function WelcomeCard({ b }: { b: Booking }) {
             <Badge tone={DELIVERY[w.email.status].tone}>{DELIVERY[w.email.status].label}</Badge>
             {can && !['SENT', 'SENDING'].includes(w.email.status) && <Button size="sm" variant={w.email.status === 'FAILED' ? 'danger' : 'primary'} icon={RefreshCw} disabled={!isEmail(b.email)} onClick={send}>{w.email.status === 'FAILED' || w.email.status === 'NOT_CONFIGURED' ? 'Retry' : 'Send'}</Button>}
           </div>
-          <div className="flex flex-wrap items-center gap-3 px-5 py-3">
+          <div className="flex flex-wrap items-center gap-3 px-4 py-2.5">
             <MessageCircle className="size-4 text-mute" />
             <span className="min-w-0 flex-1"><b>WhatsApp</b> <span className="text-mute">to {w.whatsapp.to || b.mobile || '—'}</span>
               <span className="block text-[11px] text-mute">{waNote}{w.whatsapp.attempts > 0 && ` · ${w.whatsapp.attempts} attempt${w.whatsapp.attempts === 1 ? '' : 's'}`}{w.whatsapp.manualAt ? ` · Chat opened by ${userName(db, w.whatsapp.manualBy)} ${fmtDateTime(w.whatsapp.manualAt)}.` : ''}</span></span>
@@ -108,8 +108,8 @@ export function FollowUpCard({ b }: { b: Booking }) {
           <Button size="sm" variant="ghost" icon={f.paused ? Play : Pause} onClick={() => run(() => setFollowUpSchedule(me, b.id, { paused: !f.paused }), f.paused ? 'Follow-ups resumed' : 'Follow-ups paused')}>{f.paused ? 'Resume' : 'Pause'}</Button>
           <Button size="sm" variant="ghost" onClick={() => setSched({ nextOn: f.nextOn < t ? t : f.nextOn, everyDays: f.everyDays })}>Change</Button>
         </span>} />
-      {!f ? <p className="px-5 py-4 text-sm text-mute">Starts when Legal approves the file.</p> : (
-        <div className="space-y-3 p-5 text-sm">
+      {!f ? <p className="px-4 py-3 text-sm text-mute">Starts when Legal approves the file.</p> : (
+        <div className="space-y-3 p-4 text-sm">
           <div className="flex flex-wrap gap-x-6 gap-y-1">
             <span>Next reminder: <b className={cx(active && !f.paused && f.nextOn < t && 'text-bad')}>{!active ? 'stopped (file closed)' : f.paused ? 'paused' : fmtDate(f.nextOn)}</b>{active && !f.paused && f.nextOn < t && <Badge tone="red" className="ml-2">Overdue</Badge>}</span>
             <span className="text-mute">Last follow-up: <b className="text-ink">{f.lastOn ? fmtDate(f.lastOn) : '—'}</b></span>
@@ -186,7 +186,7 @@ export function AdminChecklist({ b }: { b: Booking }) {
     <Card className="overflow-hidden xl:col-span-2">
       <CardHeader title={limited ? 'My Admin stages' : 'Admin checklist'} subtitle={limited ? `${done} of ${eligible.length} of your stages done` : work ? `${done} of ${eligible.length} stages done · each stage can go to a different Admin` : 'Starts when Operations assigns the file to an Admin'} icon={ClipboardCheck}
         action={mayForward && <Button size="sm" variant="outline" icon={Forward} onClick={openForward}>Forward stages</Button>} />
-      {!work ? <p className="px-5 py-4 text-sm text-mute">No Admin yet.{mayForward && ' Forward the stages to Admins one by one, or assign the whole file with “Assign to Admin”.'}</p> : (
+      {!work ? <p className="px-4 py-3 text-sm text-mute">No Admin yet.{mayForward && ' Forward the stages to Admins one by one, or assign the whole file with “Assign to Admin”.'}</p> : (
         <>
           <div className="px-5 pt-4"><Progress value={eligible.length ? (done / eligible.length) * 100 : 0} tone={done === eligible.length && eligible.length ? 'green' : 'orange'} /></div>
           <ul className="divide-y divide-line/70">
@@ -195,7 +195,7 @@ export function AdminChecklist({ b }: { b: Booking }) {
               if (!w) return null
               const overdue = !!w.due && w.due < t && !ADMIN_DONE.includes(w.status) && w.status !== 'NOT_NEEDED'
               return (
-                <li key={s.id} className="flex flex-wrap items-center gap-3 px-5 py-3 text-sm">
+                <li key={s.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5 text-sm">
                   <span className="min-w-0 flex-1"><b>{s.label}</b>{w.ref && <span className="ml-2 rounded-md bg-card2 px-1.5 py-0.5 font-mono text-[11px] font-semibold">{w.ref}</span>}
                     <span className="block text-[11px] text-mute">{w.assignee ? userName(db, w.assignee) : <b className="text-warn">Not assigned — forward it</b>}{w.assignedBy ? ` (assigned by ${userName(db, w.assignedBy)})` : ''} · updated {fmtDateTime(w.updatedAt)}{w.submittedAt ? ` · submitted ${fmtDateTime(w.submittedAt)}` : ''}{w.due ? ` · due ${fmtDate(w.due)}` : ''}{w.history.at(-1)?.note ? ` · ${w.history.at(-1)!.note}` : ''}</span>
                     {filesOf(s).length > 0 && <span className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]">{filesOf(s).map((d) => d.file ? <FileLink key={d.id} file={d.file} label={d.name} /> : <span key={d.id}>{d.name}</span>)}</span>}</span>
@@ -208,7 +208,7 @@ export function AdminChecklist({ b }: { b: Booking }) {
             })}
           </ul>
           {pc && (
-            <div className="border-t border-line bg-card2/40 px-5 py-3 text-sm">
+            <div className="border-t border-line bg-card2/40 px-4 py-2.5 text-sm">
               <p className="flex flex-wrap items-center gap-x-4 gap-y-1"><b>Pitch Deck reminder</b>
                 {precheckPending(b) ? <>
                   <span>Next: <b className={cx(pc.nextRemindOn && pc.nextRemindOn < t && 'text-bad')}>{pc.nextRemindOn ? fmtDate(pc.nextRemindOn) : '—'}</b>{pc.nextRemindOn && pc.nextRemindOn < t && <Badge tone="red" className="ml-1">Overdue</Badge>}</span>

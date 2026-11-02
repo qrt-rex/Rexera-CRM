@@ -77,7 +77,7 @@ export default function Incentives() {
         )}
       </Card>
 
-      <Card className="mt-6 overflow-hidden">
+      <Card className="mt-5 overflow-hidden">
         <CardHeader title={`Added incentives · ${monthLabel(month)}`} subtitle="Any employee, added any time after the month · paid separately from salary" icon={EyeOff}
           action={manage && <Button size="sm" icon={Plus} onClick={() => setAdd({ userId: '', month, amount: '', reason: '' })}>Add</Button>} />
         {!manual.length ? <EmptyState icon={Plus} title="Nothing added for this month" text="Use “Add incentive” for spot awards, referrals or late approvals." /> : (

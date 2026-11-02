@@ -108,7 +108,7 @@ export function OpsReport() {
   const csv = () => downloadCsv(`ops-report-${r.from}-to-${r.to}.csv`, cur.map((e) => ({ date: day(e.at), event: KPIS.find((k) => k.kind === e.kind)?.label ?? e.kind, file: e.b.bookingId, client: e.b.companyName, by: e.by ? userName(db, e.by) : '', detail: e.detail ?? '' })))
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <Card className="flex flex-wrap items-end gap-3 p-4">
         <Tabs value={period} onChange={setPeriod} tabs={[{ id: 'week', label: 'This week' }, { id: 'month', label: 'This month' }, { id: 'year', label: 'This year (FY)' }, { id: 'custom', label: 'Date range' }]} />
         {period === 'custom' && <><Input label="From" type="date" value={cf} max={ct} onChange={(e) => setCf(e.target.value)} /><Input label="To" type="date" value={ct} min={cf} onChange={(e) => setCt(e.target.value)} /></>}
@@ -132,7 +132,7 @@ export function OpsReport() {
         })}
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className="grid gap-5 xl:grid-cols-2">
         <Card className="overflow-hidden">
           <CardHeader title="Cases now" subtitle="Where things stand today (not limited to the period)" icon={Gauge} />
           <ul className="divide-y divide-line/70 text-sm">
@@ -142,7 +142,7 @@ export function OpsReport() {
         </Card>
         <Card className="overflow-hidden">
           <CardHeader title="Completions over the period" subtitle="Admin stages done + cases completed" icon={Gauge} />
-          <div className="p-5"><Bars data={buckets} height={180} /></div>
+          <div className="p-4"><Bars data={buckets} height={180} /></div>
         </Card>
         <Card className="overflow-hidden">
           <CardHeader title="Stage processing time" subtitle="Average days from start to done, for stages finished in the period" icon={Gauge} />

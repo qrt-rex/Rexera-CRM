@@ -58,14 +58,14 @@ export default function Candidates() {
         <p className="text-ink/80">Applications are saved in <b>this browser's CRM data</b> for now, so the link collects applications when opened on a computer or tablet that runs this CRM (for example an office tablet for walk-in candidates). To receive applications from candidates' own phones, the CRM needs its online database connected — then the same link works from anywhere.</p>
       </div>
 
-      <Card className="mb-6 overflow-hidden">
+      <Card className="mb-5 overflow-hidden">
         <CardHeader title="Forms" subtitle={`${db.candidateForms.filter((f) => f.active).length} open`} icon={ClipboardList} />
         {!db.candidateForms.length ? <EmptyState icon={ClipboardList} title="No forms yet" text="Create one for each role or internship you are hiring for." action={<Button icon={Plus} onClick={() => setEdit({ title: '', kind: 'JOB', positions: [], department: '', description: '' })}>New form</Button>} /> : (
           <ul className="divide-y divide-line/70">
             {db.candidateForms.map((f, idx) => {
               const n = db.candidates.filter((c) => c.formId === f.id).length
               return (
-                <li key={f.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
+                <li key={f.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
                   <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-xs font-bold text-brand-ink">{idx + 1}</span>
                   <div className="min-w-0 flex-1">
                     <p className="flex flex-wrap items-center gap-2 font-semibold">{f.title}<Badge tone={f.kind === 'INTERNSHIP' ? 'cyan' : 'navy'}>{f.kind === 'INTERNSHIP' ? 'Internship' : 'Job'}</Badge>{(f.positions ?? []).slice(0, 3).map((p) => <Badge key={p} tone="violet">{p.replace(/\s*\(.*\)$/, '')}</Badge>)}{(f.positions?.length ?? 0) > 3 && <Badge tone="gray">+{f.positions!.length - 3} more</Badge>}{!f.active && <Badge tone="gray">closed</Badge>}</p>

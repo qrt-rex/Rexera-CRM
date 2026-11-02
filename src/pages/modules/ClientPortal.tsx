@@ -92,7 +92,7 @@ export default function ClientPortal() {
       {!mayManage && <p className="mb-4 rounded-xl bg-info-soft px-4 py-3 text-sm text-info">Client logins (ID and password) are created and managed by IT Support. Here you follow every client’s sign-ins, uploads and progress.</p>}
       {!CLOUD && <p className="mb-4 rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn">The client portal works on the live CRM (connected to Supabase) — invites, sign-in and uploads go through the live server.</p>}
 
-      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label="Portal accounts" value={accounts.length} icon={Users} onClick={() => setStatus('')} />
         <Stat label="Active" value={accounts.filter((a) => a.status === 'ACTIVE').length} icon={CheckCircle2} tone="green" onClick={() => setStatus('ACTIVE')} />
         <Stat label="Not signed in yet" value={accounts.filter((a) => a.status === 'INVITED').length} icon={Mail} tone="amber" onClick={() => setStatus('INVITED')} />
@@ -108,7 +108,7 @@ export default function ClientPortal() {
 
       {tab === 'accounts' && (
         <Card className="overflow-hidden">
-          <div className="flex flex-wrap items-center gap-2 border-b border-line px-5 py-3">
+          <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2.5">
             <SearchBox value={q} onChange={setQ} placeholder="Search client, email or entry…" className="min-w-56 flex-1" />
             <Select aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value as typeof status)} className="w-44"><option value="">All statuses</option><option value="ACTIVE">Active</option><option value="INVITED">Invited</option><option value="DISABLED">Deactivated</option></Select>
           </div>

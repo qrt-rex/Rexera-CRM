@@ -25,7 +25,7 @@ export default function Notifications() {
           <ul>
             {list.map((n) => (
               <li key={n.id}>
-                <button onClick={() => { markRead(me, n.id); if (n.link) nav(n.link) }} className={cx('flex w-full items-start gap-4 border-b border-line/60 px-5 py-4 text-left hover:bg-card2', !n.read && 'bg-brand-soft/30')}>
+                <button onClick={() => { markRead(me, n.id); if (n.link) nav(n.link) }} className={cx('flex w-full items-start gap-4 border-b border-line/60 px-4 py-3 text-left hover:bg-card2', !n.read && 'bg-brand-soft/30')}>
                   <span className={cx('mt-1.5 size-2.5 shrink-0 rounded-full', n.read ? 'bg-line' : dot[n.kind])} />
                   <span className="min-w-0 flex-1"><span className="block font-semibold">{n.title}</span><span className="block text-sm text-mute">{n.body}</span></span>
                   <span className="shrink-0 text-xs text-mute">{ago(n.at)}</span>

@@ -67,7 +67,7 @@ export default function Apply() {
     <div className="min-h-full bg-gradient-to-br from-[#eef2fb] via-white to-[#fff4ea] px-4 py-8 dark:from-[#0f1830] dark:via-[#0b1020] dark:to-[#1a1420]">
       <div className="mx-auto max-w-2xl">
         {/* the open form carries the logo in its header; the other screens show it here */}
-        {(!form || !form.active || done) && <div className="mb-6 flex justify-center"><Logo /></div>}
+        {(!form || !form.active || done) && <div className="mb-5 flex justify-center"><Logo /></div>}
         {!form || !form.active ? (
           <Card className="p-8 text-center">
             <h1 className="text-xl font-extrabold">{form ? 'Applications are closed' : 'Form not found'}</h1>

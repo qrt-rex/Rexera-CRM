@@ -26,9 +26,9 @@ export default function Services() {
       <PageHeader title="Services" subtitle="Price for each booking type · price bifurcation is compulsory except for funding services" icon={Layers}
         actions={manage && <Button variant="accent" icon={Plus} onClick={() => setEdit({ s: { name: '', category: cats[0] ?? '', price: 0, gstRate: 18, deduction: 0, active: true } })}>Add service</Button>} />
 
-      <Card className="mb-6 overflow-hidden">
+      <Card className="mb-5 overflow-hidden">
         <CardHeader title="Application Support combo packages" subtitle="More applications, more opportunities — booked as Combo 3 / 6 / 9 / 12 months on a CRM entry" icon={Package} />
-        <div className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 p-4 sm:grid-cols-2 xl:grid-cols-4">
           {([3, 6, 9, 12] as const).map((m, i) => {
             const p = COMBO_PACKAGES[m]
             const tone = ['bg-[#43A047]', 'bg-[#1E88E5]', 'bg-[#7E57C2]', 'bg-[#F57C00]'][i]
@@ -46,7 +46,7 @@ export default function Services() {
             )
           })}
         </div>
-        <p className="border-t border-line px-5 py-3 text-xs text-mute">Initial applications are submitted as per the package; after them, 2 additional applications are provided each month during the package period, subject to the agreed terms. Application support covers preparation, documentation guidance and submission.</p>
+        <p className="border-t border-line px-4 py-2.5 text-xs text-mute">Initial applications are submitted as per the package; after them, 2 additional applications are provided each month during the package period, subject to the agreed terms. Application support covers preparation, documentation guidance and submission.</p>
       </Card>
 
       <Card className="overflow-hidden">

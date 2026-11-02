@@ -40,7 +40,7 @@ export function WorkProgressPanel({ title = 'Client work progress', className }:
         {slice.map((b) => {
           const last = b.stageHistory[b.stageHistory.length - 1]
           return (
-            <li key={b.id} className="px-5 py-3.5">
+            <li key={b.id} className="px-4 py-2.5.5">
               <div className="mb-1.5 flex flex-wrap items-center gap-2">
                 <Link to={`/bookings/${b.id}`} className="font-bold hover:underline">{b.companyName}</Link>
                 <span className="font-mono text-[11px] text-mute">{b.bookingId}</span>

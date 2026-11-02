@@ -103,7 +103,7 @@ export default function OpsDesk() {
       <PageHeader title="Operations Dashboard" subtitle="Cases assigned by the Legal team — status, tasks, team, deadlines and progress" icon={UserCog}
         actions={isLegal && <Button variant="accent" icon={Scale} onClick={() => document.getElementById('assign-queue')?.scrollIntoView({ behavior: 'smooth' })}>Assign to Operations{queue.length ? ` · ${queue.length}` : ''}</Button>} />
 
-      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
+      <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
         <Stat label="Waiting for Legal" value={stats.queue} icon={Scale} tone="violet" sub="to assign" onClick={() => document.getElementById('assign-queue')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
         <Stat label="In operations" value={stats.active} icon={FolderKanban} tone="cyan" onClick={() => show('active')} />
         <Stat label="With Admin / approval" value={stats.admin} icon={Send} tone="blue" onClick={() => show('admin')} />
@@ -117,12 +117,12 @@ export default function OpsDesk() {
       <AdminProgressOverview />
 
       {/* Legal's queue: approved by Accounts, waiting to be assigned */}
-      <Card id="assign-queue" className="mb-6 scroll-mt-24 overflow-hidden">
+      <Card id="assign-queue" className="mb-5 scroll-mt-24 overflow-hidden">
         <CardHeader title="Waiting to be assigned" subtitle={isLegal ? 'Approved by Accounts — pick the Operation team member, the furthest stage and the deadline' : 'Files Legal is reviewing — they will be assigned to the team'} icon={Inbox} />
         {!queue.length ? <EmptyState icon={CheckCircle2} title="Nothing waiting" text="Files approved by Accounts appear here." /> : (
           <ul className="divide-y divide-line/70">
             {queue.map((b) => (
-              <li key={b.id} className="flex flex-col gap-3 px-5 py-3.5 md:flex-row md:items-center">
+              <li key={b.id} className="flex flex-col gap-3 px-4 py-2.5.5 md:flex-row md:items-center">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2"><Link to={`/bookings/${b.id}`} className="font-bold hover:underline">{b.companyName}</Link><PriorityBadge p={b.priority} /></div>
                   <p className="truncate text-xs text-mute"><span className="font-mono">{b.bookingId}</span> · {b.serviceName} · sales {userName(db, b.createdBy)} · collected {inr(bookingMoney(b).collected)} · waiting {ago(b.updatedAt)}</p>
@@ -134,7 +134,7 @@ export default function OpsDesk() {
         )}
       </Card>
 
-      <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_380px]">
+      <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_380px]">
         <Card id="cases" className="scroll-mt-24 overflow-hidden">
           <CardHeader title="Assigned cases" subtitle={`${list.length} shown · most urgent first`} icon={ClipboardList} />
           <div className="space-y-3 border-b border-line p-4">
@@ -204,7 +204,7 @@ function CaseCard({ b, highlight }: { b: Booking; highlight: boolean }) {
   const people = [b.opsMemberId, b.adminId].filter(Boolean) as string[]
 
   return (
-    <li id={`case-${b.id}`} className={cx('scroll-mt-24 px-5 py-4 transition', highlight && 'bg-accent-soft/40 ring-2 ring-inset ring-accent/50')}>
+    <li id={`case-${b.id}`} className={cx('scroll-mt-24 px-4 py-3 transition', highlight && 'bg-accent-soft/40 ring-2 ring-inset ring-accent/50')}>
       <div className="flex flex-wrap items-center gap-2">
         <Link to={`/bookings/${b.id}`} className="font-bold hover:underline">{b.companyName}</Link>
         <span className="font-mono text-[11px] text-mute">{b.bookingId}</span>

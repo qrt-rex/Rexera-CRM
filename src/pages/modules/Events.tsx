@@ -34,8 +34,8 @@ export default function Events() {
     <div>
       <PageHeader title="Events & Calendar" subtitle="Meetings, trainings, holidays and deadlines" icon={CalendarDays}
         actions={manage && <Button variant="accent" icon={Plus} onClick={() => setEdit({ title: '', date: selected, time: '10:00', kind: 'MEETING', description: '' })}>New event</Button>} />
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <Card className="p-5">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <Card className="p-4">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-extrabold">{cursor.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</h2>
             <div className="flex gap-1">
@@ -60,13 +60,13 @@ export default function Events() {
             })}
           </div>
         </Card>
-        <div className="space-y-6">
+        <div className="space-y-5">
           <Card className="overflow-hidden">
             <CardHeader title={fmtDate(selected)} subtitle={`${onDay.length} event(s)`} icon={CalendarDays} />
             {!onDay.length ? <EmptyState icon={CalendarDays} title="Free day" /> : (
               <ul className="divide-y divide-line/70">
                 {onDay.map((e) => (
-                  <li key={e.id} className="px-5 py-3">
+                  <li key={e.id} className="px-4 py-2.5">
                     <div className="flex items-center gap-2"><Badge tone={KIND_TONE[e.kind]}>{e.kind.toLowerCase()}</Badge><span className="text-xs text-mute">{e.kind === 'HOLIDAY' ? 'All day' : e.time}</span>
                       {manage && <span className="ml-auto flex gap-1"><Button size="sm" variant="ghost" icon={Pencil} aria-label="Edit" onClick={() => setEdit(e)} /><Button size="sm" variant="ghost" icon={Trash2} aria-label="Delete" className="text-bad" onClick={() => run(() => deleteEvent(me, e.id), 'Deleted')} /></span>}</div>
                     <p className="mt-1 font-semibold">{e.title}</p><p className="text-sm text-mute">{e.description}</p><p className="mt-1 text-[11px] text-mute">by {userName(db, e.by)}</p>

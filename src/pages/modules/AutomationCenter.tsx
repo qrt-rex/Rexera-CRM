@@ -88,7 +88,7 @@ export default function AutomationCenter() {
       {tab === 'rules' && (!rules.length ? (
         <Card>
           <EmptyState icon={Workflow} title="No rules yet" text={editor ? 'Start from a template below, or make a new rule.' : 'The IT Support team adds rules here.'} />
-          {editor && <div className="grid gap-3 border-t border-line p-5 sm:grid-cols-2">{TEMPLATES.map((tp) => (
+          {editor && <div className="grid gap-3 border-t border-line p-4 sm:grid-cols-2">{TEMPLATES.map((tp) => (
             <button key={tp.name} type="button" onClick={() => setEdit({ form: fromTemplate(tp) })} className="rounded-2xl border border-line p-4 text-left transition hover:border-brand hover:bg-brand-soft/40">
               <p className="flex items-center gap-2 text-sm font-bold"><Zap className="size-4 text-accent" />{tp.name}</p>
               <p className="mt-1 text-xs text-mute">{triggerOf(tp.trigger)?.label}</p>

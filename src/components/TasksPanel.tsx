@@ -28,7 +28,7 @@ export function TasksPanel({ className, scope = 'mine' }: { className?: string; 
         action={<Button size="sm" icon={Plus} onClick={() => { setF({ bookingId: '', title: '', assignee: '', due: '', remind: true }); setOpen(true) }}>Add task</Button>} />
       <ul className="max-h-96 divide-y divide-line/70 overflow-y-auto">
         {tasks.slice(0, 30).map(({ t, b }) => (
-          <li key={t.id} className="flex items-start gap-3 px-5 py-3">
+          <li key={t.id} className="flex items-start gap-3 px-4 py-2.5">
             <button aria-label="Mark done" onClick={() => run(() => toggleTask(me, b.id, t.id), 'Task done')} className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-md border-2 border-line hover:border-ok"><Check className="size-3 text-transparent hover:text-ok" /></button>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold">{t.title}</p>

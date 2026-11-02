@@ -54,7 +54,7 @@ export function OperationsDashboard() {
           </div>
         ) : undefined} />
       {/* every count opens its list (Operations Dashboard filtered to the same files) */}
-      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
+      <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
         <Stat label="Total files" value={mine.length} icon={FileText} tone="violet" sub={team ? 'across the team' : 'assigned to you'} to={`/ops-desk?filter=all&member=${who}`} />
         <Stat label="Active files" value={active.length} icon={FolderKanban} tone="green" sub="in operations" to={`/ops-desk?filter=active&member=${who}`} />
         <Stat label="Open tasks" value={openTasks} icon={ListTodo} tone="blue" sub="across files" to="/work" />
@@ -76,11 +76,11 @@ export function OperationsDashboard() {
         <Tile to="/attendance" icon={UserCheck} label="Attendance Board" tone="green" />
       </TileGrid>
       {toApprove.length > 0 && (
-        <Section title="Approve completed client work" subtitle="Admin has finished these — approve to complete, or send back" icon={CheckCircle2} className="mt-6">
+        <Section title="Approve completed client work" subtitle="Admin has finished these — approve to complete, or send back" icon={CheckCircle2} className="mt-5">
           {toApprove.slice(0, 8).map((b) => <BookingRow key={b.id} b={b} />)}
         </Section>
       )}
-      <div className="mt-6 grid gap-6 xl:grid-cols-3">
+      <div className="mt-5 grid gap-5 xl:grid-cols-3">
         <Section title={team ? 'Team active files' : 'My active files'} subtitle={`${active.length} in operations · client documents shown on each file`} icon={FolderKanban} className="xl:col-span-2" action={<ViewAll to="/work" />}>
           {!active.length ? <EmptyState icon={Inbox} title="No active files" text="Legal assigns files to you here." /> : (
             <ul className="divide-y divide-line/70">
@@ -88,13 +88,13 @@ export function OperationsDashboard() {
             </ul>
           )}
         </Section>
-        <div className="space-y-6">
+        <div className="space-y-5">
           <TasksPanel scope={team ? 'all' : 'mine'} />
-          {team && <Section title="Team workload" subtitle="Active and on-hold files per person" icon={UsersRound}><div className="max-h-96 overflow-y-auto p-5"><HBars data={workload} /></div></Section>}
+          {team && <Section title="Team workload" subtitle="Active and on-hold files per person" icon={UsersRound}><div className="max-h-96 overflow-y-auto p-4"><HBars data={workload} /></div></Section>}
           <LoginLogoutCard /><UpcomingEvents limit={3} />
         </div>
       </div>
-      <WorkProgressPanel title={team ? 'Client work progress · whole team' : 'Client work progress · all files'} className="mt-6" />
+      <WorkProgressPanel title={team ? 'Client work progress · whole team' : 'Client work progress · all files'} className="mt-5" />
     </div>
   )
 }
@@ -121,7 +121,7 @@ export function AdminDashboard() {
   return (
     <div>
       <Greeting subtitle="Admin · move client work through the stages, add documents, then send it to Operations for approval" />
-      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <Stat label="Assigned to me" value={assigned.length} icon={Inbox} tone="blue" to="/approvals" />
         <Stat label="My open stages" value={myStages.length} icon={ClipboardCheck} tone="cyan" sub="Pitch Deck, DPR, …" onClick={() => document.getElementById('my-stages')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
         <Stat label="On hold clients" value={hold.length} icon={PauseCircle} tone="orange" to="/bookings?status=ON_HOLD" />
@@ -139,11 +139,11 @@ export function AdminDashboard() {
         {!limited && <Tile to="/forms" icon={FileSignature} label="Document Form Builder" desc="Client forms & secure links" tone="violet" />}
         {!limited && <Tile to="/workflow-settings" icon={Settings2} label="Workflow settings" desc="Reminders, welcome message, alerts" tone="navy" />}
       </TileGrid>
-      <Section id="my-stages" title="My Admin stages" subtitle="Stages the Operation team assigned to you — open one to update its status and upload its file" icon={ClipboardCheck} className="mt-6">
+      <Section id="my-stages" title="My Admin stages" subtitle="Stages the Operation team assigned to you — open one to update its status and upload its file" icon={ClipboardCheck} className="mt-5">
         {!myStages.length ? <EmptyState icon={CheckCircle2} title="No open stages" text="Pitch Deck, Finance, DPR, Certification and Submission stages assigned to you appear here." /> : (
           <ul className="divide-y divide-line/70">
             {myStages.slice(0, 12).map(({ b, s, w }) => (
-              <li key={`${b.id}-${s.id}`} className="flex flex-wrap items-center gap-3 px-5 py-3 text-sm">
+              <li key={`${b.id}-${s.id}`} className="flex flex-wrap items-center gap-3 px-4 py-2.5 text-sm">
                 <span className="min-w-0 flex-1">
                   <Link to={`/bookings/${b.id}?tab=workflow`} className="font-semibold hover:underline">{s.label} · {b.companyName}</Link>
                   <span className="block text-[11px] text-mute"><span className="font-mono font-semibold text-ink">{w.ref ?? b.bookingId}</span>{w.assignedBy ? ` · from ${userName(db, w.assignedBy)}` : ''}{w.due ? ` · due ${fmtDate(w.due)}` : ''}</span>
@@ -155,22 +155,22 @@ export function AdminDashboard() {
           </ul>
         )}
       </Section>
-      {!limited && <div className="mt-6"><AutomationAlerts /><AdminProgressOverview /></div>}
-      <div className="grid gap-6 xl:grid-cols-3">
+      {!limited && <div className="mt-5"><AutomationAlerts /><AdminProgressOverview /></div>}
+      <div className="grid gap-5 xl:grid-cols-3">
         <Section title="My client work" subtitle={`Stages: ${STAGES.join(' → ')}`} icon={Inbox} className="xl:col-span-2" action={<ViewAll to="/work" />}>
           {waiting.length ? <ul className="divide-y divide-line/70">{waiting.slice(0, 8).map((b) => <ClientWorkRow key={b.id} b={b} showDocs />)}</ul> : <EmptyState icon={CheckCircle2} title="Nothing waiting" text="Operations will assign files to you." />}
         </Section>
-        <div className="space-y-6">
+        <div className="space-y-5">
           <LoginLogoutCard />
           <Section title="Recently completed" icon={CheckCircle2} action={<ViewAll to="/bookings?status=COMPLETED" />}>
             <ul className="divide-y divide-line/70">
               {completed.slice(0, 5).map((b) => (
-                <li key={b.id} className="flex items-center gap-3 px-5 py-3">
+                <li key={b.id} className="flex items-center gap-3 px-4 py-2.5">
                   <div className="min-w-0 flex-1"><Link to={`/bookings/${b.id}`} className="block truncate text-sm font-semibold hover:underline"><ClientSerial b={b} />{b.companyName}</Link><p className="truncate text-xs text-mute">{b.serviceName} · {userName(db, b.createdBy)}</p></div>
                   <BookingStatusBadge b={b} />
                 </li>
               ))}
-              {!completed.length && <li className="p-5 text-sm text-mute">No completed files yet.</li>}
+              {!completed.length && <li className="p-4 text-sm text-mute">No completed files yet.</li>}
             </ul>
           </Section>
         </div>

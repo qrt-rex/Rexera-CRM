@@ -25,7 +25,7 @@ export default function Settings() {
   return (
     <div>
       <PageHeader title="Profile Settings" subtitle="Your own account only — role and permissions are managed by a Super Admin" icon={SettingsIcon} />
-      <div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
+      <div className="grid gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
         <Card className="h-fit p-2">
           <p className="px-3 pb-1 pt-2 text-[11px] font-bold uppercase tracking-wider text-mute">General settings</p>
           {items.map((i) => (
@@ -58,7 +58,7 @@ function Profile() {
   return (
     <Card className="overflow-hidden">
       <CardHeader title="Employee information" icon={UserIcon} />
-      <div className="flex flex-wrap items-center gap-5 border-b border-line p-5">
+      <div className="flex flex-wrap items-center gap-5 border-b border-line p-4">
         <ZoomAvatar name={me.name} photo={me.photo} size={84} sub={me.designation} />
         <div>
           <input ref={pick} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ''; if (file) choose(file) }} />
@@ -69,7 +69,7 @@ function Profile() {
           <p className="mt-2 text-xs text-mute">JPG, PNG, WebP or GIF, up to 5 MB. You can position and zoom it before saving.</p>
         </div>
       </div>
-      <div className="grid gap-4 p-5 sm:grid-cols-2">
+      <div className="grid gap-4 p-4 sm:grid-cols-2">
         <Input label="Full name" required value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
         <Input label="User name" value={me.username} disabled hint="Ask an admin to change it" />
         <PhoneInput label="Phone number" required value={f.phone} onChange={(v) => setF({ ...f, phone: v })} />
@@ -99,10 +99,10 @@ function Security() {
   const lastSignIn = db.audit.find((a) => a.by === me.id && a.action === 'SIGN_IN')
   const err = p.next && !PASSWORD_RULE.test(p.next) ? PASSWORD_HINT : p.again && p.again !== p.next ? 'Does not match' : ''
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <Card className="overflow-hidden">
         <CardHeader title="Change password" icon={KeyRound} />
-        <div className="grid gap-4 p-5 sm:grid-cols-2">
+        <div className="grid gap-4 p-4 sm:grid-cols-2">
           <Input label="New password" type={p.show ? 'text' : 'password'} autoComplete="new-password" value={p.next} onChange={(e) => setP({ ...p, next: e.target.value })} hint={PASSWORD_HINT} error={err === PASSWORD_HINT ? err : undefined} />
           <Input label="Re-type new password" type={p.show ? 'text' : 'password'} autoComplete="new-password" value={p.again} onChange={(e) => setP({ ...p, again: e.target.value })} error={err === 'Does not match' ? err : undefined} />
           <label className="flex items-center gap-2 text-xs text-mute sm:col-span-2"><input type="checkbox" checked={p.show} onChange={(e) => setP({ ...p, show: e.target.checked })} className="accent-[var(--brand)]" />Show password</label>
@@ -114,7 +114,7 @@ function Security() {
       </Card>
       <Card className="overflow-hidden">
         <CardHeader title="Sign-in & access" icon={ShieldCheck} />
-        <div className="grid gap-3 p-5 text-sm sm:grid-cols-2">
+        <div className="grid gap-3 p-4 text-sm sm:grid-cols-2">
           <div className="rounded-xl bg-card2 p-3"><p className="text-xs text-mute">Two-step verification</p><Badge tone="green" className="mt-1">On · emailed 6-digit code</Badge></div>
           <div className="rounded-xl bg-card2 p-3"><p className="text-xs text-mute">Last sign-in</p><p className="font-semibold">{fmtDateTime(lastSignIn?.at)}</p></div>
           <div className="rounded-xl bg-card2 p-3"><p className="text-xs text-mute">Roles</p><p className="font-semibold">{rolesOf(me).map(roleLabel).join(', ')}</p></div>
@@ -131,7 +131,7 @@ function Notifs() {
   return (
     <Card className="overflow-hidden">
       <CardHeader title="Notifications" icon={Bell} />
-      <div className="flex items-center justify-between gap-4 p-5">
+      <div className="flex items-center justify-between gap-4 p-4">
         <div><p className="font-semibold">Dashboard pop-up bubble</p><p className="text-sm text-mute">Show the newest unread notification under the bell at the top (this device only). Takes effect on next page load.</p></div>
         <Toggle checked={!off} onChange={(v) => { setOff(!v); try { localStorage.setItem(POPUP_KEY, v ? '0' : '1') } catch { /* ignore */ } }} label="Pop-up" />
       </div>
@@ -145,7 +145,7 @@ function Appearance() {
   return (
     <Card className="overflow-hidden">
       <CardHeader title="Appearance" icon={Palette} />
-      <div className="grid gap-4 p-5 sm:grid-cols-3">
+      <div className="grid gap-4 p-4 sm:grid-cols-3">
         {opts.map((o) => (
           <button key={o.id} onClick={() => { setTheme(o.id); applyTheme(o.id) }} className={cx('rounded-2xl border-2 p-4 text-left transition', theme === o.id ? 'border-brand bg-brand-soft' : 'border-line hover:bg-card2')}>
             <div className={cx('mb-3 h-20 rounded-xl border border-line', o.id === 'dark' ? 'bg-[#0b1020]' : o.id === 'light' ? 'bg-[#f4f6fb]' : 'bg-gradient-to-r from-[#f4f6fb] to-[#0b1020]')} />

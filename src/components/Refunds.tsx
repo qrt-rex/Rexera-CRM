@@ -161,7 +161,7 @@ export function RefundsCard({ b }: { b: Booking }) {
     <Card className="overflow-hidden xl:col-span-2">
       <CardHeader title="Refunds" icon={Undo2} subtitle={accounts ? 'Requests from every team · approve, reject and complete them with the transaction ID and proof' : 'Ask for a refund and follow it · Accounts approves and pays it'}
         action={mayAsk && <Button size="sm" variant="soft" icon={Undo2} onClick={() => setAsk(true)}>Refund</Button>} />
-      {!list.length ? <p className="px-5 py-4 text-sm text-mute">No refund requests on this client.</p> : (
+      {!list.length ? <p className="px-4 py-3 text-sm text-mute">No refund requests on this client.</p> : (
         <Table>
           <thead><tr><Th>Requested</Th><Th>Reason</Th><Th className="text-right">Amount</Th><Th>Status</Th><Th /></tr></thead>
           <tbody>
@@ -176,7 +176,7 @@ export function RefundsCard({ b }: { b: Booking }) {
                   {accounts && <RefundActions b={b} r={r} />}
                 </span></Td>
               </tr>,
-              open === r.id && <tr key={`${r.id}-d`}><td colSpan={5} className="bg-card2/40 px-5 py-3"><RefundDetails r={r} /></td></tr>,
+              open === r.id && <tr key={`${r.id}-d`}><td colSpan={5} className="bg-card2/40 px-4 py-2.5"><RefundDetails r={r} /></td></tr>,
             ])}
           </tbody>
         </Table>

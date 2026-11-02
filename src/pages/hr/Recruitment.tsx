@@ -84,7 +84,7 @@ export default function Recruitment() {
         </div>
       )}
 
-      {error && <Card className="mb-5 p-5 text-sm text-bad">Couldn't open browser storage: {error}</Card>}
+      {error && <Card className="mb-5 p-4 text-sm text-bad">Couldn't open browser storage: {error}</Card>}
 
       {loading ? (
         <Card className="grid place-items-center p-16"><Loader2 className="size-8 animate-spin text-mute" /></Card>
@@ -98,7 +98,7 @@ export default function Recruitment() {
           </button>
         </Card>
       ) : (
-        <div className="grid gap-6 xl:grid-cols-[300px_minmax(0,1fr)]">
+        <div className="grid gap-5 xl:grid-cols-[300px_minmax(0,1fr)]">
           {/* file list */}
           <Card className="h-fit overflow-hidden">
             <div className="border-b border-line px-4 py-3">

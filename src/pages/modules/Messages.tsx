@@ -140,12 +140,12 @@ export default function Messages() {
         </div>
         {other ? (
           <div className="flex min-h-0 flex-col">
-            <div className="flex items-center gap-3 border-b border-line px-5 py-3">
+            <div className="flex items-center gap-3 border-b border-line px-4 py-2.5">
               <button className="text-sm text-mute md:hidden" onClick={() => setPeer(null)}>←</button>
               <ZoomAvatar name={other.name} photo={other.photo} sub={`${roleLabel(other.role)} · ${other.designation}`} />
               <div><p className="font-bold">{other.name}</p><p className="text-xs text-mute">{roleLabel(other.role)} · {other.designation}</p></div>
             </div>
-            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto bg-card2/40 p-5">
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto bg-card2/40 p-4">
               {!thread.length && <p className="pt-10 text-center text-sm text-mute">Say hello to {other.name.split(' ')[0]} 👋</p>}
               {thread.map((m) => {
                 const mine = m.from === me.id

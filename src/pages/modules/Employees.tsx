@@ -71,7 +71,7 @@ export default function Employees() {
         {list.map((u) => {
           const st = dayStatus(db, u.id)
           return (
-            <Card key={u.id} className={`cursor-pointer p-5 transition hover:-translate-y-0.5 hover:shadow-pop ${u.active ? '' : 'opacity-60'}`} onClick={() => setParams({ open: u.id })}>
+            <Card key={u.id} className={`cursor-pointer p-4 transition hover:-translate-y-0.5 hover:shadow-pop ${u.active ? '' : 'opacity-60'}`} onClick={() => setParams({ open: u.id })}>
               <div className="flex items-start gap-3">
                 <Avatar name={u.name} photo={u.photo} size={52} />
                 <div className="min-w-0 flex-1">

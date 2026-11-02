@@ -66,12 +66,12 @@ export default function Performance() {
               </tr>
             ))}</tbody>
           </Table>
-          <p className="border-t border-line px-5 py-3 text-xs text-mute">Score: sales people 40% attendance + 60% of monthly target; everyone else attendance. Attendance counts tracked working days only. Grades A+ ≥ 90 · A ≥ 75 · B ≥ 60 · C ≥ 40.</p>
+          <p className="border-t border-line px-4 py-2.5 text-xs text-mute">Score: sales people 40% attendance + 60% of monthly target; everyone else attendance. Attendance counts tracked working days only. Grades A+ ≥ 90 · A ≥ 75 · B ≥ 60 · C ≥ 40.</p>
         </Card>
       ) : (
         <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
           {list.map((r) => (
-            <Card key={r.u.id} className="print-area p-5">
+            <Card key={r.u.id} className="print-area p-4">
               <div className="flex items-center gap-3">
                 <Avatar name={r.u.name} photo={r.u.photo} size={48} />
                 <div className="min-w-0 flex-1"><p className="truncate font-bold">{r.u.name}</p><p className="truncate text-xs text-mute">{r.u.designation} · {monthLabel(month)}</p></div>

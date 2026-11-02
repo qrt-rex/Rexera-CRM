@@ -23,7 +23,7 @@ export function DialerCampaigns() {
   }, [])
   useEffect(load, [load])
   return (
-    <Card className="mt-6 overflow-hidden">
+    <Card className="mt-5 overflow-hidden">
       <CardHeader title="Dialer campaigns" subtitle="Blutec dialer campaigns and their leads (separate from the IVR broadcasts above)" icon={ListChecks}
         action={<Button size="sm" variant="ghost" icon={RefreshCcw} onClick={load}>Refresh</Button>} />
       {state.error ? <p className="p-4 text-sm text-bad">{state.error}</p>

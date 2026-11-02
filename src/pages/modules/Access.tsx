@@ -145,7 +145,7 @@ function ManageAccess({ user, readOnly }: { user: User; readOnly: boolean }) {
   }
   const funcOff = [...off].length, own = user.grants.length + user.denies.length
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="grid gap-3 sm:grid-cols-4">
         <Summary label="Modules open" value={modules.filter((m) => !off.has(`${m.key}:view`)).length} />
         <Summary label="Permissions" value={eff.size} />
@@ -273,10 +273,10 @@ function RolesTab() {
   }, [ac.customRoles, fnRole, db.rolePerms])
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <Card className="overflow-hidden">
         <CardHeader title="Roles" subtitle="Built-in roles, and roles you create. A custom role is built on a built-in role (its dashboard and workflow) with its own permissions." icon={ShieldCheck} />
-        <div className="grid gap-4 p-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_320px]">
           <ul className="divide-y divide-line/70 rounded-xl border border-line">
             {ROLES.map((r) => (
               <li key={r.id} className="flex items-center gap-3 px-3 py-2 text-sm">
@@ -329,7 +329,7 @@ function RolesTab() {
             </tbody>
           </table>
         </div>
-        <p className="border-t border-line px-5 py-3 text-xs text-mute">Modules shown: those this role reaches with its permissions. Buttons for a switched-off function are locked on that module's pages; exports and downloads stop; the database refuses deletes and new records in the main tables.</p>
+        <p className="border-t border-line px-4 py-2.5 text-xs text-mute">Modules shown: those this role reaches with its permissions. Buttons for a switched-off function are locked on that module's pages; exports and downloads stop; the database refuses deletes and new records in the main tables.</p>
       </Card>
 
       <Card className="overflow-hidden">
@@ -360,7 +360,7 @@ function RolesTab() {
             ])}
           </tbody>
         </Table>
-        <p className="border-t border-line px-5 py-3 text-xs text-mute">{ALL_PERMS.length} permissions · built-in roles save with “Save changes”; custom roles save on each click. Every change is in the Activity Log with before and after.</p>
+        <p className="border-t border-line px-4 py-2.5 text-xs text-mute">{ALL_PERMS.length} permissions · built-in roles save with “Save changes”; custom roles save on each click. Every change is in the Activity Log with before and after.</p>
       </Card>
       {node}
     </div>
@@ -377,7 +377,7 @@ function BranchesCard() {
   return (
     <Card className="overflow-hidden lg:col-span-2">
       <CardHeader title="Invoice branches" subtitle="Accounts chooses the branch on each tax invoice; its address and GSTIN print on it" icon={Building2} />
-      <div className="grid gap-4 p-5 xl:grid-cols-3">
+      <div className="grid gap-4 p-4 xl:grid-cols-3">
         {list.map((b, i) => (
           <div key={b.id} className="grid gap-3 rounded-2xl border border-line p-4">
             <div className="grid grid-cols-[minmax(0,1fr)_110px] gap-3">
@@ -411,10 +411,10 @@ function SettingsTab() {
   const [confirm, node] = useConfirm()
   const [s, setS] = useState(db.settings)
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
+    <div className="grid gap-5 lg:grid-cols-2">
       <Card className="overflow-hidden">
         <CardHeader title="System settings" icon={Settings2} />
-        <div className="grid gap-4 p-5">
+        <div className="grid gap-4 p-4">
           <Input label="Company name" value={s.companyName} onChange={(e) => setS({ ...s, companyName: e.target.value })} />
           <Input label="Company GSTIN" value={s.companyGstin} onChange={(e) => setS({ ...s, companyGstin: e.target.value.toUpperCase() })} />
           <Select label="Supplier state (for CGST/SGST vs IGST)" value={s.supplierState} onChange={(e) => setS({ ...s, supplierState: e.target.value })}>{INDIAN_STATES.map((x) => <option key={x}>{x}</option>)}</Select>
@@ -425,7 +425,7 @@ function SettingsTab() {
       <BranchesCard />
       <Card className="overflow-hidden">
         <CardHeader title="Attendance rules" icon={Lock} />
-        <div className="space-y-3 p-5 text-sm">
+        <div className="space-y-3 p-4 text-sm">
           <label className="flex items-center justify-between gap-3 font-semibold">
             Block sign-in after Logout until the next day
             <Toggle checked={db.settings.dayLock === true} label="Block sign-in after Logout" onChange={(v) => run(() => updateSettings(me, { dayLock: v }), v ? 'Lock on — after Logout, people sign in again tomorrow' : 'Lock off — people can sign in again after Logout')} />
@@ -438,7 +438,7 @@ function SettingsTab() {
       </Card>
       <Card className="overflow-hidden">
         <CardHeader title="Sign-in" icon={Lock} />
-        <div className="space-y-3 p-5 text-sm">
+        <div className="space-y-3 p-4 text-sm">
           <label className="flex items-center justify-between gap-3 font-semibold">
             Ask for the email code at sign-in
             <Toggle checked={db.settings.loginCode !== false} label="Ask for the email code at sign-in" onChange={(v) => run(() => updateSettings(me, { loginCode: v }), v ? 'Email code on — sign-in needs the password and the 6-digit code' : 'Email code off — everyone signs in with their password')} />
@@ -459,7 +459,7 @@ function SettingsTab() {
       </Card>
       <Card className="overflow-hidden">
         <CardHeader title="Demo data" icon={RefreshCcw} />
-        <div className="space-y-3 p-5 text-sm">
+        <div className="space-y-3 p-4 text-sm">
           <p className="text-mute">This build stores data in your browser. Reset brings back the sample company, users, leads and CRM entries.</p>
           <p className="text-mute">Last sign-in activity: {db.audit.find((a) => a.action === 'SIGN_IN') ? `${userName(db, db.audit.find((a) => a.action === 'SIGN_IN')!.by)} · ${fmtDate(db.audit.find((a) => a.action === 'SIGN_IN')!.at)}` : '—'}</p>
           <Button variant="danger" icon={RefreshCcw} onClick={async () => { if (await confirm('Reset all data?', 'Every change made in this browser will be lost.', true)) { await resetDemoData(); location.href = '/login' } }}>Reset demo data</Button>

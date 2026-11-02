@@ -99,7 +99,7 @@ function BranchView({ id }: { id: string }) {
   return (
     <>
       {/* branch details */}
-      <Card className="mb-6 flex flex-wrap items-center gap-x-8 gap-y-3 p-4 text-sm">
+      <Card className="mb-5 flex flex-wrap items-center gap-x-8 gap-y-3 p-4 text-sm">
         <span className="flex items-center gap-3"><span className="grid size-11 place-items-center rounded-xl bg-brand-soft font-extrabold text-brand-ink">{code.slice(0, 5)}</span>
           <span><b className="block">{branch?.name}</b><span className="text-xs text-mute">{[branch?.city, branch?.state].filter(Boolean).join(', ') || 'Address not set'}</span></span></span>
         {branch?.address && <span className="flex items-center gap-1.5 text-mute"><MapPin className="size-4" />{branch.address}{branch.pin ? ` – ${branch.pin}` : ''}</span>}
@@ -110,7 +110,7 @@ function BranchView({ id }: { id: string }) {
         <span className="text-mute">Team leaders: <b className="text-ink">{leaders.map((u) => u.name).join(', ') || '—'}</b></span>
       </Card>
 
-      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4">
         <MiniStat label="Staff · present today" value={`${staff.length} · ${present}`} icon={UserCheck} />
         <MiniStat label="Calls today" value={p.callsToday} icon={PhoneCall} tone="green" />
         <MiniStat label="Open leads · due" value={`${p.openLeads} · ${p.followUpsDue}`} icon={CalendarClock} tone="amber" />
@@ -124,7 +124,7 @@ function BranchView({ id }: { id: string }) {
       <ScorecardSection team={team} scopeName={code} />
       <PeopleSection team={team} subtitle={`${code} · this month`} />
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Section title="CRM entries" subtitle={`${files.length} client file${files.length === 1 ? '' : 's'} booked by ${code} · newest first`} icon={ClipboardList}
           action={can('bookings.all', 'bookings.team') ? <Link to="/bookings" className="text-xs font-bold text-brand-ink hover:underline">All CRM entries →</Link> : undefined}>
           {!files.length ? <EmptyState icon={ClipboardList} title="No CRM entries yet" text="Client files booked by this branch's sales people appear here." /> : (
@@ -144,15 +144,15 @@ function BranchView({ id }: { id: string }) {
             </Table>
           )}
         </Section>
-        <div className="space-y-6">
-          <Section title="Collections · last 6 months" subtitle={code} icon={TrendingUp}><div className="p-5"><Bars data={trend} format={inrShort} highlightLast height={160} /></div></Section>
+        <div className="space-y-5">
+          <Section title="Collections · last 6 months" subtitle={code} icon={TrendingUp}><div className="p-4"><Bars data={trend} format={inrShort} highlightLast height={160} /></div></Section>
           <Section title="Leads by status" subtitle={`${leads.length} lead${leads.length === 1 ? '' : 's'} with ${code}`} icon={Users}>
-            <div className="p-5">{leadMix.length ? <HBars data={leadMix} /> : <p className="text-sm text-mute">No leads with this branch yet.</p>}</div>
+            <div className="p-4">{leadMix.length ? <HBars data={leadMix} /> : <p className="text-sm text-mute">No leads with this branch yet.</p>}</div>
           </Section>
         </div>
       </div>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Section title="Attendance today" subtitle={`${present} of ${staff.length} signed in`} icon={UserCheck}>
           {!staff.length ? <EmptyState icon={UserCheck} title="Nobody in this branch yet" text="HR sets each person's branch in Employee Details." /> : (
             <div className="grid gap-2 p-4 sm:grid-cols-2">
@@ -169,10 +169,10 @@ function BranchView({ id }: { id: string }) {
             </div>
           )}
         </Section>
-        <div className="space-y-6">
+        <div className="space-y-5">
           {me.role === 'branchdirector' && <LoginLogoutCard />}
           <Section title="Follow-ups due" subtitle={`${due.length} lead${due.length === 1 ? '' : 's'} due today or overdue`} icon={CalendarClock}>
-            {!due.length ? <p className="p-5 text-sm text-mute">Nothing due — well done.</p> : (
+            {!due.length ? <p className="p-4 text-sm text-mute">Nothing due — well done.</p> : (
               <ul className="divide-y divide-line">
                 {due.slice(0, 8).map((l) => (
                   <li key={l.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
@@ -207,7 +207,7 @@ function AllBranchesView({ ids, unbranched }: { ids: string[]; unbranched: boole
 
   return (
     <>
-      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <MiniStat label="Sales team" value={team.length} icon={Users} />
         <MiniStat label="Calls today" value={total.callsToday} icon={PhoneCall} tone="green" />
         <MiniStat label="Open leads · due" value={`${total.openLeads} · ${total.followUpsDue}`} icon={CalendarClock} tone="amber" />
@@ -216,7 +216,7 @@ function AllBranchesView({ ids, unbranched }: { ids: string[]; unbranched: boole
         <MiniStat label="Target achieved" value={pct(total)} icon={Target} tone={total.achievedPct !== null && total.achievedPct >= 100 ? 'green' : 'orange'} />
       </div>
 
-      <BranchCards ids={ids} className="mb-6" />
+      <BranchCards ids={ids} className="mb-5" />
 
       <Section title="Branch-wise comparison" subtitle="This month · money includes GST · click a branch to open its dashboard" icon={Building2}>
         <Table>
@@ -240,9 +240,9 @@ function AllBranchesView({ ids, unbranched }: { ids: string[]; unbranched: boole
 
       <ScorecardSection team={team} scopeName={ids.length === 1 && !unbranched ? branchCode(db, ids[0]) : 'All branches'} />
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
         <PeopleSection team={team} subtitle="Every branch · this month" showBranch className="mt-0" />
-        <Section title="Collections · last 6 months" subtitle="Every branch" icon={TrendingUp} className="self-start"><div className="p-5"><Bars data={trend} format={inrShort} highlightLast height={170} /></div></Section>
+        <Section title="Collections · last 6 months" subtitle="Every branch" icon={TrendingUp} className="self-start"><div className="p-4"><Bars data={trend} format={inrShort} highlightLast height={170} /></div></Section>
       </div>
 
       {can('leads.assign', 'leads.manage') && <AssignClients team={team} />}
@@ -284,7 +284,7 @@ export function BranchCards({ ids, className }: { ids?: string[]; className?: st
 }
 
 /** Every sales person's month: calls, open leads, CRM entries, collections and target. */
-function PeopleSection({ team, subtitle, showBranch, className = 'mt-6' }: { team: User[]; subtitle: string; showBranch?: boolean; className?: string }) {
+function PeopleSection({ team, subtitle, showBranch, className = 'mt-5' }: { team: User[]; subtitle: string; showBranch?: boolean; className?: string }) {
   const db = useDb()
   const people = useMemo(() => team.map((u) => ({ u, p: progressFor(db, [u]) })).sort((a, b) => b.p.collectedMonth - a.p.collectedMonth || b.p.callsMonth - a.p.callsMonth), [db, team])
   return (
@@ -317,8 +317,8 @@ function YourPages() {
   const { can } = useAuth()
   const pages = MODULES.filter((m) => !m.hrOnly && canSee(m, can) && !['security', 'notifications', 'inbox', 'users', 'system'].includes(m.key)).slice(0, 9)
   return (
-    <Section title="Your pages" subtitle="What the Super Admin has given you access to" icon={KeyRound} className="mt-6">
-      <div className="p-5"><TileGrid>{pages.map((m) => <Tile key={m.key} to={m.path} icon={m.icon} label={m.label} desc={m.desc} tone={m.tone} />)}</TileGrid></div>
+    <Section title="Your pages" subtitle="What the Super Admin has given you access to" icon={KeyRound} className="mt-5">
+      <div className="p-4"><TileGrid>{pages.map((m) => <Tile key={m.key} to={m.path} icon={m.icon} label={m.label} desc={m.desc} tone={m.tone} />)}</TileGrid></div>
     </Section>
   )
 }
@@ -334,7 +334,7 @@ function ScorecardSection({ team, scopeName }: { team: ReturnType<typeof salesTe
   const tone = (p: number | null) => (p === null ? 'text-mute' : p >= 100 ? 'text-ok' : p >= 60 ? 'text-warn' : 'text-bad')
   const cell = 'border border-line/80 px-3 py-1.5'
   return (
-    <Section title="Scorecard" subtitle={`${fmtDate(card.from)} – ${fmtDate(card.to)} · collections till ${fmtDate(card.tillDate)} · with GST · ranked by collection`} icon={Trophy} className="mt-6"
+    <Section title="Scorecard" subtitle={`${fmtDate(card.from)} – ${fmtDate(card.to)} · collections till ${fmtDate(card.tillDate)} · with GST · ranked by collection`} icon={Trophy} className="mt-5"
       action={<Button size="sm" icon={ImageDown} disabled={!card.rows.length} onClick={() => run(() => scorecardImage(card, db.settings.companyName || 'Rexera'), 'Scorecard image downloaded')}>Download image</Button>}>
       <div className="flex flex-wrap items-end gap-3 border-b border-line p-4">
         <Tabs value={period} onChange={(v) => setPeriod(v as ScorePeriod)} tabs={SCORE_PERIODS} />
@@ -411,7 +411,7 @@ function AssignClients({ team }: { team: ReturnType<typeof salesTeam> }) {
   }
   const teamSize = (id: string) => team.filter((u) => u.teamLeadId === id).length
   return (
-    <Section title="Assign clients to team leaders" subtitle="Give leads directly to a team leader — they are notified at once and pass them on to their sales people" icon={UserPlus} className="mt-6"
+    <Section title="Assign clients to team leaders" subtitle="Give leads directly to a team leader — they are notified at once and pass them on to their sales people" icon={UserPlus} className="mt-5"
       action={<span className="flex gap-1 rounded-xl bg-card2 p-1 text-xs font-semibold">
         {([['unassigned', 'Not assigned'], ['team', 'With my team (re-assign)']] as const).map(([k, l]) => <button key={k} onClick={() => { setMode(k); setPicked([]) }} className={cx('rounded-lg px-3 py-1.5', mode === k ? 'bg-card shadow-sm' : 'text-mute hover:text-ink')}>{l}</button>)}
       </span>}>

@@ -35,7 +35,7 @@ export function AccountsDashboard() {
   return (
     <div>
       <Greeting subtitle="Accounts · verify payments and decide client files" />
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <MiniStat label="Files to approve" value={pending} icon={ClipboardCheck} tone="amber" />
         <MiniStat label="On hold" value={hold} icon={PauseCircle} tone="orange" />
         <MiniStat label="Payments to verify" value={unverified} icon={Wallet} tone="red" />
@@ -51,25 +51,25 @@ export function AccountsDashboard() {
         <Tile to="/leave?new=1" icon={CalendarCheck2} label="Request my leave" tone="violet" />
         <Tile to="/attendance" icon={UserCheck} label="Attendance Board" tone="green" />
       </TileGrid>
-      <div className="mt-6 grid gap-6 xl:grid-cols-3">
-        <div className="space-y-6 xl:col-span-2">
+      <div className="mt-5 grid gap-5 xl:grid-cols-3">
+        <div className="space-y-5 xl:col-span-2">
           <Section title="Client files waiting for you" subtitle="Approve sends the file to Legal" icon={ClipboardCheck} action={<ViewAll to="/approvals" />}>
             {waiting.length ? waiting.slice(0, 6).map((b) => <BookingRow key={b.id} b={b} />) : <EmptyState icon={CheckCircle2} title="All clear" text="No files are waiting for accounts." />}
           </Section>
           {/* refund requests from Sales, Team Leaders, Operations, Legal and Admin: only Accounts approves and pays */}
           <Section title="Refund requests" subtitle={`${refundsPending} to review · ${refundRequests.length - refundsPending} approved, waiting to be paid`} icon={Undo2} action={<ViewAll to="/refunds?tab=PENDING" />}>
             {refundRequests.length ? refundRequests.slice(0, 6).map(({ b, r }) => (
-              <Link key={r.id} to={`/bookings/${b.id}`} className="flex items-center gap-3 border-b border-line/60 px-5 py-3 last:border-0 hover:bg-card2/60">
+              <Link key={r.id} to={`/bookings/${b.id}`} className="flex items-center gap-3 border-b border-line/60 px-4 py-2.5 last:border-0 hover:bg-card2/60">
                 <span className="min-w-0 flex-1"><b className="block truncate text-sm">{b.companyName}</b><span className="block truncate text-xs text-mute">{b.bookingId} · {r.reason}</span></span>
                 <span className="text-right"><b className="block text-sm tabular-nums">{inr(r.amount)}</b><span className={r.status === 'PENDING' ? 'text-[11px] font-semibold text-warn' : 'text-[11px] font-semibold text-info'}>{r.status === 'PENDING' ? 'To review' : 'Approved · to pay'}</span></span>
               </Link>
             )) : <EmptyState icon={CheckCircle2} title="No refund requests" text="Requests made on a client’s CRM entry appear here." />}
           </Section>
         </div>
-        <div className="space-y-6">
+        <div className="space-y-5">
           <LoginLogoutCard />
           <Section title="Money overview" icon={IndianRupee}>
-            <div className="space-y-3 p-5 text-sm">
+            <div className="space-y-3 p-4 text-sm">
               <div className="flex justify-between"><span className="text-mute">Quoted (with GST)</span><b>{inr(totals.quoted)}</b></div>
               <div className="flex justify-between"><span className="text-mute">Collected</span><b className="text-ok">{inr(totals.collected)}</b></div>
               <div className="flex justify-between"><span className="text-mute">Outstanding</span><b className="text-bad">{inr(totals.outstanding)}</b></div>
@@ -77,8 +77,8 @@ export function AccountsDashboard() {
           </Section>
         </div>
       </div>
-      <Section title="Collections · last 6 months" icon={BarChart3} className="mt-6">
-        <div className="p-5"><Bars data={rev} format={inrShort} highlightLast height={200} /></div>
+      <Section title="Collections · last 6 months" icon={BarChart3} className="mt-5">
+        <div className="p-4"><Bars data={rev} format={inrShort} highlightLast height={200} /></div>
       </Section>
     </div>
   )
@@ -103,7 +103,7 @@ export function LegalDashboard() {
     <div>
       <Greeting subtitle="Legal · review CRM entries and assign them to the Operation team"
         right={<Button variant="accent" size="lg" icon={UserCog} onClick={() => nav('/ops-desk?view=assign')}>Assign to Operations{waiting.length ? ` · ${waiting.length}` : ''}</Button>} />
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <MiniStat label="Waiting for legal" value={waiting.length} icon={FileSearch} tone="violet" />
         <MiniStat label="With Operations" value={withOps} icon={UserCog} tone="cyan" />
         <MiniStat label="Overdue files" value={overdue} icon={AlertTriangle} tone="red" />
@@ -118,18 +118,18 @@ export function LegalDashboard() {
         <Tile to="/reports" icon={BookOpenCheck} label="Reports" tone="navy" />
         <Tile to="/attendance" icon={UserCheck} label="Attendance Board" tone="green" />
       </TileGrid>
-      <div className="mt-6 grid gap-6 xl:grid-cols-3">
+      <div className="mt-5 grid gap-5 xl:grid-cols-3">
         <Section title="Review & assign" subtitle="Pick an operations member and the furthest stage they may reach" icon={Scale} className="xl:col-span-2" action={<ViewAll to="/approvals" />}>
           {waiting.length ? waiting.slice(0, 6).map((b) => <BookingRow key={b.id} b={b} onDone={(k) => k === 'ASSIGN_OPS' && nav(`/ops-desk?case=${b.id}`)} />) : <EmptyState icon={CheckCircle2} title="Nothing to review" text="Files approved by Accounts appear here." />}
         </Section>
-        <div className="space-y-6">
-          <Section title="Operation team workload" icon={UserCog}><div className="max-h-96 overflow-y-auto p-5"><HBars data={workload} /></div></Section>
+        <div className="space-y-5">
+          <Section title="Operation team workload" icon={UserCog}><div className="max-h-96 overflow-y-auto p-4"><HBars data={workload} /></div></Section>
           <LoginLogoutCard />
           <UpcomingEvents limit={3} />
         </div>
       </div>
-      <WorkProgressPanel className="mt-6" />
-      <div className="mt-6 grid gap-6 xl:grid-cols-2">
+      <WorkProgressPanel className="mt-5" />
+      <div className="mt-5 grid gap-5 xl:grid-cols-2">
         <Section title="Client documents" subtitle="Latest uploads across client files" icon={FileText} action={<ViewAll to="/documents" />}>
           <ul className="max-h-96 divide-y divide-line/70 overflow-y-auto">
             {recentDocs.map(({ d, b }) => (

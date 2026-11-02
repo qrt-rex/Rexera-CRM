@@ -100,7 +100,7 @@ export default function DigitalMedia() {
       <PageHeader title="Digital Media Dashboard" subtitle="Media Function — posts, flyers, posters and videos: assign, upload and publish to the company and to clients" icon={Clapperboard}
         actions={manage && <Button icon={Plus} onClick={() => setForm({ data: emptyForm(), files: [] })}>Create Media</Button>} />
 
-      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
+      <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
         <Stat label="All media" value={items.length} icon={Clapperboard} onClick={() => { setUp(''); setWork(''); setPub('') }} />
         <Stat label="Uploaded" value={count((m) => uploadStatus(m) === 'UPLOADED')} icon={Upload} tone="green" onClick={() => setUp('UPLOADED')} />
         <Stat label="Not uploaded" value={count((m) => uploadStatus(m) === 'NOT_UPLOADED')} icon={FileX2} tone="gray" onClick={() => setUp('NOT_UPLOADED')} />
@@ -112,7 +112,7 @@ export default function DigitalMedia() {
 
       <Card className="overflow-hidden">
         <CardHeader title="Media Function" icon={Clapperboard} subtitle={manage ? 'Every media record — click a column title to sort' : 'Media assigned to you, and company media'} />
-        <div className="flex flex-wrap items-center gap-2 border-b border-line px-5 py-3">
+        <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2.5">
           <SearchBox value={q} onChange={setQ} placeholder="Search scheme or media title…" className="min-w-56 flex-1" />
           <Select aria-label="Upload status" value={up} onChange={(e) => setUp(e.target.value as typeof up)} className="w-40"><option value="">Any upload status</option><option value="UPLOADED">Uploaded</option><option value="NOT_UPLOADED">Not uploaded</option></Select>
           <Select aria-label="Work status" value={work} onChange={(e) => setWork(e.target.value as typeof work)} className="w-40"><option value="">Any work status</option>{(Object.keys(WORK_STATUS) as MediaWorkShown[]).map((k) => <option key={k} value={k}>{WORK_STATUS[k].label}</option>)}</Select>

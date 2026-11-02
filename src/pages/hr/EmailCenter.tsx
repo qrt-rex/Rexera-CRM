@@ -86,10 +86,10 @@ function Compose({ onSent }: { onSent: () => void }) {
   const preview = recipients[0] ?? me
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
       <Card className="overflow-hidden">
         <CardHeader title="New email" icon={Send} />
-        <div className="space-y-4 p-5">
+        <div className="space-y-4 p-4">
           <div>
             <div className="mb-1.5 flex flex-wrap items-center gap-2">
               <span className="text-xs font-semibold text-mute">To <span className="text-bad">*</span> · login email addresses</span>
@@ -155,7 +155,7 @@ function Compose({ onSent }: { onSent: () => void }) {
 
       <Card className="h-fit overflow-hidden xl:sticky xl:top-24">
         <CardHeader title="Preview" subtitle={`As ${preview.name} will see it`} icon={Eye} />
-        <div className="space-y-2 p-5 text-sm">
+        <div className="space-y-2 p-4 text-sm">
           <p className="text-xs text-mute">To: {preview.email}</p>
           <p className="font-bold">{fill(subject || '(no subject)', preview, db)}</p>
           <p className="whitespace-pre-line rounded-xl bg-card2 p-3 leading-relaxed">{fill(body, preview, db)}</p>
@@ -186,7 +186,7 @@ function Sent() {
             const read = b.filter((e) => e.read).length
             return (
               <li key={first.batchId}>
-                <button onClick={() => setOpen(b)} className="flex w-full flex-wrap items-center gap-3 px-5 py-3 text-left hover:bg-card2">
+                <button onClick={() => setOpen(b)} className="flex w-full flex-wrap items-center gap-3 px-4 py-2.5 text-left hover:bg-card2">
                   <span className={cx('grid size-9 shrink-0 place-items-center rounded-xl', first.automation ? 'bg-violet-500/12 text-violet-600 dark:text-violet-300' : 'bg-brand-soft text-brand-ink')}>{first.automation ? <Bot className="size-4" /> : <Send className="size-4" />}</span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-semibold">{first.subject}</span>
@@ -237,7 +237,7 @@ function Automations() {
       {AUTOMATIONS.map((meta) => {
         const a = db.emailAutomations.find((x) => x.key === meta.key)!
         return (
-          <Card key={meta.key} className={cx('p-5 transition', !a.enabled && 'opacity-70')}>
+          <Card key={meta.key} className={cx('p-4 transition', !a.enabled && 'opacity-70')}>
             <div className="flex items-start gap-3">
               <span className={cx('grid size-10 shrink-0 place-items-center rounded-xl', a.enabled ? 'bg-ok-soft text-ok' : 'bg-card2 text-mute')}>{meta.schedule === 'event' ? <Bot className="size-5" /> : <Clock className="size-5" />}</span>
               <div className="min-w-0 flex-1">
