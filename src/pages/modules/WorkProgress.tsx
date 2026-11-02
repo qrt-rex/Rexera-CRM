@@ -5,6 +5,7 @@ import { useDb } from '../../lib/store'
 import { useMe } from '../../lib/auth'
 import { userName, usersWithRole, visibleBookings } from '../../lib/actions'
 import { BOOKING_STATUS, stageLabel } from '../../lib/workflow'
+import { StageBadge } from '../../components/StageControls'
 import { addDays, downloadCsv, fmtDate, fmtDateTime, today, ymd } from '../../lib/format'
 import { roleLabel } from '../../lib/rbac'
 import { Avatar, Button, Card, CardHeader, Input, Table, Tabs, Td, Th, useRun } from '../../components/ui'
@@ -106,7 +107,7 @@ export function WorkProgress() {
               <tr key={b.id}>
                 <Td><Link to={`/bookings/${b.id}`} className="font-semibold hover:underline">{b.companyName}</Link><p className="text-xs text-mute">{b.bookingId} · {BOOKING_STATUS[b.status].label}</p></Td>
                 <Td className="text-xs">{userName(db, b.opsMemberId)}</Td><Td className="text-xs">{userName(db, b.adminId)}</Td>
-                <Td className="text-xs">{stageLabel(b.stage, b.stageOutcome)}</Td><Td className="text-right font-bold tabular-nums">{moves}</Td>
+                <Td className="text-xs"><StageBadge stage={b.stage} label={stageLabel(b.stage, b.stageOutcome)} /></Td><Td className="text-right font-bold tabular-nums">{moves}</Td>
                 <Td className="text-xs text-mute">{last ? fmtDateTime(last.at) : '—'}</Td>
               </tr>
             ))}

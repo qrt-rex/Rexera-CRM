@@ -3,7 +3,7 @@ import type { Booking } from '../lib/types'
 import { useDb } from '../lib/store'
 import { useMe } from '../lib/auth'
 import { canMoveStage, moveStage, outcomeNeedsReason, setStageOutcome } from '../lib/actions'
-import { STAGE_OUTCOMES, STAGES, stageLabel } from '../lib/workflow'
+import { STAGE_OUTCOMES, STAGES, stageColor, stageLabel } from '../lib/workflow'
 import { Button, cx, Modal, Textarea, useRun } from './ui'
 
 /**
@@ -107,6 +107,7 @@ export function StageSelect({ b, className }: { b: Booking; className?: string }
   return (
     <>
       <select aria-label={`Stage of ${b.companyName}`} value={value} onChange={(e) => pick(e.target.value)} title={b.stageReason ? `Reason: ${b.stageReason}` : undefined}
+        style={outcomeNeedsReason(b.stageOutcome) ? undefined : { borderLeft: `4px solid ${stageColor(b.stage)}` }}
         className={cx('mt-1 block h-8 max-w-56 rounded-lg border px-2 text-xs font-semibold', outcomeNeedsReason(b.stageOutcome) ? 'border-bad/40 bg-bad-soft text-bad' : 'border-line bg-card', className)}>
         {!options.some((x) => `${x.n}:${x.o ?? ''}` === value) && <option value={value}>{stageLabel(b.stage, b.stageOutcome)}</option>}
         {options.map((x) => (
@@ -126,10 +127,23 @@ export function StageSelect({ b, className }: { b: Booking; className?: string }
 }
 
 /** "8. Hold — Client not responding since Monday" */
+/** The stage as a coloured badge (its colour is the stage's everywhere in the CRM). */
+export function StageBadge({ stage, label, className }: { stage: number; label?: string; className?: string }) {
+  const c = stageColor(stage)
+  return (
+    <span className={cx('inline-flex max-w-full items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold', className)}
+      style={{ color: c, background: `color-mix(in srgb, ${c} 13%, transparent)` }} title={label ?? (stage ? `${stage}. ${STAGES[stage - 1]}` : 'Not with the Operation team yet')}>
+      <span className="grid size-4 shrink-0 place-items-center rounded-full text-[9px] font-bold text-white" style={{ background: c }}>{stage || '–'}</span>
+      <span className="truncate">{label ?? (stage ? STAGES[stage - 1] : 'With approvals')}</span>
+    </span>
+  )
+}
+
 export function StageText({ b, className }: { b: Booking; className?: string }) {
   const bad = outcomeNeedsReason(b.stageOutcome)
   return (
     <span className={cx(bad ? 'text-bad' : '', className)}>
+      <span className="mr-1 inline-block size-2 rounded-full align-middle" style={{ background: stageColor(b.stage) }} aria-hidden />
       {stageLabel(b.stage, b.stageOutcome)}{b.stageReason ? <span className="font-normal"> — {b.stageReason}</span> : null}
     </span>
   )

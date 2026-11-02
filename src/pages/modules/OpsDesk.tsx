@@ -8,7 +8,7 @@ import type { Booking } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
 import { addTask, availableDecisions, TASK_REMIND_DAYS, toggleTask, userName, usersWithRole } from '../../lib/actions'
-import { STAGES, stageLabel } from '../../lib/workflow'
+import { STAGES, stageColor, stageLabel } from '../../lib/workflow'
 import { addDays, ago, bookingMoney, daysBetween, fmtDate, fmtDateTime, inr, today, ymd } from '../../lib/format'
 import { monthStart } from '../../lib/metrics'
 import { Avatar, Badge, Button, Card, CardHeader, Checkbox, cx, EmptyState, Input, PageHeader, SearchBox, Select, Stat, Table, Td, Th, useRun } from '../../components/ui'
@@ -222,7 +222,7 @@ function CaseCard({ b, highlight }: { b: Booking; highlight: boolean }) {
       </dl>
 
       <div className="mt-3">
-        <div className="mb-1 flex justify-between text-[11px]"><span className="font-semibold">{stageLabel(b.stage, b.stageOutcome)} <span className="font-normal text-mute">· stage {b.stage} of {STAGES.length}, allowed up to {b.maxStage}</span></span><span className="font-bold">{pct}%</span></div>
+        <div className="mb-1 flex justify-between text-[11px]"><span className="font-semibold"><span className="mr-1 inline-block size-2 rounded-full align-middle" style={{ background: stageColor(b.stage) }} />{stageLabel(b.stage, b.stageOutcome)} <span className="font-normal text-mute">· stage {b.stage} of {STAGES.length}, allowed up to {b.maxStage}</span></span><span className="font-bold">{pct}%</span></div>
         <StageTrack b={b} />
       </div>
       {from?.remark && <p className="mt-2 rounded-lg bg-card2 px-3 py-1.5 text-xs"><span className="font-semibold">Legal’s instructions:</span> {from.remark}</p>}

@@ -12,6 +12,13 @@ export const STAGES = [
   'Approved / Rejected / Re-submission / Hold',
 ] as const
 
+/**
+ * One colour per stage, the same everywhere (badges, tables, the board, filters, the file page). Index 0 = not with
+ * the Operation team yet. Picked to stay readable as text on white and on the dark theme.
+ */
+export const STAGE_COLORS = ['#6b7280', '#64748b', '#0284c7', '#d97706', '#0d9488', '#7c3aed', '#4f46e5', '#db2777', '#16a34a'] as const
+export const stageColor = (stage: number) => STAGE_COLORS[Math.max(0, Math.min(STAGES.length, stage))]
+
 /** Stages with a step (3) or a result (8) to choose; the first option is the default when a file reaches the stage. */
 export const STAGE_OUTCOMES: Record<number, { id: string; label: string; tone: Tone }[]> = {
   3: [{ id: 'IN_PROCESS', label: 'Document in process', tone: 'blue' }, { id: 'IN_REVIEW', label: 'Document in review', tone: 'violet' }],

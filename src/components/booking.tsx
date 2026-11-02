@@ -7,7 +7,7 @@ import { getDb, useDb } from '../lib/store'
 import { requestWelcomeWhatsapp } from '../lib/share'
 import { useMe } from '../lib/auth'
 import { addDocuments, adminMayDo, availableDecisions, decide, userName, usersWithRole, type Decision } from '../lib/actions'
-import { BOOKING_STATUS, CHAIN, hasLegalDoc, HOLD_REASONS, LEGAL_DOC_CATEGORIES, STAGES, stageLabel } from '../lib/workflow'
+import { BOOKING_STATUS, CHAIN, hasLegalDoc, HOLD_REASONS, LEGAL_DOC_CATEGORIES, STAGES, stageColor, stageLabel } from '../lib/workflow'
 import { DocUploader, type PendingDoc } from './DocUploader'
 import { addDays, bookingMoney, fmtDate, inr, ymd } from '../lib/format'
 import { Badge, Button, Checkbox, cx, Input, Modal, Progress, Select, Textarea, useRun, useToast } from './ui'
@@ -49,14 +49,26 @@ export function ChainStepper({ b, compact }: { b: Booking; compact?: boolean }) 
   const db = useDb()
   const idx = chainIndex(b)
   const problem = b.status === 'REJECTED' ? 'red' : ['ON_HOLD', 'ACCOUNTS_HOLD', 'CHANGES_REQUIRED'].includes(b.status) ? 'amber' : null
+  /** who is responsible for a step that isn't done yet (a person, else the team) */
   const who = (key: string) => {
     if (key === 'SUBMITTED') return userName(db, b.createdBy)
-    if (key === 'TL') return userName(db, b.teamLeadId)
-    if (key === 'OPS') return b.opsMemberId ? userName(db, b.opsMemberId) : ''
-    if (key === 'ADMIN') return b.adminId ? userName(db, b.adminId) : ''
-    if (key === 'REVIEW' || key === 'DONE') return b.opsMemberId ? userName(db, b.opsMemberId) : ''
+    if (key === 'TL') return b.teamLeadId ? userName(db, b.teamLeadId) : 'Team Leader'
+    if (key === 'ACCOUNTS') return 'Accounts team'
+    if (key === 'LEGAL') return 'Legal team'
+    if (key === 'OPS') return b.opsMemberId ? userName(db, b.opsMemberId) : 'Operation team'
+    if (key === 'ADMIN') return b.adminId ? userName(db, b.adminId) : 'Admin team'
+    if (key === 'REVIEW' || key === 'DONE') return b.opsMemberId ? userName(db, b.opsMemberId) : 'Operation team'
     return ''
   }
+  // the decision that closed each step: who did it and when (from the file's approval history)
+  const LEVEL: Record<string, string[]> = { TL: ['Team Leader'], ACCOUNTS: ['Accounts'], LEGAL: ['Legal'], OPS: ['Operations'], ADMIN: ['Admin'], REVIEW: ['Operations approval'], DONE: ['Operations approval'] }
+  const doneBy = (key: string): { by: string; at: string } | undefined => {
+    if (key === 'SUBMITTED') return { by: b.createdBy, at: b.createdAt }
+    const acts = b.approvals.filter((a) => (LEVEL[key] ?? []).includes(a.level) && !['REJECTED', 'HOLD', 'REQUEST_CHANGES', 'REOPENED'].includes(a.action))
+    const pick = key === 'DONE' ? acts.filter((a) => a.action === 'COMPLETED').at(-1) : acts.at(-1)
+    return pick ? { by: pick.by, at: pick.at } : undefined
+  }
+  const when = (iso: string) => new Date(iso).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })
   return (
     <ol className="flex w-full items-start">
       {CHAIN.map((c, i) => {
@@ -71,12 +83,18 @@ export function ChainStepper({ b, compact }: { b: Booking; compact?: boolean }) 
                 current ? 'border-accent bg-accent-soft text-accent anim-ring' : 'border-line bg-card text-mute')}>
               {done ? <Check className="size-4" /> : tone === 'red' ? <XCircle className="size-4" /> : tone === 'amber' ? <PauseCircle className="size-4" /> : i + 1}
             </span>
-            {!compact && (
-              <>
-                <span className={cx('mt-1.5 text-[11px] font-bold', current ? 'text-ink' : 'text-mute')}>{c.label}</span>
-                <span className="hidden max-w-full truncate px-1 text-[10px] text-mute sm:block">{who(c.key)}</span>
-              </>
-            )}
+            {!compact && (() => {
+              const d = done ? doneBy(c.key) : undefined
+              const name = d?.by ? userName(db, d.by) : who(c.key)
+              const sub = d ? when(d.at) : (current || i > idx) && b.deadline && !['COMPLETED', 'REJECTED'].includes(b.status) && c.key !== 'SUBMITTED' ? `Due ${fmtDate(b.deadline)}` : current ? 'Pending' : ''
+              return (
+                <>
+                  <span className={cx('mt-1.5 text-[11px] font-bold', current ? 'text-ink' : 'text-mute')}>{c.label}</span>
+                  <span className="hidden max-w-full truncate px-1 text-[10px] font-medium text-ink/75 sm:block" title={name}>{name}</span>
+                  {sub && <span className={cx('hidden max-w-full truncate px-1 text-[10px] sm:block', d ? 'text-mute' : current ? 'font-semibold text-accent' : 'text-mute/80')} title={sub}>{sub}</span>}
+                </>
+              )
+            })()}
           </li>
         )
       })}
@@ -89,7 +107,7 @@ export function StageTrack({ b }: { b: Booking }) {
     <div className="flex gap-1" aria-label={`Stage ${stageLabel(b.stage, b.stageOutcome)} of ${STAGES.length}`} title={stageLabel(b.stage, b.stageOutcome)}>
       {STAGES.map((s, i) => (
         <span key={s} title={`${i + 1}. ${s}${i + 1 > b.maxStage ? ' (locked)' : ''}`}
-          className={cx('h-2 flex-1 rounded-full', i < b.stage ? 'bg-ok' : i < b.maxStage ? 'bg-brand-soft' : 'bg-line/60')} />
+          className={cx('h-2 flex-1 rounded-full', i < b.stage ? '' : i < b.maxStage ? 'bg-brand-soft' : 'bg-line/60')} style={i < b.stage ? { background: stageColor(i + 1) } : undefined} />
       ))}
     </div>
   )

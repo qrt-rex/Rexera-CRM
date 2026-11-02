@@ -5,7 +5,7 @@ import type { Booking } from '../lib/types'
 import { useDb } from '../lib/store'
 import { useMe } from '../lib/auth'
 import { canMoveStage, moveStage, userName } from '../lib/actions'
-import { STAGE_OUTCOMES, STAGES, stageLabel } from '../lib/workflow'
+import { STAGE_OUTCOMES, STAGES, stageColor, stageLabel } from '../lib/workflow'
 import { bookingMoney, inr } from '../lib/format'
 import { BookingStatusBadge, PriorityBadge } from './booking'
 import { StageSelect } from './StageControls'
@@ -53,10 +53,10 @@ export function BookingBoard({ list }: { list: Booking[] }) {
               onDragOver={(e: DragEvent) => { if (ok) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (over !== n) setOver(n) } }}
               onDragLeave={(e: DragEvent) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver((x) => (x === n ? null : x)) }}
               onDrop={(e: DragEvent) => { e.preventDefault(); drop(n) }}
-              className={cx('flex w-72 shrink-0 flex-col rounded-2xl border bg-card2/60 transition',
+              style={{ borderTop: `3px solid ${stageColor(n)}` }} className={cx('flex w-72 shrink-0 flex-col rounded-2xl border bg-card2/60 transition',
                 hot ? 'border-brand bg-brand-soft/60 ring-2 ring-brand/30' : dragged ? (ok ? 'border-brand/40 border-dashed' : 'border-line opacity-60') : 'border-line')}>
               <header className="flex items-center gap-2 border-b border-line px-3 py-2.5">
-                <span className={cx('grid size-6 shrink-0 place-items-center rounded-lg text-[11px] font-bold', n === WAITING ? 'bg-line text-mute' : 'bg-brand text-white')}>{n === WAITING ? '–' : n}</span>
+                <span className="grid size-6 shrink-0 place-items-center rounded-lg text-[11px] font-bold text-white" style={{ background: stageColor(n) }}>{n === WAITING ? '–' : n}</span>
                 <h3 className="min-w-0 flex-1 truncate text-[13px] font-bold" title={n === WAITING ? 'Approvals / legal — not with the Operation team yet' : STAGES[n - 1]}>{n === WAITING ? 'With approvals' : STAGES[n - 1]}</h3>
                 <span className="rounded-full bg-card px-2 text-[11px] font-semibold text-mute">{cards.length}</span>
               </header>
