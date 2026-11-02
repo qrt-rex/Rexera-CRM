@@ -1,11 +1,12 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BarChart3, Bell, Briefcase, Building2, CalendarDays, ChevronRight, Download, Eye, FileBarChart, FileText, Home, IndianRupee, KeyRound, LayoutDashboard, Megaphone, MessagesSquare, PieChart, Settings, Sparkles, TrendingUp, UserCheck, UserCog, UserPlus, Users, UsersRound, Images, Workflow, Trophy } from 'lucide-react'
 import { useDb } from '../../lib/store'
 import { useMe } from '../../lib/auth'
-import { collections, invoiceSummary, monthStart, presentToday, revenueByMonth, todaySession } from '../../lib/metrics'
+import { collections, invoiceSummary, monthStart, presentToday, revenueByMonth } from '../../lib/metrics'
 import { BOOKING_STATUS } from '../../lib/workflow'
-import { fmtDate, fmtTime, inr, inrShort, today, ymd } from '../../lib/format'
+import { fmtDate, inr, inrShort, today, ymd } from '../../lib/format'
+import { CreateUserModal } from '../../components/CreateUserModal'
 import { canOpenDashboard, ROLES, rolesOf } from '../../lib/rbac'
 import { Avatar, Card, cx, Progress } from '../../components/ui'
 import { Bars, Donut, HBars } from '../../components/charts'
@@ -19,7 +20,7 @@ export function SuperAdminDashboard() {
   const db = useDb()
   const me = useMe()
   const unread = useUnread()
-  const s = todaySession(db, me.id)
+  const [newUser, setNewUser] = useState(false)
   const att = presentToday(db)
   const inv = invoiceSummary(db)
   const rev = revenueByMonth(db)
@@ -65,10 +66,12 @@ export function SuperAdminDashboard() {
     <div>
       {/* top row */}
       <div className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Card className="flex divide-x divide-line p-4">
-          <div className="flex-1 pr-3"><p className="text-[11px] font-semibold text-mute">Login Time</p><p className="text-xl font-extrabold">{fmtTime(s?.loginAt)}</p><p className="text-[11px] text-mute">{fmtDate(today())}</p></div>
-          <div className="flex-1 pl-3"><p className="text-[11px] font-semibold text-mute">Logout Time</p><p className="text-xl font-extrabold">{fmtTime(s?.logoutAt)}</p><p className="text-[11px] text-mute">{s?.logoutAt ? 'Day ended' : 'Not yet logout'}</p></div>
-        </Card>
+        {/* login / logout time stays in the side column; this box gives someone a sign-in */}
+        <button onClick={() => setNewUser(true)} className="text-left"><Card className="flex h-full items-center gap-3 p-4 transition hover:border-brand/40 hover:shadow-pop">
+          <span className="grid size-11 place-items-center rounded-xl bg-brand text-white shadow-sm"><UserPlus className="size-5" /></span>
+          <div className="min-w-0 flex-1"><p className="text-[11px] font-semibold text-mute">Add user</p><p className="font-extrabold">Create user</p><p className="truncate text-[11px] text-mute">Role · email · password · {db.users.filter((u) => u.active).length} active users</p></div>
+          <span className="rounded-lg bg-brand-soft px-2 py-1 text-[11px] font-bold text-brand-ink">+ New</span>
+        </Card></button>
         <Link to="/events"><Card className="flex h-full items-center gap-3 p-4 transition hover:shadow-pop">
           <span className="grid size-11 place-items-center rounded-xl bg-info-soft text-info"><CalendarDays className="size-5" /></span>
           <div className="min-w-0 flex-1"><p className="text-[11px] font-semibold text-mute">Calendar</p><p className="font-extrabold">{fmtDate(today())}</p><p className="truncate text-[11px] text-mute">{todays.length ? todays.map((e) => e.title).join(', ') : "No events today"}</p></div>
@@ -139,6 +142,7 @@ export function SuperAdminDashboard() {
       </div>
 
       <p className="mt-6 flex items-center gap-2 text-xs text-mute"><UserPlus className="size-3.5" />Tip: open any role’s dashboard from “All dashboards” to see exactly what that team sees.</p>
+      <CreateUserModal open={newUser} onClose={() => setNewUser(false)} />
     </div>
   )
 }
