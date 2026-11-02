@@ -102,7 +102,7 @@ export function mapAll(backup) {
     { key: 'maintenance', value: d.settings.maintenance ?? { on: false, message: '' } },
     { key: 'pf', value: d.pfSettings },
     { key: 'branches', value: d.settings.branches ?? [] },
-    { key: 'attendance', value: { dayLock: d.settings.dayLock === true } },
+    { key: 'attendance', value: { dayLock: d.settings.dayLock === true, ...(d.settings.loginCode === false ? { loginCode: false } : {}) } },
     { key: 'breaks', value: d.settings.breakPolicy ?? null },
     { key: 'leadAssign', value: d.settings.leadAssign ?? null },
     { key: 'workflow', value: d.settings.workflow ?? null },
@@ -305,7 +305,7 @@ export function rowsToDb(input) {
     settings: opt({
       sessionMinutes: session.minutes, supplierState: company.supplierState, companyName: company.name, companyGstin: company.gstin,
       maintenance: maintenance && (maintenance.on || maintenance.message || maintenance.by) ? maintenance : undefined,
-      sessionsValidAfter: u(session.validAfter), dayLock: setting('attendance')?.dayLock || undefined,
+      sessionsValidAfter: u(session.validAfter), dayLock: setting('attendance')?.dayLock || undefined, loginCode: setting('attendance')?.loginCode === false ? false : undefined,
       branches: setting('branches')?.length ? setting('branches') : undefined, breakPolicy: u(setting('breaks')), leadAssign: u(setting('leadAssign')), workflow: u(setting('workflow')), jobs: u(setting('jobs')), dialerCampaigns: u(setting('dialerCampaigns')), clientTemplates: u(setting('clientTemplates')),
     }),
     counters: setting('counters') ?? { booking: 0, lead: 0, invoice: 0 },

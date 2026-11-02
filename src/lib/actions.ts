@@ -105,11 +105,16 @@ function passwordOk(d: DB, u: User) {
   const mt = d.settings.maintenance
   assert(!mt?.on || isMaster(u), `Rexera CRM is under maintenance${mt?.message ? `: ${mt.message}` : '.'} Please try again later.`)
   if (!CLOUD) mutate((m) => { delete m.loginFails[u.username.toLowerCase()]; delete m.loginFails[u.email.toLowerCase()] })
+  // Access → Settings → "Ask for the email code at sign-in" off: the password is enough
+  if (d.settings.loginCode === false) {
+    finishSignIn(u.id)
+    return { token: '', devCode: '', email: u.email, master: isMaster(u), signedIn: u.id }
+  }
   const token = uid('tmp-')
   const code = genCode()
   pending.set(token, { userId: u.id, code, expires: Date.now() + 5 * 60000, attempts: 0, resends: 0 })
   // Super Admin / IT Support may go on without the code when it can't be emailed (signInWithoutCode)
-  return { token, devCode: code, email: u.email, master: isMaster(u) }
+  return { token, devCode: code, email: u.email, master: isMaster(u), signedIn: undefined as string | undefined }
 }
 
 /** The day's session and the sign-in record, once the person is through both steps. */

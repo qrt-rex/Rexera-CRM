@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Eye, EyeOff, KeyRound, Loader2, Lock, ShieldCheck, User as UserIcon } from 'lucide-react'
 import { useAuth } from '../lib/auth'
-import { useDb } from '../lib/store'
+import { getDb, useDb } from '../lib/store'
 import { loginStep1, resendCode, signInWithoutCode, verifyCode } from '../lib/actions'
 import { DEMO_PASSWORD, PRESET_USERS } from '../lib/seed'
 import { ROLES } from '../lib/rbac'
@@ -50,6 +50,13 @@ export default function Login() {
     setBusy(true)
     try {
       const r = await loginStep1(login, password)
+      // the email code is switched off (Access → Settings): signed in with the password
+      if (r.signedIn) {
+        signIn(r.signedIn)
+        const u = getDb().users.find((x) => x.id === r.signedIn)!
+        nav(`/dashboard/${u.role}`, { replace: true })
+        return
+      }
       setToken(r.token); setDevCode(r.devCode); setEmail(r.email); setStep('code'); setCode(['', '', '', '', '', '']); setMaster(r.master); setNoMail('')
       // The code is shown on screen only in developer mode. In a real build, showing it whenever email fails let anyone
       // who knew a password skip the second step.

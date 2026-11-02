@@ -230,6 +230,18 @@ function SettingsTab() {
         </div>
       </Card>
       <Card className="overflow-hidden">
+        <CardHeader title="Sign-in" icon={Lock} />
+        <div className="space-y-3 p-5 text-sm">
+          <label className="flex items-center justify-between gap-3 font-semibold">
+            Ask for the email code at sign-in
+            <Toggle checked={db.settings.loginCode !== false} label="Ask for the email code at sign-in" onChange={(v) => run(() => updateSettings(me, { loginCode: v }), v ? 'Email code on — sign-in needs the password and the 6-digit code' : 'Email code off — everyone signs in with their password')} />
+          </label>
+          <p className="text-mute">{db.settings.loginCode !== false
+            ? 'On: after the password, a 6-digit code is emailed and must be entered. This needs a mail service on the live server (RESEND_API_KEY on Render) — without one nobody receives the code.'
+            : 'Off: everyone signs in with their username / email and password only. Turn it back on once the code emails arrive.'}</p>
+        </div>
+      </Card>
+      <Card className="overflow-hidden">
         <CardHeader title="Demo data" icon={RefreshCcw} />
         <div className="space-y-3 p-5 text-sm">
           <p className="text-mute">This build stores data in your browser. Reset brings back the sample company, users, leads and CRM entries.</p>

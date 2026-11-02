@@ -938,6 +938,8 @@ export interface Settings {
   sessionsValidAfter?: string
   /** after Logout, no sign-in until the next day (IT / Super Admin always can). Off = testing: people can sign in again. */
   dayLock?: boolean
+  /** false: sign in with the password only (no 6-digit email code) — e.g. while no mail service is set up */
+  loginCode?: boolean
   branches?: Branch[]
   breakPolicy?: BreakPolicy
   /** automatic lead assignment (round robin): new website / CSV / manual leads go to these people in turn */
