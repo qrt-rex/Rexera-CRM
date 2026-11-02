@@ -1,4 +1,5 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
+import { MultiFilter, optionsFrom } from '../../components/MultiFilter'
 import { useSearchParams } from 'react-router-dom'
 import { BookOpenCheck, Download, FileBarChart, Printer, TrendingUp } from 'lucide-react'
 import { useDb } from '../../lib/store'
@@ -26,11 +27,19 @@ export default function Reports() {
   const books = visibleBookings(db, me)
   const totals = pipelineTotals(db, books)
   const rev = revenueByMonth(db, 12)
+  // Service report: each service with its industry types; filter by industry type (several at once)
+  const [industries, setIndustries] = useState<string[]>([])
+  const industryOf = (b: { industry?: string }) => b.industry?.trim() || 'Not set'
+  const serviceBooks = industries.length ? books.filter((b) => industries.includes(industryOf(b))) : books
   const byService = useMemo(() => {
-    const m = new Map<string, { count: number; collected: number }>()
-    for (const b of books) { const x = m.get(b.serviceName) ?? { count: 0, collected: 0 }; x.count++; x.collected += bookingMoney(b).collected; m.set(b.serviceName, x) }
-    return [...m.entries()].map(([label, v]) => ({ label, ...v })).sort((a, b) => b.collected - a.collected)
-  }, [books])
+    const m = new Map<string, { count: number; collected: number; industries: Map<string, number> }>()
+    for (const b of serviceBooks) {
+      const x = m.get(b.serviceName) ?? { count: 0, collected: 0, industries: new Map<string, number>() }
+      x.count++; x.collected += bookingMoney(b).collected; x.industries.set(industryOf(b), (x.industries.get(industryOf(b)) ?? 0) + 1)
+      m.set(b.serviceName, x)
+    }
+    return [...m.entries()].map(([label, v]) => ({ label, count: v.count, collected: v.collected, industries: [...v.industries].sort((a, b) => b[1] - a[1]) })).sort((a, b) => b.collected - a.collected)
+  }, [serviceBooks])
   const byStage = STAGES.map((s, i) => ({ label: `${i + 1}. ${s}`, value: books.filter((b) => b.opsMemberId && b.stage === i + 1 && b.status !== 'COMPLETED').length }))
   const turnaround = useMemo(() => {
     const done = books.filter((b) => b.status === 'COMPLETED')
@@ -70,9 +79,16 @@ export default function Reports() {
       {tab === 'clients' && <ClientDocReport />}
       {tab === 'services' && (
         <Card className="overflow-hidden">
-          <CardHeader title="Service-wise report" action={<Button size="sm" variant="outline" icon={Download} onClick={() => downloadCsv('service-report.csv', byService.map((s) => ({ service: s.label, bookings: s.count, collected: Math.round(s.collected) })))}>CSV</Button>} />
-          <Table><thead><tr><Th>Service</Th><Th className="text-right">Bookings</Th><Th className="text-right">Collected</Th><Th className="w-64">Share</Th></tr></thead>
-            <tbody>{byService.map((s) => <tr key={s.label}><Td className="font-semibold">{s.label}</Td><Td className="text-right">{s.count}</Td><Td className="text-right font-semibold">{inr(s.collected)}</Td><Td><Progress value={(s.collected / Math.max(1, byService[0]!.collected)) * 100} /></Td></tr>)}</tbody></Table>
+          <CardHeader title="Service-wise report" subtitle={industries.length ? `Industry type: ${industries.join(', ')}` : 'All industry types'}
+            action={<div className="flex flex-wrap items-center gap-2">
+              <MultiFilter label="Industry type" value={industries} onChange={setIndustries} options={optionsFrom(books, industryOf)} width="w-80" />
+              <Button size="sm" variant="outline" icon={Download} onClick={() => downloadCsv('service-report.csv', byService.map((s) => ({ service: s.label, industry_types: s.industries.map(([k, n]) => `${k} (${n})`).join('; '), bookings: s.count, collected: Math.round(s.collected) })))}>CSV</Button>
+            </div>} />
+          <Table><thead><tr><Th>Service</Th><Th>Industry type</Th><Th className="text-right">Bookings</Th><Th className="text-right">Collected</Th><Th className="w-56">Share</Th></tr></thead>
+            <tbody>{byService.map((s) => <tr key={s.label}><Td className="font-semibold">{s.label}</Td>
+              <Td><div className="flex max-w-80 flex-wrap gap-1">{s.industries.slice(0, 4).map(([k, n]) => <button key={k} type="button" onClick={() => setIndustries([k])} className="rounded-full bg-card2 px-2 py-0.5 text-[11px] font-semibold hover:bg-brand-soft hover:text-brand-ink" title={`Show only ${k}`}>{k} · {n}</button>)}{s.industries.length > 4 && <span className="text-[11px] text-mute">+{s.industries.length - 4} more</span>}</div></Td>
+              <Td className="text-right">{s.count}</Td><Td className="text-right font-semibold">{inr(s.collected)}</Td><Td><Progress value={(s.collected / Math.max(1, byService[0]?.collected ?? 1)) * 100} /></Td></tr>)}
+              {!byService.length && <tr><Td colSpan={5} className="py-8 text-center text-sm text-mute">No CRM entries for the chosen industry type.</Td></tr>}</tbody></Table>
         </Card>
       )}
 

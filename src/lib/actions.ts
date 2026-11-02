@@ -13,7 +13,7 @@ import { applicationProblems, formPositions, JOB_POSITIONS } from '../../supabas
 import { docStatus, reviewSteps } from '../../supabase/portal-rules.mjs'
 import { serverPost } from './serverApi'
 import { hashPassword } from './crypto'
-import { CALL_OUTCOMES, FINAL_STAGE, hasLegalDoc, LEAD_STATUS, OPEN_LEAD, STAGE_OUTCOMES, STAGES, stageLabel } from './workflow'
+import { BOOKING_STATUS, CALL_OUTCOMES, FINAL_STAGE, hasLegalDoc, LEAD_STATUS, OPEN_LEAD, STAGE_OUTCOMES, STAGES, stageLabel } from './workflow'
 import { fireAutomation } from './email'
 import { convertibleEntries, markConverted, startsFromClientEntry } from './clientEntries'
 import { addDays, daysBetween, fmtDate, isEmail, isGstin, isPan, isPhone, normPhone, nowIso, round2, today, uid, ymd } from './format'
@@ -1185,6 +1185,44 @@ export type Decision =
   | { kind: 'RETURN_ADMIN'; remark: string }
 
 /** Which decisions this user may take on this entry right now. */
+// ------------------------------------------------------------ send a client back one step (sales person, their team leader)
+/** Where a file goes when it is sent back one step: the previous team in the chain, and its label. */
+export function previousStep(b: Booking): { status: BookingStatus; team: string } | null {
+  switch (b.status) {
+    case 'PENDING_TL': return { status: 'CHANGES_REQUIRED', team: 'the sales person (to correct)' }
+    case 'PENDING_ACCOUNTS': case 'ACCOUNTS_HOLD': return b.teamLeadId ? { status: 'PENDING_TL', team: 'Team Leader' } : { status: 'CHANGES_REQUIRED', team: 'the sales person (to correct)' }
+    case 'PENDING_LEGAL': return { status: 'PENDING_ACCOUNTS', team: 'Accounts' }
+    case 'IN_OPERATIONS': return { status: 'PENDING_LEGAL', team: 'Legal' }
+    case 'WITH_ADMIN': return { status: 'IN_OPERATIONS', team: 'Operations' }
+    case 'OPS_REVIEW': return { status: 'WITH_ADMIN', team: 'Admin' }
+    case 'ON_HOLD': return b.holdFrom === 'WITH_ADMIN' ? { status: 'IN_OPERATIONS', team: 'Operations' } : { status: 'PENDING_LEGAL', team: 'Legal' }
+    default: return null
+  }
+}
+/** The client's sales person, their team leader, and Super Admin / IT may send a file back one step. */
+export const canSendBack = (d: DB, me: User, b: Booking) =>
+  !!previousStep(b) && visibleBookings(d, me).some((x) => x.id === b.id) && (b.createdBy === me.id || b.teamLeadId === me.id || isMaster(me))
+
+/** Sends the client back to the previous team / stage, with the reason; recorded on the file and in the activity log. */
+export function sendBack(me: User, id: string, reason: string) {
+  mutate((d) => {
+    const b = findB(d, id)
+    assert(canSendBack(d, me, b), 'You can’t send this client back right now.')
+    assert(reason.trim().length >= 5, 'Write why the client is being sent back.')
+    const to = previousStep(b)!
+    const from = BOOKING_STATUS[b.status].label, at = nowIso()
+    b.status = to.status
+    if (to.status !== 'ON_HOLD') b.holdFrom = undefined
+    b.approvals.push({ id: uid('ap-'), level: 'Sent back', action: 'SENT_BACK', by: me.id, at, remark: `${from} → ${to.team}: ${reason.trim()}` })
+    b.updatedAt = at
+    audit(d, me.id, 'CLIENT_SENT_BACK', `${b.bookingId} · ${b.companyName}: ${from} → ${to.team} — ${reason.trim()}`)
+    const team = (r: Role) => d.users.filter((u) => u.active && rolesOf(u).includes(r)).map((u) => u.id)
+    const toWho = to.status === 'PENDING_TL' ? [b.teamLeadId] : to.status === 'PENDING_ACCOUNTS' ? team('accounts') : to.status === 'PENDING_LEGAL' ? team('legal')
+      : to.status === 'IN_OPERATIONS' ? [b.opsMemberId] : to.status === 'WITH_ADMIN' ? [b.adminId] : [b.createdBy]
+    notify(d, [...toWho, b.createdBy, b.opsMemberId].filter((x, i, a) => x && x !== me.id && a.indexOf(x) === i), 'Client sent back', `${b.bookingId} · ${b.companyName}: ${from} → ${to.team} — ${reason.trim()} (${me.name})`, `/bookings/${b.id}`, 'warning')
+  })
+}
+
 export function availableDecisions(d: DB, me: User, b: Booking): Decision['kind'][] {
   const p = effectivePerms(d, me)
   const sa = isSA(me)

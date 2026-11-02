@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Archive, ArrowLeft, Building2, Layers, Check, CheckCircle2, ChevronRight, CircleDot, Download, FileText, FolderKanban, History, IndianRupee, ListTodo, MessageCircle, MessageSquare, Pencil, Plus, Receipt, Send, ShieldCheck, Trash2, X, Lock, Mail, Gift, Percent, Undo2, Workflow } from 'lucide-react'
+import { Archive, ArrowLeft, CornerUpLeft, Upload, Building2, Layers, Check, CheckCircle2, ChevronRight, CircleDot, Download, FileText, FolderKanban, History, IndianRupee, ListTodo, MessageCircle, MessageSquare, Pencil, Plus, Receipt, Send, ShieldCheck, Trash2, X, Lock, Mail, Gift, Percent, Undo2, Workflow } from 'lucide-react'
 import { AdminChecklist, FollowUpCard, WelcomeCard } from '../../components/WorkflowPanels'
 import { ClientEmailComposer } from '../../components/ClientEmail'
 import { MessageClientModal, MessageLog, NextMessage } from '../../components/ClientMessage'
@@ -12,8 +12,8 @@ import { WhatsappClientButton } from '../../components/WhatsappClient'
 import { openBookingPdf } from '../../lib/bookingPdf'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
-import { addComboService, addComment, addComplimentaryService, addDocuments, addPayment, addRefund, commissionNow, deleteRefund, needsPriceSplit, addTask, canEditBooking, canEmailClient, canForwardAdminStages, canRequestRefund, canRunClientPortal, canMoveStage, deleteDocument, deleteTask, invoiceFromBooking, moveStage, PAYMENT_MODES, setCommission, setDeduction, setPaymentTds, setRefundStatus, toggleTask, userName, verifyPayment, visibleBookings, visibleDocuments, visibleTasks } from '../../lib/actions'
-import { STAGES, STAGE_OUTCOMES, stageLabel } from '../../lib/workflow'
+import { addComboService, addComment, addComplimentaryService, addDocuments, addPayment, addRefund, commissionNow, deleteRefund, needsPriceSplit, addTask, canEditBooking, canEmailClient, canSendBack, previousStep, sendBack, canForwardAdminStages, canRequestRefund, canRunClientPortal, canMoveStage, deleteDocument, deleteTask, invoiceFromBooking, moveStage, PAYMENT_MODES, setCommission, setDeduction, setPaymentTds, setRefundStatus, toggleTask, userName, verifyPayment, visibleBookings, visibleDocuments, visibleTasks } from '../../lib/actions'
+import { BOOKING_STATUS, STAGES, STAGE_OUTCOMES, stageLabel } from '../../lib/workflow'
 import { ago, bookingMoney, fmtDate, fmtDateTime, gstSplit, inr, today } from '../../lib/format'
 import { isStageOnlyAdmin, roleLabel } from '../../lib/rbac'
 import type { FileRef, LegacyRow } from '../../lib/types'
@@ -43,6 +43,7 @@ export default function BookingDetail() {
   // WhatsApp / email to the client: null = closed, '' = the composer on its first open message
   const [message, setMessage] = useState<MessageStageId | '' | null>(null)
   const [refund, setRefund] = useState(false)
+  const [back, setBack] = useState<string | null>(null)
   const b = visibleBookings(db, me).find((x) => x.id === id)
   if (!b) return <Card><EmptyState icon={FileText} title="CRM entry not found" text="It doesn't exist or isn't visible to you." action={<Link to="/bookings"><Button>All CRM entries</Button></Link>} /></Card>
   const m = bookingMoney(b)
@@ -64,6 +65,7 @@ export default function BookingDetail() {
             {mayMessage(db, me, { kind: 'booking', b }) && <Button variant="accent" icon={MessageCircle} onClick={() => setMessage('')}>Message client</Button>}
             {canEmailClient(db, me, b) && <Button variant="outline" icon={Mail} onClick={() => setMail(true)}>Detailed email</Button>}
             {canRequestRefund(db, me, b) && <Button variant="outline" icon={Undo2} onClick={() => setRefund(true)}>Refund</Button>}
+            {canSendBack(db, me, b) && <Button variant="outline" icon={CornerUpLeft} onClick={() => setBack('')} title={`Send back to ${previousStep(b)!.team}`}>Send back</Button>}
             <WhatsappClientButton b={b} />
             {canEditBooking(db, me, b) && <Link to={`/bookings/${b.id}/edit`}><Button variant="outline" icon={Pencil}>Edit</Button></Link>}
             {can('billing.create', 'billing.manage') && !invoices.length && !['PENDING_TL', 'REJECTED'].includes(b.status) && (
@@ -118,6 +120,11 @@ export default function BookingDetail() {
       )}
       {message !== null && <MessageClientModal target={{ kind: 'booking', b }} stage={message || undefined} onClose={() => setMessage(null)} />}
       {refund && <RefundRequestModal b={b} onClose={() => setRefund(false)} />}
+      <Modal open={back !== null} onClose={() => setBack(null)} size="sm" title={`Send back to ${previousStep(b)?.team ?? ''}`} subtitle={`${b.bookingId} · ${b.companyName} · now: ${BOOKING_STATUS[b.status].label}`}
+        footer={<><Button variant="outline" onClick={() => setBack(null)}>Cancel</Button><Button icon={CornerUpLeft} disabled={(back ?? '').trim().length < 5} onClick={async () => { if (back !== null && await run(() => sendBack(me, b.id, back), 'Client sent back')) setBack(null) }}>Send back</Button></>}>
+        <Textarea label="Reason" required rows={3} value={back ?? ''} onChange={(e) => setBack(e.target.value)} autoFocus placeholder="What needs to be redone or corrected, and why…" />
+        <p className="mt-2 text-xs text-mute">The file returns to the previous team, which is notified. The reason and your name are kept in the file's history and the activity log.</p>
+      </Modal>
       {tab === 'legacy' && <LegacyRecord id={b.id} />}
       {mail && <ClientEmailComposer b={b} onClose={() => setMail(false)} />}
     </div>
@@ -422,14 +429,22 @@ function Documents({ id }: { id: string }) {
   const run = useRun()
   const b = useBooking(id)
   const [pending, setPending] = useState<PendingDoc[]>([])
+  const [uploading, setUploading] = useState(false)
+  // documents waiting to be verified come first, newest first within each group
+  const docs = [...visibleDocuments(db, me, b)].sort((x, y) => Number(y.status === 'PENDING') - Number(x.status === 'PENDING') || y.at.localeCompare(x.at))
+  const toVerify = docs.filter((d) => d.status === 'PENDING').length
   return (
     <Card className="overflow-hidden">
-      <CardHeader title="Client documents" subtitle="PAN card, GSTIN, CRM, QT, Agreement, pitch deck, F.R, D.P.R… — stored with uploader, date and time" icon={FileText} />
-      <div className="border-b border-line p-5"><DocUploader label="Add documents" value={pending} onChange={setPending} onUpload={async (docs) => !!(await run(() => addDocuments(me, b.id, docs), `${docs.length} document(s) added`))} /></div>
-      {!visibleDocuments(db, me, b).length ? <EmptyState icon={FileText} title="No documents yet" text="Upload KYC, company documents, certificates, pitch deck or financials." /> : (
+      <CardHeader title="Client documents" icon={FileText}
+        subtitle={toVerify ? `${toVerify} to verify · PAN, GSTIN, agreement, pitch deck, F.R, D.P.R… with uploader, date and time` : 'PAN card, GSTIN, CRM, QT, Agreement, pitch deck, F.R, D.P.R… — stored with uploader, date and time'}
+        action={<Button icon={Upload} onClick={() => setUploading(true)}>Upload</Button>} />
+      <Modal open={uploading} onClose={() => setUploading(false)} title="Upload documents" subtitle={`${b.bookingId} · ${b.companyName}`} size="lg">
+        <DocUploader label="Add documents" value={pending} onChange={setPending} onUpload={async (list) => { const ok = !!(await run(() => addDocuments(me, b.id, list), `${list.length} document(s) added`)); if (ok) setUploading(false); return ok }} />
+      </Modal>
+      {!docs.length ? <EmptyState icon={FileText} title="No documents yet" text="Upload KYC, company documents, certificates, pitch deck or financials." action={<Button icon={Upload} onClick={() => setUploading(true)}>Upload</Button>} /> : (
         <div className="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-3">
-          {visibleDocuments(db, me, b).map((d) => (
-            <div key={d.id} className="flex items-start gap-3 rounded-xl border border-line p-3">
+          {docs.map((d) => (
+            <div key={d.id} className={cx('flex items-start gap-3 rounded-xl border p-3', d.status === 'PENDING' ? 'border-warn/40 bg-warn-soft/30' : 'border-line')}>
               <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-info-soft text-info"><FileText className="size-5" /></span>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold">{d.name}</p>

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   BadgeCheck, Bell, ChevronDown, ChevronRight, Home, LayoutGrid, LogOut, Mail, Menu as MenuIcon, Moon, Search, Settings, ShieldCheck, Sun, UserCheck, X, Monitor,
-  HelpCircle, SlidersHorizontal, Users, CalendarCheck2, TrendingUp, GraduationCap, FileText, Inbox, PartyPopper, BarChart3,
+  HelpCircle, SlidersHorizontal, Users, CalendarCheck2, CalendarDays, TrendingUp, GraduationCap, FileText, Inbox, PartyPopper, BarChart3,
   Wallet, Receipt, Landmark, Trophy, Briefcase, Wrench, MailPlus, ClipboardList, FilePen, Coffee, Package, PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react'
 import type { Perm, User } from '../lib/types'
@@ -164,6 +164,15 @@ export function Shell() {
             )}
             <BellMenu />
             <button onClick={() => setHelp(true)} aria-label="Help" title="Help" className="hidden size-10 place-items-center rounded-xl text-mute hover:bg-card2 hover:text-ink sm:grid"><HelpCircle className="size-5" /></button>
+            {/* the calendar (events, holidays, deadlines) sits here, next to the profile */}
+            <Menu width="w-72" trigger={(open) => (
+              <button aria-label="Calendar" title="Calendar" aria-expanded={open} className={cx('relative grid size-10 place-items-center rounded-xl hover:bg-card2 hover:text-ink', open ? 'bg-card2 text-ink' : 'text-mute')}>
+                <CalendarDays className="size-5" />
+                <span className="absolute bottom-1.5 right-1.5 text-[8px] font-bold leading-none text-accent">{new Date().getDate()}</span>
+              </button>
+            )}>
+              {() => <div className="p-2"><MiniCalendar /></div>}
+            </Menu>
             <Menu width="w-72" trigger={(open) => (
               <button className="ml-1 flex items-center gap-2 rounded-full py-1 pl-1 pr-2 hover:bg-card2" aria-expanded={open} aria-label="Account menu">
                 <Avatar name={me.name} photo={me.photo} size={36} />
@@ -312,7 +321,6 @@ function Sidebar({ mini, onExpand }: { mini: boolean; onExpand: () => void }) {
             ))}
           </SideGroup>
         ))}
-        <div className="pt-3"><MiniCalendar /></div>
       </nav>
       <div className="space-y-0.5 border-t border-line p-3">
         <NavLink to="/settings" className={({ isActive }) => cx(item, isActive ? active : idle)}><Settings className="size-5" />Profile Settings</NavLink>
