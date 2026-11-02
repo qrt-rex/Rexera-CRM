@@ -14,7 +14,7 @@ import { TasksPanel } from '../../components/TasksPanel'
 import { WorkProgressPanel } from '../../components/WorkProgressPanel'
 import { Button, EmptyState } from '../../components/ui'
 import { Bars, HBars } from '../../components/charts'
-import { BookingRow } from '../../components/booking'
+import { BookingRow , ClientSerial } from '../../components/booking'
 import { Greeting, LoginLogoutCard, MiniStat, Section, Tile, TileGrid, UpcomingEvents, ViewAll } from './widgets'
 
 export function AccountsDashboard() {
@@ -136,7 +136,7 @@ export function LegalDashboard() {
               <li key={d.id} className="flex items-center gap-3 px-5 py-2.5">
                 <div className="min-w-0 flex-1">
                   {d.file ? <FileLink file={d.file} label={d.name} /> : <span className="text-sm font-semibold">{d.name}</span>}
-                  <p className="truncate text-xs text-mute">{d.category} · <Link to={`/bookings/${b.id}`} className="hover:underline">{b.companyName}</Link> · {fmtDateTime(d.at)}</p>
+                  <p className="truncate text-xs text-mute">{d.category} · <Link to={`/bookings/${b.id}`} className="hover:underline"><ClientSerial b={b} />{b.companyName}</Link> · {fmtDateTime(d.at)}</p>
                 </div>
                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${d.status === 'VERIFIED' ? 'bg-ok-soft text-ok' : d.status === 'REJECTED' ? 'bg-bad-soft text-bad' : 'bg-warn-soft text-warn'}`}>{(d.status ?? 'PENDING').toLowerCase()}</span>
               </li>

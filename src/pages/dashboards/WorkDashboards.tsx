@@ -15,7 +15,7 @@ import { ACTIVE_FILE_STATUSES, ADMIN_DONE, ADMIN_STAGES, adminStatusLabel } from
 import { fmtDate, ymd } from '../../lib/format'
 import { EmptyState, Stat } from '../../components/ui'
 import { HBars } from '../../components/charts'
-import { BookingRow, BookingStatusBadge } from '../../components/booking'
+import { BookingRow, BookingStatusBadge , ClientSerial } from '../../components/booking'
 import { ClientWorkRow } from '../../components/ClientWork'
 import { TasksPanel } from '../../components/TasksPanel'
 import { WorkProgressPanel } from '../../components/WorkProgressPanel'
@@ -166,7 +166,7 @@ export function AdminDashboard() {
             <ul className="divide-y divide-line/70">
               {completed.slice(0, 5).map((b) => (
                 <li key={b.id} className="flex items-center gap-3 px-5 py-3">
-                  <div className="min-w-0 flex-1"><Link to={`/bookings/${b.id}`} className="block truncate text-sm font-semibold hover:underline">{b.companyName}</Link><p className="truncate text-xs text-mute">{b.serviceName} · {userName(db, b.createdBy)}</p></div>
+                  <div className="min-w-0 flex-1"><Link to={`/bookings/${b.id}`} className="block truncate text-sm font-semibold hover:underline"><ClientSerial b={b} />{b.companyName}</Link><p className="truncate text-xs text-mute">{b.serviceName} · {userName(db, b.createdBy)}</p></div>
                   <BookingStatusBadge b={b} />
                 </li>
               ))}

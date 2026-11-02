@@ -1,3 +1,4 @@
+import { ClientSerial } from './booking'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BellRing, Check, ListTodo, Plus } from 'lucide-react'
@@ -31,7 +32,7 @@ export function TasksPanel({ className, scope = 'mine' }: { className?: string; 
             <button aria-label="Mark done" onClick={() => run(() => toggleTask(me, b.id, t.id), 'Task done')} className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-md border-2 border-line hover:border-ok"><Check className="size-3 text-transparent hover:text-ok" /></button>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold">{t.title}</p>
-              <p className="text-xs text-mute"><Link to={`/bookings/${b.id}`} className="hover:underline">{b.companyName}</Link>{t.assignee ? ` · ${userName(db, t.assignee)}` : ''}{t.due ? ` · due ${fmtDate(t.due)}` : ''}</p>
+              <p className="text-xs text-mute"><Link to={`/bookings/${b.id}`} className="hover:underline"><ClientSerial b={b} />{b.companyName}</Link>{t.assignee ? ` · ${userName(db, t.assignee)}` : ''}{t.due ? ` · due ${fmtDate(t.due)}` : ''}</p>
             </div>
             {t.remindEveryDays && <span title={`Reminder every ${t.remindEveryDays} days`} className="inline-flex shrink-0 items-center gap-1 rounded-full bg-warn-soft px-2 py-0.5 text-[10px] font-semibold text-warn"><BellRing className="size-3" />{t.remindEveryDays}d</span>}
             {t.due && t.due < today() && <span className="shrink-0 rounded-full bg-bad-soft px-2 py-0.5 text-[10px] font-semibold text-bad">overdue</span>}

@@ -8,7 +8,7 @@ import { collections, monthStart, salesNumbers, waitingFor } from '../../lib/met
 import { inr, inrShort } from '../../lib/format'
 import { EmptyState } from '../../components/ui'
 import { Ring } from '../../components/charts'
-import { BookingRow, BookingStatusBadge, ChainStepper } from '../../components/booking'
+import { BookingRow, BookingStatusBadge, ChainStepper , ClientSerial } from '../../components/booking'
 import { ClientEntriesPanel } from '../../components/ClientEntry'
 import { followUpDue, visibleClientEntries } from '../../lib/clientEntries'
 import { Greeting, LoginLogoutCard, MiniStat, Section, Tile, TileGrid, UpcomingEvents, ViewAll, type TileSubAction } from './widgets'
@@ -150,7 +150,7 @@ export function SalesDashboard({ lead }: { lead: boolean }) {
                 {mine.slice(0, 5).map((b) => (
                   <li key={b.id} className="px-5 py-4">
                     <div className="mb-3 flex flex-wrap items-center gap-2">
-                      <Link to={`/bookings/${b.id}`} className="font-bold hover:underline">{b.companyName}</Link>
+                      <Link to={`/bookings/${b.id}`} className="font-bold hover:underline"><ClientSerial b={b} />{b.companyName}</Link>
                       <BookingStatusBadge b={b} />
                       <span className="ml-auto text-xs text-mute">{b.serviceName}{lead && ` · ${userName(db, b.createdBy)}`}</span>
                     </div>

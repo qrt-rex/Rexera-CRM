@@ -8,7 +8,7 @@ import { KYC_CATEGORIES, stageLabel } from '../../lib/workflow'
 import { ago, bookingMoney, inr, today } from '../../lib/format'
 import { roleLabel } from '../../lib/rbac'
 import { EmptyState, Stat } from '../../components/ui'
-import { BookingStatusBadge } from '../../components/booking'
+import { BookingStatusBadge , ClientSerial } from '../../components/booking'
 import { Greeting, LoginLogoutCard, Section, Tile, TileGrid, ViewAll } from './widgets'
 import { MESSAGES_ENABLED } from '../../lib/modules'
 
@@ -79,7 +79,7 @@ export function SupportDashboard() {
               {waiting.map((b) => (
                 <li key={b.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
                   <div className="min-w-0 flex-1">
-                    <Link to={`/bookings/${b.id}`} className="font-semibold hover:underline">{b.companyName}</Link>
+                    <Link to={`/bookings/${b.id}`} className="font-semibold hover:underline"><ClientSerial b={b} />{b.companyName}</Link>
                     <p className="text-xs text-mute">{b.contactPerson} · {b.mobile} · {b.holdReason ?? 'On hold'} · updated {ago(b.updatedAt)}</p>
                   </div>
                   <BookingStatusBadge b={b} />

@@ -13,6 +13,11 @@ import { addDays, bookingMoney, fmtDate, inr, ymd } from '../lib/format'
 import { Badge, Button, Checkbox, cx, Input, Modal, Progress, Select, Textarea, useRun, useToast } from './ui'
 import { deliverWelcome } from '../lib/welcome'
 
+/** The client's unique serial number (the CRM ID), shown the same way next to the client's name everywhere. */
+export function ClientSerial({ b, className }: { b: Pick<Booking, 'bookingId'>; className?: string }) {
+  return <span className={cx('mr-1.5 inline-block rounded-md bg-card2 px-1.5 py-px align-middle font-mono text-[10.5px] font-semibold text-mute ring-1 ring-line', className)}>{b.bookingId}</span>
+}
+
 export function BookingStatusBadge({ b }: { b: Booking }) {
   const s = BOOKING_STATUS[b.status]
   return <Badge tone={s.tone} dot>{s.label}</Badge>

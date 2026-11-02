@@ -9,7 +9,7 @@ import { STAGES } from '../lib/workflow'
 import { fmtDateTime } from '../lib/format'
 import { checkFile, saveFile } from '../lib/files'
 import { Button, cx, Modal, useRun, useToast } from './ui'
-import { BookingStatusBadge, DecisionButtons, StageTrack } from './booking'
+import { BookingStatusBadge, DecisionButtons, StageTrack , ClientSerial } from './booking'
 import { DOC_ACCEPT, DocUploader, type PendingDoc } from './DocUploader'
 import { FileLink } from './FileField'
 import { StageControls, StageText } from './StageControls'
@@ -31,7 +31,7 @@ export function ClientWorkRow({ b, showDocs = false }: { b: Booking; showDocs?: 
   return (
     <li className="px-5 py-4">
       <div className="mb-2 flex flex-wrap items-center gap-2">
-        <Link to={`/bookings/${b.id}`} className="font-bold hover:underline">{b.companyName}</Link>
+        <Link to={`/bookings/${b.id}`} className="font-bold hover:underline"><ClientSerial b={b} />{b.companyName}</Link>
         <BookingStatusBadge b={b} />
         <span className="ml-auto text-xs font-semibold text-mute">Stage <StageText b={b} /> <span className="font-normal">of {STAGES.length}</span></span>
       </div>

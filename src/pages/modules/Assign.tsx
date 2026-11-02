@@ -6,7 +6,7 @@ import { useAuth, useMe } from '../../lib/auth'
 import { reassignOwner, sendToTeamLead, userName, usersWithRole, visibleBookings } from '../../lib/actions'
 import { bookingMoney, inr } from '../../lib/format'
 import { Avatar, Button, Card, CardHeader, EmptyState, PageHeader, Select, Table, Tabs, Td, Th, useRun } from '../../components/ui'
-import { BookingStatusBadge } from '../../components/booking'
+import { BookingStatusBadge , ClientSerial } from '../../components/booking'
 
 export default function Assign() {
   const db = useDb()
@@ -79,7 +79,7 @@ export default function Assign() {
             <Card key={u.id} className="overflow-hidden">
               <CardHeader title={u.name} subtitle={`${items.length} client(s) · ${inr(items.reduce((s, b) => s + bookingMoney(b).collected, 0))} collected`} />
               <ul className="divide-y divide-line/70">
-                {items.map((b) => <li key={b.id} className="flex items-center gap-2 px-5 py-2.5"><Link to={`/bookings/${b.id}`} className="min-w-0 flex-1 truncate text-sm font-semibold hover:underline">{b.companyName}</Link><BookingStatusBadge b={b} /></li>)}
+                {items.map((b) => <li key={b.id} className="flex items-center gap-2 px-5 py-2.5"><Link to={`/bookings/${b.id}`} className="min-w-0 flex-1 truncate text-sm font-semibold hover:underline"><ClientSerial b={b} />{b.companyName}</Link><BookingStatusBadge b={b} /></li>)}
                 {!items.length && <li className="px-5 py-4 text-sm text-mute">No clients yet.</li>}
               </ul>
             </Card>

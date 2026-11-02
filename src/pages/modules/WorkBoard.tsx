@@ -6,7 +6,7 @@ import { useMe } from '../../lib/auth'
 import { userName, usersWithRole, visibleBookings } from '../../lib/actions'
 import { bookingMoney, fmtDate, inr, today } from '../../lib/format'
 import { Card, EmptyState, PageHeader, SearchBox, Table, Tabs, Td, Th, usePaged } from '../../components/ui'
-import { BookingStatusBadge, DeadlineBadge, StageTrack } from '../../components/booking'
+import { BookingStatusBadge, DeadlineBadge, StageTrack , ClientSerial } from '../../components/booking'
 
 export default function WorkBoard() {
   const db = useDb()
@@ -44,7 +44,7 @@ export default function WorkBoard() {
             <tbody>
               {slice.map((b) => (
                 <tr key={b.id} className="hover:bg-card2/60">
-                  <Td><Link to={`/bookings/${b.id}`} className="font-semibold hover:underline">{b.companyName}</Link><p className="text-xs text-mute">{b.serviceName}</p></Td>
+                  <Td><Link to={`/bookings/${b.id}`} className="font-semibold hover:underline"><ClientSerial b={b} />{b.companyName}</Link><p className="text-xs text-mute">{b.serviceName}</p></Td>
                   <Td><BookingStatusBadge b={b} /></Td>
                   <Td className="w-48"><StageTrack b={b} /></Td>
                   <Td className="text-xs">{userName(db, b.opsMemberId)}</Td><Td className="text-xs">{userName(db, b.adminId)}</Td>
