@@ -35,3 +35,10 @@ export function mayWhatsappClient(roles: string[] | undefined): boolean
 export const MAX_WHATSAPP_MESSAGE: number
 export function whatsappLink(mobile: string | undefined | null, text: string): string
 export type { Role }
+export const DUE_SOON_DAYS: number
+export const DOC_REMINDER_DAYS: number
+export type DeadlineState = 'OVERDUE' | 'TODAY' | 'SOON' | 'LATER'
+export function deadlineState(due: string, today: string): DeadlineState
+export interface FileDeadline { key: 'file' | AdminStageId; label: string; due: string; state: DeadlineState; assignee?: string; status?: AdminWorkStatus }
+export function fileDeadlines(f: { status: string; deadline?: string; adminId?: string; adminWork?: Partial<Record<AdminStageId, { due?: string; status: AdminWorkStatus; assignee?: string }>> }, today: string): FileDeadline[]
+export function reminderPeriod(today: string, every?: number): number

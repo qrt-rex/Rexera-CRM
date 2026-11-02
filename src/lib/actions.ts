@@ -7,7 +7,7 @@ import { CLOUD, cloudSetOwnPassword, cloudSetPassword, cloudSignIn, cloudSignOut
 import { bookingBranch, directorBranches, isBranchScoped, leadBranch, NO_BRANCH } from './branches'
 import { BOOKING_TYPES, COMBO_PACKAGES, comboCap, comboMonths, isFundingService } from './catalog'
 import {
-  ACTIVE_FILE_STATUSES, ADMIN_DONE, ADMIN_STAGES, ADMIN_WORK_STATUSES, addDays as addDaysYmd, adminStatusLabel, CLOSED_FILE_STATUSES, followUpDue, istToday, nextAfter as nextAfterYmd, precheckDue, precheckPending, schemeAlertDue, workflowSettings,
+  ACTIVE_FILE_STATUSES, ADMIN_DONE, ADMIN_STAGES, ADMIN_WORK_STATUSES, addDays as addDaysYmd, adminStatusLabel, CLOSED_FILE_STATUSES, fileDeadlines, followUpDue, istToday, nextAfter as nextAfterYmd, precheckDue, precheckPending, schemeAlertDue, workflowSettings,
 } from '../../supabase/workflow-rules.mjs'
 import { applicationProblems, formPositions, JOB_POSITIONS } from '../../supabase/form-rules.mjs'
 import { docStatus, reviewSteps } from '../../supabase/portal-rules.mjs'
@@ -1683,9 +1683,10 @@ export function addFollowUpNote(me: User, id: string, note: string) {
 }
 /** Admin: pause / resume the 15-day follow-up, or change its next date or interval. */
 export function setFollowUpSchedule(me: User, id: string, change: { paused?: boolean; nextOn?: string; everyDays?: number; note?: string }) {
-  need(me, 'followup.manage')
   mutate((d) => {
     const b = findB(d, id)
+    // Admin and the Operation team edit reminder schedules
+    assert(has(me, 'followup.manage', 'bookings.process') || b.opsMemberId === me.id || isMaster(me), 'Only Operations and Admin change follow-up reminders.')
     const f = b.followUp
     assert(f, 'This file has no follow-up schedule.')
     const at = nowIso(), note = change.note?.trim()
@@ -1744,6 +1745,52 @@ export function runPrecheckReminders(now = Date.now()) {
     }
   })
   return due.length
+}
+
+/**
+ * Deadline alerts in the app (the server job does this on the live CRM): two days before a client deadline or an Admin
+ * stage's due date, then every day while overdue — to the file's Operations person and the Admin responsible.
+ * Each alert is sent once (remembered in this browser).
+ */
+export function runDeadlineAlerts(now = Date.now()) {
+  const d = getDb(), t = istToday(now)
+  if (CLOUD && serverJobsActive(d, now)) return 0
+  let sent: Record<string, number> = {}
+  try { sent = JSON.parse(localStorage.getItem('rexera-deadline-alerts') ?? '{}') } catch { /* storage blocked */ }
+  const due: { b: Booking; x: ReturnType<typeof fileDeadlines>[number]; key: string }[] = []
+  for (const b of d.bookings) for (const x of fileDeadlines(b, t)) {
+    if (x.state === 'LATER') continue
+    const key = x.state === 'OVERDUE' ? `overdue:${b.id}:${x.key}:${t}` : `duesoon:${b.id}:${x.key}:${x.due}`
+    if (!sent[key]) due.push({ b, x, key })
+  }
+  if (!due.length) return 0
+  mutate((m) => {
+    for (const { b, x } of due) {
+      const overdue = x.state === 'OVERDUE'
+      const who = x.key === 'file' ? b.opsMemberId : x.assignee ?? b.adminId
+      notify(m, [b.opsMemberId, x.assignee ?? b.adminId], overdue ? `Overdue: ${x.label} — ${b.companyName}` : `Due ${x.state === 'TODAY' ? 'today' : fmtDate(x.due)}: ${x.label} — ${b.companyName}`,
+        reminderBody(m, b, `${x.label} ${overdue ? 'was due' : 'due'} ${fmtDate(x.due)} · responsible: ${userName(m, who)}`), `/bookings/${b.id}`, overdue ? 'warning' : 'info')
+    }
+  })
+  for (const { key } of due) sent[key] = now
+  // forget alerts older than 60 days
+  for (const [k, at] of Object.entries(sent)) if (now - at > 60 * 86400000) delete sent[k]
+  try { localStorage.setItem('rexera-deadline-alerts', JSON.stringify(sent)) } catch { /* storage blocked */ }
+  return due.length
+}
+
+/** Operations or Admin give a client (CRM entry) its deadline; Admin stage deadlines are set per stage (setAdminWork). */
+export function setFileDeadline(me: User, id: string, deadline: string | null, note = '') {
+  mutate((d) => {
+    const b = findB(d, id)
+    assert(isMaster(me) || has(me, 'bookings.process', 'bookings.admin', 'followup.manage') || b.opsMemberId === me.id || b.adminId === me.id, 'Only Operations and Admin set a client’s deadline.')
+    assert(!deadline || /^\d{4}-\d{2}-\d{2}$/.test(deadline), 'Pick a date.')
+    const before = b.deadline ? fmtDate(b.deadline) : 'none'
+    b.deadline = deadline || ''
+    b.updatedAt = nowIso()
+    audit(d, me.id, 'DEADLINE_SET', `${b.bookingId} · ${b.companyName}: client deadline${note.trim() ? ` — ${note.trim()}` : ''}`, { before, after: deadline ? fmtDate(deadline) : 'none', ref: b.id })
+    notify(d, [b.opsMemberId, b.adminId].filter((x) => x && x !== me.id), 'Client deadline changed', `${b.bookingId} · ${b.companyName}: ${deadline ? fmtDate(deadline) : 'removed'} (${me.name})`, `/bookings/${b.id}`, 'info')
+  })
 }
 
 /** Admin: reminder intervals, the welcome message templates, the Operations contact and scheme alert recipients. */

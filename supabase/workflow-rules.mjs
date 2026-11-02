@@ -171,3 +171,27 @@ export function adminProgress(bookings, today) {
 /** {client_name} … placeholders → values (unknown ones are left as they are). */
 export const fillTemplate = (text, vars) => String(text ?? '').replace(/\{(\w+)\}/g, (m, k) => (vars[k] != null && vars[k] !== '' ? String(vars[k]) : k === 'ops_phone' || k === 'ops_email' ? '—' : m))
 export const WELCOME_PLACEHOLDERS = ['{client_name}', '{company}', '{service}', '{reference}', '{status}', '{ops_name}', '{ops_phone}', '{ops_email}']
+
+// ------------------------------------------------------------------ deadlines and reminders (Reminders dashboard, alerts)
+/** A deadline counts as "due soon" this many days ahead (the advance alert). */
+export const DUE_SOON_DAYS = 2
+/** Pending client documents are chased every this many days until they arrive. */
+export const DOC_REMINDER_DAYS = 7
+const dayNo = (ymd) => Math.floor(Date.parse(`${ymd}T00:00:00Z`) / 86400000)
+export const deadlineState = (due, today) => (due < today ? 'OVERDUE' : due === today ? 'TODAY' : dayNo(due) - dayNo(today) <= DUE_SOON_DAYS ? 'SOON' : 'LATER')
+/**
+ * The deadlines on a file that are still open: the client deadline (while the file is active) and each Admin stage's
+ * due date (until the stage is done). `f`: { status, deadline, adminId, adminWork }.
+ */
+export function fileDeadlines(f, today) {
+  const out = []
+  if (f.deadline && ACTIVE_FILE_STATUSES.includes(f.status)) out.push({ key: 'file', label: 'Client deadline', due: f.deadline, state: deadlineState(f.deadline, today) })
+  for (const s of ADMIN_STAGES) {
+    const w = f.adminWork?.[s.id]
+    if (!w?.due || ADMIN_DONE.includes(w.status) || w.status === 'NOT_NEEDED') continue
+    out.push({ key: s.id, label: s.label, due: w.due, state: deadlineState(w.due, today), assignee: w.assignee ?? f.adminId ?? undefined, status: w.status })
+  }
+  return out
+}
+/** Which reminder period a date falls in (one client-document reminder per period). */
+export const reminderPeriod = (today, every = DOC_REMINDER_DAYS) => Math.floor(dayNo(today) / every)

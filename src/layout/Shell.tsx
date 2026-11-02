@@ -14,7 +14,7 @@ import { applyTheme, getTheme, useAuth, useMe, type Theme } from '../lib/auth'
 import { MESSAGES_ENABLED, MODULES, canSee, moduleLabel } from '../lib/modules'
 import { canOpenDashboard, isMaster, ROLES, roleLabel } from '../lib/rbac'
 import { CLOUD } from '../lib/cloud'
-import { markRead, overdueLeadsOf, runBreakMonitor, runComboReminders, runFollowUpReminders, runPrecheckReminders, runSchemeAlerts, runTaskReminders, unseenLeadsOf } from '../lib/actions'
+import { markRead, overdueLeadsOf, runBreakMonitor, runComboReminders, runDeadlineAlerts, runFollowUpReminders, runPrecheckReminders, runSchemeAlerts, runTaskReminders, unseenLeadsOf } from '../lib/actions'
 import { runScheduledAutomations } from '../lib/email'
 import { ago, today } from '../lib/format'
 import { Avatar, Button, cx, Menu, MenuItem, Modal } from '../components/ui'
@@ -77,7 +77,7 @@ export function Shell() {
     // each built-in automation can be switched off by IT Support (Automation Center); daily-check rules run here too
     const jobs: [string, () => unknown][] = [
       ['scheduled-emails', runScheduledAutomations], ['task-reminders', runTaskReminders], ['combo-reminders', runComboReminders],
-      ['file-follow-ups', runFollowUpReminders], ['pitch-deck-reminders', runPrecheckReminders], ['scheme-expiry-alerts', runSchemeAlerts], ['custom-rules', runScheduledRules],
+      ['file-follow-ups', runFollowUpReminders], ['pitch-deck-reminders', runPrecheckReminders], ['deadline-alerts', runDeadlineAlerts], ['scheme-expiry-alerts', runSchemeAlerts], ['custom-rules', runScheduledRules],
     ]
     const tick = () => { for (const [key, run] of jobs) { try { if (builtinOn(getDb(), key)) run() } catch { /* never block the app */ } } }
     tick()

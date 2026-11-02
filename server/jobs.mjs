@@ -7,8 +7,9 @@
 import { timingSafeEqual } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 import {
-  ACTIVE_FILE_STATUSES, addDays, adminStatusLabel, fillTemplate, followUpDue, istToday, nextAfter, precheckDue, schemeAlertDue, workflowSettings,
+  ACTIVE_FILE_STATUSES, ADMIN_STAGES, addDays, adminStatusLabel, fileDeadlines, fillTemplate, followUpDue, istToday, nextAfter, precheckDue, reminderPeriod, schemeAlertDue, workflowSettings,
 } from '../supabase/workflow-rules.mjs'
+import { docStatus } from '../supabase/portal-rules.mjs'
 import { rowWelcomeVars, welcomeWhatsapp } from './whatsapp.mjs'
 
 const admin = (env) => {
@@ -20,7 +21,7 @@ const STAGES = ['Data Collection', 'Data Received', 'Document In-process / In-re
 const stageText = (r) => `${r.stage}. ${STAGES[r.stage - 1] ?? ''}`
 
 /** A booking row as the shared rules read it. */
-const asFile = (r) => ({ id: r.id, status: r.status, adminId: r.admin_id, followUp: r.follow_up, adminWork: r.admin_work })
+const asFile = (r) => ({ id: r.id, status: r.status, adminId: r.admin_id, followUp: r.follow_up, adminWork: r.admin_work, deadline: r.deadline })
 
 /** Takes the reminder key; false when it was already taken (sent before). */
 async function once(sb, key, kind, refId, recipients) {
@@ -54,7 +55,7 @@ export async function runJobs(env, { send, now = Date.now(), client, fetchImpl }
   // ---------------------------------------------------------------- active files
   let files = []
   await step('files', async () => {
-    const { data, error } = await sb.from('bookings').select('id, booking_code, company_name, contact_person, email, mobile, status, stage, service_name, ops_member_id, admin_id, follow_up, admin_work, welcome')
+    const { data, error } = await sb.from('bookings').select('id, booking_code, company_name, contact_person, email, mobile, status, stage, service_name, ops_member_id, admin_id, follow_up, admin_work, welcome, deadline, client_docs')
       .in('status', ACTIVE_FILE_STATUSES)
     if (error) throw new Error(error.message)
     files = data ?? []
@@ -105,6 +106,39 @@ export async function runJobs(env, { send, now = Date.now(), client, fetchImpl }
       out.precheck++
     })
   }
+
+  // ---------------------------------------------------------------- deadlines: an advance alert, then every day while overdue
+  out.deadlines = 0
+  if (!off.has('deadline-alerts')) for (const r of files) for (const x of fileDeadlines(asFile(r), t)) {
+    if (x.state === 'LATER') continue
+    await step(`deadline ${r.booking_code} ${x.key}`, async () => {
+      const overdue = x.state === 'OVERDUE'
+      const to = [r.ops_member_id, x.assignee ?? r.admin_id].filter(Boolean)
+      // overdue: one alert a day until done · due soon / today: one alert for that due date
+      if (!(await once(sb, overdue ? `overdue:${r.id}:${x.key}:${t}` : `duesoon:${r.id}:${x.key}:${x.due}`, overdue ? 'OVERDUE' : 'DUE_SOON', r.id, to))) return
+      const who = x.key === 'file' ? name(r.ops_member_id) : name(x.assignee ?? r.admin_id)
+      await notify(sb, to, overdue ? `Overdue: ${x.label} — ${r.company_name}` : `Due ${x.state === 'TODAY' ? 'today' : fmt(x.due)}: ${x.label} — ${r.company_name}`,
+        `${r.booking_code} · ${r.company_name} · ${x.label} ${overdue ? `was due ${fmt(x.due)}` : `due ${fmt(x.due)}`} · responsible: ${who}${x.status ? ` · ${adminStatusLabel(x.status)}` : ''}`, `/bookings/${r.id}`, overdue ? 'warning' : 'info')
+      out.deadlines++
+    })
+  }
+
+  // ---------------------------------------------------------------- client documents still awaited: every 7 days until they arrive
+  out.clientDocs = 0
+  if (!off.has('client-doc-reminders')) await step('client documents', async () => {
+    const asked = files.filter((r) => r.client_docs && Object.values(r.client_docs).some((x) => x && !x.removed))
+    if (!asked.length) return
+    const { data: ups } = await sb.from('client_doc_uploads').select('booking_id, category, at').in('booking_id', asked.map((r) => r.id))
+    for (const r of asked) {
+      const mine = (ups ?? []).filter((u) => u.booking_id === r.id)
+      const waiting = ADMIN_STAGES.filter((s) => ['PENDING_UPLOAD', 'RESUBMISSION'].includes(docStatus(r.client_docs[s.id], mine, s.id) ?? ''))
+      if (!waiting.length) continue
+      const to = [r.ops_member_id, r.admin_id].filter(Boolean)
+      if (!(await once(sb, `clientdocs:${r.id}:${reminderPeriod(t)}`, 'CLIENT_DOCS', r.id, to))) continue
+      await notify(sb, to, `Client documents still awaited: ${r.company_name}`, `${r.booking_code} · ${waiting.map((s) => s.label).join(', ')} — remind the client (Client portal / Message client)`, `/bookings/${r.id}?tab=workflow`)
+      out.clientDocs++
+    }
+  })
 
   // ---------------------------------------------------------------- scheme ends tomorrow
   if (!off.has('scheme-expiry-alerts')) await step('schemes', async () => {

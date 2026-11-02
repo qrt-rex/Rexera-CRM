@@ -7,7 +7,11 @@ import { deleteScheme, upsertScheme, userName } from '../../lib/actions'
 import { fmtDate, fmtDateTime, inr } from '../../lib/format'
 import { istToday, schemeDaysLeft, schemeDuration, schemeState, type SchemeState } from '../../../supabase/workflow-rules.mjs'
 import { Badge, Button, Card, EmptyState, Input, Modal, PageHeader, SearchBox, Tabs, Textarea, Toggle, useConfirm, useRun } from '../../components/ui'
-import { byPrice, inPriceBand, OptionFilter, PriceFilter, type PriceBand, type PriceSort } from '../../components/CatalogFilters'
+import { byPrice, inPriceBand, PriceFilter, type PriceBand, type PriceSort } from '../../components/CatalogFilters'
+import { FilterBar, MultiFilter, optionsFrom } from '../../components/MultiFilter'
+
+const PRICE = { lt10k: 'Under ₹10,000', '10-50k': '₹10,000 – ₹50,000', '50k-1l': '₹50,000 – ₹1 lakh', gt1l: '₹1 lakh and above', none: 'No price' } as const
+const ENDS = { week: 'Ends within 7 days', month: 'Ends within 30 days', later: 'Ends later', open: 'No end date', ended: 'Ended' } as const
 
 type Edit = Omit<Scheme, 'id' | 'createdAt' | 'by' | 'updatedAt' | 'updatedBy'> & { id?: string }
 const blank: Edit = { title: '', category: 'Grant', summary: '', benefit: '', eligibility: '', active: true, price: undefined, startDate: '', endDate: '' }
@@ -32,16 +36,25 @@ export default function Schemes() {
   // price-wise and scheme-wise (category)
   const [band, setBand] = useState<PriceBand>('all')
   const [sort, setSort] = useState<PriceSort>('')
-  const [cat, setCat] = useState('')
-  const cats = [...new Set(db.schemes.map((s) => s.category.trim()).filter(Boolean))].sort()
+  // Excel-style filters: tick several values in each (none ticked = all)
+  const [cats, setCats] = useState<string[]>([])
+  const [states, setStates] = useState<string[]>([])
+  const [prices, setPrices] = useState<string[]>([])
+  const [ending, setEnding] = useState<string[]>([])
   const [tab, setTab] = useState<'live' | 'EXPIRED' | 'all'>('live')
   const [edit, setEdit] = useState<Edit | null>(null)
   const live = (s: Scheme) => ['ACTIVE', 'UPCOMING', 'NO_DATES'].includes(schemeState(s, t))
-  const list = byPrice(db.schemes
+  const priceOf = (s: Scheme) => (s.price == null ? 'none' : s.price < 10_000 ? 'lt10k' : s.price < 50_000 ? '10-50k' : s.price < 100_000 ? '50k-1l' : 'gt1l')
+  const endOf = (s: Scheme) => { const left = schemeDaysLeft(s, t); return !s.endDate ? 'open' : left == null || left < 0 ? 'ended' : left <= 7 ? 'week' : left <= 30 ? 'month' : 'later' }
+  const KEYS = { cat: (s: Scheme) => s.category.trim() || 'Other', state: (s: Scheme) => schemeState(s, t), price: priceOf, end: endOf }
+  const sel = { cat: cats, state: states, price: prices, end: ending }
+  const shownBase = db.schemes
     .filter((s) => (manage ? (tab === 'all' || (tab === 'live' ? live(s) : schemeState(s, t) === 'EXPIRED')) : live(s)))
-    .filter((s) => !cat || s.category.trim() === cat)
     .filter((s) => inPriceBand(s.price, band))
-    .filter((s) => !q || `${s.title} ${s.summary} ${s.category}`.toLowerCase().includes(q.toLowerCase()))
+    .filter((s) => !q || `${s.title} ${s.summary} ${s.category} ${s.benefit} ${s.eligibility}`.toLowerCase().includes(q.toLowerCase()))
+  const passing = (skip?: keyof typeof KEYS) => shownBase.filter((s) => (Object.keys(KEYS) as (keyof typeof KEYS)[]).every((k) => k === skip || !sel[k].length || sel[k].includes(KEYS[k](s))))
+  const opt = (k: keyof typeof KEYS, label: (v: string) => string) => optionsFrom(passing(k), KEYS[k], label)
+  const list = byPrice(passing()
     .sort((a, b) => (a.endDate ?? '9999').localeCompare(b.endDate ?? '9999')), (s) => s.price, sort)
   const days = edit?.startDate && edit.endDate && edit.endDate >= edit.startDate ? schemeDuration(edit) : null
 
@@ -51,7 +64,12 @@ export default function Schemes() {
         actions={<>{manage && <Button variant="accent" icon={Plus} onClick={() => setEdit({ ...blank })}>Add scheme</Button>}</>} />
       <div className="mb-5 flex flex-wrap items-center gap-3">
         <SearchBox value={q} onChange={setQ} placeholder="Search schemes…" className="max-w-md flex-1" />
-        <OptionFilter label="Scheme category" all="All categories" value={cat} options={cats} onChange={setCat} />
+        <FilterBar active={[cats, states, prices, ending].filter((x) => x.length).length} onClear={() => { setCats([]); setStates([]); setPrices([]); setEnding([]) }}>
+          <MultiFilter label="Category" value={cats} onChange={setCats} options={opt('cat', (v) => v)} />
+          {manage && <MultiFilter label="Status" value={states} onChange={setStates} options={opt('state', (v) => STATE[v as SchemeState]?.label ?? v)} />}
+          <MultiFilter label="Price range" keepOrder value={prices} onChange={setPrices} options={['lt10k', '10-50k', '50k-1l', 'gt1l', 'none'].map((v) => opt('price', (x) => PRICE[x as keyof typeof PRICE]).find((o) => o.value === v)).filter((o): o is NonNullable<typeof o> => !!o)} />
+          <MultiFilter label="Ends" keepOrder value={ending} onChange={setEnding} options={['week', 'month', 'later', 'open', 'ended'].map((v) => opt('end', (x) => ENDS[x as keyof typeof ENDS]).find((o) => o.value === v)).filter((o): o is NonNullable<typeof o> => !!o)} />
+        </FilterBar>
         <PriceFilter band={band} sort={sort} onBand={setBand} onSort={setSort} />
         {manage && <Tabs value={tab} onChange={setTab} tabs={[
           { id: 'live', label: 'Active & upcoming', count: db.schemes.filter(live).length },

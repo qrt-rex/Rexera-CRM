@@ -76,6 +76,7 @@ export const MODULES: ModuleDef[] = [
   { key: 'reports', path: '/reports', label: 'Reports', desc: 'Analytics, report cards and exports', icon: BookOpenCheck, tone: 'navy', perms: ['reports.view'], group: 'Workspace' },
   { key: 'notifications', path: '/notifications', label: 'Notifications', desc: 'Everything that needs your attention', icon: BellRing, tone: 'orange', perms: [], group: 'Workspace' },
   // the WhatsApp / email templates each team sends to clients, and every message sent
+  { key: 'reminders', path: '/reminders', label: 'Reminders', desc: 'Deadlines, follow-ups and documents awaited — overdue and due-soon alerts', icon: BellRing, tone: 'amber', perms: [], roles: ['operations', 'admin', 'superadmin', 'it'], group: 'Client files' },
   { key: 'client-messages', path: '/client-messages', label: 'Client Messages', desc: 'WhatsApp & email templates for every team, message log, setup', icon: MessagesSquare, tone: 'green', perms: [], roles: ['operations', 'admin', 'superadmin', 'it'], group: 'Client files' },
   // every automation in one place: IT Support edits, Super Admin looks
   { key: 'automation', path: '/automation', label: 'Automation Center', desc: 'Built-in automations on / off, your own rules (when → if → then), run history', icon: Workflow, tone: 'violet', perms: [], roles: ['it', 'superadmin'], group: 'Admin' },

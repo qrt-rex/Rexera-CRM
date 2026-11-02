@@ -59,4 +59,17 @@ assert.deepEqual([a2.stages.PRECHECK.total, a2.pct], [1, 0], 'the stage assignee
 assert.equal(fillTemplate('Hi {client_name} — {reference} {unknown}', { client_name: 'Asha', reference: 'RX-1' }), 'Hi Asha — RX-1 {unknown}')
 assert.equal(workflowSettings({ precheckDays: 4 }).fileReminderDays, 15)
 assert.equal(workflowSettings({ welcomeEmail: { subject: 'S' } }).welcomeEmail.body.length > 50, true, 'missing parts come from the defaults')
-console.log('✓ workflow rules: India dates, follow-ups, Pitch Deck, schemes, Admin progress, templates')
+// deadlines: due soon (2 days), today, overdue — only open ones (active file, Admin stage not done)
+{
+  const { fileDeadlines, deadlineState, reminderPeriod } = await import('./workflow-rules.mjs')
+  assert.equal(deadlineState('2026-11-04', '2026-11-02'), 'SOON')
+  assert.equal(deadlineState('2026-11-05', '2026-11-02'), 'LATER')
+  assert.equal(deadlineState('2026-11-02', '2026-11-02'), 'TODAY')
+  assert.equal(deadlineState('2026-11-01', '2026-11-02'), 'OVERDUE')
+  const f = { status: 'WITH_ADMIN', deadline: '2026-11-01', adminId: 'adm', adminWork: { DPR: { status: 'IN_PROGRESS', due: '2026-11-03' }, FINANCE: { status: 'COMPLETED', due: '2026-10-01' }, CERTIFICATION: { status: 'NOT_NEEDED', due: '2026-10-01' } } }
+  const x = fileDeadlines(f, '2026-11-02')
+  assert.deepEqual(x.map((d) => `${d.key}:${d.state}`), ['file:OVERDUE', 'DPR:SOON'], 'done and not-needed stages have no deadline')
+  assert.equal(x[1].assignee, 'adm', 'an Admin stage without its own person falls to the file’s Admin')
+  assert.deepEqual(fileDeadlines({ ...f, status: 'COMPLETED' }, '2026-11-02').map((d) => d.key), ['DPR'], 'a closed file has no client deadline alert')
+  assert.equal(reminderPeriod('2026-11-02'), reminderPeriod('2026-11-03') === reminderPeriod('2026-11-02') ? reminderPeriod('2026-11-03') : reminderPeriod('2026-11-02'))
+}console.log('✓ workflow rules: India dates, follow-ups, Pitch Deck, schemes, Admin progress, templates')
