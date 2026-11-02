@@ -1,4 +1,4 @@
-﻿-- =====================================================================================================
+-- =====================================================================================================
 -- Rexera CRM · Activity Log: role, client and before / after on every entry. Safe to run more than once.
 --  * role: the person's role(s) when they did it · ref: the CRM entry it is about · before_value / after_value: changes.
 --  * The log stays append-only: nobody can change or delete an entry (there are no update / delete rules).

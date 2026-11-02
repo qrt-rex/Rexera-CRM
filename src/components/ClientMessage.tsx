@@ -129,7 +129,12 @@ export function MessageLog({ target, compact }: { target: Target; compact?: bool
   const db = useDb()
   const list = messagesFor(db, target)
   if (!list.length) return <EmptyState icon={MessageCircle} title="No messages sent yet" text={compact ? undefined : 'WhatsApp and email messages to this client appear here.'} />
-  return <ul className="divide-y divide-line/70">{list.map((m) => <LogRow key={m.id} m={m} />)}</ul>
+  return (
+    <>
+      <ul className="divide-y divide-line/70">{list.map((m) => <LogRow key={m.id} m={m} />)}</ul>
+      {!compact && <p className="border-t border-line px-4 py-2 text-[11px] text-mute">Messages are kept exactly as sent — nobody can edit or delete them.</p>}
+    </>
+  )
 }
 export function LogRow({ m, record }: { m: Msg; record?: ReactNode }) {
   const db = useDb()
