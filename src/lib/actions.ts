@@ -1,7 +1,8 @@
 import type {
-  AdminStageId, AdminWorkStatus, Booking, BookingStatus, BookingType, BDoc, Delivery, Service, WorkflowSettings, Branch, BreakPolicy, Call, CallOutcome, ClientEmailLog, Shift, CandidateApplication, CandidateForm, DaySession, DB, EventItem, FileRef, Invoice, InvoiceItem, Lead, LeaveType, Milestone, Perm, Post, Role, SalesKitItem, Scheme, User,
+  AccessControl, FnAction, AdminStageId, AdminWorkStatus, Booking, BookingStatus, BookingType, BDoc, Delivery, Service, WorkflowSettings, Branch, BreakPolicy, Call, CallOutcome, ClientEmailLog, Shift, CandidateApplication, CandidateForm, DaySession, DB, EventItem, FileRef, Invoice, InvoiceItem, Lead, LeaveType, Milestone, Perm, Post, Role, SalesKitItem, Scheme, User,
 } from './types'
-import { effectivePerms, isMaster, isStageOnlyAdmin, MASTER_ROLES, rolesOf, roleLabel } from './rbac'
+import { accessControlOf, canManageRoles, DEFAULT_ROLE_PERMS, effectivePerms, fnKey, isMaster, isStageOnlyAdmin, MASTER_ROLES, ROLES, rolesOf, roleLabel } from './rbac'
+import { MODULES } from './modules'
 import { clearCloudDb, getDb, mutate, reloadFromCloud, saved } from './store'
 import { CLOUD, cloudSetOwnPassword, cloudSetPassword, cloudSignIn, cloudSignOut, cloudUserId } from './cloud'
 import { bookingBranch, directorBranches, isBranchScoped, leadBranch, NO_BRANCH } from './branches'
@@ -2801,18 +2802,27 @@ export function updateUser(me: User, id: string, patch: Partial<Pick<User, 'name
     assert(u, 'User not found.')
     if ('phone' in patch) { patch.phone = normPhone(patch.phone ?? ''); assert(isPhone(patch.phone), 'Enter a valid 10-digit mobile number — the dialer calls it.') }
     checkBranches(d, patch)
-    const accessChange = ['role', 'extraRoles', 'grants', 'denies', 'active'].some((k) => k in patch)
+    // roles, extra roles and per-person permissions / functions: IT Support only (Access Control)
+    const roleChange = (['role', 'extraRoles', 'grants', 'denies'] as const).some((k) => k in patch && JSON.stringify(patch[k]) !== JSON.stringify(u[k]))
+    const accessChange = roleChange || ('active' in patch && patch.active !== u.active)
     const touchesSA = rolesOf(u).includes('superadmin') || patch.role === 'superadmin' || !!patch.extraRoles?.includes('superadmin')
-    assert(!touchesSA || isSA(me), 'Only a Super Admin can change Super Admin accounts or make someone a Super Admin.')
+    if (roleChange) assert(canManageRoles(me), 'Roles and permissions are managed by IT Support only.')
+    else assert(!touchesSA || isSA(me) || !accessChange, 'Only a Super Admin can change Super Admin accounts.')
     if (accessChange) {
-      assert(has(me, 'access.manage'), 'Only access managers can change roles or access.')
+      assert(roleChange || has(me, 'access.manage'), 'Only access managers can activate or deactivate accounts.')
       assert(u.id !== me.id, "You can't change your own access.")
       if (u.role === 'superadmin' && (patch.role && patch.role !== 'superadmin' || patch.active === false)) {
         assert(d.users.filter((x) => x.role === 'superadmin' && x.active && x.id !== u.id).length > 0, 'At least one active Super Admin must remain.')
       }
     }
+    // who changed whose access, and what it was before / after
+    const show = (k: 'role' | 'extraRoles' | 'grants' | 'denies' | 'active', v: unknown) =>
+      k === 'role' ? roleLabel(v as Role) : k === 'extraRoles' ? (v as Role[]).map(roleLabel).join(', ') || '—' : k === 'active' ? (v ? 'active' : 'inactive') : (v as string[]).join(', ') || '—'
+    const changed = (['role', 'extraRoles', 'grants', 'denies', 'active'] as const).filter((k) => k in patch && JSON.stringify(patch[k]) !== JSON.stringify(u[k]))
+    const before = changed.map((k) => `${k}: ${show(k, u[k])}`).join(' · ')
     Object.assign(u, patch)
-    audit(d, me.id, accessChange ? 'ACCESS_CHANGE' : 'USER_EDIT', u.name)
+    if (accessChange) audit(d, me.id, roleChange ? 'ACCESS_CHANGE' : 'USER_ACTIVE', `${u.name} (${u.email}) — ${changed.join(', ')}`, { before, after: changed.map((k) => `${k}: ${show(k, u[k])}`).join(' · ') })
+    else audit(d, me.id, 'USER_EDIT', u.name)
   })
 }
 
@@ -2893,10 +2903,111 @@ export async function resetUserPassword(me: User, id: string, password: string) 
 }
 
 export function setRolePerms(me: User, role: Role, perms: Perm[]) {
-  need(me, 'access.manage')
+  assert(canManageRoles(me), 'Roles and permissions are managed by IT Support only.')
   assert(!MASTER_ROLES.includes(role), `${roleLabel(role)} always has every permission.`)
-  mutate((d) => { d.rolePerms[role] = perms; audit(d, me.id, 'ROLE_PERMS', `${roleLabel(role)}: ${perms.length} permissions`) })
+  mutate((d) => {
+    const was = new Set(d.rolePerms[role] ?? []), now = new Set(perms)
+    const added = perms.filter((p) => !was.has(p)), removed = [...was].filter((p) => !now.has(p))
+    d.rolePerms[role] = perms
+    audit(d, me.id, 'ROLE_PERMS', `${roleLabel(role)}: ${perms.length} permissions${added.length ? ` · + ${added.join(', ')}` : ''}${removed.length ? ` · − ${removed.join(', ')}` : ''}`,
+      { before: [...was].sort().join(', '), after: [...now].sort().join(', ') })
+  })
 }
+
+// ------------------------------------------------------------------ Access Control (IT Support): custom roles, functions
+const ROLE_COLORS = ['#0F766E', '#9333EA', '#C2410C', '#1D4ED8', '#BE123C', '#4D7C0F', '#0369A1', '#A16207']
+const roleName = (d: DB, id: string) => accessControlOf(d).customRoles.find((r) => r.id === id)?.name ?? roleLabel(id as Role)
+function editAccess(me: User, fn: (ac: AccessControl, d: DB) => void) {
+  assert(canManageRoles(me), 'Roles and permissions are managed by IT Support only.')
+  mutate((d) => {
+    const ac = structuredClone(accessControlOf(d))
+    fn(ac, d)
+    d.settings.accessControl = ac
+  })
+}
+/** A new role, built on a built-in role (its dashboard and workflow), starting with that role's permissions. */
+export function createCustomRole(me: User, name: string, base: Role) {
+  const n = name.trim()
+  assert(n.length >= 2 && n.length <= 40, 'Give the role a name (2–40 characters).')
+  assert(!MASTER_ROLES.includes(base), 'Build a role on a team role, not on Super Admin or IT Support.')
+  let id = ''
+  editAccess(me, (ac, d) => {
+    assert(![...ROLES.map((r) => r.label), ...ac.customRoles.map((r) => r.name)].some((x) => x.toLowerCase() === n.toLowerCase()), 'A role with that name already exists.')
+    id = uid('role-')
+    ac.customRoles.push({ id, name: n, base, perms: [...(d.rolePerms[base] ?? DEFAULT_ROLE_PERMS[base])], color: ROLE_COLORS[ac.customRoles.length % ROLE_COLORS.length]!, createdBy: me.id, createdAt: nowIso() })
+    // it starts with the base role's switched-off functions too
+    if (ac.roleDeny[base]?.length) ac.roleDeny[id] = [...ac.roleDeny[base]!]
+    audit(d, me.id, 'ROLE_CREATE', `${n} (based on ${roleLabel(base)})`, { after: `${n}: ${ac.customRoles.at(-1)!.perms.length} permissions` })
+  })
+  return id
+}
+export function updateCustomRole(me: User, id: string, patch: { name?: string; perms?: Perm[] }) {
+  editAccess(me, (ac, d) => {
+    const r = ac.customRoles.find((x) => x.id === id)
+    assert(r, 'Role not found.')
+    const before = `${r.name}: ${[...r.perms].sort().join(', ')}`
+    if (patch.name !== undefined) {
+      const n = patch.name.trim()
+      assert(n.length >= 2 && n.length <= 40, 'Give the role a name (2–40 characters).')
+      assert(![...ROLES.map((x) => x.label), ...ac.customRoles.filter((x) => x.id !== id).map((x) => x.name)].some((x) => x.toLowerCase() === n.toLowerCase()), 'A role with that name already exists.')
+      r.name = n
+    }
+    if (patch.perms) r.perms = patch.perms.filter((p) => p !== 'roles.manage')
+    r.updatedAt = nowIso()
+    audit(d, me.id, 'ROLE_EDIT', r.name, { before, after: `${r.name}: ${[...r.perms].sort().join(', ')}` })
+  })
+}
+/** Deleting a role puts its people back on the built-in role it was based on. */
+export function deleteCustomRole(me: User, id: string) {
+  editAccess(me, (ac, d) => {
+    const r = ac.customRoles.find((x) => x.id === id)
+    assert(r, 'Role not found.')
+    const people = Object.entries(ac.userRole).filter(([, rid]) => rid === id).map(([uid]) => uid)
+    for (const p of people) delete ac.userRole[p]
+    ac.customRoles = ac.customRoles.filter((x) => x.id !== id)
+    delete ac.roleDeny[id]
+    audit(d, me.id, 'ROLE_DELETE', `${r.name}${people.length ? ` — ${people.length} person(s) back to ${roleLabel(r.base)}` : ''}`, { before: `${r.name}: ${r.perms.length} permissions` })
+  })
+}
+/** Gives a person a custom role (their main role becomes its base) — or takes it away (null). */
+export function assignCustomRole(me: User, userId: string, roleId: string | null) {
+  const target = getDb().users.find((u) => u.id === userId)
+  assert(target, 'User not found.')
+  assert(target.id !== me.id, "You can't change your own access.")
+  assert(!rolesOf(target).some((r) => MASTER_ROLES.includes(r)), 'Super Admin and IT Support accounts keep their own role.')
+  const r = roleId ? accessControlOf(getDb()).customRoles.find((x) => x.id === roleId) : undefined
+  assert(!roleId || r, 'Role not found.')
+  // the main role follows the custom role's base (dashboard, workflow)
+  if (r && target.role !== r.base) updateUser(me, userId, { role: r.base })
+  editAccess(me, (ac, d) => {
+    const was = ac.userRole[userId]
+    if (r) ac.userRole[userId] = r.id
+    else delete ac.userRole[userId]
+    audit(d, me.id, 'ACCESS_CHANGE', `${target.name} (${target.email}) — role`, { before: was ? roleName(d, was) : roleLabel(target.role), after: r ? r.name : roleLabel(target.role) })
+  })
+}
+/** Switches one function of a module on or off for a role (built-in or custom). */
+export function setRoleFn(me: User, roleId: string, module: string, action: FnAction, allowed: boolean) {
+  editAccess(me, (ac, d) => {
+    assert(!(roleId === 'it' && module === 'access'), 'IT Support always keeps Access Control.')
+    const k = `${module}:${action}`, list = new Set(ac.roleDeny[roleId] ?? [])
+    if (allowed) list.delete(k); else list.add(k)
+    ac.roleDeny[roleId] = [...list]
+    audit(d, me.id, 'ROLE_FUNCTION', `${roleName(d, roleId)} · ${moduleName(module)} · ${action}`, { before: allowed ? 'off' : 'on', after: allowed ? 'on' : 'off' })
+  })
+}
+/** One person's function: as their role says (default), or allowed / denied for them by name. */
+export function setUserFn(me: User, userId: string, module: string, action: FnAction, mode: 'role' | 'allow' | 'deny') {
+  const u = getDb().users.find((x) => x.id === userId)
+  assert(u, 'User not found.')
+  assert(!(rolesOf(u).includes('it') && module === 'access' && mode === 'deny'), 'IT Support always keeps Access Control.')
+  const k = fnKey(module, action)
+  const grants = u.grants.filter((x) => x !== k), denies = u.denies.filter((x) => x !== k)
+  if (mode === 'allow') grants.push(k)
+  if (mode === 'deny') denies.push(k)
+  updateUser(me, userId, { grants, denies })
+}
+const moduleName = (k: string) => MODULES.find((m) => m.key === k)?.label ?? k
 
 export function updateProfile(me: User, patch: Partial<Pick<User, 'name' | 'phone' | 'address' | 'photo'>>) {
   if (patch.phone !== undefined) assert(isPhone(patch.phone), 'Phone must be 10 digits.')

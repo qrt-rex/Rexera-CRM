@@ -1,4 +1,4 @@
-import type { DB, Perm, Role, User } from './types'
+import type { AccessControl, AccessKey, CustomRole, DB, FnAction, FnKey, Perm, Role, User } from './types'
 import { mayManagePortalLogins } from '../../supabase/portal-rules.mjs'
 
 export const ROLES: { id: Role; label: string; short: string; color: string; desc: string }[] = [
@@ -104,7 +104,8 @@ export const PERM_GROUPS: { group: string; perms: { id: Perm; label: string }[] 
       { id: 'email.send', label: 'Email Center & email automations' },
       { id: 'reports.view', label: 'Reports & analytics' },
       { id: 'reports.export', label: 'Export data (CSV)' },
-      { id: 'access.manage', label: 'Roles, users & permissions' },
+      { id: 'access.manage', label: 'User accounts: create, activate / deactivate, set passwords' },
+      { id: 'roles.manage', label: 'Roles & permissions: create roles, give or take away permissions and functions (IT Support; anyone else only when IT allows it)' },
       { id: 'website.manage', label: 'Website content, publishing & website leads (Super Admin)' },
       { id: 'portal.manage', label: 'Client portal logins: create ID and password, link, deactivate (IT Support only)' },
       { id: 'portal.view', label: 'Client portal: see every client’s logins, activity and progress (Legal, Operation team, Admin)' },
@@ -118,7 +119,8 @@ export const ALL_PERMS: Perm[] = PERM_GROUPS.flatMap((g) => g.perms.map((p) => p
 const common: Perm[] = ['broadcasts.view', 'messages.use', 'schemes.view', 'content.view', 'media.view']
 
 export const DEFAULT_ROLE_PERMS: Record<Role, Perm[]> = {
-  superadmin: [...ALL_PERMS],
+  // roles & permissions are IT Support's alone — not even the Super Admin's (unless IT allows it for that person)
+  superadmin: ALL_PERMS.filter((p) => p !== 'roles.manage'),
   admin: [...common, 'bookings.all', 'bookings.admin', 'content.manage', 'salesinfo.manage', 'schemes.manage', 'employees.view', 'documents.forms', 'reports.view', 'followup.manage', 'forms.manage', 'workflow.manage', 'portal.view', 'refunds.request'],
   accounts: [...common, 'bookings.all', 'bookings.accounts', 'billing.create', 'billing.manage', 'refunds.manage', 'reports.view', 'reports.export'],
   legal: [...common, 'bookings.all', 'bookings.legal', 'documents.forms', 'leave.approve', 'reports.view', 'portal.view', 'refunds.request'],
@@ -196,14 +198,64 @@ export const canEditSchemeRules = (db: DB, u: User) => {
 /** Who creates client portal logins (ID + password), sets passwords, links entries, deactivates: IT Support only (the server applies the same). */
 export const canManagePortalLogins = (u: User | null | undefined) => !!u && mayManagePortalLogins(rolesOf(u))
 
+// ------------------------------------------------------------------ IT Support's access control
+/** The actions a person can be given (or not) in every module. */
+export const FN_ACTIONS: { id: FnAction; label: string }[] = [
+  { id: 'view', label: 'View' }, { id: 'create', label: 'Create' }, { id: 'edit', label: 'Edit' }, { id: 'delete', label: 'Delete' },
+  { id: 'download', label: 'Download' }, { id: 'export', label: 'Export' }, { id: 'approve', label: 'Approve' }, { id: 'send', label: 'Send' },
+]
+export const fnKey = (module: string, action: FnAction): FnKey => `fn:${module}:${action}`
+const isFn = (k: AccessKey): k is FnKey => k.startsWith('fn:')
+const isPerm = (k: AccessKey): k is Perm => !isFn(k)
+
+export const accessControlOf = (db: DB): AccessControl => ({ customRoles: [], userRole: {}, roleDeny: {}, ...(db.settings.accessControl ?? {}) })
+/** The custom role IT gave this person (it replaces their main role's permissions), if any. */
+export const customRoleOf = (db: DB, u: User): CustomRole | undefined => {
+  const ac = accessControlOf(db), id = ac.userRole[u.id]
+  return id ? ac.customRoles.find((r) => r.id === id) : undefined
+}
+/**
+ * Roles & permissions are managed by IT Support only — anyone else (Super Admin included) only when IT gives them
+ * "roles.manage" by name. The database applies the same rule (app.can_manage_roles()).
+ */
+export const canManageRoles = (u: User | null | undefined) =>
+  !!u && (rolesOf(u).includes('it') || (u.grants.includes('roles.manage') && !u.denies.includes('roles.manage')))
+
+/**
+ * The functions this person may NOT use ('leads:export'): those every one of their roles is denied (a custom role
+ * stands in for the main role), then the person's own allow / deny from IT. IT Support never loses Access Control.
+ */
+export function deniedFns(db: DB, u: User | null | undefined): Set<string> {
+  const out = new Set<string>()
+  if (!u) return out
+  const ac = accessControlOf(db)
+  const custom = customRoleOf(db, u)
+  const roleIds = [custom ? custom.id : u.role, ...u.extraRoles.filter((r) => r !== u.role)]
+  const lists = roleIds.map((r) => new Set(ac.roleDeny[r] ?? []))
+  if (lists.length) for (const f of lists[0]!) if (lists.every((l) => l.has(f))) out.add(f)
+  for (const k of u.denies) if (isFn(k)) out.add(k.slice(3))
+  for (const k of u.grants) if (isFn(k)) out.delete(k.slice(3))
+  if (rolesOf(u).includes('it')) for (const f of [...out]) if (f.startsWith('access:')) out.delete(f)
+  return out
+}
+
 export function effectivePerms(db: DB, u: User | null | undefined): Set<Perm> {
   if (!u) return new Set()
   const roles = rolesOf(u)
-  if (roles.some((r) => MASTER_ROLES.includes(r))) return new Set(ALL_PERMS)
+  const denies = u.denies.filter(isPerm), grants = u.grants.filter(isPerm)
+  if (roles.some((r) => MASTER_ROLES.includes(r))) {
+    // masters hold everything — except what IT took away from them by name, and roles & permissions (IT's)
+    const s = new Set(ALL_PERMS)
+    for (const p of denies) s.delete(p)
+    if (!canManageRoles(u)) s.delete('roles.manage')
+    return s
+  }
   const s = new Set<Perm>()
-  for (const r of roles) for (const p of db.rolePerms[r] ?? DEFAULT_ROLE_PERMS[r]) s.add(p)
-  for (const p of u.grants) s.add(p)
-  for (const p of u.denies) s.delete(p)
+  const custom = customRoleOf(db, u)
+  for (const r of roles) for (const p of (custom && r === u.role ? custom.perms : db.rolePerms[r] ?? DEFAULT_ROLE_PERMS[r])) s.add(p)
+  for (const p of grants) s.add(p)
+  for (const p of denies) s.delete(p)
+  if (!canManageRoles(u)) s.delete('roles.manage')
   for (const [perm, allowed] of Object.entries(RESERVED) as [Perm, Role[]][]) {
     if (s.has(perm) && !roles.some((r) => allowed.includes(r))) s.delete(perm)
   }

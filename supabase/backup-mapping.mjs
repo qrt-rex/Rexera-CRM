@@ -106,6 +106,8 @@ export function mapAll(backup) {
     { key: 'breaks', value: d.settings.breakPolicy ?? null },
     { key: 'leadAssign', value: d.settings.leadAssign ?? null },
     { key: 'workflow', value: d.settings.workflow ?? null },
+    // IT Support's custom roles, who has them, and the functions each role may not use
+    { key: 'accessControl', value: d.settings.accessControl ?? null },
     { key: 'jobs', value: d.settings.jobs ?? null },
     { key: 'dialerCampaigns', value: d.settings.dialerCampaigns ?? null },
     { key: 'clientTemplates', value: d.settings.clientTemplates ?? null },
@@ -306,7 +308,7 @@ export function rowsToDb(input) {
       sessionMinutes: session.minutes, supplierState: company.supplierState, companyName: company.name, companyGstin: company.gstin,
       maintenance: maintenance && (maintenance.on || maintenance.message || maintenance.by) ? maintenance : undefined,
       sessionsValidAfter: u(session.validAfter), dayLock: setting('attendance')?.dayLock || undefined, loginCode: setting('attendance')?.loginCode === false ? false : undefined, loginCodeOnScreen: setting('attendance')?.loginCodeOnScreen === true || undefined,
-      branches: setting('branches')?.length ? setting('branches') : undefined, breakPolicy: u(setting('breaks')), leadAssign: u(setting('leadAssign')), workflow: u(setting('workflow')), jobs: u(setting('jobs')), dialerCampaigns: u(setting('dialerCampaigns')), clientTemplates: u(setting('clientTemplates')),
+      branches: setting('branches')?.length ? setting('branches') : undefined, breakPolicy: u(setting('breaks')), leadAssign: u(setting('leadAssign')), workflow: u(setting('workflow')), accessControl: u(setting('accessControl')), jobs: u(setting('jobs')), dialerCampaigns: u(setting('dialerCampaigns')), clientTemplates: u(setting('clientTemplates')),
     }),
     counters: setting('counters') ?? { booking: 0, lead: 0, invoice: 0 },
     loginFails: Object.fromEntries(rows('login_attempts').map((r) => [r.login, opt({ count: r.failures, until: u(r.locked_until) })])),

@@ -3,7 +3,7 @@ import {
   BookMarked, Globe, UserRoundCheck, KeyRound, Megaphone, MessagesSquare, Phone, Settings, ShieldCheck, Sparkles, UserCheck, UserCog, UserPlus, Users, UsersRound,
   CalendarCheck2, Network, ScrollText, Wallet, Receipt, Landmark, Trophy, SlidersHorizontal, Gauge, KeySquare, DatabaseBackup, DatabaseZap, MailPlus, ClipboardList, FilePen, Inbox, Undo2, BadgeCheck, BadgePercent, Layers, FileSignature, Settings2, Workflow, type LucideIcon,
 } from 'lucide-react'
-import type { Perm, Role, User } from './types'
+import type { AccessKey, Perm, Role, User } from './types'
 import { rolesOf } from './rbac'
 import type { Tone } from './workflow'
 
@@ -80,7 +80,9 @@ export const MODULES: ModuleDef[] = [
   { key: 'client-messages', path: '/client-messages', label: 'Client Messages', desc: 'WhatsApp & email templates for every team, message log, setup', icon: MessagesSquare, tone: 'green', perms: [], roles: ['operations', 'admin', 'superadmin', 'it'], group: 'Client files' },
   // every automation in one place: IT Support edits, Super Admin looks
   { key: 'automation', path: '/automation', label: 'Automation Center', desc: 'Built-in automations on / off, your own rules (when → if → then), run history', icon: Workflow, tone: 'violet', perms: [], roles: ['it', 'superadmin'], group: 'Admin' },
-  { key: 'access', path: '/access', label: 'Access Management', desc: 'Users, roles and permissions', icon: KeyRound, tone: 'navy', perms: ['access.manage'], group: 'Admin' },
+  { key: 'access', path: '/access', label: 'Access Management', desc: 'Users, roles and permissions', icon: KeyRound, tone: 'navy', perms: ['access.manage', 'roles.manage'], group: 'Admin' },
+  // IT Support's panel: roles, permissions and every function, user by user
+  { key: 'access-control', path: '/access?tab=roles', label: 'Access Control', desc: 'Roles, permissions and functions — user by user (IT Support)', icon: ShieldCheck, tone: 'navy', perms: ['roles.manage'], group: 'Admin' },
   { key: 'api-keys', path: '/api-keys', label: 'API Keys', desc: 'Keys for integrations: create, rotate, revoke', icon: KeySquare, tone: 'orange', perms: ['access.manage'], group: 'Admin' },
   { key: 'legacy-import', path: '/legacy-import', label: 'Import from old CRM', desc: 'Load the old PHP CRM .sql dump, checked line by line', icon: DatabaseZap, tone: 'violet', perms: ['access.manage'], group: 'Admin' },
   { key: 'backup', path: '/backup', label: 'Data Backup & Restore', desc: 'Encrypted backups, snapshots, restore', icon: DatabaseBackup, tone: 'cyan', perms: ['access.manage'], group: 'Admin' },
@@ -93,8 +95,10 @@ export const MODULES: ModuleDef[] = [
 export const moduleByKey = (k: string) => MODULES.find((m) => m.key === k)!
 /** Messages is switched off for now (the code stays); set to true to bring the module back everywhere. */
 export const MESSAGES_ENABLED = false
-export const canSee = (m: ModuleDef, has: (...p: Perm[]) => boolean, me?: User | null) =>
+/** The module is open to this person: its permissions, its roles, and View not switched off by IT Support. */
+export const canSee = (m: ModuleDef, has: (...p: AccessKey[]) => boolean, me?: User | null) =>
   (m.key !== 'messages' || MESSAGES_ENABLED) && (!m.perms.length || has(...m.perms)) && (!m.roles || (!!me && rolesOf(me).some((r) => m.roles!.includes(r))))
+  && has(`fn:${m.key.split('?')[0]}:view`)
 
 /** The Super Admin only runs IVR campaigns there (calls are for sales people), so for them the Dialer is called IVR. */
 export const moduleLabel = (m: { key: string; label: string }, me: User) =>

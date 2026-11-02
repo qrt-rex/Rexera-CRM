@@ -5,7 +5,7 @@ import { useDb } from '../lib/store'
 import { useMe } from '../lib/auth'
 import { createUser, PASSWORD_HINT, PASSWORD_RULE, resetUserPassword, updateUser } from '../lib/actions'
 import { isPhone, normPhone } from '../lib/format'
-import { ROLES, roleLabel, rolesOf } from '../lib/rbac'
+import { canManageRoles, ROLES, roleLabel, rolesOf } from '../lib/rbac'
 import { Badge, Button, Input, Modal, Select, useRun } from './ui'
 
 const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim())
@@ -55,7 +55,8 @@ export function CreateUserModal({ open, onClose }: { open: boolean; onClose: () 
     const email = f.email.trim().toLowerCase()
     if (existing) {
       const ok = await run(async () => {
-        if (existing.role !== f.role) updateUser(me, existing.id, { role: f.role })
+        // roles are IT Support's (Access Control): anyone else only sets the password
+        if (existing.role !== f.role && canManageRoles(me)) updateUser(me, existing.id, { role: f.role })
         await resetUserPassword(me, existing.id, f.password)
       }, `Sign-in ready for ${existing.name} (${roleLabel(f.role)}) — share the password with them privately`)
       if (ok) onClose()
@@ -71,7 +72,7 @@ export function CreateUserModal({ open, onClose }: { open: boolean; onClose: () 
     <Modal open={open} onClose={onClose} title="Create user" subtitle="A CRM sign-in with a role and a password" size="md"
       footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button icon={existing ? KeyRound : UserPlus} onClick={save}>{existing ? 'Set password' : 'Create user'}</Button></>}>
       <form className="grid gap-4 sm:grid-cols-2" autoComplete="off" onSubmit={(e) => { e.preventDefault(); void save() }}>
-        <Select label="Role" required value={f.role} onChange={(e) => set({ role: e.target.value as Role })} className="sm:col-span-2">
+        <Select label="Role" required value={f.role} disabled={!!existing && !canManageRoles(me)} hint={existing && !canManageRoles(me) ? 'An existing account keeps its role — IT Support changes roles.' : undefined} onChange={(e) => set({ role: e.target.value as Role })} className="sm:col-span-2">
           {roles.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
         </Select>
         <Input label="Email (login ID)" required type="email" autoComplete="off" value={f.email} onChange={(e) => set({ email: e.target.value })} error={show('email')} />

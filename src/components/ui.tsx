@@ -4,8 +4,10 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
-import { AlertTriangle, CheckCircle2, Info, Loader2, X, XCircle, type LucideIcon } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Info, Loader2, Lock, X, XCircle, type LucideIcon } from 'lucide-react'
+import type { FnAction } from '../lib/types'
 import type { Tone } from '../lib/workflow'
+import { DENIED_EVENT, deniedText, textOf, useBlocked } from '../lib/fnScope'
 import { initials } from '../lib/format'
 import { trackAction } from '../lib/activity'
 
@@ -27,18 +29,21 @@ const btnSizes = { sm: 'h-8 px-3 text-xs', md: 'h-10 px-4 text-sm', lg: 'h-12 px
 
 export function Button({ variant = 'primary', size = 'md', icon: Icon, loading, className, children, ...rest }:
   ButtonHTMLAttributes<HTMLButtonElement> & { variant?: BtnVariant; size?: keyof typeof btnSizes; icon?: LucideIcon; loading?: boolean }) {
+  // a function IT Support switched off for this person here (delete, export, send…): shown, but locked
+  const blocked = useBlocked(textOf(children, rest['aria-label'], rest.title), Icon)
   return (
-    <button {...rest} disabled={rest.disabled || loading} className={cx(btnBase, btnVariants[variant], btnSizes[size], className)}>
-      {loading ? <Loader2 className="size-4 animate-spin" /> : Icon ? <Icon className={size === 'sm' ? 'size-3.5' : 'size-4'} /> : null}
+    <button {...rest} disabled={rest.disabled || loading || !!blocked} title={blocked ? deniedText(blocked) : rest.title} className={cx(btnBase, btnVariants[variant], btnSizes[size], className)}>
+      {loading ? <Loader2 className="size-4 animate-spin" /> : blocked ? <Lock className={size === 'sm' ? 'size-3.5' : 'size-4'} /> : Icon ? <Icon className={size === 'sm' ? 'size-3.5' : 'size-4'} /> : null}
       {children}
     </button>
   )
 }
 
 export function IconButton({ icon: Icon, label, badge, className, ...rest }: ButtonHTMLAttributes<HTMLButtonElement> & { icon: LucideIcon; label: string; badge?: number }) {
+  const blocked = useBlocked(label, Icon)
   return (
-    <button aria-label={label} title={label} {...rest} className={cx('relative grid size-10 place-items-center rounded-xl text-mute hover:bg-card2 hover:text-ink transition-colors', className)}>
-      <Icon className="size-5" />
+    <button aria-label={label} title={blocked ? deniedText(blocked) : label} {...rest} disabled={rest.disabled || !!blocked} className={cx('relative grid size-10 place-items-center rounded-xl text-mute hover:bg-card2 hover:text-ink transition-colors disabled:opacity-50 disabled:pointer-events-none', className)}>
+      {blocked ? <Lock className="size-5" /> : <Icon className="size-5" />}
       {!!badge && <span className="absolute -right-0.5 -top-0.5 grid min-w-5 h-5 place-items-center rounded-full bg-bad px-1 text-[10px] font-bold text-white ring-2 ring-card">{badge > 99 ? '99+' : badge}</span>}
     </button>
   )
@@ -379,6 +384,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setItems((x) => [...x.slice(-3), { id, tone, text }])
     setTimeout(() => setItems((x) => x.filter((t) => t.id !== id)), tone === 'error' ? 5500 : 3500)
   }, [])
+  // an export / download stopped by IT Support's access settings (fnGate)
+  useEffect(() => {
+    const on = (e: Event) => push('error', deniedText((e as CustomEvent<FnAction>).detail))
+    window.addEventListener(DENIED_EVENT, on)
+    return () => window.removeEventListener(DENIED_EVENT, on)
+  }, [push])
   const icons = { success: CheckCircle2, error: XCircle, info: Info, warning: AlertTriangle }
   const tones = { success: 'text-ok', error: 'text-bad', info: 'text-info', warning: 'text-warn' }
   return (

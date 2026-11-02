@@ -17,6 +17,24 @@ export type Perm =
   | 'payroll.view' | 'payroll.manage' | 'incentives.manage' | 'recruitment.manage' | 'performance.view'
   | 'email.send' | 'assets.manage'
   | 'media.view' | 'media.manage'
+  | 'roles.manage'
+
+/** What a person may do inside a module (Access Control → functions). */
+export type FnAction = 'view' | 'create' | 'edit' | 'delete' | 'download' | 'export' | 'approve' | 'send'
+/** A function permission: `fn:<module>:<action>`, e.g. fn:leads:export (allowed / denied per role or per person). */
+export type FnKey = `fn:${string}:${FnAction}`
+/** What a per-person override can name: a permission or a function. */
+export type AccessKey = Perm | FnKey
+/** A role made by IT Support: built on a built-in role (its dashboard and workflow), with its own permissions. */
+export interface CustomRole { id: string; name: string; base: Role; perms: Perm[]; color: string; createdBy: string; createdAt: string; updatedAt?: string }
+/** IT Support's access settings (app_settings 'accessControl'). */
+export interface AccessControl {
+  customRoles: CustomRole[]
+  /** person → custom role id */
+  userRole: Record<string, string>
+  /** role (built-in id or custom role id) → functions it may NOT use ('leads:export') */
+  roleDeny: Record<string, string[]>
+}
 
 export interface Address { line: string; city: string; state: string; pin: string; country: string }
 
@@ -28,8 +46,9 @@ export interface User {
   phone: string
   role: Role
   extraRoles: Role[]
-  grants: Perm[]
-  denies: Perm[]
+  /** per-person overrides set by IT Support: permissions and functions (fn:module:action) */
+  grants: AccessKey[]
+  denies: AccessKey[]
   teamLeadId?: string
   department: string
   designation: string
@@ -942,6 +961,8 @@ export interface Settings {
   loginCode?: boolean
   /** developer mode on the live CRM: when the code can't be emailed, it is shown on the sign-in screen */
   loginCodeOnScreen?: boolean
+  /** custom roles, who has them, and the functions each role may not use — IT Support only */
+  accessControl?: AccessControl
   branches?: Branch[]
   breakPolicy?: BreakPolicy
   /** automatic lead assignment (round robin): new website / CSV / manual leads go to these people in turn */

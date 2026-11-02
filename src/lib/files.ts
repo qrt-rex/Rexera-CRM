@@ -1,5 +1,6 @@
 import type { FileRef } from './types'
 import { nowIso, uid } from './format'
+import { fnGate } from './fnGate'
 import { CLOUD } from './cloud'
 import { cloudConfig, getSupabase, supabaseKey } from './supabase'
 
@@ -102,6 +103,8 @@ export async function saveMediaFile(f: File, type: string, onProgress?: (share: 
 
 /** Opens the file in a new tab (PDF / image) or downloads it. */
 export async function openFile(ref: FileRef, download = false) {
+  // IT Support can switch off downloads in a module (Access Control); opening to look stays with View
+  if (download && !fnGate('download')) return
   // the tab opens straight away, while this is still the click: opened after loading the file, browsers block it
   const viewer = !download && /^(application\/pdf|image\/)/.test(ref.type) ? window.open('', '_blank') : null
   if (viewer) viewer.opener = null

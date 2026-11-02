@@ -1,4 +1,5 @@
 import type { Booking, Invoice } from './types'
+import { fnGate } from './fnGate'
 
 const inrFmt = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2, minimumFractionDigits: 0 })
 const inrCompactFmt = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 1 })
@@ -108,7 +109,7 @@ export function rupeesInWords(n: number) {
 
 // ---------- CSV ----------
 export function downloadCsv(filename: string, rows: Record<string, unknown>[]) {
-  if (!rows.length) return
+  if (!rows.length || !fnGate('export')) return
   const cols = Object.keys(rows[0]!)
   const esc = (v: unknown) => {
     const s = v == null ? '' : String(v)

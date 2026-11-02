@@ -1,8 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { Perm, User } from './types'
+import type { AccessKey, Perm, User } from './types'
 import { useDb, mutate, clearCloudDb, saved } from './store'
 import { CLOUD, cloudSignOut, cloudUserId } from './cloud'
-import { effectivePerms } from './rbac'
+import { deniedFns, effectivePerms } from './rbac'
 import { nowIso, uid } from './format'
 
 const SESSION_KEY = 'rexera-session'
@@ -11,7 +11,8 @@ type Session = { userId: string; token: string; at: string }
 interface AuthCtx {
   user: User | null
   perms: Set<Perm>
-  can: (...p: Perm[]) => boolean
+  /** any of these permissions — or functions (fn:module:action) */
+  can: (...p: AccessKey[]) => boolean
   signIn: (userId: string) => void
   signOut: (reason?: string) => void
   /** ms until auto sign-out, or null when signed out */
@@ -33,7 +34,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return u && u.active ? u : null
   }, [db.users, session])
   const perms = useMemo(() => effectivePerms(db, user), [db, user])
-  const can = useCallback((...p: Perm[]) => p.some((x) => perms.has(x)), [perms])
+  // functions IT Support switched off for this person (they change live: Supabase sends every access change)
+  const denied = useMemo(() => deniedFns(db, user), [db, user])
+  const can = useCallback((...p: AccessKey[]) => p.some((x) => (x.startsWith('fn:') ? !!user && !denied.has(x.slice(3)) : perms.has(x as Perm))), [perms, denied, user])
 
   const signIn = useCallback((userId: string) => {
     const s = { userId, token: uid('jwt-'), at: nowIso() }

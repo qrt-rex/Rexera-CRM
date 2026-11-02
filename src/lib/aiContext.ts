@@ -1,6 +1,6 @@
-import type { DB, User } from './types'
+import type { AccessKey, DB, Perm, User } from './types'
 import { breakFor, breakLabel, breakReview, breakUsedMs, canDecideLeave, userName, visibleBookings, visibleLeads } from './actions'
-import { effectivePerms, roleLabel } from './rbac'
+import { deniedFns, effectivePerms, roleLabel } from './rbac'
 import { MODULES, canSee } from './modules'
 import { dayStatus, monthStart, todaySession, waitingFor } from './metrics'
 import { BOOKING_STATUS, OPEN_LEAD, stageLabel } from './workflow'
@@ -11,8 +11,9 @@ import { bookingMoney, fmtDate, fmtTime, today, ymd } from './format'
  * question stays small (fast and cheap). Nothing here is sent anywhere except our own server, which forwards it to the AI.
  */
 export function buildAiContext(db: DB, me: User): string {
-  const p = effectivePerms(db, me)
-  const can = (...x: Parameters<typeof p.has>[0][]) => x.some((y) => p.has(y))
+  const p = effectivePerms(db, me), off = deniedFns(db, me)
+  // permissions, and the functions IT Support switched off (fn:module:action)
+  const can = (...x: AccessKey[]) => x.some((y) => (y.startsWith('fn:') ? !off.has(y.slice(3)) : p.has(y as Perm)))
   const t = today(), month = monthStart()
   const ctx: Record<string, unknown> = {}
 

@@ -124,7 +124,8 @@ export function ItDashboard() {
           if (await confirm('Clean up old data?', 'Removes read notifications older than 30 days and activity log entries older than 180 days. Take a backup first if you need them.')) doAndRecheck('clean', () => cleanupOldData(me), 'Old data cleaned up')
         }} />
         <Action icon={ScrollText} tone="gray" label="Export activity log" hint={`${db.audit.length} entries as CSV`} onClick={() => downloadCsv(`activity-${today()}.csv`, db.audit.map((a) => ({ at: a.at, by: userName(db, a.by), action: a.action, detail: a.detail })))} />
-        <Action icon={LayoutGrid} tone="navy" label="Access management" hint="Permission matrix, users, settings" to="/access" />
+        <Action icon={ShieldCheck} tone="navy" label="Access Control" hint="Roles, permissions, every function — user by user" to="/access?tab=roles" />
+        <Action icon={LayoutGrid} tone="cyan" label="Users & access" hint="Each person's role, functions and permissions" to="/access?tab=users" />
         <Action icon={DatabaseZap} tone="violet" label="Import from old CRM" hint="Old PHP CRM .sql dump · verified before saving" to="/legacy-import" />
       </div>
 

@@ -1,13 +1,14 @@
-import { lazy, Suspense, useEffect, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, type ReactNode } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams, Link } from 'react-router-dom'
 import { Compass } from 'lucide-react'
 import { AuthProvider, useAuth } from './lib/auth'
 import { ToastProvider, Button, Skeleton, useToast } from './components/ui'
 import { onSyncError } from './lib/store'
 import { Shell } from './layout/Shell'
-import { canOpenDashboard } from './lib/rbac'
+import { canOpenDashboard, fnKey } from './lib/rbac'
 import { moduleByKey, canSee } from './lib/modules'
-import type { Perm, Role } from './lib/types'
+import { FnScopeCtx, setFnGate } from './lib/fnScope'
+import type { FnAction, Perm, Role } from './lib/types'
 import Login from './pages/Login'
 import { ErrorBoundary } from './components/ErrorBoundary'
 
@@ -86,7 +87,10 @@ function RequireAuth({ children }: { children: ReactNode }) {
 
 function Guard({ m, perm, children }: { m: string; perm?: Perm; children: ReactNode }) {
   const { can, user } = useAuth()
-  return canSee(moduleByKey(m), can, user) && (!perm || can(perm)) ? <>{children}</> : <NotFound />
+  // the module's functions (IT Support → Access Control): buttons inside, and exports / downloads made here
+  const scope = useMemo(() => ({ module: m, allowed: (a: FnAction) => can(fnKey(m, a)) }), [m, can])
+  useLayoutEffect(() => { setFnGate(scope); return () => setFnGate(null) }, [scope])
+  return canSee(moduleByKey(m), can, user) && (!perm || can(perm)) ? <FnScopeCtx.Provider value={scope}>{children}</FnScopeCtx.Provider> : <NotFound />
 }
 
 function DashboardRoute() {
