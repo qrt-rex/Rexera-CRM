@@ -114,7 +114,7 @@ export function mapAll(backup) {
   ]
   t.api_keys = (d.apiKeys ?? []).map((k) => ({ id: k.id, name: k.name, prefix: k.prefix, key_hash: k.hash, scopes: k.scopes, created_by: uref(k.createdBy), created_at: k.createdAt, expires_at: s(k.expiresAt), revoked_at: s(k.revokedAt), revoked_by: uref(k.revokedBy) }))
   t.backup_log = (d.backupLog ?? []).map((b) => ({ id: b.id, at: b.at, by_user: uref(b.by), kind: b.kind, note: b.note ?? '', bytes: b.bytes ?? 0, encrypted: !!b.encrypted }))
-  t.audit_log = d.audit.map((a) => ({ at: a.at, by_user: uref(a.by), action: a.action, detail: a.detail ?? '' })).reverse()
+  t.audit_log = d.audit.map((a) => ({ at: a.at, by_user: uref(a.by), action: a.action, detail: a.detail ?? '', ...(a.role ? { role: a.role } : {}), ...(a.ref ? { ref: a.ref } : {}), ...(a.before != null ? { before_value: a.before } : {}), ...(a.after != null ? { after_value: a.after } : {}) })).reverse()
 
   t.candidate_forms = (d.candidateForms ?? []).map((f) => ({ id: f.id, token: f.token, title: f.title, kind: f.kind, positions: f.positions ?? [], position: s(f.positions?.[0]), department: f.department ?? '', description: f.description ?? '', active: f.active, created_at: f.createdAt, created_by: uref(f.by) }))
   t.candidate_applications = (d.candidates ?? []).map((c) => ({ id: c.id, form_id: c.formId, name: c.name, email: c.email, phone: c.phone, city: c.city ?? '', dob: s(c.dob), qualification: c.qualification, college: s(c.college), experience: c.experience ?? '', current_company: s(c.currentCompany), expected_salary: s(c.expectedSalary), notice_period: s(c.noticePeriod), branch: s(c.branch), position: s(c.position), candidate_type: s(c.candidateType), current_ctc: s(c.currentCtc), interview_at: s(c.interviewAt), linkedin: s(c.linkedin), message: s(c.message), resume: c.resume, status: c.status, notes: s(c.notes), submitted_at: c.submittedAt, ...(c.selected !== undefined ? { selected: c.selected, selected_at: s(c.selectedAt), selected_by: s(c.selectedBy) } : {}) }))
@@ -300,7 +300,7 @@ export function rowsToDb(input) {
     messages: rows('messages').map((m) => opt({ id: m.id, from: m.from_user, to: m.to_user, body: m.body, at: m.sent_at, read: m.read, attachments: u(m.attachments) })),
     templates: rows('message_templates').map((x) => ({ id: x.id, name: x.name, body: x.body, by: x.created_by ?? '' })),
     // the app keeps the audit log newest first; the table is oldest first
-    audit: [...rows('audit_log')].reverse().map((a, i) => ({ id: `a-${a.id ?? i}`, at: a.at, by: a.by_user ?? '', action: a.action, detail: a.detail ?? '' })),
+    audit: [...rows('audit_log')].reverse().map((a, i) => opt({ id: `a-${a.id ?? i}`, at: a.at, by: a.by_user ?? '', action: a.action, detail: a.detail ?? '', role: u(a.role), ref: u(a.ref), before: u(a.before_value), after: u(a.after_value) })),
     rolePerms: rows('role_permissions').reduce((m, r) => { (m[r.role] ??= []).push(r.permission); return m }, {}),
     settings: opt({
       sessionMinutes: session.minutes, supplierState: company.supplierState, companyName: company.name, companyGstin: company.gstin,

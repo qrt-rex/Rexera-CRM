@@ -43,8 +43,9 @@ function notify(d: DB, userIds: (string | undefined)[], title: string, body: str
   }
   if (d.notices.length > 600) d.notices.length = 600
 }
-function audit(d: DB, by: string, action: string, detail: string) {
-  d.audit.unshift({ id: uid('a-'), at: nowIso(), by, action, detail })
+/** One activity-log entry; change keeps the value before and after (role and client are stamped by the store). */
+function audit(d: DB, by: string, action: string, detail: string, change?: { before?: string; after?: string; ref?: string }) {
+  d.audit.unshift({ id: uid('a-'), at: nowIso(), by, action, detail, ...(change?.before !== undefined ? { before: change.before.slice(0, 1000) } : {}), ...(change?.after !== undefined ? { after: change.after.slice(0, 1000) } : {}), ...(change?.ref ? { ref: change.ref } : {}) })
   if (d.audit.length > 1000) d.audit.length = 1000
 }
 const findB = (d: DB, id: string) => {
@@ -121,7 +122,7 @@ function finishSignIn(userId: string, how?: string) {
     else if (s.logoutAt && !dayLockOn(d)) { s.logoutAt = undefined; s.reopenedBy = u.id }
     audit(d, u.id, how ? 'SIGN_IN_NO_EMAIL_CODE' : 'SIGN_IN', how ? `${u.name} signed in without the email code — ${how}` : `${u.name} signed in`)
     // the other Super Admins / IT Support see every sign-in that skipped the code
-    if (how) notify(d, d.users.filter((x) => x.active && x.id !== u.id && isMaster(x)).map((x) => x.id), 'Signed in without the email code', `${u.name} — ${how}`, '/audit', 'warning')
+    if (how) notify(d, d.users.filter((x) => x.active && x.id !== u.id && isMaster(x)).map((x) => x.id), 'Signed in without the email code', `${u.name} — ${how}`, undefined, 'warning')
   })
 }
 
@@ -820,6 +821,7 @@ export function setLeadStatus(me: User, id: string, status: Lead['status'], note
     l.seenAt ??= nowIso()
     leadEvent(l, me.id, was === status ? `Updated (${LEAD_STATUS[status].label})` : `${LEAD_STATUS[was].label} → ${LEAD_STATUS[status].label}`,
       [note.trim(), followUp ? `follow-up ${fmtDate(followUp)}` : '', status === 'CONVERTED' && value ? `value ₹${round2(value)}` : ''].filter(Boolean).join(' · '))
+    if (was !== status) audit(d, me.id, 'LEAD_STATUS', `${l.code ?? ''} ${l.name}${note.trim() ? ` — ${note.trim()}` : ''}`.trim(), { before: LEAD_STATUS[was].label, after: LEAD_STATUS[status].label })
   })
 }
 
@@ -1160,12 +1162,16 @@ export function updateBooking(me: User, id: string, patch: BookingPatch) {
       assert(Number.isFinite(patch.successFee.value) && patch.successFee.value >= 0 && (patch.successFee.type === 'AMOUNT' || patch.successFee.value <= 100), 'Success fee must be 0 or more (a percentage up to 100). Enter 0 if the client did not agree.')
       b.successFeePct = patch.successFee.type === 'PCT' ? patch.successFee.value : 0
     }
+    // which fields changed, before and after (for the Activity Log)
+    const show = (v: unknown) => (v == null || v === '' ? '—' : typeof v === 'object' ? JSON.stringify(v) : String(v))
+    const changed = (Object.keys(patch) as (keyof BookingPatch)[]).filter((k) => show(b[k as keyof Booking]) !== show(patch[k]))
+    const was = changed.map((k) => `${k}: ${show(b[k as keyof Booking])}`).join('; '), now = changed.map((k) => `${k}: ${show(patch[k])}`).join('; ')
     Object.assign(b, patch)
     b.updatedAt = nowIso()
     // the sales person changed an entry Accounts is checking: tell Accounts
     if (b.createdBy === me.id && !has(me, 'bookings.accounts') && ['PENDING_ACCOUNTS', 'ACCOUNTS_HOLD'].includes(b.status))
       notify(d, usersWithRole(d, 'accounts').map((u) => u.id), 'CRM entry edited by sales', `${b.bookingId} · ${b.companyName} — check the changes`, `/bookings/${b.id}`, 'info')
-    audit(d, me.id, 'BOOKING_EDIT', `${b.bookingId} edited`)
+    audit(d, me.id, 'BOOKING_EDIT', `${b.bookingId} · ${b.companyName} edited${changed.length ? `: ${changed.join(', ')}` : ''}`, { before: was, after: now, ref: b.id })
   })
 }
 
@@ -1215,7 +1221,7 @@ export function sendBack(me: User, id: string, reason: string) {
     if (to.status !== 'ON_HOLD') b.holdFrom = undefined
     b.approvals.push({ id: uid('ap-'), level: 'Sent back', action: 'SENT_BACK', by: me.id, at, remark: `${from} → ${to.team}: ${reason.trim()}` })
     b.updatedAt = at
-    audit(d, me.id, 'CLIENT_SENT_BACK', `${b.bookingId} · ${b.companyName}: ${from} → ${to.team} — ${reason.trim()}`)
+    audit(d, me.id, 'CLIENT_SENT_BACK', `${b.bookingId} · ${b.companyName}: ${from} → ${to.team} — ${reason.trim()}`, { before: from, after: BOOKING_STATUS[to.status].label, ref: b.id })
     const team = (r: Role) => d.users.filter((u) => u.active && rolesOf(u).includes(r)).map((u) => u.id)
     const toWho = to.status === 'PENDING_TL' ? [b.teamLeadId] : to.status === 'PENDING_ACCOUNTS' ? team('accounts') : to.status === 'PENDING_LEGAL' ? team('legal')
       : to.status === 'IN_OPERATIONS' ? [b.opsMemberId] : to.status === 'WITH_ADMIN' ? [b.adminId] : [b.createdBy]
@@ -1270,6 +1276,7 @@ export function decide(me: User, id: string, dec: Decision) {
     const b = findB(d, id)
     assert(availableDecisions(d, me, b).includes(dec.kind), 'This action is not available right now.')
     const at = nowIso()
+    const statusBefore = BOOKING_STATUS[b.status].label
     const levelOf: Partial<Record<BookingStatus, string>> = {
       PENDING_TL: 'Team Leader', PENDING_ACCOUNTS: 'Accounts', ACCOUNTS_HOLD: 'Accounts', PENDING_LEGAL: 'Legal', CHANGES_REQUIRED: 'Sales',
       IN_OPERATIONS: 'Operations', WITH_ADMIN: 'Admin', OPS_REVIEW: 'Operations approval', ON_HOLD: 'Hold', REJECTED: 'Sales',
@@ -1387,7 +1394,7 @@ export function decide(me: User, id: string, dec: Decision) {
     }
     b.approvals.push({ id: uid('ap-'), level, action: dec.kind === 'APPROVE' ? 'APPROVED' : dec.kind === 'REJECT' ? 'REJECTED' : dec.kind === 'COMPLETE' ? 'WORK_DONE' : dec.kind === 'APPROVE_DONE' ? 'COMPLETED' : dec.kind, by: me.id, at, remark: dec.remark })
     b.updatedAt = at
-    audit(d, me.id, `BOOKING_${dec.kind}`, `${b.bookingId}: ${dec.remark || '—'}`)
+    audit(d, me.id, `BOOKING_${dec.kind}`, `${b.bookingId} · ${b.companyName}: ${dec.remark || '—'}`, { before: statusBefore, after: BOOKING_STATUS[b.status].label, ref: b.id })
   })
 }
 
@@ -1858,9 +1865,11 @@ export function moveStage(me: User, id: string, stage: number, note: string, out
       b.status = 'IN_OPERATIONS'
       b.approvals.push({ id: uid('ap-'), level: 'Operations', action: 'REOPENED', by: me.id, at: nowIso(), remark: note.trim() })
     }
+    const stageBefore = b.opsMemberId ? stageLabel(b.stage, b.stageOutcome) : 'Not started'
     b.stage = stage
     b.stageOutcome = o
     b.stageReason = outcomeNeedsReason(o) ? note.trim() : undefined
+    audit(d, me.id, 'STAGE_MOVE', `${b.bookingId} · ${b.companyName}: ${stageLabel(stage, o)}${note.trim() ? ` — ${note.trim()}` : ''}`, { before: stageBefore, after: stageLabel(stage, o), ref: b.id })
     b.stageHistory.push({ stage, at: nowIso(), by: me.id, outcome: o, note: note.trim() || `Moved to ${stageLabel(stage, o)}` })
     b.updatedAt = nowIso()
     notify(d, [b.createdBy, b.opsMemberId, b.adminId].filter((x) => x && x !== me.id), `Stage: ${stageLabel(stage, o)}`, `${b.bookingId} · ${b.companyName}${b.stageReason ? ` — ${b.stageReason}` : ''}`, `/bookings/${b.id}`, outcomeNeedsReason(o) ? 'warning' : 'info')

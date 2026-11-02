@@ -915,7 +915,16 @@ export interface CandidateLetter {
 export interface Notice { id: string; userId: string; title: string; body: string; link?: string; at: string; read: boolean; kind: 'info' | 'success' | 'warning' | 'action' }
 export interface Message { id: string; from: string; to: string; body: string; at: string; read: boolean; attachments?: FileRef[] }
 export interface Template { id: string; name: string; body: string; by: string }
-export interface Audit { id: string; at: string; by: string; action: string; detail: string }
+export interface Audit {
+  id: string; at: string; by: string; action: string; detail: string
+  /** the person's role(s) when they did it, e.g. "operations" or "sales,teamlead" (stamped automatically) */
+  role?: string
+  /** the CRM entry it is about (its id), found from the detail when not given */
+  ref?: string
+  /** for changes: the value before and after */
+  before?: string
+  after?: string
+}
 
 export interface Settings {
   sessionMinutes: number

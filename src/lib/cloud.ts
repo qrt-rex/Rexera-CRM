@@ -316,7 +316,12 @@ export function plan(prev: DB, next: DB, s: SupabaseClient): Op[][] {
     const fresh = next.audit.filter((x) => !had.has(x))
     if (fresh.length) {
       const rows = mapAll({ db: { ...EMPTY, ...pick(next, ['users', 'settings', 'counters', 'pfSettings', 'incentiveRules', 'version', 'upgrades']), incentiveHistory: [], rolePerms: {}, loginFails: {}, audit: fresh } as unknown as DB }).audit_log
-      steps.push([() => s.from('audit_log').insert(rows)])
+      // role / client / before-after columns come with a database update: until it is run, the entries go in without them
+    steps.push([async () => {
+      const r = await s.from('audit_log').insert(rows)
+      if (!r.error || !/column|schema cache/i.test(r.error.message)) return r
+      return s.from('audit_log').insert(rows.map(({ role: _r, ref: _f, before_value: _b, after_value: _a, ...rest }: Record<string, unknown>) => rest))
+    }])
     }
   }
   return steps

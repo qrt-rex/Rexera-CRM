@@ -1,5 +1,5 @@
 -- =====================================================================================================
--- Rexera CRM · migrations to run on the live Supabase project (2026-10-15 … 2026-10-31, in order).
+-- Rexera CRM · migrations to run on the live Supabase project (2026-10-15 … 2026-11-02, in order).
 -- Paste all of it into Supabase → SQL Editor → Run. Each part is safe to run more than once.
 -- Generated from supabase/migrations/.
 -- =====================================================================================================
@@ -2051,3 +2051,15 @@ create policy booking_refunds_update on booking_refunds for update to authentica
   using (app.has_perm('refunds.manage')) with check (app.has_perm('refunds.manage') and app.can_see_booking(booking_id));
 drop policy if exists booking_refunds_delete on booking_refunds;
 create policy booking_refunds_delete on booking_refunds for delete to authenticated using (app.has_perm('refunds.manage'));
+
+-- ##################################################################### 20261102000000_audit_roles.sql
+﻿-- =====================================================================================================
+-- Rexera CRM · Activity Log: role, client and before / after on every entry. Safe to run more than once.
+--  * role: the person's role(s) when they did it · ref: the CRM entry it is about · before_value / after_value: changes.
+--  * The log stays append-only: nobody can change or delete an entry (there are no update / delete rules).
+-- =====================================================================================================
+alter table audit_log add column if not exists role         text;
+alter table audit_log add column if not exists ref          text;
+alter table audit_log add column if not exists before_value text;
+alter table audit_log add column if not exists after_value  text;
+create index if not exists audit_log_ref_idx on audit_log(ref) where ref is not null;

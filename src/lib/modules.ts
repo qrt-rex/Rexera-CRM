@@ -83,7 +83,7 @@ export const MODULES: ModuleDef[] = [
   { key: 'api-keys', path: '/api-keys', label: 'API Keys', desc: 'Keys for integrations: create, rotate, revoke', icon: KeySquare, tone: 'orange', perms: ['access.manage'], group: 'Admin' },
   { key: 'legacy-import', path: '/legacy-import', label: 'Import from old CRM', desc: 'Load the old PHP CRM .sql dump, checked line by line', icon: DatabaseZap, tone: 'violet', perms: ['access.manage'], group: 'Admin' },
   { key: 'backup', path: '/backup', label: 'Data Backup & Restore', desc: 'Encrypted backups, snapshots, restore', icon: DatabaseBackup, tone: 'cyan', perms: ['access.manage'], group: 'Admin' },
-  { key: 'audit', path: '/audit', label: 'Activity Log', desc: 'Who did what and when', icon: ScrollText, tone: 'gray', perms: ['audit.view'], group: 'Admin' },
+  { key: 'audit', path: '/audit', label: 'Activity Log', desc: 'Every action by every person: role, client, before / after, exact time', icon: ScrollText, tone: 'gray', perms: ['audit.view'], roles: ['superadmin'], group: 'Admin' },
   { key: 'security', path: '/settings', label: 'Profile & Settings', desc: 'Profile, security, appearance', icon: Settings, tone: 'gray', perms: [], group: 'Workspace' },
   { key: 'users', path: '/access?tab=users', label: 'Users', desc: 'Create and manage accounts', icon: Users, tone: 'navy', perms: ['access.manage'], group: 'Admin' },
   { key: 'system', path: '/access?tab=settings', label: 'System Settings', desc: 'Session timeout, company, GST state', icon: ShieldCheck, tone: 'gray', perms: ['access.manage'], group: 'Admin' },

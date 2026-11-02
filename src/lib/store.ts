@@ -165,10 +165,24 @@ const commitListeners = new Set<(prev: DB, next: DB) => void>()
 export function onCommit(fn: (prev: DB, next: DB) => void) { commitListeners.add(fn); return () => { commitListeners.delete(fn) } }
 
 /** Applies a change. Only the records touched are copied, so this stays fast with thousands of client files. */
+/**
+ * Every new activity-log entry gets the person's role(s) at that moment and, when its text names a CRM entry
+ * (RX-2026-000123), that entry — so the Activity Log can filter by role and by client without each action doing it.
+ */
+function stampAudit(d: DB, prev: DB) {
+  if (d.audit === prev.audit || !d.audit.length) return
+  const had = new Set(prev.audit.slice(0, 200).map((a) => a.id))
+  for (let i = 0; i < d.audit.length && i < 200 && !had.has(d.audit[i]!.id); i++) {
+    const a = d.audit[i]!
+    if (!a.role) { const u = d.users.find((x) => x.id === a.by); if (u) a.role = [u.role, ...u.extraRoles.filter((r) => r !== u.role)].join(',') }
+    if (!a.ref) { const code = a.detail?.match(/RX-\d{4}-\d{4,6}/)?.[0]; const b = code ? d.bookings.find((x) => x.bookingId === code) : undefined; if (b) a.ref = b.id }
+  }
+}
+
 export function mutate<T = void>(fn: (d: DB) => T): T {
   let out!: T
   const prev = db
-  db = produce(db, (draft) => { out = fn(draft as DB) })
+  db = produce(db, (draft) => { out = fn(draft as DB); stampAudit(draft as DB, prev) })
   if (CLOUD) { if (db !== prev) { lastSave = pushToCloud(prev, db); lastSave.catch(() => undefined) } } else save()
   emit()
   if (db !== prev) for (const l of commitListeners) { try { l(prev, db) } catch (e) { console.warn('[store] listener', e) } }
