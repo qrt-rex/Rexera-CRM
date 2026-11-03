@@ -1,5 +1,4 @@
-import { useMemo, useState } from 'react'
-import { BlutecEmbed } from '../../components/BlutecEmbed'
+import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { BarChart3, Briefcase, CalendarCheck2, ClipboardCheck, ClipboardList, FileText, Images, IndianRupee, Megaphone, Network, Phone, PhoneCall, Sparkles, Target, UserCheck, Users, BellRing, Lightbulb, BookMarked, FileSignature, UserRoundCheck, Receipt, Layers } from 'lucide-react'
 import { useDb } from '../../lib/store'
@@ -15,7 +14,6 @@ import { followUpDue, visibleClientEntries } from '../../lib/clientEntries'
 import { Greeting, LoginLogoutCard, MiniStat, Section, Tile, TileGrid, UpcomingEvents, ViewAll, type TileSubAction } from './widgets'
 
 export function SalesDashboard({ lead }: { lead: boolean }) {
-  const [openDialer, setOpenDialer] = useState(false)
   const db = useDb()
   const me = useMe()
   const { can } = useAuth()
@@ -32,12 +30,6 @@ export function SalesDashboard({ lead }: { lead: boolean }) {
   const entriesDue = visibleClientEntries(db, me).filter((e) => followUpDue(e)).length
 
   // Sub-action definitions for each tile's dropdown menu
-  const dialerActions: TileSubAction[] = [
-    { label: openDialer ? 'Hide Web Dialer' : 'Open Web Dialer', onClick: () => { setOpenDialer((v) => !v); setTimeout(() => document.getElementById('web-dialer')?.scrollIntoView({ behavior: 'smooth' }), 50) }, icon: Phone },
-    { label: 'Full Dialer Page', to: '/dialer', icon: PhoneCall },
-    { label: 'My Leads Queue', to: '/dialer?tab=queue', icon: PhoneCall },
-    { label: 'Call History', to: '/dialer?tab=history', icon: BarChart3 },
-  ]
   const docFormActions: TileSubAction[] = [
     { label: 'All Forms', to: '/documents', icon: FileText },
     // the Form Builder is for Admin / Operations — not shown to people who can't open it
@@ -109,7 +101,7 @@ export function SalesDashboard({ lead }: { lead: boolean }) {
       </div>
 
       <TileGrid>
-        <Tile to="/dialer" icon={Phone} label="Dialer · my leads" desc="Call your assigned leads, log outcomes" highlight badge={n.toCall} subActions={dialerActions} />
+        <Tile to="/dialer" icon={Phone} label="Dialer · my leads" desc="Call your assigned leads, log outcomes" highlight badge={n.toCall} />
         <Tile to="/documents" icon={FileText} label="Document Form" desc="Collect client documents" tone="blue" subActions={docFormActions} />
         <Tile to="/content?tab=FLYER" icon={Images} label="Flyer & Post" desc="Latest marketing material" tone="orange" badge={newPosts || undefined} subActions={flyerActions} />
         <Tile to="/schemes" icon={Sparkles} label="Schemes" desc="Government schemes & offers" tone="green" subActions={schemeActions} />
@@ -130,42 +122,6 @@ export function SalesDashboard({ lead }: { lead: boolean }) {
         <Tile to="/attendance" icon={UserCheck} label="Attendance Board" desc="Live day status" tone="green" subActions={attendanceActions} />
         <Tile to="/notifications" icon={BellRing} label="Notifications" desc="Approvals and updates" tone="orange" />
       </TileGrid>
-
-      {/* Blutec Web Dialer right on Sales Person Dashboard */}
-      <Section
-        id="web-dialer"
-        className="mt-5"
-        title="Blutec Web Dialer"
-        subtitle="Make calls directly from your dashboard with your Blutec agent account"
-        icon={Phone}
-        action={
-          <button
-            onClick={() => setOpenDialer((v) => !v)}
-            className="rounded-lg border border-line bg-card px-3 py-1 text-xs font-semibold text-fg hover:bg-card2 transition"
-          >
-            {openDialer ? 'Hide Web Dialer' : 'Open Web Dialer'}
-          </button>
-        }
-      >
-        {openDialer ? (
-          <div className="p-2">
-            <BlutecEmbed className="h-[750px] w-full" />
-          </div>
-        ) : (
-          <div className="flex flex-wrap items-center justify-between gap-3 p-4">
-            <div>
-              <p className="text-sm font-semibold text-fg">Dial leads from this dashboard</p>
-              <p className="text-xs text-mute">Open your embedded Blutec phone to make calls without leaving the CRM.</p>
-            </div>
-            <button
-              onClick={() => setOpenDialer(true)}
-              className="rounded-xl bg-brand px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-brand/90 transition"
-            >
-              Open Web Dialer
-            </button>
-          </div>
-        )}
-      </Section>
 
       {/* sales person → dialer → client entry → follow-ups → CRM entry */}
       <Section id="client-entries" className="mt-5" title={lead ? 'Client entries · me and my team' : 'My client entries'} subtitle="Filled in the dialer during the call — follow up, then convert to a CRM entry once the payment is received" icon={ClipboardList}>
