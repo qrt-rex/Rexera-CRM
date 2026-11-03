@@ -57,7 +57,7 @@ export async function createEmbedSession(agentEmail, agentPassword) {
   if (!loginRes.ok) {
     let msg = `Blutec login failed (${loginRes.status})`
     try { const j = await loginRes.json(); msg = j.message || j.error || msg } catch { /* ignore */ }
-    throw new Error(`Blutec login failed for "${agentEmail}": ${msg}. Ensure this email is registered in Blutec with BLUTEC_AGENT_PASSWORD (or set BLUTEC_AGENT_EMAIL in Render if using a shared agent account).`)
+    throw new Error(`Invalid credentials for "${agentEmail}" in Blutec. Please check your individual Blutec email and password.`)
   }
 
   const data = await loginRes.json()
@@ -198,6 +198,7 @@ function rewriteJsBundle(source) {
     // Socket.IO path rewrite: io() uses path "/socket.io" by default;
     // rewrite so the WS connection goes to /btc/socket.io
     .replace(/path\s*:\s*"\/socket\.io"/g, 'path:"/btc/socket.io"')
+    .replaceAll('"/assets/', '"/btc/assets/')
 }
 
 // ---------------------------------------------------------------------------
@@ -268,12 +269,17 @@ export async function handleProxy(req, res) {
 
     const contentType = (upstream.headers.get('content-type') || '').toLowerCase()
 
-    // --- HTML: inject the auth script
+    // --- HTML: inject the auth script and rewrite asset paths
     if (contentType.includes('text/html')) {
       let html = await upstream.text()
+      // Rewrite asset paths so they route through /btc/assets/
+      html = html
+        .replaceAll('src="/assets/', 'src="/btc/assets/')
+        .replaceAll('href="/assets/', 'href="/btc/assets/')
+        .replaceAll('"/assets/', '"/btc/assets/')
+        .replaceAll("'/assets/", "'/btc/assets/")
       // Inject the auth script just before </head>
       html = html.replace('</head>', `${INJECT_SCRIPT}</head>`)
-      // If there's no </head>, inject at the top of <body>
       if (!html.includes(INJECT_SCRIPT)) {
         html = html.replace('<body', `${INJECT_SCRIPT}<body`)
       }
@@ -282,7 +288,6 @@ export async function handleProxy(req, res) {
         'Content-Type': 'text/html; charset=utf-8',
         'Content-Length': String(buf.length),
         'Cache-Control': 'no-store',
-        'X-Frame-Options': '', // Allow iframe embedding
         'access-control-allow-origin': '*',
       })
       return res.end(buf)

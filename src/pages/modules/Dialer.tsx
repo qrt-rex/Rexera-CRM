@@ -80,7 +80,7 @@ export default function Dialer() {
   const showCalls = roles.some((r) => r === 'sales' || r === 'teamlead')
   const showIvr = roles.includes('superadmin')
   const showDash = showCalls || isMaster(me) || can('leads.manage', 'team.progress')
-  const showEmbed = roles.some((r) => r === 'sales' || r === 'teamlead' || r === 'superadmin')
+  const showEmbed = roles.some((r) => r === 'sales' || r === 'teamlead')
   const tabs = [
     ...(showDash ? [{ id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard }] : []),
     ...(showCalls ? [{ id: 'calls', label: 'Dialing', icon: PhoneCall }] : []),
