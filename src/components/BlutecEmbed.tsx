@@ -86,16 +86,21 @@ export function BlutecEmbed({ className, onError }: Props) {
     return (
       <div className={cx('flex flex-col items-center justify-center gap-3 rounded-2xl bg-bad-soft p-8 text-center', className)}>
         <p className="font-semibold text-bad">Could not open the Blutec dialer</p>
-        <p className="text-sm text-bad/80">{state.message}</p>
-        <p className="text-xs text-mute">
-          Ask IT to set <code className="rounded bg-card2 px-1">BLUTEC_AGENT_PASSWORD</code> in the server environment.
-        </p>
-        <button
-          className="mt-2 rounded-xl border border-bad/30 px-4 py-1.5 text-sm font-semibold text-bad hover:bg-bad-soft"
-          onClick={() => { startedRef.current = false; setState({ phase: 'idle' }); setTimeout(() => { startedRef.current = false }, 0) }}
-        >
-          Retry
-        </button>
+        <p className="max-w-xl text-sm text-bad/90">{state.message}</p>
+        <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
+          <button
+            className="rounded-xl border border-bad/30 bg-card px-4 py-1.5 text-sm font-semibold text-bad hover:bg-bad-soft"
+            onClick={() => { startedRef.current = false; setState({ phase: 'idle' }); setTimeout(() => { startedRef.current = false }, 0) }}
+          >
+            Retry auto-login
+          </button>
+          <button
+            className="rounded-xl bg-brand px-4 py-1.5 text-sm font-semibold text-white hover:bg-brand/90"
+            onClick={() => setState({ phase: 'ready', src: '/btc/login' })}
+          >
+            Log in directly inside frame
+          </button>
+        </div>
       </div>
     )
   }

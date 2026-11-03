@@ -57,7 +57,7 @@ export async function createEmbedSession(agentEmail, agentPassword) {
   if (!loginRes.ok) {
     let msg = `Blutec login failed (${loginRes.status})`
     try { const j = await loginRes.json(); msg = j.message || j.error || msg } catch { /* ignore */ }
-    throw new Error(msg)
+    throw new Error(`Blutec login failed for "${agentEmail}": ${msg}. Ensure this email is registered in Blutec with BLUTEC_AGENT_PASSWORD (or set BLUTEC_AGENT_EMAIL in Render if using a shared agent account).`)
   }
 
   const data = await loginRes.json()

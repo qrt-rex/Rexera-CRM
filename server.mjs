@@ -848,8 +848,9 @@ const server = http.createServer(async (req, res) => {
     const who = req.headers.authorization ? await crmUser(getEnv, req.headers.authorization).catch(() => null) : null
     if (!who) return sendJson(res, 401, { success: false, message: 'Sign in to the CRM to open the embedded dialer.' })
     const agentPassword = getEnv('BLUTEC_AGENT_PASSWORD')
+    const agentEmail = getEnv('BLUTEC_AGENT_EMAIL') || who.email
     try {
-      const { nonce, expiresAt } = await createEmbedSession(who.email, agentPassword)
+      const { nonce, expiresAt } = await createEmbedSession(agentEmail, agentPassword)
       return sendJson(res, 200, { success: true, nonce, expiresAt })
     } catch (e) {
       console.error('[blutec-embed]', e.message)
