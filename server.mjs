@@ -847,14 +847,19 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/blutec-embed' && req.method === 'POST') {
     const who = req.headers.authorization ? await crmUser(getEnv, req.headers.authorization).catch(() => null) : null
     if (!who) return sendJson(res, 401, { success: false, message: 'Sign in to the CRM to open the embedded dialer.' })
-    const agentPassword = getEnv('BLUTEC_AGENT_PASSWORD')
-    const agentEmail = getEnv('BLUTEC_AGENT_EMAIL') || who.email
+    let body = {}
+    try { body = await readJsonBody(req) } catch { /* ignore */ }
+    const agentEmail = String(body.email || req.headers['x-blutec-email'] || getEnv('BLUTEC_AGENT_EMAIL') || who.email).trim()
+    const agentPassword = String(body.password || req.headers['x-blutec-password'] || getEnv('BLUTEC_AGENT_PASSWORD') || '').trim()
+    if (!agentPassword) {
+      return sendJson(res, 400, { success: false, code: 'NO_PASSWORD', email: agentEmail, message: 'BLUTEC_AGENT_PASSWORD is not configured on the server.' })
+    }
     try {
       const { nonce, expiresAt } = await createEmbedSession(agentEmail, agentPassword)
-      return sendJson(res, 200, { success: true, nonce, expiresAt })
+      return sendJson(res, 200, { success: true, nonce, expiresAt, email: agentEmail })
     } catch (e) {
       console.error('[blutec-embed]', e.message)
-      return sendJson(res, 502, { success: false, message: e.message })
+      return sendJson(res, 401, { success: false, code: 'LOGIN_FAILED', email: agentEmail, message: e.message })
     }
   }
 
