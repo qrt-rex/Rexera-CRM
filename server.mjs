@@ -551,6 +551,11 @@ function serveStaticFile(req, res, pathname) {
     return
   }
 
+  // If a static asset (/assets/*) is not found in Rexera dist, proxy it to Blutec!
+  if (pathname.startsWith('/assets/')) {
+    return handleProxy({ ...req, url: `/btc${req.url}` }, res)
+  }
+
   // SPA fallback: return index.html for unknown routes (e.g. /reset-password, /crm-entries)
   const indexHtml = path.join(DIST_DIR, 'index.html')
   if (fs.existsSync(indexHtml)) {
@@ -845,15 +850,23 @@ const server = http.createServer(async (req, res) => {
   // -------------------------------------------------------------
   // POST /api/blutec-embed → create an embed session for the signed-in agent
   if (pathname === '/api/blutec-embed' && req.method === 'POST') {
+    let body = {}
+    try { body = await readJsonBody(req) } catch { /* ignore */ }
     const who = req.headers.authorization ? await crmUser(getEnv, req.headers.authorization).catch(() => null) : null
-    if (!who) return sendJson(res, 401, { success: false, message: 'Sign in to the CRM to open the embedded dialer.' })
-    const agentPassword = getEnv('BLUTEC_AGENT_PASSWORD')
+    const agentEmail = String(body.email || req.headers['x-blutec-email'] || who?.email || getEnv('BLUTEC_AGENT_EMAIL') || '').trim()
+    const agentPassword = String(body.password || req.headers['x-blutec-password'] || getEnv('BLUTEC_AGENT_PASSWORD') || '').trim()
+    if (!agentEmail) {
+      return sendJson(res, 400, { success: false, message: 'Please provide your Blutec agent email.' })
+    }
+    if (!agentPassword) {
+      return sendJson(res, 400, { success: false, code: 'NO_PASSWORD', email: agentEmail, message: 'Please enter your Blutec agent password.' })
+    }
     try {
-      const { nonce, expiresAt } = await createEmbedSession(who.email, agentPassword)
-      return sendJson(res, 200, { success: true, nonce, expiresAt })
+      const { nonce, expiresAt } = await createEmbedSession(agentEmail, agentPassword)
+      return sendJson(res, 200, { success: true, nonce, expiresAt, email: agentEmail })
     } catch (e) {
       console.error('[blutec-embed]', e.message)
-      return sendJson(res, 502, { success: false, message: e.message })
+      return sendJson(res, 401, { success: false, code: 'LOGIN_FAILED', email: agentEmail, message: e.message })
     }
   }
 

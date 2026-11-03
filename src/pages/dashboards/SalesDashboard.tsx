@@ -31,11 +31,6 @@ export function SalesDashboard({ lead }: { lead: boolean }) {
   const entriesDue = visibleClientEntries(db, me).filter((e) => followUpDue(e)).length
 
   // Sub-action definitions for each tile's dropdown menu
-  const dialerActions: TileSubAction[] = [
-    { label: 'Open Dialer', to: '/dialer', icon: Phone },
-    { label: 'My Leads Queue', to: '/dialer?tab=queue', icon: PhoneCall },
-    { label: 'Call History', to: '/dialer?tab=history', icon: BarChart3 },
-  ]
   const docFormActions: TileSubAction[] = [
     { label: 'All Forms', to: '/documents', icon: FileText },
     // the Form Builder is for Admin / Operations — not shown to people who can't open it
@@ -110,7 +105,7 @@ export function SalesDashboard({ lead }: { lead: boolean }) {
       </div>
 
       <TileGrid>
-        <Tile to="/dialer" icon={Phone} label="Dialer · my leads" desc="Call your assigned leads, log outcomes" highlight badge={n.toCall} subActions={dialerActions} />
+        <Tile to="/dialer" icon={Phone} label="Dialer · my leads" desc="Call your assigned leads, log outcomes" highlight badge={n.toCall} />
         <Tile to="/documents" icon={FileText} label="Document Form" desc="Collect client documents" tone="blue" subActions={docFormActions} />
         <Tile to="/content?tab=FLYER" icon={Images} label="Flyer & Post" desc="Latest marketing material" tone="orange" badge={newPosts || undefined} subActions={flyerActions} />
         <Tile to="/schemes" icon={Sparkles} label="Schemes" desc="Government schemes & offers" tone="green" subActions={schemeActions} />
