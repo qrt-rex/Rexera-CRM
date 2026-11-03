@@ -106,6 +106,7 @@ export const PERM_GROUPS: { group: string; perms: { id: Perm; label: string }[] 
       { id: 'reports.export', label: 'Export data (CSV)' },
       { id: 'access.manage', label: 'User accounts: create, activate / deactivate, set passwords' },
       { id: 'roles.manage', label: 'Roles & permissions: create roles, give or take away permissions and functions (IT Support; anyone else only when IT allows it)' },
+      { id: 'quiz.manage', label: 'Sales Quiz: create, edit, publish quizzes and see every result (IT Support; anyone else only when IT allows it)' },
       { id: 'website.manage', label: 'Website content, publishing & website leads (Super Admin)' },
       { id: 'portal.manage', label: 'Client portal logins: create ID and password, link, deactivate (IT Support only)' },
       { id: 'portal.view', label: 'Client portal: see every client’s logins, activity and progress (Legal, Operation team, Admin)' },
@@ -120,7 +121,7 @@ const common: Perm[] = ['broadcasts.view', 'messages.use', 'schemes.view', 'cont
 
 export const DEFAULT_ROLE_PERMS: Record<Role, Perm[]> = {
   // roles & permissions are IT Support's alone — not even the Super Admin's (unless IT allows it for that person)
-  superadmin: ALL_PERMS.filter((p) => p !== 'roles.manage'),
+  superadmin: ALL_PERMS.filter((p) => p !== 'roles.manage' && p !== 'quiz.manage'),
   admin: [...common, 'bookings.all', 'bookings.admin', 'content.manage', 'salesinfo.manage', 'schemes.manage', 'employees.view', 'documents.forms', 'reports.view', 'followup.manage', 'forms.manage', 'workflow.manage', 'portal.view', 'refunds.request'],
   accounts: [...common, 'bookings.all', 'bookings.accounts', 'billing.create', 'billing.manage', 'refunds.manage', 'reports.view', 'reports.export'],
   legal: [...common, 'bookings.all', 'bookings.legal', 'documents.forms', 'leave.approve', 'reports.view', 'portal.view', 'refunds.request'],
@@ -220,6 +221,11 @@ export const customRoleOf = (db: DB, u: User): CustomRole | undefined => {
  */
 export const canManageRoles = (u: User | null | undefined) =>
   !!u && (rolesOf(u).includes('it') || (u.grants.includes('roles.manage') && !u.denies.includes('roles.manage')))
+/** Sales Quiz: IT Support makes the quizzes and sees every result (anyone else only when IT allows it by name). */
+export const canManageQuiz = (u: User | null | undefined) =>
+  !!u && (rolesOf(u).includes('it') || (u.grants.includes('quiz.manage') && !u.denies.includes('quiz.manage')))
+/** Only Sales users take the quiz (the database checks the same). */
+export const canTakeQuiz = (u: User | null | undefined) => !!u && rolesOf(u).includes('sales')
 
 /**
  * The functions this person may NOT use ('leads:export'): those every one of their roles is denied (a custom role
@@ -248,6 +254,7 @@ export function effectivePerms(db: DB, u: User | null | undefined): Set<Perm> {
     const s = new Set(ALL_PERMS)
     for (const p of denies) s.delete(p)
     if (!canManageRoles(u)) s.delete('roles.manage')
+    if (!canManageQuiz(u)) s.delete('quiz.manage')
     return s
   }
   const s = new Set<Perm>()
@@ -256,6 +263,7 @@ export function effectivePerms(db: DB, u: User | null | undefined): Set<Perm> {
   for (const p of grants) s.add(p)
   for (const p of denies) s.delete(p)
   if (!canManageRoles(u)) s.delete('roles.manage')
+  if (!canManageQuiz(u)) s.delete('quiz.manage')
   for (const [perm, allowed] of Object.entries(RESERVED) as [Perm, Role[]][]) {
     if (s.has(perm) && !roles.some((r) => allowed.includes(r))) s.delete(perm)
   }

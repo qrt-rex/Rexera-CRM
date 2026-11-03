@@ -12,6 +12,7 @@ import { BookingRow, BookingStatusBadge, ChainStepper , ClientSerial } from '../
 import { ClientEntriesPanel } from '../../components/ClientEntry'
 import { followUpDue, visibleClientEntries } from '../../lib/clientEntries'
 import { Greeting, LoginLogoutCard, MiniStat, Section, Tile, TileGrid, UpcomingEvents, ViewAll, type TileSubAction } from './widgets'
+import { QuizDashboardCard } from '../modules/Quiz'
 
 export function SalesDashboard({ lead }: { lead: boolean }) {
   const db = useDb()
@@ -97,6 +98,9 @@ export function SalesDashboard({ lead }: { lead: boolean }) {
           </div>
         }
       />
+
+      {/* Sales Quiz: Start Quiz when one is open, and the latest score */}
+      <QuizDashboardCard />
 
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <MiniStat label="Leads to call" value={n.toCall} icon={PhoneCall} tone="navy" />

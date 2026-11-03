@@ -17,6 +17,7 @@ const Dashboard = lazy(() => import('./pages/dashboards/Dashboard'))
 const BranchDashboard = lazy(() => import('./pages/dashboards/BranchDashboard').then((m) => ({ default: m.BranchDashboard })))
 const Leads = lazy(() => import('./pages/modules/Leads'))
 const Dialer = lazy(() => import('./pages/modules/Dialer'))
+const Quiz = lazy(() => import('./pages/modules/Quiz'))
 const Bookings = lazy(() => import('./pages/modules/Bookings'))
 const BookingForm = lazy(() => import('./pages/modules/BookingForm'))
 const BookingDetail = lazy(() => import('./pages/modules/BookingDetail'))
@@ -166,6 +167,7 @@ export default function App() {
               <Route path="/branches/:id" element={<S><BranchRoute /></S>} />
               <Route path="/leads" element={<Guard m="leads"><S><Leads /></S></Guard>} />
               <Route path="/dialer" element={<Guard m="dialer"><S><Dialer /></S></Guard>} />
+              <Route path="/quiz" element={<Guard m="quiz"><S><Quiz /></S></Guard>} />
               <Route path="/client-entries" element={<Guard m="client-entries"><S><ClientEntries /></S></Guard>} />
               <Route path="/team" element={<Guard m="team"><S><TeamProgress /></S></Guard>} />
               <Route path="/assign" element={<Guard m="assign"><S><Assign /></S></Guard>} />

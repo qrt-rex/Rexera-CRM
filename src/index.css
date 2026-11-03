@@ -99,9 +99,12 @@ body {
   text-rendering: optimizeLegibility;
   font-feature-settings: "cv11", "ss01";
 }
-/* headings break evenly; paragraphs avoid a lone last word */
-h1, h2, h3, h4 { text-wrap: balance; }
-p { text-wrap: pretty; overflow-wrap: anywhere; }
+/* headings break evenly; paragraphs avoid a lone last word — in the base layer, so a utility on the element
+   (truncate, whitespace-nowrap) still wins */
+@layer base {
+  h1, h2, h3, h4 { text-wrap: balance; }
+  p { text-wrap: pretty; overflow-wrap: anywhere; }
+}
 * { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
 *:hover { scrollbar-color: color-mix(in srgb, var(--mute) 45%, transparent) transparent; }
 

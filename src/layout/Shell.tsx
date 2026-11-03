@@ -148,7 +148,7 @@ export function Shell() {
             className="-ml-1 hidden size-9 shrink-0 place-items-center rounded-lg text-mute hover:bg-card2 hover:text-ink lg:grid">
             {collapsed ? <PanelLeftOpen className="size-5" /> : <PanelLeftClose className="size-5" />}
           </button>
-          <h1 className="hidden min-w-0 max-w-64 shrink truncate whitespace-nowrap text-base font-extrabold tracking-tight md:block">{title}</h1>
+          <h1 className="hidden max-w-56 shrink-0 truncate whitespace-nowrap text-base font-extrabold tracking-tight md:block">{title}</h1>
           <button onClick={() => setPalette(true)} className="mx-auto flex h-9 w-full min-w-0 max-w-md items-center gap-2.5 rounded-lg border border-line bg-card2 px-3 text-sm text-mute transition hover:border-brand/50 hover:bg-card hover:shadow-card">
             <Search className="size-4 shrink-0 text-mute" />
             <span className="flex-1 truncate text-left">{hrMode ? 'Search employees, leads, pages…' : 'Search clients, leads, people…'}</span>

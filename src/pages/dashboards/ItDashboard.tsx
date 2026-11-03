@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  Activity, AlertTriangle, Camera, CheckCircle2, DatabaseBackup, DatabaseZap, Download, Eraser, HardDrive, KeyRound, LayoutGrid, Lock, LogOut, RefreshCcw,
+  Activity, AlertTriangle, Camera, GraduationCap, CheckCircle2, DatabaseBackup, DatabaseZap, Download, Eraser, HardDrive, KeyRound, LayoutGrid, Lock, LogOut, RefreshCcw,
   ScrollText, ShieldAlert, ShieldCheck, Stethoscope, Unlock, UserCog, Users, Wrench, XCircle, type LucideIcon,
 } from 'lucide-react'
 import type { Role } from '../../lib/types'
@@ -125,6 +125,7 @@ export function ItDashboard() {
         }} />
         <Action icon={ScrollText} tone="gray" label="Export activity log" hint={`${db.audit.length} entries as CSV`} onClick={() => downloadCsv(`activity-${today()}.csv`, db.audit.map((a) => ({ at: a.at, by: userName(db, a.by), action: a.action, detail: a.detail })))} />
         <Action icon={ShieldCheck} tone="navy" label="Access Control" hint="Roles, permissions, every function — user by user" to="/access?tab=roles" />
+        <Action icon={GraduationCap} tone="orange" label="Quiz Management" hint="Make, publish and archive Sales quizzes · every result" to="/quiz?tab=manage" />
         <Action icon={LayoutGrid} tone="cyan" label="Users & access" hint="Each person's role, functions and permissions" to="/access?tab=users" />
         <Action icon={DatabaseZap} tone="violet" label="Import from old CRM" hint="Old PHP CRM .sql dump · verified before saving" to="/legacy-import" />
       </div>
