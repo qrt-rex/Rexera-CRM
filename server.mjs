@@ -22,6 +22,7 @@ import { sendHrLetter } from './server/hrLetters.mjs'
 import { whatsappConfigured } from './server/whatsapp.mjs'
 import { incentiveReport, reportConfig } from './server/incentives.mjs'
 import { blutecEnv, handleBlutec } from './supabase/functions/_shared/blutec.ts'
+import { createEmbedSession, consumeEmbedNonce, handleProxy, handleWsUpgrade } from './server/blutecEmbed.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DIST_DIR = path.resolve(__dirname, 'dist')
@@ -839,6 +840,36 @@ const server = http.createServer(async (req, res) => {
     return handleBlutecRelay(req, res).catch((err) => sendJson(res, 502, { success: false, message: err.message }))
   }
 
+  // -------------------------------------------------------------
+  // Blutec embed: nonce-based auto-login for the iframe reverse proxy
+  // -------------------------------------------------------------
+  // POST /api/blutec-embed → create an embed session for the signed-in agent
+  if (pathname === '/api/blutec-embed' && req.method === 'POST') {
+    const who = req.headers.authorization ? await crmUser(getEnv, req.headers.authorization).catch(() => null) : null
+    if (!who) return sendJson(res, 401, { success: false, message: 'Sign in to the CRM to open the embedded dialer.' })
+    const agentPassword = getEnv('BLUTEC_AGENT_PASSWORD')
+    try {
+      const { nonce, expiresAt } = await createEmbedSession(who.email, agentPassword)
+      return sendJson(res, 200, { success: true, nonce, expiresAt })
+    } catch (e) {
+      console.error('[blutec-embed]', e.message)
+      return sendJson(res, 502, { success: false, message: e.message })
+    }
+  }
+
+  // GET /api/blutec-embed-token?nonce=… → one-time token exchange (called by the injected script inside the iframe)
+  if (pathname === '/api/blutec-embed-token' && req.method === 'GET') {
+    const nonce = parsedUrl.searchParams.get('nonce') || ''
+    const tokens = consumeEmbedNonce(nonce)
+    if (!tokens) return sendJson(res, 404, { success: false, message: 'Nonce not found or expired.' })
+    return sendJson(res, 200, { success: true, ...tokens })
+  }
+
+  // ALL /btc/* → reverse-proxy to https://dialer.blutec.ai
+  if (pathname.startsWith('/btc')) {
+    return handleProxy(req, res)
+  }
+
   if (pathname === '/api/incentive-report' && req.method === 'GET') {
     return handleIncentiveReport(req, res, parsedUrl.searchParams)
   }
@@ -855,11 +886,22 @@ server.listen(PORT, HOST, () => {
   console.log(`\n======================================================`)
   console.log(`🚀 Rexera CRM Live Production Server is running!`)
   console.log(`👉 URL: http://${HOST}:${PORT} (listening on all interfaces)`)
+  console.log(`🌐 Blutec Embed: ${getEnv('BLUTEC_AGENT_PASSWORD') ? 'Configured (shared agent password set)' : '⚠️  NOT configured (Set BLUTEC_AGENT_PASSWORD for iframe auto-login)'}`)
   console.log(`📞 Dialer: ${blutecEnv({ ...fileEnv, ...process.env }).keyId ? 'Configured' : '⚠️ NOT configured (Set BLUTEC_KEY_ID, BLUTEC_API_KEY, BLUTEC_SIGNING_SECRET)'}`)
   console.log(`📧 SMTP: ${getEnv('SMTP_USER') ? `Configured (${getEnv('SMTP_USER')})` : '⚠️ NOT configured (Set SMTP_USER & SMTP_PASS)'}`)
   console.log(`======================================================\n`)
 })
 
+
+// WebSocket upgrade: tunnel /btc/socket.io/* to Blutec for real-time events
+server.on('upgrade', (req, socket, head) => {
+  const pathname = req.url ? new URL(req.url, 'http://localhost').pathname : ''
+  if (pathname.startsWith('/btc/socket.io')) {
+    handleWsUpgrade(req, socket, head)
+  } else {
+    socket.destroy()
+  }
+})
 process.on('SIGTERM', () => {
   console.log('SIGTERM signal received: closing HTTP server')
   server.close(() => process.exit(0))

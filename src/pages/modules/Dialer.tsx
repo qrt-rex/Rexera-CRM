@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Briefcase, CalendarClock, CircleDashed, ClipboardList, Flame, History, LayoutDashboard, Pause, Phone, PhoneCall, PhoneOff, Play, Radio, RefreshCcw, Settings2, Square, UserPlus } from 'lucide-react'
+import { Briefcase, CalendarClock, CircleDashed, ClipboardList, Flame, History, LayoutDashboard, Monitor, Pause, Phone, PhoneCall, PhoneOff, Play, Radio, RefreshCcw, Settings2, Square, UserPlus } from 'lucide-react'
 import type { CallOutcome, Lead } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
@@ -16,6 +16,7 @@ import { AgentStatusMenu, CallbacksView, CallHistory, DialerDashboard, DialerTit
 import type { LiveCall } from '../../lib/callStats'
 import { ClientEntryForLead } from '../../components/ClientEntry'
 import { CLIENT_ENTRY_STATUS, openEntryForLead } from '../../lib/clientEntries'
+import { BlutecEmbed } from '../../components/BlutecEmbed'
 
 /** Blutec connection state, checked once per page view. */
 function useBlutec() {
@@ -61,6 +62,14 @@ export function CallLogger({ lead, seconds = 0, suggested, refId, totalSec, call
   )
 }
 
+function BlutecEmbedTab() {
+  return (
+    <div className="mt-2">
+      <BlutecEmbed className="h-[calc(100vh-180px)] w-full" />
+    </div>
+  )
+}
+
 export default function Dialer() {
   const me = useMe()
   const { can } = useAuth()
@@ -71,9 +80,11 @@ export default function Dialer() {
   const showCalls = roles.some((r) => r === 'sales' || r === 'teamlead')
   const showIvr = roles.includes('superadmin')
   const showDash = showCalls || isMaster(me) || can('leads.manage', 'team.progress')
+  const showEmbed = roles.some((r) => r === 'sales' || r === 'teamlead' || r === 'superadmin')
   const tabs = [
     ...(showDash ? [{ id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard }] : []),
     ...(showCalls ? [{ id: 'calls', label: 'Dialing', icon: PhoneCall }] : []),
+    ...(showEmbed ? [{ id: 'embed', label: 'Web Dialer', icon: Monitor }] : []),
     ...(showDash ? [{ id: 'history', label: 'Call History', icon: History }, { id: 'callbacks', label: 'Callbacks', icon: CalendarClock }] : []),
     ...(showIvr ? [{ id: 'ivr', label: 'IVR campaigns', icon: Radio }] : []),
   ]
@@ -103,6 +114,7 @@ export default function Dialer() {
       {tab === 'dashboard' && <DialerDashboard pick={pick} live={live} onStart={showCalls ? () => go('calls') : undefined} onCallbacks={() => go('callbacks')} onOpenLead={openLead} />}
       {tab === 'history' && <CallHistory pick={pick} onOpenLead={openLead} />}
       {tab === 'callbacks' && <CallbacksView pick={pick} onOpenLead={openLead} />}
+      {tab === 'embed' && <BlutecEmbedTab />}
       {tab === 'ivr' && <><DialerTitle title="IVR Campaigns" subtitle="IVR campaigns through Blutec: live stats and hot prospects" /><IvrTab bt={bt} manage /><DialerCampaigns /></>}
       {!tab && <Card><EmptyState icon={Phone} title="Dialer is for sales people" text="Calls are used by sales people and team leaders; IVR campaigns are run by the Super Admin." /></Card>}
     </div>
