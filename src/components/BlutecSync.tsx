@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { getDb } from '../lib/store'
 import { useMe } from '../lib/auth'
 import { blutec, DialerError } from '../lib/dialer'
-import { applyBlutecCall, canMakeClientEntry } from '../lib/clientEntries'
+import { applyBlutecCall, canMakeClientEntry, restoreBlutecEntries } from '../lib/clientEntries'
 import { useToast } from './ui'
 
 /**
@@ -22,6 +22,8 @@ export function BlutecSync() {
       const mine = getDb().leads.filter((l) => l.assignedTo === me.id && l.status === 'NEW')
         .sort((a, b) => (a.assignedAt ?? '').localeCompare(b.assignedAt ?? '')).slice(0, 30)
       let leads = 0, entries = 0
+      // entries that were refused earlier (e.g. a bad email on the lead) are made again first
+      try { entries += restoreBlutecEntries(me) } catch (e) { console.warn('[blutec sync]', e) }
       for (const l of mine) {
         if (stop) return
         let b
