@@ -594,8 +594,6 @@ async function handleBlutecRelay(req, res) {
     let body
     try { body = await readJsonBody(req) } catch { return sendJson(res, 400, { success: false, message: 'Bad JSON' }) }
     if (IVR_ACTIONS.includes(body.action) && !who.roles.some((r) => r === 'superadmin' || r === 'it')) return sendJson(res, 403, { success: false, message: 'IVR campaigns are for the Super Admin and IT.' })
-    // calls always ring the signed-in person's own agent phone
-    if (body.action === 'call') { body.agentEmail = who.email; body.userId = who.id }
     if (body.action === 'agent') body.email = who.email
     // "Your campaigns": only the ones given to the signed-in person, never ids sent by the browser
     if (body.action === 'myCampaigns') body = { action: 'campaignsByIds', ids: await campaignsOf(who.id) }

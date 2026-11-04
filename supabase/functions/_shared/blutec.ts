@@ -23,7 +23,7 @@ export interface BlutecEnv {
 export type BlutecRequest =
   | { action: 'status' }
   | { action: 'agent'; email: string }
-  | { action: 'call'; agentEmail: string; phone: string; leadId?: string; attempt?: string; userId?: string }
+  | { action: 'leadLookup'; phone: string }
   | { action: 'dncCheck'; phone: string }
   | { action: 'dncAdd'; phone: string; reason?: string }
   | { action: 'callStatus'; refId: string }
@@ -142,6 +142,72 @@ async function agentUuid(e: BlutecEnv, email: string) {
   return uuid
 }
 
+/** What the CRM takes from a Blutec lead and its latest call. Empty strings = Blutec didn't say (never guessed). */
+export interface BlutecLeadInfo {
+  blutecLeadId: number | null; name: string; company: string; email: string; city: string
+  disposition: string; calledAt: string; agent: string; campaign: string; durationSec: number | null; notes: string
+}
+type Obj = Record<string, unknown>
+const isObj = (x: unknown): x is Obj => !!x && typeof x === 'object' && !Array.isArray(x)
+const nk = (k: string) => k.toLowerCase().replace(/[^a-z]/g, '')
+/** The first non-empty text among these keys (any case / _), in these objects, in order. Nested { name } counts. */
+const pick = (objs: unknown[], keys: string[]) => {
+  for (const o of objs) {
+    if (!isObj(o)) continue
+    for (const k of keys) {
+      const hit = Object.entries(o).find(([x]) => nk(x) === nk(k))?.[1]
+      const v = isObj(hit) ? hit.name ?? hit.label : hit
+      if ((typeof v === 'string' && v.trim()) || typeof v === 'number') return String(v).trim()
+    }
+  }
+  return ''
+}
+/**
+ * Reads Blutec's lead lookup, lead details and call history whatever the exact field names (the docs show only
+ * id / phone / name / status), the latest call that has a disposition first.
+ */
+export function blutecLeadInfo(raw: { lookup?: unknown; lead?: unknown; history?: unknown }): BlutecLeadInfo {
+  const lead = { ...(isObj(raw.lookup) ? raw.lookup : {}), ...(isObj(raw.lead) ? raw.lead : {}) }
+  const custom = ['custom_data', 'custom_fields', 'customData', 'extra', 'data'].map((k) => lead[k]).filter(isObj)
+  const people = [lead, ...custom]
+  const h = raw.history
+  const list: unknown[] = Array.isArray(h) ? h : isObj(h) ? (['history', 'calls', 'items', 'records', 'dispositions'].map((k) => h[k]).find(Array.isArray) ?? []) : []
+  const WHEN = ['disposed_at', 'call_time', 'called_at', 'start_time', 'started_at', 'end_time', 'created_at', 'createdAt', 'updated_at']
+  const DISPO = ['disposition_name', 'disposition', 'last_disposition', 'dispositionName']
+  const time = (r: unknown) => { const t = Date.parse(pick([r], WHEN)); return Number.isFinite(t) ? t : 0 }
+  const calls = list.filter(isObj).sort((a, b) => time(b) - time(a))
+  const last = calls.find((r) => pick([r], DISPO)) ?? calls[0]
+  const first = pick(people, ['first_name', 'firstname']), lastName = pick(people, ['last_name', 'lastname'])
+  const dur = pick([last], ['talk_duration_seconds', 'talk_duration', 'talk_time', 'duration_seconds', 'duration', 'billsec'])
+  const at = last ? time(last) : 0
+  const id = Number(lead.id)
+  return {
+    blutecLeadId: Number.isFinite(id) ? id : null,
+    name: pick(people, ['name', 'full_name', 'customer_name', 'contact_name', 'client_name']) || [first, lastName].filter(Boolean).join(' '),
+    company: pick(people, ['company', 'company_name', 'business', 'business_name', 'firm', 'firm_name', 'organization', 'organisation']),
+    email: pick(people, ['email', 'email_id', 'mail']),
+    city: pick(people, ['city', 'location']),
+    disposition: pick([last], DISPO) || pick([lead], DISPO),
+    calledAt: at ? new Date(at).toISOString() : '',
+    agent: pick([last], ['agent_name', 'agent', 'user_name', 'user', 'disposed_by']),
+    campaign: pick([last, lead], ['campaign_name', 'campaign']),
+    // seconds, or "00:00:43" as Blutec's own screens show it
+    durationSec: /^\d+(:\d+){1,2}$/.test(dur) ? dur.split(':').reduce((s, x) => s * 60 + Number(x), 0) : dur && Number.isFinite(Number(dur)) ? Math.round(Number(dur)) : null,
+    notes: pick([last], ['notes', 'note', 'remarks', 'comment']),
+  }
+}
+
+/** Blutec's disposition (Hot Prospect, Interested, Intro, …) → the client entry status, if it names one. */
+export function entryStatusFromDisposition(text?: string): 'HOT' | 'INTERESTED' | 'NOT_INTERESTED' | 'CALL_BACK' | 'PAYMENT_PENDING' | '' {
+  const k = (text ?? '').toLowerCase()
+  if (/not\s*interest/.test(k)) return 'NOT_INTERESTED'
+  if (/hot/.test(k)) return 'HOT'
+  if (/interest|intro/.test(k)) return 'INTERESTED'
+  if (/call\s*back/.test(k)) return 'CALL_BACK'
+  if (/payment/.test(k)) return 'PAYMENT_PENDING'
+  return ''
+}
+
 export async function handleBlutec(req: BlutecRequest, e: BlutecEnv): Promise<BlutecResult> {
   try {
     switch (req.action) {
@@ -150,16 +216,23 @@ export async function handleBlutec(req: BlutecRequest, e: BlutecEnv): Promise<Bl
       case 'agent':
         if (!dialerReady(e)) return fail(503, 'Click-to-call is not configured.', 'NOT_CONFIGURED')
         return { status: 200, body: { success: true, data: { agent_uuid: await agentUuid(e, req.email) } } }
-      case 'call': {
-        if (!dialerReady(e)) return fail(503, 'Click-to-call is not configured.', 'NOT_CONFIGURED')
-        const phone = String(req.phone).replace(/\D/g, '')
-        if (phone.length < 10 || phone.length > 15) return fail(422, 'The number must have 10–15 digits.', 'VALIDATION_ERROR')
-        const destination = toE164ish(phone)
-        // numbers on the company's Do-Not-Disturb list are never dialled (a failed check doesn't block the call)
-        if (dncReady(e) && await isDnc(e, destination).catch(() => false)) return fail(409, 'This number is on the Do-Not-Disturb list — it can’t be called.', 'DND')
-        const uuid = await agentUuid(e, req.agentEmail)
-        return await signed(e, 'POST', '/api/v1/click-to-call', '', { agent_uuid: uuid, destination_number: destination, caller_id: e.callerId || undefined, ring_timeout: 30, custom_identifier: req.leadId ? { crm_lead_id: req.leadId, ...(req.userId ? { crm_user_id: req.userId } : {}) } : undefined },
-          req.attempt ? `crm-${req.leadId ?? phone}-${req.attempt}` : undefined)
+      case 'leadLookup': {
+        // the sales person called this number from Blutec's own dialer: what Blutec knows about it (lead + latest call)
+        if (!dncReady(e)) return fail(503, 'Looking up Blutec leads needs the Blutec API token (BLUTEC_TOKEN).', 'NOT_CONFIGURED')
+        const ten = String(req.phone).replace(/\D/g, '').slice(-10)
+        if (!/^[6-9]\d{9}$/.test(ten)) return fail(422, 'A valid 10-digit mobile is required.', 'VALIDATION_ERROR')
+        // Blutec stores numbers as 91XXXXXXXXXX; older lists may hold the bare 10 digits
+        let found: unknown = null
+        for (const p of [`91${ten}`, ten]) {
+          const r = await dialerApi(e, 'GET', `/api/leads/lookup-by-phone?phone=${p}`)
+          const d = (r.body as { data?: unknown })?.data
+          if (r.status === 200 && d && typeof d === 'object' && (d as { id?: unknown }).id != null) { found = d; break }
+        }
+        if (!found) return { status: 200, body: { success: true, data: null } }
+        const id = Number((found as { id: unknown }).id)
+        const [lead, history] = await Promise.all([dialerApi(e, 'GET', `/api/leads/${id}`), dialerApi(e, 'GET', `/api/leads/${id}/history`)])
+        const raw = { lookup: found, lead: lead.status === 200 ? (lead.body as { data?: unknown }).data : null, history: history.status === 200 ? (history.body as { data?: unknown }).data : null }
+        return { status: 200, body: { success: true, data: { ...blutecLeadInfo(raw), raw } } }
       }
       case 'dncCheck': {
         if (!dncReady(e)) return fail(503, 'The DND list needs the Blutec API token (BLUTEC_TOKEN).', 'NOT_CONFIGURED')
