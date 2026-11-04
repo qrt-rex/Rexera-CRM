@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { AlertTriangle, Briefcase, ChevronDown, Download, Forward, Globe, Pencil, Plus, Shuffle, Trash2, Upload, UserPlus, Users } from 'lucide-react'
+import { Briefcase, ChevronDown, Download, Forward, Globe, Pencil, Plus, Shuffle, Trash2, Upload, UserPlus, Users } from 'lucide-react'
 import type { Lead, LeadStatus } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
@@ -62,7 +62,6 @@ export default function Leads() {
   const openId = params.get('open')
   const all = visibleLeads(db, me)
   const t = today()
-  const myOverdue = overdueLeadsOf(db, me.id)
 
   const counts = useMemo(() => ({
     open: all.filter((l) => OPEN_LEAD.includes(l.status)).length,
@@ -128,13 +127,6 @@ export default function Leads() {
           <Button variant="accent" icon={Plus} onClick={() => setForm({ open: true })}>New lead</Button>
         </>} />
 
-      {myOverdue.length > 0 && (
-        // <div role="alert" className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-bad/40 bg-bad-soft px-4 py-3 text-sm text-bad">
-        //   <AlertTriangle className="size-5" />
-        //   <span className="flex-1"><b>{myOverdue.length} lead(s) still on “New” from before today.</b> <span className="text-ink/75">Update their disposition (or forward them) now — until you do, no new leads can be given to you.</span></span>
-        //   <Button size="sm" variant="danger" onClick={() => { setView('open'); setDisp('NEW') }}>Show them</Button>
-        // </div>
-      )}
 
       <Card className="overflow-hidden">
         <div className="flex flex-wrap items-center gap-3 border-b border-line p-4">
