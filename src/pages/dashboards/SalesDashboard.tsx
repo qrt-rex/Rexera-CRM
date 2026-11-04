@@ -105,7 +105,6 @@ export function SalesDashboard({ lead }: { lead: boolean }) {
       </div>
 
       <TileGrid>
-        <Tile to="/dialer" icon={Phone} label="Dialer · my leads" desc="Call your assigned leads, log outcomes" highlight badge={n.toCall} />
         <Tile to="/documents" icon={FileText} label="Document Form" desc="Collect client documents" tone="blue" subActions={docFormActions} />
         <Tile to="/content?tab=FLYER" icon={Images} label="Flyer & Post" desc="Latest marketing material" tone="orange" badge={newPosts || undefined} subActions={flyerActions} />
         <Tile to="/schemes" icon={Sparkles} label="Schemes" desc="Government schemes & offers" tone="green" subActions={schemeActions} />

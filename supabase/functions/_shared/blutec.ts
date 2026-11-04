@@ -197,6 +197,13 @@ export function blutecLeadInfo(raw: { lookup?: unknown; lead?: unknown; history?
   }
 }
 
+/** One line for the call: "Hot Prospect · 4 Nov 2026, 12:01 pm · 43s · IT Sample Camp. · by Dhairya Dave". */
+export const blutecCallSummary = (b: Pick<BlutecLeadInfo, 'disposition' | 'calledAt' | 'durationSec' | 'campaign' | 'agent'>) => [
+  b.disposition,
+  b.calledAt && new Date(b.calledAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }),
+  b.durationSec != null && `${b.durationSec}s`, b.campaign, b.agent && `by ${b.agent}`,
+].filter(Boolean).join(' · ')
+
 /** Blutec's disposition (Hot Prospect, Interested, Intro, …) → the client entry status, if it names one. */
 export function entryStatusFromDisposition(text?: string): 'HOT' | 'INTERESTED' | 'NOT_INTERESTED' | 'CALL_BACK' | 'PAYMENT_PENDING' | '' {
   const k = (text ?? '').toLowerCase()

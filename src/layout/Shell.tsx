@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { BlutecSync } from '../components/BlutecSync'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   BadgeCheck, Bell, ChevronDown, ChevronRight, Home, LayoutGrid, LogOut, Mail, Menu as MenuIcon, Moon, Search, Settings, ShieldCheck, Sun, UserCheck, X, Monitor,
@@ -204,6 +205,7 @@ export function Shell() {
         <main id="main" className="mx-auto w-full max-w-[1680px] flex-1 px-3 py-4 sm:px-5 sm:py-5 lg:px-6">
           <BreakBanner />
           <BreakPrompt />
+          <BlutecSync />
           {loc.pathname.startsWith('/dashboard') && <OverdueLeadsBanner />}
           {maintenance?.on && isMaster(me) && (
             <div className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-warn/40 bg-warn-soft px-4 py-3 text-sm text-warn">
@@ -465,7 +467,7 @@ function OverdueLeadsBanner() {
   return (
     <div role="alert" className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-bad/40 bg-bad-soft px-4 py-3 text-sm text-bad">
       <b>Action required: {n} lead(s) without a disposition since yesterday.</b>
-      <span className="text-ink/75">Update them now — until you do, no new leads can be given to you.</span>
+      <span className="text-ink/75">Call them from Blutec and set the disposition there (Intro, Hot Prospect…) — it comes into the CRM automatically. Until then, no new leads can be given to you.</span>
       <Link to={can('leads.admin') ? '/leads' : '/dialer'} className="ml-auto rounded-full bg-bad px-4 py-1.5 text-xs font-bold text-white">Open my leads</Link>
     </div>
   )

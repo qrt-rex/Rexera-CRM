@@ -523,6 +523,8 @@ export interface ClientEntry {
   /** the CRM entry made from it */
   bookingId?: string
   convertedAt?: string
+  /** made from a Blutec call (Intro / Hot prospect): scheme, price and requirement still to be filled in by the sales person */
+  pending?: boolean
 }
 
 // ------------------------------------------------------------------ Digital Media Dashboard (Media Function)

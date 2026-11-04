@@ -171,6 +171,8 @@ export function mapAll(backup) {
     lead_id: s(x.leadId), owner_id: uref(x.ownerId), created_at: x.createdAt, updated_at: x.updatedAt, booking_id: s(x.bookingId), converted_at: s(x.convertedAt),
     // sent only when set, so client entries keep saving before the email column's migration is run
     ...(x.email ? { email: x.email } : {}),
+    // sent once an entry has been pending (a Blutec call), so others keep saving before that migration is run
+    ...(x.pending !== undefined ? { pending: !!x.pending } : {}),
   }))
   t.client_messages = (d.clientMessages ?? []).map((x) => ({
     id: x.id, booking_id: s(x.bookingId), client_entry_id: s(x.clientEntryId), stage: x.stage, channel: x.channel, to_addr: x.to, subject: s(x.subject), body: x.body,
@@ -366,7 +368,7 @@ export function rowsToDb(input) {
     clientEntries: rows('client_entries').map((x) => opt({
       id: x.id, date: x.entry_date, clientName: x.client_name, companyName: x.company_name, phone: x.phone, serviceId: x.service_id ?? '', scheme: x.scheme,
       pitchedPrice: Number(x.pitched_price), status: x.status, requirement: x.requirement, note: x.note, followUp: u(x.follow_up), followUps: x.follow_ups ?? [],
-      leadId: u(x.lead_id), ownerId: x.owner_id ?? '', createdAt: x.created_at, updatedAt: x.updated_at, bookingId: u(x.booking_id), convertedAt: u(x.converted_at), email: u(x.email),
+      leadId: u(x.lead_id), ownerId: x.owner_id ?? '', createdAt: x.created_at, updatedAt: x.updated_at, bookingId: u(x.booking_id), convertedAt: u(x.converted_at), email: u(x.email), pending: x.pending ? true : undefined,
     })),
     clientMessages: rows('client_messages').map((x) => opt({
       id: x.id, bookingId: u(x.booking_id), clientEntryId: u(x.client_entry_id), stage: x.stage, channel: x.channel, to: x.to_addr, subject: u(x.subject), body: x.body,

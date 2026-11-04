@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { blutec } from '../lib/dialer'
-import { entryStatusFromDisposition } from '../../supabase/functions/_shared/blutec'
+import { blutecCallSummary, entryStatusFromDisposition } from '../../supabase/functions/_shared/blutec'
 import { useNavigate } from 'react-router-dom'
 import { Briefcase, CalendarClock, ClipboardList, Download, History, MessageCircle, Pencil, Plus, Save, Search } from 'lucide-react'
 import { MessageClientModal, MessageLog } from './ClientMessage'
@@ -47,7 +47,7 @@ export function ClientEntryFormView({ lead, entry, compact, onSaved }: { lead?: 
   const [busy, submit] = useSubmitting()
   const [f, setF] = useState<ClientEntryForm>(() => entry ? {
     date: entry.date, clientName: entry.clientName, companyName: entry.companyName, phone: entry.phone, serviceId: entry.serviceId,
-    pitchedPrice: entry.pitchedPrice, status: entry.status === 'CONVERTED' ? '' : entry.status, requirement: entry.requirement, note: entry.note, followUp: entry.followUp ?? '', email: entry.email ?? '',
+    pitchedPrice: entry.pending ? '' : entry.pitchedPrice, status: entry.status === 'CONVERTED' ? '' : entry.status, requirement: entry.requirement, note: entry.note, followUp: entry.followUp ?? '', email: entry.email ?? '',
   } : emptyEntry(lead, db))
   const [tried, setTried] = useState(false)
   const set = <K extends keyof ClientEntryForm>(k: K, v: ClientEntryForm[K]) => setF((x) => ({ ...x, [k]: v }))
@@ -63,8 +63,10 @@ export function ClientEntryFormView({ lead, entry, compact, onSaved }: { lead?: 
     blutec.leadLookup(phone).then((b) => {
       if (!live) return
       if (!b) { setFetched({ phone, text: 'This number is not in Blutec — fill the details in yourself.', tone: 'mute' }); return }
+      // what Blutec really answered, to check its field names
+      console.info('[blutec] lead lookup answered:', b.raw)
       const status = entryStatusFromDisposition(b.disposition)
-      const call = [b.disposition, b.calledAt && fmtDateTime(b.calledAt), b.durationSec != null && `${b.durationSec}s`, b.campaign, b.agent && `by ${b.agent}`].filter(Boolean).join(' · ')
+      const call = blutecCallSummary(b)
       setF((x) => ({
         ...x, clientName: x.clientName || b.name, companyName: x.companyName || b.company, email: x.email || b.email, status: x.status || status,
         note: x.note || [call && `Blutec call: ${call}`, b.notes].filter(Boolean).join('\n'),
@@ -145,8 +147,8 @@ function EntryDetails({ entry }: { entry: ClientEntry }) {
         {row('Client', entry.clientName)}
         {row('Company', entry.companyName)}
         {row('Number', <span className="font-mono">{seesMaskedPhones(me) ? maskPhone(entry.phone) : entry.phone}</span>)}
-        {row('Scheme', entry.scheme)}
-        {row('Pitched price', inr(entry.pitchedPrice))}
+        {row('Scheme', entry.pending ? 'Pending — Edit to fill in' : entry.scheme)}
+        {row('Pitched price', entry.pending ? 'Pending' : inr(entry.pitchedPrice))}
         {row('Status', <Badge tone={CLIENT_ENTRY_STATUS[entry.status].tone}>{CLIENT_ENTRY_STATUS[entry.status].label}</Badge>)}
         {row('Next follow-up', entry.followUp ? fmtDate(entry.followUp) : '—')}
         {row('Sales person', userName(db, entry.ownerId))}
@@ -217,11 +219,13 @@ export function ClientEntriesPanel({ lead, full }: { lead: boolean; full?: boole
           {mayMessage(db, me, { kind: 'entry', e }) && <Button size="sm" variant="ghost" icon={MessageCircle} title="WhatsApp / email the client" aria-label={`Message ${e.clientName}`} onClick={() => setMsg(e.id)} />}
           {canEditClientEntry(me, e) && <Button size="sm" variant="ghost" icon={Pencil} title="Edit" aria-label={`Edit ${e.clientName}`} onClick={() => setOpen({ id: e.id, follow: false, edit: true })} />}
           <Button size="sm" variant="ghost" icon={CalendarClock} title="Add follow-up" aria-label={`Follow-up ${e.clientName}`} onClick={() => setOpen({ id: e.id, follow: true })} />
-          {e.ownerId === me.id && e.status !== 'NOT_INTERESTED' && can('bookings.create') && <Button size="sm" variant="soft" icon={Briefcase} title="Convert to CRM entry (payment received)" onClick={() => convert(e)}>Convert</Button>}
+          {e.pending && canEditClientEntry(me, e) && <Button size="sm" variant="soft" icon={Pencil} title="Fill in the scheme, price and requirement" onClick={() => setOpen({ id: e.id, follow: false, edit: true })}>Complete</Button>}
+          {!e.pending && e.ownerId === me.id && e.status !== 'NOT_INTERESTED' && can('bookings.create') && <Button size="sm" variant="soft" icon={Briefcase} title="Convert to CRM entry (payment received)" onClick={() => convert(e)}>Convert</Button>}
         </>}
     </span>
   )
   const status = (e: ClientEntry) => <Badge tone={CLIENT_ENTRY_STATUS[e.status].tone}>{CLIENT_ENTRY_STATUS[e.status].label}</Badge>
+  const pendingBadge = <Badge tone="amber">From Blutec · details pending</Badge>
   const followUp = (e: ClientEntry) => e.followUp
     ? <span className={cx(followUpDue(e, t) && 'font-bold text-bad')}>Follow-up {fmtDate(e.followUp)}</span>
     : e.followUps.length > 0 ? <span>{e.followUps.length} follow-up{e.followUps.length > 1 ? 's' : ''} done</span> : null
@@ -257,7 +261,7 @@ export function ClientEntriesPanel({ lead, full }: { lead: boolean; full?: boole
                 {status(e)}
               </div>
               <p className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-mute">
-                <span className="min-w-0 truncate">{e.scheme}</span><span className="font-semibold tabular-nums text-ink">{inr(e.pitchedPrice)}</span><span>{fmtDate(e.date)}</span>{followUp(e)}
+                {e.pending ? pendingBadge : <><span className="min-w-0 truncate">{e.scheme}</span><span className="font-semibold tabular-nums text-ink">{inr(e.pitchedPrice)}</span></>}<span>{fmtDate(e.date)}</span>{followUp(e)}
               </p>
               {full && <p className="line-clamp-2 text-xs">{e.requirement}</p>}
               {lead && <p className="text-xs text-mute">Sales person: {owner(e)}</p>}
@@ -283,7 +287,7 @@ export function ClientEntriesPanel({ lead, full }: { lead: boolean; full?: boole
                     <span className="block truncate text-xs text-mute">{e.companyName}</span>
                     <span className="block font-mono text-[11px] text-mute">{seesMaskedPhones(me) ? maskPhone(e.phone) : e.phone}</span>
                   </Td>
-                  <Td><span className="line-clamp-2 text-xs">{e.scheme}</span><span className="block font-semibold tabular-nums">{inr(e.pitchedPrice)}</span></Td>
+                  <Td>{e.pending ? pendingBadge : <><span className="line-clamp-2 text-xs">{e.scheme}</span><span className="block font-semibold tabular-nums">{inr(e.pitchedPrice)}</span></>}</Td>
                   <Td>{status(e)}<span className="mt-1 block text-[11px] text-mute">{fmtDate(e.date)}</span><span className="block text-[11px] text-mute">{followUp(e)}</span></Td>
                   {full && <Td className="hidden xl:table-cell"><span className="line-clamp-2 text-xs" title={e.requirement}>{e.requirement}</span><span className="mt-0.5 line-clamp-2 text-[11px] text-mute" title={e.note}>{e.followUps[0] ? `Last follow-up: ${e.followUps[0].note}` : e.note}</span></Td>}
                   {full && <Td className="hidden text-xs lg:table-cell">{fmtDate(e.createdAt)}<span className="block text-mute">{fmtTime(e.createdAt)}</span></Td>}
@@ -296,7 +300,7 @@ export function ClientEntriesPanel({ lead, full }: { lead: boolean; full?: boole
         </div>
       </>}
       <Modal open={!!cur} onClose={() => setOpen(null)} size="lg" title={cur ? `${open?.edit ? 'Edit · ' : ''}${cur.clientName} · ${cur.companyName}` : ''} subtitle={cur ? `Client entry · ${cur.scheme}` : undefined}
-        footer={cur && !open?.edit && cur.status !== 'CONVERTED' && cur.ownerId === me.id && cur.status !== 'NOT_INTERESTED' && can('bookings.create') ? <Button variant="soft" icon={Briefcase} onClick={() => { setOpen(null); convert(cur) }}>Convert to CRM entry</Button> : undefined}>
+        footer={cur && !open?.edit && !cur.pending && cur.status !== 'CONVERTED' && cur.ownerId === me.id && cur.status !== 'NOT_INTERESTED' && can('bookings.create') ? <Button variant="soft" icon={Briefcase} onClick={() => { setOpen(null); convert(cur) }}>Convert to CRM entry</Button> : undefined}>
         {cur && (open?.edit && canEditClientEntry(me, cur) ? <ClientEntryFormView key={cur.id} entry={cur} onSaved={() => setOpen({ id: cur.id, follow: false })} /> : (
           <div className="space-y-5">
             {cur.status !== 'CONVERTED' && open?.follow && <div className="rounded-2xl border border-line p-4"><h4 className="mb-3 font-bold">Add follow-up</h4><ClientFollowUpForm entry={cur} onDone={() => setOpen({ id: cur.id, follow: false })} /></div>}
