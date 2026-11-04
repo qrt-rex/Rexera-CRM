@@ -33,3 +33,15 @@ assert.equal(dispositionToStatus(''), undefined)
 assert.equal(blutecCallSummary({ disposition: 'Intro', calledAt: '2026-11-04T06:31:00Z', durationSec: 43, campaign: 'IT Sample Camp.', agent: 'Dhairya Dave' }),
   'Intro · 4 Nov 2026, 12:01 pm · 43s · IT Sample Camp. · by Dhairya Dave')
 console.log('✓ Blutec dispositions → lead status (Intro, Hot Prospect), call summary in India time')
+
+// the lead in Blutec's answer, whatever the envelope; nothing without an id
+import { leadOf } from './functions/_shared/blutec.ts'
+assert.equal(leadOf({ success: true, data: { id: 7, name: 'A' } }).id, 7)
+assert.equal(leadOf({ success: true, data: { lead: { id: 8 } } }).id, 8)
+assert.equal(leadOf({ success: true, data: { leads: [{ id: 9 }] } }).id, 9)
+assert.equal(leadOf({ success: true, data: [{ id: 10 }] }).id, 10)
+assert.equal(leadOf({ id: 11 }).id, 11)
+assert.equal(leadOf({ success: true, data: null }), null)
+assert.equal(leadOf({ success: true, data: { leads: [] } }), null)
+assert.equal(leadOf({ success: false, message: 'Lead not found' }), null)
+console.log('✓ Blutec lead answer: data, data.lead, data.leads[0], data[0], bare; not found = null')

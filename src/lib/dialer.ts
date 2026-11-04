@@ -61,7 +61,12 @@ async function call<T>(body: Record<string, unknown>): Promise<T> {
 export const blutec = {
   status: () => call<BlutecStatus>({ action: 'status' }),
   /** What Blutec knows about a number the sales person called from Blutec's own dialer (null = not in Blutec). */
-  leadLookup: (phone: string) => call<(BlutecLeadInfo & { raw?: unknown }) | null>({ action: 'leadLookup', phone }),
+  leadLookup: (phone: string) => call<{ found?: boolean } & Partial<BlutecLeadInfo> & { raw?: unknown; tried?: unknown }>({ action: 'leadLookup', phone })
+    .then((b) => {
+      // what Blutec really answered, to check its field names
+      console.info(`[blutec] lead lookup ${phone}:`, b?.found ? b.raw : b?.tried ?? b)
+      return b?.found ? b as BlutecLeadInfo & { raw?: unknown } : null
+    }),
   /** Adds the number to the company's Do-Not-Disturb list in Blutec (no campaign or click-to-call will dial it). */
   dncAdd: (phone: string, reason: string) => call<unknown>({ action: 'dncAdd', phone, reason }),
   callStatus: (refId: string) => call<CallStatus>({ action: 'callStatus', refId }),
