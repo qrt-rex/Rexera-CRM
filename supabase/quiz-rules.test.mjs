@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { QUIZ_SIZE, publicQuestions, quizFeedback, quizProblem, scoreQuiz } from './quiz-rules.mjs'
+import { QUIZ_SIZE, fmtClock, publicQuestions, quizFeedback, quizProblem, scoreQuiz, secondsLeft, windowProblem, windowState } from './quiz-rules.mjs'
 
 const q = (i, correct = 1) => ({ id: `q${i}`, text: `Question ${i}?`, options: ['A', 'B', 'C', 'D'], correct })
 const ten = Array.from({ length: QUIZ_SIZE }, (_, i) => q(i + 1))
@@ -30,4 +30,17 @@ assert.match(quizFeedback(7).title, /Good Effort/)
 assert.match(quizFeedback(4).title, /Please Improve/)
 assert.match(quizFeedback(0).title, /Please Improve/)
 
-console.log('✓ quiz: 10 questions, options, correct answer, no answers for Sales, score, feedback')
+// quiz time, India time (UTC+5:30): 9:15–9:30 am IST = 03:45–04:00 UTC
+const at = (utc) => Date.parse(`2026-11-04T${utc}Z`)
+assert.equal(windowState('09:15', '09:30', at('03:44:59')), 'before')
+assert.equal(windowState('09:15', '09:30', at('03:45:00')), 'open')
+assert.equal(windowState('09:15', '09:30', at('03:59:59')), 'open')
+assert.equal(windowState('09:15', '09:30', at('04:00:00')), 'after')
+assert.equal(secondsLeft('09:30', at('03:58:30')), 90)
+assert.equal(secondsLeft('09:30', at('04:10:00')), 0)
+assert.equal(windowProblem('09:15', '09:30'), null)
+assert.match(windowProblem('09:30', '09:15'), /after it starts/)
+assert.match(windowProblem('9:15', '09:30'), /HH:MM/)
+assert.equal(fmtClock('09:15'), '9:15 am'); assert.equal(fmtClock('13:05'), '1:05 pm'); assert.equal(fmtClock('00:30'), '12:30 am')
+
+console.log('✓ quiz: 10 questions, options, correct answer, no answers for Sales, score, feedback, daily quiz time')

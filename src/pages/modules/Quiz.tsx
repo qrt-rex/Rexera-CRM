@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import { Archive, BarChart3, CheckCircle2, ChevronLeft, ChevronRight, CircleDashed, Copy, Download, Eye, GraduationCap, Lock, Pencil, Play, Plus, RefreshCcw, Rocket, Save, Trash2, Trophy, Undo2, XCircle } from 'lucide-react'
+import { AlarmClock, Archive, BarChart3, CheckCircle2, ChevronLeft, ChevronRight, CircleDashed, Copy, Download, Eye, GraduationCap, Lock, Pencil, Play, Plus, RefreshCcw, Rocket, Save, Trash2, Trophy, Undo2, XCircle } from 'lucide-react'
 import type { OpenQuiz, Quiz, QuizAttempt, QuizQuestion, QuizStatus } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useMe } from '../../lib/auth'
@@ -8,7 +8,7 @@ import { userName } from '../../lib/actions'
 import { canManageQuiz, canTakeQuiz } from '../../lib/rbac'
 import { answerQuestion, deleteQuiz, finishQuiz, loadMyQuizzes, loadQuizAdmin, newQuestionId, saveQuiz, setQuizStatus, startQuiz, useQuizData } from '../../lib/quiz'
 import { downloadCsv, fmtDateTime } from '../../lib/format'
-import { MAX_OPTIONS, MIN_OPTIONS, QUIZ_SIZE, quizFeedback, quizProblem } from '../../../supabase/quiz-rules.mjs'
+import { DEFAULT_WINDOW, fmtClock, MAX_OPTIONS, MIN_OPTIONS, QUIZ_SIZE, quizFeedback, quizProblem, secondsLeft, windowProblem, windowState } from '../../../supabase/quiz-rules.mjs'
 import { Badge, Button, Card, CardHeader, cx, EmptyState, Input, Modal, PageHeader, Select, Table, Tabs, Td, Textarea, Th, useConfirm, useRun } from '../../components/ui'
 
 /**
@@ -28,7 +28,7 @@ export default function QuizPage() {
   return (
     <div>
       <PageHeader title="Sales Quiz" icon={GraduationCap}
-        subtitle={manage ? 'Make quizzes of 10 questions, publish them for the Sales team, and see every result.' : 'Ten questions. Each answer is saved and locked when you submit it — read carefully.'}
+        subtitle={manage ? 'Make quizzes of 10 questions, set the daily quiz time, publish them for the Sales team, and see every result.' : 'Ten questions, taken at the set time (India time). Each answer is saved and locked when you submit it — read carefully.'}
         actions={tabs.length > 1 && tab && <Tabs value={tab} onChange={(t) => setParams({ tab: t })} tabs={tabs} />} />
       {!tab && <Card><EmptyState icon={GraduationCap} title="The quiz is for the Sales team" text="Sales people take quizzes; IT Support makes them." /></Card>}
       {tab === 'mine' && <MyQuizzes />}
@@ -72,15 +72,15 @@ function MyQuizzes() {
                   <span className="grid size-10 place-items-center rounded-lg bg-brand-soft text-brand-ink"><GraduationCap className="size-5" /></span>
                   <span className="min-w-0 flex-1">
                     <b className="block truncate text-sm">{q.name}</b>
-                    <span className="block truncate text-xs text-mute">{q.questions.length} questions · ID {q.id}{q.description ? ` · ${q.description}` : ''}</span>
+                    <span className="block truncate text-xs text-mute">{q.questions.length} questions · <b className="text-ink">{timeLabel(q)}</b> · ID {q.id}{q.description ? ` · ${q.description}` : ''}</span>
                   </span>
                   {a?.finishedAt ? <>
                     <Badge tone={scoreTone(a.score ?? 0)}>Score {a.score}/{a.total}</Badge>
                     <Button size="sm" variant="soft" icon={Eye} onClick={() => setParams({ review: a.id })}>Review</Button>
                   </> : a ? <>
                     <Badge tone="amber">In progress · {answered}/{q.questions.length}</Badge>
-                    <Button size="sm" variant="accent" icon={Play} onClick={() => setParams({ play: q.id })}>Continue</Button>
-                  </> : <Button size="sm" variant="accent" icon={Play} onClick={() => setParams({ play: q.id })}>Start Quiz</Button>}
+                    <Button size="sm" variant="accent" icon={windowState(q.windowStart, q.windowEnd) === 'open' ? Play : Trophy} onClick={() => setParams({ play: q.id })}>{windowState(q.windowStart, q.windowEnd) === 'open' ? 'Continue' : 'Finish Quiz'}</Button>
+                  </> : <StartButton quiz={q} onStart={() => setParams({ play: q.id })} />}
                 </li>
               )
             })}
@@ -92,7 +92,25 @@ function MyQuizzes() {
   )
 }
 
-const scoreTone = (s: number) => (s >= 8 ? 'green' : s >= 5 ? 'amber' : 'red') as 'green' | 'amber' | 'red'
+/** "9:15 am – 9:30 am" */
+const timeLabel = (q: { windowStart?: string; windowEnd?: string }) => `${fmtClock(q.windowStart ?? DEFAULT_WINDOW.start)} – ${fmtClock(q.windowEnd ?? DEFAULT_WINDOW.end)}`
+const notOpen = (q: { windowStart: string; windowEnd: string }, state: 'before' | 'open' | 'after') =>
+  state === 'before' ? `The quiz opens at ${fmtClock(q.windowStart)} (India time).` : `Today's quiz time (${timeLabel(q)}) is over.`
+/** 125 → "2:05" */
+const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+/** Now, ticking every second (for the quiz time). */
+function useClock() {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => { const i = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(i) }, [])
+  return now
+}
+/** Start Quiz — only in the quiz time; before / after it, says when. */
+function StartButton({ quiz, onStart, to }: { quiz: OpenQuiz; onStart?: () => void; to?: string }) {
+  const state = windowState(quiz.windowStart, quiz.windowEnd, useClock())
+  if (state !== 'open') return <span className="inline-flex items-center gap-1.5 rounded-lg bg-card2 px-3 py-1.5 text-xs font-semibold text-mute"><AlarmClock className="size-3.5" />{state === 'before' ? `Opens at ${fmtClock(quiz.windowStart)}` : 'Closed for today'}</span>
+  const b = <Button size={to ? 'md' : 'sm'} variant="accent" icon={Play} onClick={onStart}>Start Quiz</Button>
+  return to ? <Link to={to}>{b}</Link> : b
+}const scoreTone = (s: number) => (s >= 8 ? 'green' : s >= 5 ? 'amber' : 'red') as 'green' | 'amber' | 'red'
 
 /** One question at a time: pick, Submit answer (saved and locked), next; Finish Quiz when all are answered. */
 function QuizRunner({ quiz, initial, onBack, onFinished }: { quiz: OpenQuiz; initial?: QuizAttempt; onBack: () => void; onFinished: (a: QuizAttempt) => void }) {
@@ -109,6 +127,11 @@ function QuizRunner({ quiz, initial, onBack, onFinished }: { quiz: OpenQuiz; ini
   const locked = attempt?.answers[q.id]
   const answered = attempt ? quiz.questions.filter((x) => attempt.answers[x.id]).length : 0
   const all = answered === quiz.questions.length
+  // the quiz time (India time): answers only while it is open; once it is over, Finish scores what was answered
+  const now = useClock()
+  const state = windowState(quiz.windowStart, quiz.windowEnd, now)
+  const left = secondsLeft(quiz.windowEnd, now)
+  const canFinish = all || state === 'after'
 
   const begin = async () => {
     setStarting(true)
@@ -147,10 +170,12 @@ function QuizRunner({ quiz, initial, onBack, onFinished }: { quiz: OpenQuiz; ini
         <li className="flex gap-2"><Lock className="mt-0.5 size-4 shrink-0 text-warn" />Each answer is saved and <b>locked</b> when you submit it.</li>
         <li className="flex gap-2"><Trophy className="mt-0.5 size-4 shrink-0 text-accent" />Finish Quiz shows your score out of {quiz.questions.length} and the right answers.</li>
       </ul>
-      <div className="mt-5 flex justify-center gap-2">
+      <p className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-card2 px-3 py-1 text-xs font-semibold"><AlarmClock className="size-3.5" />Quiz time: {timeLabel(quiz)}{state === 'open' ? ` · ${clock(left)} left` : ''}</p>
+      <div className="mt-4 flex justify-center gap-2">
         <Button variant="outline" icon={ChevronLeft} onClick={onBack}>Back</Button>
-        <Button variant="accent" icon={Play} loading={starting} onClick={begin}>Start Quiz</Button>
+        <Button variant="accent" icon={Play} loading={starting} disabled={state !== 'open'} title={state === 'open' ? undefined : notOpen(quiz, state)} onClick={begin}>Start Quiz</Button>
       </div>
+      {state !== 'open' && <p className="mt-2 text-xs font-semibold text-warn">{notOpen(quiz, state)}</p>}
     </Card>
   )
 
@@ -161,6 +186,7 @@ function QuizRunner({ quiz, initial, onBack, onFinished }: { quiz: OpenQuiz; ini
           <Button size="sm" variant="ghost" icon={ChevronLeft} onClick={onBack}>All quizzes</Button>
           <b className="min-w-0 flex-1 truncate text-sm">{quiz.name}</b>
           <span className="text-xs font-semibold text-mute">{answered} of {quiz.questions.length} answered</span>
+          <span className={cx('inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold tabular-nums', state === 'open' ? (left <= 60 ? 'bg-bad-soft text-bad' : 'bg-ok-soft text-ok') : 'bg-card2 text-mute')}><AlarmClock className="size-3.5" />{state === 'open' ? `${clock(left)} left` : state === 'after' ? 'Quiz time over' : `Opens ${fmtClock(quiz.windowStart)}`}</span>
         </div>
         <div className="mt-3 h-2 overflow-hidden rounded-full bg-card2"><div className="h-full rounded-full bg-ok transition-all" style={{ width: `${(answered / quiz.questions.length) * 100}%` }} /></div>
         <div className="mt-3 flex flex-wrap gap-1.5" role="tablist" aria-label="Questions">
@@ -180,7 +206,7 @@ function QuizRunner({ quiz, initial, onBack, onFinished }: { quiz: OpenQuiz; ini
           {q.options.map((o, n) => {
             const chosen = locked ? locked.choice === n : pick === n
             return (
-              <button key={n} role="radio" aria-checked={chosen} disabled={!!locked || busy} onClick={() => setPick(n)}
+              <button key={n} role="radio" aria-checked={chosen} disabled={!!locked || busy || state !== 'open'} onClick={() => setPick(n)}
                 className={cx('flex items-center gap-3 rounded-lg border px-3.5 py-2.5 text-left text-sm transition disabled:cursor-default',
                   chosen ? 'border-brand bg-brand-soft font-semibold text-brand-ink ring-2 ring-brand/15' : 'border-line hover:border-brand/40 hover:bg-card2', locked && !chosen && 'opacity-55')}>
                 <span className={cx('grid size-6 shrink-0 place-items-center rounded-full border text-[11px] font-bold', chosen ? 'border-brand bg-brand text-white' : 'border-line text-mute')}>{String.fromCharCode(65 + n)}</span>
@@ -193,12 +219,13 @@ function QuizRunner({ quiz, initial, onBack, onFinished }: { quiz: OpenQuiz; ini
         {locked && <p className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-ok"><Lock className="size-3.5" />Saved {fmtDateTime(locked.at)} — this answer is locked.</p>}
         <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-line pt-4">
           <Button variant="outline" icon={ChevronLeft} disabled={i === 0} onClick={() => go(i - 1)}>Previous</Button>
-          {!locked && <Button icon={Lock} disabled={pick == null} loading={busy} onClick={submit}>Submit answer</Button>}
+          {!locked && <Button icon={Lock} disabled={pick == null || state !== 'open'} loading={busy} onClick={submit}>Submit answer</Button>}
           <span className="flex-1" />
           {i < quiz.questions.length - 1 && <Button variant="ghost" onClick={() => go(i + 1)}>Next<ChevronRight className="size-4" /></Button>}
-          {(all || i === quiz.questions.length - 1) && <Button variant="accent" icon={Trophy} disabled={!all} loading={busy && all} onClick={finish} title={all ? undefined : 'Answer every question first'}>Finish Quiz</Button>}
+          {(canFinish || i === quiz.questions.length - 1) && <Button variant="accent" icon={Trophy} disabled={!canFinish} loading={busy && canFinish} onClick={finish} title={canFinish ? undefined : 'Answer every question first'}>Finish Quiz</Button>}
         </div>
-        {i === quiz.questions.length - 1 && !all && <p className="mt-2 text-right text-xs text-mute">{quiz.questions.length - answered} question(s) still to answer.</p>}
+        {state === 'after' && !all && <p className="mt-2 text-right text-xs font-semibold text-warn">The quiz time is over — press Finish Quiz. The {quiz.questions.length - answered} question(s) not answered count as incorrect.</p>}
+        {state === 'open' && i === quiz.questions.length - 1 && !all && <p className="mt-2 text-right text-xs text-mute">{quiz.questions.length - answered} question(s) still to answer.</p>}
       </Card>
       {confirmNode}
     </div>
@@ -308,18 +335,19 @@ export function QuizDashboardCard() {
       <span className="grid size-11 place-items-center rounded-lg bg-accent-soft text-accent"><GraduationCap className="size-6" /></span>
       <div className="min-w-0 flex-1">
         <p className="text-xs font-semibold text-mute">Sales Quiz</p>
-        <p className="truncate font-bold">{pending ? `${pending.name} · ${pending.questions.length} questions` : 'No new quiz right now'}</p>
+        <p className="truncate font-bold">{pending ? `${pending.name} · ${pending.questions.length} questions · ${timeLabel(pending)}` : 'No new quiz right now'}</p>
         {last && <p className="text-xs text-mute">Last result: <b className={cx(scoreTone(last.score ?? 0) === 'green' ? 'text-ok' : scoreTone(last.score ?? 0) === 'amber' ? 'text-warn' : 'text-bad')}>{last.score}/{last.total}</b> in {last.quizName} · {fmtDateTime(last.finishedAt)}</p>}
       </div>
       {last && <Link to={`/quiz?review=${last.id}`}><Button variant="outline" icon={Eye}>My results</Button></Link>}
-      {pending && <Link to={`/quiz?play=${pending.id}`}><Button variant="accent" icon={Play}>{inProgress ? 'Continue Quiz' : 'Start Quiz'}</Button></Link>}
+      {pending && (inProgress ? <Link to={`/quiz?play=${pending.id}`}><Button variant="accent" icon={Play}>{windowState(pending.windowStart, pending.windowEnd) === 'open' ? 'Continue Quiz' : 'Finish Quiz'}</Button></Link>
+        : <StartButton quiz={pending} to={`/quiz?play=${pending.id}`} />)}
     </Card>
   )
 }
 
 // ============================================================ IT Support: quizzes
 const blankQuestion = (): QuizQuestion => ({ id: newQuestionId(), text: '', options: ['', '', '', ''], correct: -1 })
-const blankQuiz = (): Quiz => ({ id: `quiz-${Date.now().toString(36)}`, name: '', description: '', status: 'DRAFT', questions: Array.from({ length: QUIZ_SIZE }, blankQuestion), createdAt: '' })
+const blankQuiz = (): Quiz => ({ id: `quiz-${Date.now().toString(36)}`, name: '', description: '', status: 'DRAFT', questions: Array.from({ length: QUIZ_SIZE }, blankQuestion), windowStart: DEFAULT_WINDOW.start, windowEnd: DEFAULT_WINDOW.end, createdAt: '' })
 const STATUS: Record<QuizStatus, { label: string; tone: 'gray' | 'green' | 'amber' }> = { DRAFT: { label: 'Draft', tone: 'gray' }, PUBLISHED: { label: 'Published', tone: 'green' }, ARCHIVED: { label: 'Archived', tone: 'amber' } }
 
 function QuizManagement() {
@@ -339,7 +367,7 @@ function QuizManagement() {
           action={<Button icon={Plus} onClick={() => setEdit(blankQuiz())}>New quiz</Button>} />
         {!data?.quizzes.length ? <EmptyState icon={GraduationCap} title="No quizzes yet" text="Make the first one: 10 questions, the options and the correct answer for each." /> : (
           <Table>
-            <thead><tr><Th>Quiz</Th><Th>Status</Th><Th className="text-right">Questions</Th><Th className="text-right">Taken</Th><Th className="text-right">Average</Th><Th>Updated</Th><Th className="text-right">Actions</Th></tr></thead>
+            <thead><tr><Th>Quiz</Th><Th>Status</Th><Th>Quiz time</Th><Th className="text-right">Questions</Th><Th className="text-right">Taken</Th><Th className="text-right">Average</Th><Th>Updated</Th><Th className="text-right">Actions</Th></tr></thead>
             <tbody>
               {data.quizzes.map((q) => {
                 const t = takenBy(q.id), done = t.filter((a) => a.finishedAt)
@@ -348,6 +376,7 @@ function QuizManagement() {
                   <tr key={q.id}>
                     <Td><b className="block text-[13px]">{q.name}</b><span className="font-mono text-[11px] text-mute">{q.id}</span></Td>
                     <Td><Badge tone={STATUS[q.status].tone}>{STATUS[q.status].label}</Badge></Td>
+                    <Td className="whitespace-nowrap text-xs">{timeLabel(q)}</Td>
                     <Td className="text-right tabular-nums">{q.questions.length}/{QUIZ_SIZE}</Td>
                     <Td className="text-right tabular-nums">{done.length}{t.length > done.length ? <span className="text-xs text-mute"> +{t.length - done.length} in progress</span> : ''}</Td>
                     <Td className="text-right tabular-nums">{avg == null ? '—' : `${avg.toFixed(1)}/10`}</Td>
@@ -379,7 +408,7 @@ function QuizEditor({ initial, readOnly, onClose, onSaved }: { initial: Quiz; re
   const [q, setQ] = useState<Quiz>(() => structuredClone(initial))
   const [busy, setBusy] = useState(false)
   const setQuestion = (n: number, patch: Partial<QuizQuestion>) => setQ((x) => ({ ...x, questions: x.questions.map((y, i) => (i === n ? { ...y, ...patch } : y)) }))
-  const problem = quizProblem(q, { publish: true })
+  const problem = quizProblem(q, { publish: true }) ?? windowProblem(q.windowStart, q.windowEnd)
   const save = async (publish: boolean) => {
     setBusy(true)
     const ok = await run(() => saveQuiz(me, q, publish), publish ? 'Saved and published for the Sales team' : 'Draft saved')
@@ -400,6 +429,12 @@ function QuizEditor({ initial, readOnly, onClose, onSaved }: { initial: Quiz; re
         <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
           <Input label="Quiz name" required value={q.name} onChange={(e) => setQ({ ...q, name: e.target.value })} placeholder="e.g. Government schemes · Week 45" />
           <Input label="Short description (optional)" value={q.description ?? ''} onChange={(e) => setQ({ ...q, description: e.target.value })} placeholder="What it covers" />
+        </div>
+        <div className="flex flex-wrap items-end gap-3 rounded-lg border border-line bg-card2/50 p-3">
+          <AlarmClock className="mb-2 size-5 text-accent" />
+          <Input label="Quiz opens (India time)" type="time" required value={q.windowStart} onChange={(e) => setQ({ ...q, windowStart: e.target.value })} className="w-40" />
+          <Input label="Quiz closes" type="time" required value={q.windowEnd} onChange={(e) => setQ({ ...q, windowEnd: e.target.value })} className="w-40" />
+          <p className="mb-2 min-w-48 flex-1 text-xs text-mute">Every day, Sales can start the quiz and submit answers only in this time ({timeLabel(q)}). After it closes, Finish Quiz scores what was answered.</p>
         </div>
         {q.questions.map((x, n) => (
           <Card key={x.id} className="p-3.5">

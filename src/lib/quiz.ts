@@ -6,7 +6,7 @@ import { getDb, mutate, useDb } from './store'
 import { ActionError } from './actions'
 import { canManageQuiz, canTakeQuiz } from './rbac'
 import { nowIso, uid } from './format'
-import { publicQuestions, quizProblem, scoreQuiz } from '../../supabase/quiz-rules.mjs'
+import { DEFAULT_WINDOW, fmtClock, publicQuestions, quizProblem, scoreQuiz, windowProblem, windowState } from '../../supabase/quiz-rules.mjs'
 
 /**
  * Sales Quiz. IT Support makes quizzes (10 questions, options, the correct answer) and publishes them; Sales people
@@ -31,15 +31,20 @@ const attemptOf = (r: Row): QuizAttempt => ({
 })
 const quizOf = (r: Row): Quiz => ({
   id: r.id as string, name: r.name as string, description: (r.description as string) ?? undefined, status: r.status as QuizStatus,
-  questions: (r.questions as Quiz['questions']) ?? [], createdBy: (r.created_by as string) ?? undefined, createdAt: r.created_at as string,
+  questions: (r.questions as Quiz['questions']) ?? [], windowStart: hhmm(r.window_start, DEFAULT_WINDOW.start), windowEnd: hhmm(r.window_end, DEFAULT_WINDOW.end), createdBy: (r.created_by as string) ?? undefined, createdAt: r.created_at as string,
   updatedAt: (r.updated_at as string) ?? undefined, publishedAt: (r.published_at as string) ?? undefined,
 })
-const quizRow = (q: Quiz, me: User) => ({ id: q.id, name: q.name.trim(), description: q.description?.trim() || null, status: q.status, questions: q.questions, created_by: q.createdBy ?? me.id, updated_by: me.id })
+const quizRow = (q: Quiz, me: User) => ({ id: q.id, name: q.name.trim(), description: q.description?.trim() || null, status: q.status, questions: q.questions, window_start: q.windowStart, window_end: q.windowEnd, created_by: q.createdBy ?? me.id, updated_by: me.id })
+/** "09:15:00" → "09:15" */
+const hhmm = (v: unknown, dflt: string) => (typeof v === 'string' && /^\d{2}:\d{2}/.test(v) ? v.slice(0, 5) : dflt)
+const timeText = (q: { windowStart: string; windowEnd: string }) => `${fmtClock(q.windowStart)} to ${fmtClock(q.windowEnd)}`
 async function rpc<T>(fn: string, args: Record<string, unknown> = {}): Promise<T> {
   const { data, error } = await (await getSupabase()).rpc(fn, args)
   if (error) throw new ActionError(error.message.replace(/^.*?:\s*/, '') || 'The quiz could not be saved — try again.')
   return data as T
 }
+/** the quiz time of a quiz (older demo quizzes have none: 9:15–9:30) */
+const winOf = (q: Partial<Quiz>) => ({ windowStart: q.windowStart ?? DEFAULT_WINDOW.start, windowEnd: q.windowEnd ?? DEFAULT_WINDOW.end })
 /** a plain copy of a record being edited in the store (the edit's working copy is gone once it is saved) */
 const copy = <T>(x: T): T => JSON.parse(JSON.stringify(x)) as T
 const audit = (by: string, action: string, detail: string) => mutate((d) => { d.audit.unshift({ id: uid('a-'), at: nowIso(), by, action, detail }) })
@@ -50,12 +55,15 @@ export async function loadMyQuizzes(me: User): Promise<MyQuizzes> {
   needTaker(me)
   if (CLOUD) {
     const r = await rpc<{ quizzes: OpenQuiz[]; attempts: Row[] }>('quiz_for_me')
-    return { quizzes: r.quizzes ?? [], attempts: (r.attempts ?? []).map(attemptOf) }
+    return {
+      quizzes: (r.quizzes ?? []).map((q) => ({ ...q, windowStart: hhmm((q as unknown as Row).window_start, DEFAULT_WINDOW.start), windowEnd: hhmm((q as unknown as Row).window_end, DEFAULT_WINDOW.end) })),
+      attempts: (r.attempts ?? []).map(attemptOf),
+    }
   }
   const d = getDb()
   return {
     quizzes: (d.quizzes ?? []).filter((q) => q.status === 'PUBLISHED').sort((a, b) => (b.publishedAt ?? '').localeCompare(a.publishedAt ?? ''))
-      .map((q) => ({ id: q.id, name: q.name, description: q.description, publishedAt: q.publishedAt, questions: publicQuestions(q.questions) })),
+      .map((q) => ({ id: q.id, name: q.name, description: q.description, publishedAt: q.publishedAt, windowStart: q.windowStart ?? DEFAULT_WINDOW.start, windowEnd: q.windowEnd ?? DEFAULT_WINDOW.end, questions: publicQuestions(q.questions) })),
     attempts: (d.quizAttempts ?? []).filter((a) => a.userId === me.id).sort((a, b) => b.startedAt.localeCompare(a.startedAt)),
   }
 }
@@ -69,6 +77,7 @@ export async function startQuiz(me: User, quizId: string): Promise<QuizAttempt> 
     assert(q, 'This quiz is not open.')
     d.quizAttempts ??= []
     out = d.quizAttempts.find((a) => a.quizId === quizId && a.userId === me.id)
+    if (!out) assert(windowState(q.windowStart, q.windowEnd) === 'open', `The quiz can be taken from ${timeText(winOf(q))} (India time).`)
     if (!out) { out = { id: uid('qa-'), quizId, userId: me.id, quizName: q.name, total: q.questions.length, startedAt: nowIso(), answers: {} }; d.quizAttempts.unshift(out) }
     out = copy(out)
   })
@@ -85,7 +94,10 @@ export async function answerQuestion(me: User, attemptId: string, questionId: st
     assert(a, 'Quiz not found.')
     assert(!a.finishedAt, "This quiz is finished — answers can't change.")
     assert(!a.answers[questionId], 'This answer is locked — it was already submitted.')
-    const q = (d.quizzes ?? []).find((x) => x.id === a.quizId)?.questions.find((x) => x.id === questionId)
+    const quiz = (d.quizzes ?? []).find((x) => x.id === a.quizId)
+    assert(quiz, 'Quiz not found.')
+    assert(windowState(quiz.windowStart, quiz.windowEnd) === 'open', `The quiz time (${timeText(winOf(quiz))}) is over — press Finish Quiz to see your score.`)
+    const q = quiz.questions.find((x) => x.id === questionId)
     assert(q && choice < q.options.length, 'Pick one of the options.')
     a.answers = { ...a.answers, [questionId]: { choice, at: nowIso() } }
     out = copy(a)
@@ -106,7 +118,7 @@ export async function finishQuiz(me: User, attemptId: string): Promise<QuizAttem
       if (a.finishedAt) { a = copy(a); return }
       const quiz = (d.quizzes ?? []).find((x) => x.id === a!.quizId)
       assert(quiz, 'Quiz not found.')
-      assert(quiz.questions.every((q) => a!.answers[q.id]), 'Answer every question before finishing.')
+      assert(windowState(quiz.windowStart, quiz.windowEnd) !== 'open' || quiz.questions.every((q) => a!.answers[q.id]), 'Answer every question before finishing.')
       const r = scoreQuiz(quiz.questions, a.answers)
       Object.assign(a, { finishedAt: nowIso(), review: r.review, score: r.score, correct: r.correct, incorrect: r.incorrect })
       a = copy(a)
@@ -138,7 +150,7 @@ export const newQuestionId = () => uid('qq-')
 export async function saveQuiz(me: User, quiz: Quiz, publish = false): Promise<Quiz> {
   needManager(me)
   const next: Quiz = { ...quiz, name: quiz.name.trim(), questions: quiz.questions.map((q) => ({ ...q, text: q.text.trim(), options: q.options.map((o) => o.trim()) })), status: publish ? 'PUBLISHED' : quiz.status === 'PUBLISHED' ? 'PUBLISHED' : quiz.status }
-  const problem = quizProblem(next, { publish: next.status === 'PUBLISHED' })
+  const problem = quizProblem(next, { publish: next.status === 'PUBLISHED' }) ?? windowProblem(next.windowStart, next.windowEnd)
   assert(!problem, problem ?? '')
   const isNew = !quiz.createdAt
   if (CLOUD) {

@@ -44,6 +44,31 @@ export function scoreQuiz(questions, answers) {
   return { review, correct, incorrect: review.length - correct, score: correct }
 }
 
+// ------------------------------------------------------------------ the daily quiz time (India time), set by IT Support
+export const DEFAULT_WINDOW = { start: '09:15', end: '09:30' }
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/
+/** What is wrong with a quiz time (null = fine). */
+export function windowProblem(start, end) {
+  if (!HHMM.test(start ?? '') || !HHMM.test(end ?? '')) return 'Set the quiz time as HH:MM (e.g. 09:15 to 09:30).'
+  if (start >= end) return 'The quiz must end after it starts (same day).'
+  return null
+}
+/** Time of day in India now, "HH:MM:SS". */
+export const istClock = (now = Date.now()) => new Date(now).toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour12: false })
+/** before / open / after today's quiz time (start inclusive, end exclusive). */
+export function windowState(start = DEFAULT_WINDOW.start, end = DEFAULT_WINDOW.end, now = Date.now()) {
+  const t = istClock(now)
+  return t < `${start}:00` ? 'before' : t < `${end}:00` ? 'open' : 'after'
+}
+/** Seconds left until the quiz time ends today (0 once it has ended). */
+export function secondsLeft(end = DEFAULT_WINDOW.end, now = Date.now()) {
+  const [h, m, s] = istClock(now).split(':').map(Number)
+  const [eh, em] = end.split(':').map(Number)
+  return Math.max(0, (eh * 3600 + em * 60) - (h * 3600 + m * 60 + s))
+}
+/** "9:15 am" */
+export const fmtClock = (hhmm) => { const [h, m] = hhmm.split(':').map(Number); return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}` }
+
 /** The pop-up after Finish Quiz. */
 export function quizFeedback(score, total = QUIZ_SIZE) {
   const s = total === QUIZ_SIZE ? score : Math.round((score / Math.max(1, total)) * QUIZ_SIZE)

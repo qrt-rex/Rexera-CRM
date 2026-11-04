@@ -28,9 +28,10 @@ export type AccessKey = Perm | FnKey
 /** Sales Quiz: 10 questions made by IT Support; `correct` is the index of the right option. */
 export interface QuizQuestion { id: string; text: string; options: string[]; correct: number }
 export type QuizStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED'
-export interface Quiz { id: string; name: string; description?: string; status: QuizStatus; questions: QuizQuestion[]; createdBy?: string; createdAt: string; updatedAt?: string; publishedAt?: string }
+/** windowStart / windowEnd: the daily quiz time, India time, "HH:MM" (9:15–9:30 unless IT Support sets another). */
+export interface Quiz { id: string; name: string; description?: string; status: QuizStatus; questions: QuizQuestion[]; windowStart: string; windowEnd: string; createdBy?: string; createdAt: string; updatedAt?: string; publishedAt?: string }
 /** What a Sales person sees of an open quiz (no correct answers). */
-export interface OpenQuiz { id: string; name: string; description?: string; publishedAt?: string; questions: { id: string; text: string; options: string[] }[] }
+export interface OpenQuiz { id: string; name: string; description?: string; publishedAt?: string; windowStart: string; windowEnd: string; questions: { id: string; text: string; options: string[] }[] }
 export interface QuizReviewRow { id: string; text: string; options: string[]; correct: number; choice: number | null; ok: boolean }
 /** One Sales person's go at one quiz: answers are added one at a time and never changed; review / score at finish. */
 export interface QuizAttempt {
