@@ -1,8 +1,10 @@
 import type { ClientEntry, ClientEntryStatus, DB, User } from './types'
 import { effectivePerms, isMaster, rolesOf } from './rbac'
 import { getDb, mutate } from './store'
-import { ActionError } from './actions'
-import { isPhone, normPhone, nowIso, today, uid } from './format'
+import { ActionError, logCall } from './actions'
+import { addDays, isPhone, normPhone, nowIso, today, uid, ymd } from './format'
+import { dispositionToStatus, FOLLOW_UP_LEAD } from './workflow'
+import { blutecCallSummary, type BlutecLeadInfo } from '../../supabase/functions/_shared/blutec'
 
 /**
  * Client entry (pre-CRM entry): sales person → dialer → client entry → follow-ups (if needed) → CRM entry. The sales
@@ -40,7 +42,7 @@ export function visibleClientEntries(d: DB, me: User): ClientEntry[] {
 /** The open entry for a lead (one per lead until it is converted or dropped). */
 export const openEntryForLead = (d: DB, leadId: string) => (d.clientEntries ?? []).find((e) => e.leadId === leadId && e.status !== 'CONVERTED' && e.status !== 'NOT_INTERESTED')
 /** Entries the person can turn into a CRM entry now: their own, not yet converted. */
-export const convertibleEntries = (d: DB, me: User) => (d.clientEntries ?? []).filter((e) => e.ownerId === me.id && e.status !== 'CONVERTED' && e.status !== 'NOT_INTERESTED')
+export const convertibleEntries = (d: DB, me: User) => (d.clientEntries ?? []).filter((e) => e.ownerId === me.id && !e.pending && e.status !== 'CONVERTED' && e.status !== 'NOT_INTERESTED')
 export const followUpDue = (e: ClientEntry, t = today()) => !!e.followUp && e.followUp <= t && e.status !== 'CONVERTED' && e.status !== 'NOT_INTERESTED'
 
 export interface ClientEntryForm {
@@ -131,6 +133,7 @@ export function updateClientEntry(me: User, id: string, f: ClientEntryForm) {
       email: f.email?.trim() ? f.email.trim().toLowerCase() : undefined,
     })
     if (!e.email) delete e.email
+    if (e.pending) e.pending = false
     const l = e.leadId ? d.leads.find((x) => x.id === e.leadId) : undefined
     if (l) { l.followUp = e.followUp; if (e.status === 'NOT_INTERESTED') l.status = 'NOT_INTERESTED' }
     d.audit.unshift({ id: uid('a-'), at, by: me.id, action: 'CLIENT_ENTRY_EDIT', detail: `${e.clientName} · ${e.companyName} · ${e.scheme}` })
@@ -166,10 +169,43 @@ export function markConverted(d: DB, me: User, entryId: string, bookingId: strin
   assert(e, 'Client entry not found.')
   assert(e.ownerId === me.id, 'Only the sales person who made the client entry can convert it.')
   assert(e.status !== 'CONVERTED', 'This client entry is already a CRM entry.')
+  assert(!e.pending, 'Fill in the scheme, pitched price and requirement of this client entry first (Edit).')
   const at = nowIso()
   e.status = 'CONVERTED'
   e.bookingId = bookingId
   e.convertedAt = at
   e.followUp = undefined
   e.updatedAt = at
+}
+
+/**
+ * The sales person called this lead from Blutec's own dialer: Blutec's disposition becomes the lead's status (as if they
+ * had logged the call here), and an Intro or Hot prospect also becomes a client entry with the details pending.
+ * Only leads still on New: a status the person already set is never changed. Answers what was done.
+ */
+export function applyBlutecCall(me: User, leadId: string, b: BlutecLeadInfo): 'entry' | 'lead' | null {
+  const l0 = getDb().leads.find((x) => x.id === leadId)
+  const status = dispositionToStatus(b.disposition)
+  if (!l0 || l0.status !== 'NEW' || l0.assignedTo !== me.id || !status || status === 'NEW') return null
+  // the same Blutec call is filed once (two tabs, or a second check)
+  const ref = `lead-${b.blutecLeadId ?? l0.phone}-${Date.parse(b.calledAt) || 0}`
+  if (l0.calls.some((c) => c.id === `bt-${ref}`)) return null
+  const call = blutecCallSummary(b)
+  logCall(me, leadId, status, [`Blutec call: ${call}`, b.notes].filter(Boolean).join(' · '),
+    FOLLOW_UP_LEAD.includes(status) ? ymd(addDays(new Date(), 1)) : undefined, b.durationSec ?? 0, ref)
+  if ((status !== 'HOT_PROSPECT' && status !== 'INTRO') || !canMakeClientEntry(getDb(), me) || openEntryForLead(getDb(), leadId)) return 'lead'
+  mutate((d) => {
+    const l = d.leads.find((x) => x.id === leadId)!
+    const at = nowIso()
+    const e: ClientEntry = {
+      id: uid('ce-'), date: today(), clientName: (b.name || l.name).trim(), companyName: (b.company || l.company || '').trim(), phone: normPhone(l.phone),
+      serviceId: '', scheme: '', pitchedPrice: 0, status: status === 'HOT_PROSPECT' ? 'HOT' : 'INTERESTED', requirement: '',
+      note: [`Blutec call: ${call}`, b.notes].filter(Boolean).join('\n'), followUp: l.followUp, followUps: [], leadId, ownerId: me.id,
+      createdAt: at, updatedAt: at, pending: true, ...((b.email || l.email) ? { email: (b.email || l.email).trim().toLowerCase() } : {}),
+    }
+    d.clientEntries = [e, ...(d.clientEntries ?? [])]
+    d.audit.unshift({ id: uid('a-'), at, by: me.id, action: 'CLIENT_ENTRY_CREATE', detail: `${e.clientName} · from Blutec (${b.disposition})` })
+    if (d.audit.length > 1000) d.audit.length = 1000
+  })
+  return 'entry'
 }

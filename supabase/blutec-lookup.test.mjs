@@ -24,3 +24,12 @@ assert.equal(blutecLeadInfo({ lead: { first_name: 'A', last_name: 'B' } }).name,
 assert.equal(st('Hot Prospect'), 'HOT'); assert.equal(st('Interested'), 'INTERESTED'); assert.equal(st('Intro'), 'INTERESTED')
 assert.equal(st('Not Interested'), 'NOT_INTERESTED'); assert.equal(st('Call Back'), 'CALL_BACK'); assert.equal(st('No Answer'), ''); assert.equal(st(), '')
 console.log('✓ Blutec lookup: lead, company, latest call, duration, dispositions → client entry status, nothing invented')
+
+// the lead takes Blutec's disposition: Intro and Hot Prospect are the qualifying ones
+import { dispositionToStatus } from '../src/lib/workflow.ts'
+import { blutecCallSummary } from './functions/_shared/blutec.ts'
+assert.equal(dispositionToStatus('Intro'), 'INTRO'); assert.equal(dispositionToStatus('Hot Prospect'), 'HOT_PROSPECT'); assert.equal(dispositionToStatus('HOT PROSPECT'), 'HOT_PROSPECT')
+assert.equal(dispositionToStatus(''), undefined)
+assert.equal(blutecCallSummary({ disposition: 'Intro', calledAt: '2026-11-04T06:31:00Z', durationSec: 43, campaign: 'IT Sample Camp.', agent: 'Dhairya Dave' }),
+  'Intro · 4 Nov 2026, 12:01 pm · 43s · IT Sample Camp. · by Dhairya Dave')
+console.log('✓ Blutec dispositions → lead status (Intro, Hot Prospect), call summary in India time')

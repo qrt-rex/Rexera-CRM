@@ -600,6 +600,12 @@ async function handleBlutecRelay(req, res) {
     const r = await handleBlutec(body, blutecEnv({ ...fileEnv, ...process.env }))
     return sendJson(res, r.status, r.body)
   }
+  // signed in with Supabase but not verified here: say why, instead of asking for the old shared access key
+  if (req.headers.authorization && /\S{20,}/.test(String(req.headers.authorization).replace(/^Bearer\s*/i, ''))) {
+    return String(getEnv('SUPABASE_SECRET_KEY') || '').startsWith('sb_secret_')
+      ? sendJson(res, 401, { success: false, code: 'SIGNED_OUT', message: 'Your sign-in could not be checked (expired, or your account is inactive). Sign out and sign in again.' })
+      : sendJson(res, 503, { success: false, code: 'NOT_CONFIGURED', message: 'The server can’t check sign-ins: set SUPABASE_SECRET_KEY (the sb_secret_… key from Supabase → Settings → API Keys) on Render → Environment.' })
+  }
   const dialerKey = getEnv('DIALER_ACCESS_KEY')
   if (!dialerKey) return sendJson(res, 503, { success: false, code: 'NOT_CONFIGURED', message: 'Set DIALER_ACCESS_KEY on the server (Render → Environment).' })
   const given = req.headers['x-dialer-key'] || ''
@@ -667,6 +673,9 @@ const server = http.createServer(async (req, res) => {
       smtpConfigured: Boolean(getEnv('RESEND_API_KEY') || getEnv('RESEND_KEY') || (getEnv('SMTP_USER') && getEnv('SMTP_PASS'))),
       emailProvider: getEnv('RESEND_API_KEY') || getEnv('RESEND_KEY') ? 'resend' : getEnv('SMTP_USER') && getEnv('SMTP_PASS') ? 'smtp' : null,
       whatsappConfigured: whatsappConfigured(getEnv),
+      // can the server check sign-ins and write to Supabase (SUPABASE_SECRET_KEY = sb_secret_…), and read Blutec (BLUTEC_TOKEN)?
+      supabaseServerKey: String(getEnv('SUPABASE_SECRET_KEY') || '').startsWith('sb_secret_'),
+      blutecToken: Boolean(blutecEnv({ ...fileEnv, ...process.env }).token),
       // AI assistant set-up at a glance (never the key itself)
       aiConfigured: Boolean(getEnv('AI_API_KEY') || getEnv('OPENAI_API_KEY')),
       aiProvider: (() => { try { return new URL(getEnv('AI_BASE_URL') || 'https://api.openai.com/v1').host } catch { return 'invalid AI_BASE_URL' } })(),
