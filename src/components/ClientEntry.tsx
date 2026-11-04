@@ -63,8 +63,6 @@ export function ClientEntryFormView({ lead, entry, compact, onSaved }: { lead?: 
     blutec.leadLookup(phone).then((b) => {
       if (!live) return
       if (!b) { setFetched({ phone, text: 'This number is not in Blutec — fill the details in yourself.', tone: 'mute' }); return }
-      // what Blutec really answered, to check its field names
-      console.info('[blutec] lead lookup answered:', b.raw)
       const status = entryStatusFromDisposition(b.disposition)
       const call = blutecCallSummary(b)
       setF((x) => ({

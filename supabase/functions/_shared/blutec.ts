@@ -142,6 +142,12 @@ async function agentUuid(e: BlutecEnv, email: string) {
   return uuid
 }
 
+/** The lead in a Blutec answer: `data`, `data.lead`, `data.leads[0]`, `data[0]` or the answer itself; null without an id. */
+export function leadOf(body: unknown): Obj | null {
+  const d = isObj(body) && 'data' in body ? body.data : body
+  const x = Array.isArray(d) ? d[0] : isObj(d) ? (isObj(d.lead) ? d.lead : Array.isArray(d.leads) ? d.leads[0] : isObj(d.data) ? d.data : d) : null
+  return isObj(x) && x.id != null ? x : null
+}
 /** What the CRM takes from a Blutec lead and its latest call. Empty strings = Blutec didn't say (never guessed). */
 export interface BlutecLeadInfo {
   blutecLeadId: number | null; name: string; company: string; email: string; city: string
@@ -228,18 +234,21 @@ export async function handleBlutec(req: BlutecRequest, e: BlutecEnv): Promise<Bl
         if (!dncReady(e)) return fail(503, 'Looking up Blutec leads needs the Blutec API token (BLUTEC_TOKEN).', 'NOT_CONFIGURED')
         const ten = String(req.phone).replace(/\D/g, '').slice(-10)
         if (!/^[6-9]\d{9}$/.test(ten)) return fail(422, 'A valid 10-digit mobile is required.', 'VALIDATION_ERROR')
-        // Blutec stores numbers as 91XXXXXXXXXX; older lists may hold the bare 10 digits
-        let found: unknown = null
-        for (const p of [`91${ten}`, ten]) {
-          const r = await dialerApi(e, 'GET', `/api/leads/lookup-by-phone?phone=${p}`)
-          const d = (r.body as { data?: unknown })?.data
-          if (r.status === 200 && d && typeof d === 'object' && (d as { id?: unknown }).id != null) { found = d; break }
+        // Blutec stores numbers as 91XXXXXXXXXX; older lists may hold +91 or the bare 10 digits
+        let found: Obj | null = null
+        const tried: { phone: string; status: number; answer: string }[] = []
+        for (const p of [`91${ten}`, ten, `+91${ten}`]) {
+          const r = await dialerApi(e, 'GET', `/api/leads/lookup-by-phone?phone=${encodeURIComponent(p)}`)
+          found = r.status === 200 ? leadOf(r.body) : null
+          if (found) break
+          // what Blutec said, so a lookup that finds nothing can be checked (the browser console shows it)
+          tried.push({ phone: p, status: r.status, answer: JSON.stringify(r.body).slice(0, 1500) })
         }
-        if (!found) return { status: 200, body: { success: true, data: null } }
-        const id = Number((found as { id: unknown }).id)
+        if (!found) return { status: 200, body: { success: true, data: { found: false, tried } } }
+        const id = Number(found.id)
         const [lead, history] = await Promise.all([dialerApi(e, 'GET', `/api/leads/${id}`), dialerApi(e, 'GET', `/api/leads/${id}/history`)])
-        const raw = { lookup: found, lead: lead.status === 200 ? (lead.body as { data?: unknown }).data : null, history: history.status === 200 ? (history.body as { data?: unknown }).data : null }
-        return { status: 200, body: { success: true, data: { ...blutecLeadInfo(raw), raw } } }
+        const raw = { lookup: found, lead: lead.status === 200 ? leadOf(lead.body) ?? (lead.body as { data?: unknown }).data : null, history: history.status === 200 ? (history.body as { data?: unknown }).data ?? history.body : null }
+        return { status: 200, body: { success: true, data: { found: true, ...blutecLeadInfo(raw), raw } } }
       }
       case 'dncCheck': {
         if (!dncReady(e)) return fail(503, 'The DND list needs the Blutec API token (BLUTEC_TOKEN).', 'NOT_CONFIGURED')
