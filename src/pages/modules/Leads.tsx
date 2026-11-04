@@ -129,11 +129,11 @@ export default function Leads() {
         </>} />
 
       {myOverdue.length > 0 && (
-        <div role="alert" className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-bad/40 bg-bad-soft px-4 py-3 text-sm text-bad">
-          <AlertTriangle className="size-5" />
-          <span className="flex-1"><b>{myOverdue.length} lead(s) still on “New” from before today.</b> <span className="text-ink/75">Update their disposition (or forward them) now — until you do, no new leads can be given to you.</span></span>
-          <Button size="sm" variant="danger" onClick={() => { setView('open'); setDisp('NEW') }}>Show them</Button>
-        </div>
+        // <div role="alert" className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-bad/40 bg-bad-soft px-4 py-3 text-sm text-bad">
+        //   <AlertTriangle className="size-5" />
+        //   <span className="flex-1"><b>{myOverdue.length} lead(s) still on “New” from before today.</b> <span className="text-ink/75">Update their disposition (or forward them) now — until you do, no new leads can be given to you.</span></span>
+        //   <Button size="sm" variant="danger" onClick={() => { setView('open'); setDisp('NEW') }}>Show them</Button>
+        // </div>
       )}
 
       <Card className="overflow-hidden">

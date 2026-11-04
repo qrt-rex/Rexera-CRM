@@ -463,11 +463,11 @@ function OverdueLeadsBanner() {
   const n = overdueLeadsOf(db, me.id).length
   if (!n) return null
   return (
-    <div role="alert" className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-bad/40 bg-bad-soft px-4 py-3 text-sm text-bad">
-      <b>Action required: {n} lead(s) without a disposition since yesterday.</b>
-      <span className="text-ink/75">Update them now — until you do, no new leads can be given to you.</span>
-      <Link to={can('leads.admin') ? '/leads' : '/dialer'} className="ml-auto rounded-full bg-bad px-4 py-1.5 text-xs font-bold text-white">Open my leads</Link>
-    </div>
+    // <div role="alert" className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-bad/40 bg-bad-soft px-4 py-3 text-sm text-bad">
+    //   <b>Action required: {n} lead(s) without a disposition since yesterday.</b>
+    //   <span className="text-ink/75">Update them now — until you do, no new leads can be given to you.</span>
+    //   <Link to={can('leads.admin') ? '/leads' : '/dialer'} className="ml-auto rounded-full bg-bad px-4 py-1.5 text-xs font-bold text-white">Open my leads</Link>
+    // </div>
   )
 }
 
