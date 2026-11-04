@@ -194,18 +194,40 @@ export function applyBlutecCall(me: User, leadId: string, b: BlutecLeadInfo): 'e
   logCall(me, leadId, status, [`Blutec call: ${call}`, b.notes].filter(Boolean).join(' · '),
     FOLLOW_UP_LEAD.includes(status) ? ymd(addDays(new Date(), 1)) : undefined, b.durationSec ?? 0, ref)
   if ((status !== 'HOT_PROSPECT' && status !== 'INTRO') || !canMakeClientEntry(getDb(), me) || openEntryForLead(getDb(), leadId)) return 'lead'
+  addBlutecEntry(me, leadId, { name: b.name, company: b.company, email: b.email, hot: status === 'HOT_PROSPECT', note: [`Blutec call: ${call}`, b.notes].filter(Boolean).join('\n'), label: b.disposition })
+  return 'entry'
+}
+
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+/** The client entry (details pending) for a lead Blutec says is an Intro / Hot Prospect. Only a valid email is copied: lead lists hold "NA", "-", … */
+function addBlutecEntry(me: User, leadId: string, x: { name?: string; company?: string; email?: string; hot: boolean; note: string; label: string }) {
   mutate((d) => {
-    const l = d.leads.find((x) => x.id === leadId)!
+    const l = d.leads.find((y) => y.id === leadId)!
     const at = nowIso()
+    const email = [x.email, l.email].map((v) => (v ?? '').trim().toLowerCase()).find((v) => EMAIL.test(v))
     const e: ClientEntry = {
-      id: uid('ce-'), date: today(), clientName: (b.name || l.name).trim(), companyName: (b.company || l.company || '').trim(), phone: normPhone(l.phone),
-      serviceId: '', scheme: '', pitchedPrice: 0, status: status === 'HOT_PROSPECT' ? 'HOT' : 'INTERESTED', requirement: '',
-      note: [`Blutec call: ${call}`, b.notes].filter(Boolean).join('\n'), followUp: l.followUp, followUps: [], leadId, ownerId: me.id,
-      createdAt: at, updatedAt: at, pending: true, ...((b.email || l.email) ? { email: (b.email || l.email).trim().toLowerCase() } : {}),
+      id: uid('ce-'), date: today(), clientName: (x.name || l.name).trim(), companyName: (x.company || l.company || '').trim(), phone: normPhone(l.phone),
+      serviceId: '', scheme: '', pitchedPrice: 0, status: x.hot ? 'HOT' : 'INTERESTED', requirement: '',
+      note: x.note, followUp: l.followUp, followUps: [], leadId, ownerId: me.id, createdAt: at, updatedAt: at, pending: true, ...(email ? { email } : {}),
     }
     d.clientEntries = [e, ...(d.clientEntries ?? [])]
-    d.audit.unshift({ id: uid('a-'), at, by: me.id, action: 'CLIENT_ENTRY_CREATE', detail: `${e.clientName} · from Blutec (${b.disposition})` })
+    d.audit.unshift({ id: uid('a-'), at, by: me.id, action: 'CLIENT_ENTRY_CREATE', detail: `${e.clientName} · from Blutec (${x.label})` })
     if (d.audit.length > 1000) d.audit.length = 1000
   })
-  return 'entry'
+}
+
+/**
+ * Leads Blutec already turned into an Intro / Hot prospect whose client entry was never saved (e.g. refused for a
+ * bad email): the entry is made again from the lead and its Blutec call. A lead that ever had an entry is left alone.
+ */
+export function restoreBlutecEntries(me: User) {
+  const d = getDb()
+  if (!canMakeClientEntry(d, me)) return 0
+  const had = new Set((d.clientEntries ?? []).map((e) => e.leadId).filter(Boolean))
+  const missing = d.leads.filter((l) => l.assignedTo === me.id && (l.status === 'HOT_PROSPECT' || l.status === 'INTRO') && !had.has(l.id) && l.calls.some((c) => c.id.startsWith('bt-lead-')))
+  for (const l of missing) {
+    const call = l.calls.find((c) => c.id.startsWith('bt-lead-'))!
+    addBlutecEntry(me, l.id, { hot: l.status === 'HOT_PROSPECT', note: call.note, label: l.status === 'HOT_PROSPECT' ? 'Hot Prospect' : 'Intro' })
+  }
+  return missing.length
 }

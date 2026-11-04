@@ -206,7 +206,6 @@ export function Shell() {
           <BreakBanner />
           <BreakPrompt />
           <BlutecSync />
-          {loc.pathname.startsWith('/dashboard') && <OverdueLeadsBanner />}
           {maintenance?.on && isMaster(me) && (
             <div className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-warn/40 bg-warn-soft px-4 py-3 text-sm text-warn">
               <Wrench className="size-4" /><b>Maintenance mode is on</b><span className="text-ink/70">Only IT Support and Super Admin can use the app.{maintenance.message ? ` Message: “${maintenance.message}”` : ''}</span>
@@ -454,22 +453,6 @@ function BellMenu() {
         </>
       )}
     </Menu>
-  )
-}
-
-/** On the dashboard (as in the old CRM): leads still on New from before today block new leads until updated. */
-function OverdueLeadsBanner() {
-  const db = useDb()
-  const me = useMe()
-  const { can } = useAuth()
-  const n = overdueLeadsOf(db, me.id).length
-  if (!n) return null
-  return (
-    <div role="alert" className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-bad/40 bg-bad-soft px-4 py-3 text-sm text-bad">
-      <b>Action required: {n} lead(s) without a disposition since yesterday.</b>
-      <span className="text-ink/75">Call them from Blutec and set the disposition there (Intro, Hot Prospect…) — it comes into the CRM automatically. Until then, no new leads can be given to you.</span>
-      <Link to={can('leads.admin') ? '/leads' : '/dialer'} className="ml-auto rounded-full bg-bad px-4 py-1.5 text-xs font-bold text-white">Open my leads</Link>
-    </div>
   )
 }
 
