@@ -12,6 +12,7 @@ import { BookingRow, BookingStatusBadge, ChainStepper , ClientSerial } from '../
 import { ClientEntriesPanel } from '../../components/ClientEntry'
 import { followUpDue, visibleClientEntries } from '../../lib/clientEntries'
 import { Greeting, LoginLogoutCard, MiniStat, Section, Tile, TileGrid, UpcomingEvents, ViewAll, type TileSubAction } from './widgets'
+import { QuizDashboardCard } from '../modules/Quiz'
 
 export function SalesDashboard({ lead }: { lead: boolean }) {
   const db = useDb()
@@ -93,6 +94,9 @@ export function SalesDashboard({ lead }: { lead: boolean }) {
         }
       />
 
+      {/* Sales Quiz: Start Quiz when one is open, and the latest score */}
+      <QuizDashboardCard />
+
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <MiniStat label="Leads to call" value={n.toCall} icon={PhoneCall} tone="navy" />
         <MiniStat label="Follow-ups due" value={n.followUps} icon={CalendarCheck2} tone="amber" />
@@ -101,7 +105,6 @@ export function SalesDashboard({ lead }: { lead: boolean }) {
       </div>
 
       <TileGrid>
-        <Tile to="/dialer" icon={Phone} label="Dialer · my leads" desc="Call your assigned leads, log outcomes" highlight badge={n.toCall} />
         <Tile to="/documents" icon={FileText} label="Document Form" desc="Collect client documents" tone="blue" subActions={docFormActions} />
         <Tile to="/content?tab=FLYER" icon={Images} label="Flyer & Post" desc="Latest marketing material" tone="orange" badge={newPosts || undefined} subActions={flyerActions} />
         <Tile to="/schemes" icon={Sparkles} label="Schemes" desc="Government schemes & offers" tone="green" subActions={schemeActions} />

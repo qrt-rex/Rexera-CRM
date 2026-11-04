@@ -1,7 +1,7 @@
 import {
   BarChart3, BellRing, BookOpenCheck, Briefcase, CalendarDays, Clapperboard, Cloud, ClipboardCheck, Coffee, FileText, Package, FolderKanban, Images, IndianRupee,
   BookMarked, Globe, UserRoundCheck, KeyRound, Megaphone, MessagesSquare, Phone, Settings, ShieldCheck, Sparkles, UserCheck, UserCog, UserPlus, Users, UsersRound,
-  CalendarCheck2, Network, ScrollText, Wallet, Receipt, Landmark, Trophy, SlidersHorizontal, Gauge, KeySquare, DatabaseBackup, DatabaseZap, MailPlus, ClipboardList, FilePen, Inbox, Undo2, BadgeCheck, BadgePercent, Layers, FileSignature, Settings2, Workflow, type LucideIcon,
+  CalendarCheck2, GraduationCap, Network, ScrollText, Wallet, Receipt, Landmark, Trophy, SlidersHorizontal, Gauge, KeySquare, DatabaseBackup, DatabaseZap, MailPlus, ClipboardList, FilePen, Inbox, Undo2, BadgeCheck, BadgePercent, Layers, FileSignature, Settings2, Workflow, type LucideIcon,
 } from 'lucide-react'
 import type { AccessKey, Perm, Role, User } from './types'
 import { rolesOf } from './rbac'
@@ -26,6 +26,8 @@ export interface ModuleDef {
 export const MODULES: ModuleDef[] = [
   { key: 'leads', path: '/leads', label: 'CRM Leads', desc: 'Manual, website and CSV leads, auto-assign, lead source', icon: UserPlus, tone: 'navy', perms: ['leads.admin'], group: 'Sales' },
   { key: 'dialer', path: '/dialer', label: 'Dialer', desc: 'Power-dial your queue and log outcomes', icon: Phone, tone: 'orange', perms: ['dialer.use'], group: 'Sales' },
+  // Sales Quiz: Sales people take it; IT Support makes the quizzes and sees every result
+  { key: 'quiz', path: '/quiz', label: 'Sales Quiz', desc: 'Ten-question quizzes: take them (Sales), make and publish them, see every result (IT Support)', icon: GraduationCap, tone: 'orange', perms: [], roles: ['sales', 'it'], group: 'Sales' },
   // client entries filled in the dialer: the sales person's own, and a team leader's team's
   { key: 'client-entries', path: '/client-entries', label: 'Client Entries', desc: 'Client entries from the dialer: follow-ups, convert to CRM entry', icon: ClipboardList, tone: 'violet', perms: ['dialer.use'], roles: ['sales', 'teamlead'], group: 'Sales' },
   { key: 'team', path: '/team', label: 'Sales Team Progress', desc: 'Calls, conversions and collections by person', icon: BarChart3, tone: 'green', perms: ['team.progress'], group: 'Sales' },

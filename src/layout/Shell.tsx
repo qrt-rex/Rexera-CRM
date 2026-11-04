@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { BlutecSync } from '../components/BlutecSync'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   BadgeCheck, Bell, ChevronDown, ChevronRight, Home, LayoutGrid, LogOut, Mail, Menu as MenuIcon, Moon, Search, Settings, ShieldCheck, Sun, UserCheck, X, Monitor,
@@ -148,7 +149,7 @@ export function Shell() {
             className="-ml-1 hidden size-9 shrink-0 place-items-center rounded-lg text-mute hover:bg-card2 hover:text-ink lg:grid">
             {collapsed ? <PanelLeftOpen className="size-5" /> : <PanelLeftClose className="size-5" />}
           </button>
-          <h1 className="hidden min-w-0 max-w-64 shrink truncate whitespace-nowrap text-base font-extrabold tracking-tight md:block">{title}</h1>
+          <h1 className="hidden max-w-56 shrink-0 truncate whitespace-nowrap text-base font-extrabold tracking-tight md:block">{title}</h1>
           <button onClick={() => setPalette(true)} className="mx-auto flex h-9 w-full min-w-0 max-w-md items-center gap-2.5 rounded-lg border border-line bg-card2 px-3 text-sm text-mute transition hover:border-brand/50 hover:bg-card hover:shadow-card">
             <Search className="size-4 shrink-0 text-mute" />
             <span className="flex-1 truncate text-left">{hrMode ? 'Search employees, leads, pages…' : 'Search clients, leads, people…'}</span>
@@ -204,6 +205,7 @@ export function Shell() {
         <main id="main" className="mx-auto w-full max-w-[1680px] flex-1 px-3 py-4 sm:px-5 sm:py-5 lg:px-6">
           <BreakBanner />
           <BreakPrompt />
+          <BlutecSync />
           {loc.pathname.startsWith('/dashboard') && <OverdueLeadsBanner />}
           {maintenance?.on && isMaster(me) && (
             <div className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-warn/40 bg-warn-soft px-4 py-3 text-sm text-warn">
@@ -463,11 +465,11 @@ function OverdueLeadsBanner() {
   const n = overdueLeadsOf(db, me.id).length
   if (!n) return null
   return (
-    // <div role="alert" className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-bad/40 bg-bad-soft px-4 py-3 text-sm text-bad">
-    //   <b>Action required: {n} lead(s) without a disposition since yesterday.</b>
-    //   <span className="text-ink/75">Update them now — until you do, no new leads can be given to you.</span>
-    //   <Link to={can('leads.admin') ? '/leads' : '/dialer'} className="ml-auto rounded-full bg-bad px-4 py-1.5 text-xs font-bold text-white">Open my leads</Link>
-    // </div>
+    <div role="alert" className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-bad/40 bg-bad-soft px-4 py-3 text-sm text-bad">
+      <b>Action required: {n} lead(s) without a disposition since yesterday.</b>
+      <span className="text-ink/75">Call them from Blutec and set the disposition there (Intro, Hot Prospect…) — it comes into the CRM automatically. Until then, no new leads can be given to you.</span>
+      <Link to={can('leads.admin') ? '/leads' : '/dialer'} className="ml-auto rounded-full bg-bad px-4 py-1.5 text-xs font-bold text-white">Open my leads</Link>
+    </div>
   )
 }
 

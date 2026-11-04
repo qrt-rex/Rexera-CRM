@@ -17,7 +17,7 @@ export type Perm =
   | 'payroll.view' | 'payroll.manage' | 'incentives.manage' | 'recruitment.manage' | 'performance.view'
   | 'email.send' | 'assets.manage'
   | 'media.view' | 'media.manage'
-  | 'roles.manage'
+  | 'roles.manage' | 'quiz.manage'
 
 /** What a person may do inside a module (Access Control → functions). */
 export type FnAction = 'view' | 'create' | 'edit' | 'delete' | 'download' | 'export' | 'approve' | 'send'
@@ -25,6 +25,20 @@ export type FnAction = 'view' | 'create' | 'edit' | 'delete' | 'download' | 'exp
 export type FnKey = `fn:${string}:${FnAction}`
 /** What a per-person override can name: a permission or a function. */
 export type AccessKey = Perm | FnKey
+/** Sales Quiz: 10 questions made by IT Support; `correct` is the index of the right option. */
+export interface QuizQuestion { id: string; text: string; options: string[]; correct: number }
+export type QuizStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED'
+/** windowStart / windowEnd: the daily quiz time, India time, "HH:MM" (9:15–9:30 unless IT Support sets another). */
+export interface Quiz { id: string; name: string; description?: string; status: QuizStatus; questions: QuizQuestion[]; windowStart: string; windowEnd: string; createdBy?: string; createdAt: string; updatedAt?: string; publishedAt?: string }
+/** What a Sales person sees of an open quiz (no correct answers). */
+export interface OpenQuiz { id: string; name: string; description?: string; publishedAt?: string; windowStart: string; windowEnd: string; questions: { id: string; text: string; options: string[] }[] }
+export interface QuizReviewRow { id: string; text: string; options: string[]; correct: number; choice: number | null; ok: boolean }
+/** One Sales person's go at one quiz: answers are added one at a time and never changed; review / score at finish. */
+export interface QuizAttempt {
+  id: string; quizId: string; userId: string; quizName: string; total: number; startedAt: string; finishedAt?: string
+  answers: Record<string, { choice: number; at: string }>
+  review?: QuizReviewRow[]; score?: number; correct?: number; incorrect?: number
+}
 /** A role made by IT Support: built on a built-in role (its dashboard and workflow), with its own permissions. */
 export interface CustomRole { id: string; name: string; base: Role; perms: Perm[]; color: string; createdBy: string; createdAt: string; updatedAt?: string }
 /** IT Support's access settings (app_settings 'accessControl'). */
@@ -509,6 +523,8 @@ export interface ClientEntry {
   /** the CRM entry made from it */
   bookingId?: string
   convertedAt?: string
+  /** made from a Blutec call (Intro / Hot prospect): scheme, price and requirement still to be filled in by the sales person */
+  pending?: boolean
 }
 
 // ------------------------------------------------------------------ Digital Media Dashboard (Media Function)
@@ -1211,6 +1227,9 @@ export interface DB {
   siteHistory?: SiteHistory[]
   webLeadLog?: WebLeadLog[]
   formSubmissions?: FormSubmission[]
+  /** Sales Quiz — browser (demo) mode only; the live CRM keeps them in Supabase (lib/quiz.ts) */
+  quizzes?: Quiz[]
+  quizAttempts?: QuizAttempt[]
   /** one-time data upgrades already applied */
   upgrades: string[]
 }
