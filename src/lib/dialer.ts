@@ -1,5 +1,6 @@
 import { CLOUD } from './cloud'
 import { getSupabase } from './supabase'
+import type { BlutecLeadInfo } from '../../supabase/functions/_shared/blutec'
 
 /**
  * Talks to the Blutec relay at /api/blutec — the local dev server (vite.config.ts) or, on the live site, server.mjs. Secrets live only on the relay; the browser never sees them.
@@ -59,12 +60,8 @@ async function call<T>(body: Record<string, unknown>): Promise<T> {
 
 export const blutec = {
   status: () => call<BlutecStatus>({ action: 'status' }),
-  /**
-   * Rings the agent's own phone first, then connects the customer. `attempt` makes the Idempotency-Key: pass the same
-   * one only when retrying the same click (e.g. after CHANNEL_LIMIT), so Blutec never dials twice.
-   */
-  clickToCall: (agentEmail: string, phone: string, leadId?: string, attempt = `${Date.now()}`, userId?: string) =>
-    call<{ ref_id: string; status: string }>({ action: 'call', agentEmail, phone, leadId, attempt, userId }),
+  /** What Blutec knows about a number the sales person called from Blutec's own dialer (null = not in Blutec). */
+  leadLookup: (phone: string) => call<(BlutecLeadInfo & { raw?: unknown }) | null>({ action: 'leadLookup', phone }),
   /** Adds the number to the company's Do-Not-Disturb list in Blutec (no campaign or click-to-call will dial it). */
   dncAdd: (phone: string, reason: string) => call<unknown>({ action: 'dncAdd', phone, reason }),
   callStatus: (refId: string) => call<CallStatus>({ action: 'callStatus', refId }),

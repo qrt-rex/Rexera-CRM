@@ -1,4 +1,6 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { blutec } from '../lib/dialer'
+import { entryStatusFromDisposition } from '../../supabase/functions/_shared/blutec'
 import { useNavigate } from 'react-router-dom'
 import { Briefcase, CalendarClock, ClipboardList, Download, History, MessageCircle, Pencil, Plus, Save, Search } from 'lucide-react'
 import { MessageClientModal, MessageLog } from './ClientMessage'
@@ -8,7 +10,7 @@ import { useDb } from '../lib/store'
 import { useAuth, useMe } from '../lib/auth'
 import { userName } from '../lib/actions'
 import { addClientFollowUp, canEditClientEntry, canMakeClientEntry, CLIENT_ENTRY_STATUS, createClientEntry, emptyEntry, ENTRY_STATUSES, entryProblems, followUpDue, openEntryForLead, updateClientEntry, visibleClientEntries, type ClientEntryForm } from '../lib/clientEntries'
-import { downloadCsv, fmtDate, fmtDateTime, fmtTime, inr, maskPhone, today, ymd } from '../lib/format'
+import { downloadCsv, fmtDate, fmtDateTime, fmtTime, inr, isPhone, maskPhone, normPhone, today, ymd } from '../lib/format'
 import { seesMaskedPhones } from '../lib/rbac'
 import { Badge, Button, cx, EmptyState, Input, Modal, Select, Tabs, Td, Textarea, Th, useConfirm, useRun, useSubmitting } from './ui'
 import { PhoneInput } from './fields'
@@ -49,6 +51,30 @@ export function ClientEntryFormView({ lead, entry, compact, onSaved }: { lead?: 
   } : emptyEntry(lead, db))
   const [tried, setTried] = useState(false)
   const set = <K extends keyof ClientEntryForm>(k: K, v: ClientEntryForm[K]) => setF((x) => ({ ...x, [k]: v }))
+  // the sales person called from Blutec's own dialer: a new entry's number brings in what Blutec knows (empty fields only)
+  const [fetched, setFetched] = useState<{ phone: string; text: string; tone: 'ok' | 'mute' | 'bad' } | null>(null)
+  const looked = useRef('')
+  useEffect(() => {
+    const phone = normPhone(f.phone)
+    if (entry || !isPhone(phone) || looked.current === phone) return
+    looked.current = phone
+    let live = true
+    setFetched({ phone, text: 'Fetching the call from Blutec…', tone: 'mute' })
+    blutec.leadLookup(phone).then((b) => {
+      if (!live) return
+      if (!b) { setFetched({ phone, text: 'This number is not in Blutec — fill the details in yourself.', tone: 'mute' }); return }
+      const status = entryStatusFromDisposition(b.disposition)
+      const call = [b.disposition, b.calledAt && fmtDateTime(b.calledAt), b.durationSec != null && `${b.durationSec}s`, b.campaign, b.agent && `by ${b.agent}`].filter(Boolean).join(' · ')
+      setF((x) => ({
+        ...x, clientName: x.clientName || b.name, companyName: x.companyName || b.company, email: x.email || b.email, status: x.status || status,
+        note: x.note || [call && `Blutec call: ${call}`, b.notes].filter(Boolean).join('\n'),
+      }))
+      const missing = [!b.name && 'client name', !b.company && 'company name', !status && 'status'].filter(Boolean)
+      setFetched({ phone, text: `Fetched from Blutec${call ? ` — ${call}` : ''}.${missing.length ? ` Not in Blutec: ${missing.join(', ')}.` : ''}`, tone: 'ok' })
+    }).catch((err: Error) => live && setFetched({ phone, text: `Couldn't fetch from Blutec: ${err.message}`, tone: 'bad' }))
+    // a different number typed meanwhile: this answer is old
+    return () => { live = false; if (looked.current === phone) looked.current = '' }
+  }, [f.phone, entry])
   const e = tried ? entryProblems(db, f) : {}
   const save = () => submit(async () => {
     setTried(true)
@@ -62,6 +88,8 @@ export function ClientEntryFormView({ lead, entry, compact, onSaved }: { lead?: 
   })
   return (
     <div className="space-y-3">
+      {!entry && <p className={cx('rounded-xl bg-card2 px-3 py-2 text-xs', fetched?.tone === 'ok' ? 'text-ok' : fetched?.tone === 'bad' ? 'text-bad' : 'text-mute')}>
+        {fetched?.text ?? 'Type the number you called in Blutec — the client details and the call are fetched from Blutec.'}</p>}
       <div className={cx('grid gap-3', !compact && 'sm:grid-cols-2')}>
         <Input label="Date" required type="date" value={f.date} max={today()} error={e.date} onChange={(ev) => set('date', ev.target.value)} />
         <PhoneInput label="Number" required value={f.phone} onChange={(v) => set('phone', v)} />
