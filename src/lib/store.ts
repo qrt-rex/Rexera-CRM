@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import { produce, setAutoFreeze } from 'immer'
+import { current, isDraft, produce, setAutoFreeze } from 'immer'
 import type { DB } from './types'
 import { buildSeed, SEED_VERSION } from './seed'
 import { upgradeDb } from './hrsuite'
@@ -182,6 +182,9 @@ function stampAudit(d: DB, prev: DB) {
     if (!a.ref) { const code = a.detail?.match(/RX-\d{4}-\d{4,6}/)?.[0]; const b = code ? d.bookings.find((x) => x.bookingId === code) : undefined; if (b) a.ref = b.id }
   }
 }
+
+/** Deep copy that also works inside mutate(): structuredClone can't copy Immer drafts (Proxies). */
+export const clone = <T>(x: T): T => structuredClone(isDraft(x) ? current(x as never) as T : x)
 
 export function mutate<T = void>(fn: (d: DB) => T): T {
   let out!: T

@@ -3,7 +3,7 @@ import type {
 } from './types'
 import { accessControlOf, canManageRoles, DEFAULT_ROLE_PERMS, effectivePerms, fnKey, isMaster, isStageOnlyAdmin, MASTER_ROLES, ROLES, rolesOf, roleLabel } from './rbac'
 import { MODULES } from './modules'
-import { clearCloudDb, getDb, mutate, reloadFromCloud, saved } from './store'
+import { clearCloudDb, clone, getDb, mutate, reloadFromCloud, saved } from './store'
 import { CLOUD, cloudSetOwnPassword, cloudSetPassword, cloudSignIn, cloudSignOut, cloudUserId } from './cloud'
 import { bookingBranch, directorBranches, isBranchScoped, leadBranch, NO_BRANCH } from './branches'
 import { BOOKING_TYPES, COMBO_PACKAGES, comboCap, comboMonths, isFundingService } from './catalog'
@@ -2920,7 +2920,7 @@ const roleName = (d: DB, id: string) => accessControlOf(d).customRoles.find((r) 
 function editAccess(me: User, fn: (ac: AccessControl, d: DB) => void) {
   assert(canManageRoles(me), 'Roles and permissions are managed by IT Support only.')
   mutate((d) => {
-    const ac = structuredClone(accessControlOf(d))
+    const ac: AccessControl = { customRoles: [], userRole: {}, roleDeny: {}, ...clone(d.settings.accessControl) }
     fn(ac, d)
     d.settings.accessControl = ac
   })
