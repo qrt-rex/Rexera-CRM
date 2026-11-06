@@ -38,6 +38,10 @@ COPY --from=builder /app/dist ./dist
 COPY server.mjs ./
 COPY supabase/functions/_shared/client-email.mjs supabase/functions/_shared/blutec.ts ./supabase/functions/_shared/
 COPY server/ ./server/
+# the old-CRM import, built for the server in the builder stage (Old CRM sync)
+COPY --from=builder /app/server/dist ./server/dist
+# Old CRM sync: the table mapping and the connector protocol
+COPY supabase/backup-mapping.mjs supabase/legacy-sync-protocol.mjs ./supabase/
 # every shared rules file the server imports (workflow, forms, client portal, …)
 COPY supabase/*-rules.mjs ./supabase/
 # the Blutec webhook receiver reads the lead dispositions from the app's own list
