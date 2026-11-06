@@ -8,3 +8,22 @@ dist
 
 # local build of scripts/legacy-import-check.ts
 .tmp/
+
+# local recovery / backup data and one-off scripts (personal data, live-database scripts) - never commit
+ALL_CANDIDATES_BACKUP*
+all_candidates_complete.csv
+candidates_yesterday*
+parsed_candidates_full.json
+all-candidate-resumes/
+recovered-*/
+recovered-*.json
+backups/
+rexera-local-store-kv-db.json
+rexera-master-restore.json
+rexera-snapshot-*.json
+scripts/backup_all_candidates.mjs
+scripts/upload_candidates_to_crm.mjs
+supabase/reset-hr-data.sql
+supabase/reset-live-data.sql
+supabase/restore-yesterday-candidates.sql
+supabase/setup-team-accounts.sql
