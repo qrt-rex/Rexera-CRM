@@ -118,6 +118,21 @@ async function readOld(env, cfg, db, names, shouldStop) {
   return { tables: out, rows }
 }
 
+/** Exact number of records in the old CRM, from a fingerprint ("rows:checksum" per table) — every check keeps it fresh. */
+function oldTotal(fp) {
+  let total = 0
+  for (const t of Object.values(fp ?? {})) for (const v of Object.values(t ?? {})) total += parseInt(String(v).split(':')[0], 10) || 0
+  return { oldTotal: total, oldTotalAt: new Date().toISOString() }
+}
+/** The old CRM's storage (connector `stats`), kept 5 minutes per address. */
+async function oldStorage(env, cfg, fresh) {
+  if (fresh || !oldStats || oldStats.url !== cfg.url || Date.now() - oldStats.at > OLD_STATS_TTL) {
+    try { oldStats = { at: Date.now(), url: cfg.url, data: cfg.url ? await call(env, cfg, 'stats') : null, error: null } }
+    catch (e) { oldStats = { at: Date.now(), url: cfg.url, data: null, error: e.message } }
+  }
+  return oldStats
+}
+
 // ------------------------------------------------------------------ one run
 /** Uploaded files the import points at (old uploads folder) that the new CRM doesn't have yet → crm-files bucket. */
 async function copyFiles(env, sb, cfg, next, shouldStop) {
@@ -153,8 +168,9 @@ async function runOnce(env, { trigger = 'auto', by } = {}) {
   // 1. anything changed?
   const fp = (await call(env, cfg, 'fingerprint')).fingerprint ?? {}
   const before = cfg.state?.fingerprint
+  const counted = oldTotal(fp)
   if (trigger === 'auto' && before && fingerprintKey(before) === fingerprintKey(fp)) {
-    await saveState(sb, { lastCheckAt: now, connected: true, lastError: null })
+    await saveState(sb, { lastCheckAt: now, connected: true, lastError: null, ...counted })
     return { skipped: true }
   }
   const { data: run, error: runErr } = await sb.from('legacy_sync_runs').insert({ trigger, status: 'running', changed_tables: before ? changedTables(before, fp) : ['(first copy)'], by_user: by ?? null }).select('id').single()
@@ -195,7 +211,7 @@ async function runOnce(env, { trigger = 'auto', by } = {}) {
     const totals = Object.values(plan.counts).reduce((t, c) => ({ added: t.added + c.added, updated: t.updated + c.updated, kept: t.kept + c.kept }), { added: 0, updated: 0, kept: 0 })
     await finish({ status: 'ok', rows_read: main.rows + (bill?.rows ?? 0), written: { ...plan.counts, totals, notes: report.notes?.slice(0, 20) ?? [] }, files })
     // the fingerprint is remembered only after a complete run (files still to copy → the next check runs again)
-    await saveState(sb, { fingerprint: files.more || files.failed.length ? null : fp, lastCheckAt: now, lastRunAt: now, lastOkAt: new Date().toISOString(), connected: true, lastError: null, lastTotals: totals, oldRows: main.rows + (bill?.rows ?? 0) })
+    await saveState(sb, { fingerprint: files.more || files.failed.length ? null : fp, lastCheckAt: now, lastRunAt: now, lastOkAt: new Date().toISOString(), connected: true, lastError: null, lastTotals: totals, oldRows: main.rows + (bill?.rows ?? 0), ...counted })
     return { ok: true, totals, files }
   } catch (e) {
     await finish({ status: e.stopped ? 'stopped' : 'error', error: e.message })
@@ -255,11 +271,8 @@ export async function handleLegacySync(env, method, pathname, authorization, bod
       const cfg = await loadConfig(sb)
       const { data: stats, error } = await sb.rpc('crm_storage_stats')
       if (error) throw new Error(error.message)
-      if (!oldStats || Date.now() - oldStats.at > OLD_STATS_TTL || body.fresh) {
-        try { oldStats = { at: Date.now(), data: cfg.url ? await call(env, cfg, 'stats') : null, error: null } }
-        catch (e) { oldStats = { at: Date.now(), data: null, error: e.message } }
-      }
-      return ok({ new: { ...stats, db_limit_bytes: cfg.db_limit_bytes, storage_limit_bytes: cfg.storage_limit_bytes }, old: oldStats.data, oldError: oldStats.error, oldAt: new Date(oldStats.at).toISOString() })
+      const o = await oldStorage(env, cfg, !!body.fresh)
+      return ok({ new: { ...stats, db_limit_bytes: cfg.db_limit_bytes, storage_limit_bytes: cfg.storage_limit_bytes }, old: o.data, oldError: o.error, oldAt: new Date(o.at).toISOString() })
     }
     if (method === 'POST' && action === 'config') {
       const patch = {}
@@ -295,7 +308,10 @@ export async function handleLegacySync(env, method, pathname, authorization, bod
         if (error) throw new Error(error.message)
         await sb.from('audit_log').insert({ at: new Date().toISOString(), by_user: me.id, action: 'LEGACY_SYNC', detail: `Old CRM sync: connector address set to ${url} (tested)` })
       }
-      await saveState(sb, { connected: true, lastPingAt: new Date().toISOString(), old: { name: ping.name, logo: /^https:\/\//.test(ping.logo ?? '') ? ping.logo : null, version: ping.version, php: ping.php, databases: ping.databases, uploads: ping.uploads } })
+      // the old CRM's record count and storage at once, so the page shows them before the first copy
+      const counted = await call(env, cfg, 'fingerprint').then((r) => oldTotal(r.fingerprint), () => ({}))
+      await oldStorage(env, cfg, true)
+      await saveState(sb, { connected: true, lastError: null, lastPingAt: new Date().toISOString(), ...counted, old: { name: ping.name, logo: /^https:\/\//.test(ping.logo ?? '') ? ping.logo : null, version: ping.version, php: ping.php, databases: ping.databases, uploads: ping.uploads } })
       return ok({ ping })
     }
     if (method === 'POST' && action === 'run') {

@@ -10,7 +10,7 @@ export interface SyncConfig {
   old_name: string | null; old_logo: string | null; updated_by: string | null; updated_at: string | null
   state: {
     fingerprint?: unknown; lastCheckAt?: string; lastRunAt?: string; lastOkAt?: string; lastPingAt?: string; connected?: boolean; lastError?: string | null
-    lastTotals?: { added: number; updated: number; kept: number }; oldRows?: number
+    lastTotals?: { added: number; updated: number; kept: number }; oldRows?: number; oldTotal?: number; oldTotalAt?: string
     old?: { name?: string; logo?: string | null; version?: string; php?: string; uploads?: boolean; databases?: Record<string, { mysql?: string; tables?: string[] }> }
   }
 }

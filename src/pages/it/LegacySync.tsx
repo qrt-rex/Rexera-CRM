@@ -116,7 +116,8 @@ export default function LegacySync() {
             ['MySQL', s.old?.databases?.main?.mysql ?? '—'],
             ['Database', storage?.old ? bytes(Object.values(storage.old.databases).reduce((n, d) => n + d.bytes, 0)) : '—'],
             ['Uploaded files', storage?.old?.files ? `${bytes(storage.old.files.bytes)} · ${storage.old.files.files.toLocaleString('en-IN')} files` : '—'],
-            ['Records read', s.oldRows != null ? s.oldRows.toLocaleString('en-IN') : '—'],
+            ['Records in old CRM', s.oldTotal != null ? s.oldTotal.toLocaleString('en-IN') : '—'],
+            ['Records read (last copy)', s.oldRows != null ? s.oldRows.toLocaleString('en-IN') : cfg?.url ? 'after the first copy' : '—'],
           ]} />
 
         <Card className="flex flex-col p-4">
@@ -168,7 +169,7 @@ export default function LegacySync() {
 
       {tab === 'overview' && <Overview st={st} storage={storage} storageErr={storageErr} totals={totals} lastRun={lastRun} failedFiles={failedFiles.length} onRefresh={() => refreshStorage(true)} />}
       {tab === 'log' && <RunLog runs={runs} userOf={(id) => (id ? userName(db, id) : '—')} onRetry={() => act('run', () => runNow(false), 'Copy started — failed files are tried again')} running={!!st?.running} canRun={!!cfg?.url} />}
-      {tab === 'settings' && st && <SettingsTab st={st} onSaved={refresh} />}
+      {tab === 'settings' && st && <SettingsTab st={st} onSaved={async () => { await refresh(); void refreshStorage(true) }} />}
       {tab === 'settings' && !st && <Card><EmptyState icon={Settings2} title="Settings load from the CRM server" text={err || 'Loading…'} /></Card>}
       {tab === 'guide' && <Guide st={st} />}
 
@@ -358,6 +359,7 @@ function RunLog({ runs, userOf, onRetry, running, canRun }: { runs: SyncRun[]; u
 function SettingsTab({ st, onSaved }: { st: SyncStatus; onSaved: () => Promise<void> }) {
   const toast = useToast()
   const c = st.config
+  const s = c.state ?? {}
   const [url, setUrl] = useState(c.url ?? '')
   const [interval, setIntervalSec] = useState(c.interval_sec)
   const [prefer, setPrefer] = useState(c.prefer)
@@ -368,53 +370,94 @@ function SettingsTab({ st, onSaved }: { st: SyncStatus; onSaved: () => Promise<v
   const [busy, setBusy] = useState('')
   const [ping, setPing] = useState<Ping | null>(null)
   const [pingErr, setPingErr] = useState('')
+  const [save, setSave] = useState<{ state: 'idle' | 'waiting' | 'saving' | 'saved' | 'error'; at?: string; error?: string }>({ state: 'idle' })
+
+  /** what differs from the saved settings (only valid values; the address is saved by Test connection or when leaving the box) */
+  const changes = (withUrl: boolean) => {
+    const p: Parameters<typeof saveConfig>[0] = {}
+    const u = url.trim()
+    if (withUrl && u && u !== (c.url ?? '') && /^https:\/\/[^/\s]+\.[^/\s]+\//.test(u)) p.url = u
+    if (interval !== c.interval_sec) p.intervalSec = interval
+    if (prefer !== c.prefer) p.prefer = prefer
+    if (oldName.trim() !== (c.old_name ?? '')) p.oldName = oldName.trim()
+    const l = oldLogo.trim()
+    if (l !== (c.old_logo ?? '') && (!l || /^https:\/\/\S+\.\S+/.test(l))) p.oldLogo = l
+    const db = Number(dbMb) * MB
+    if (dbMb && Number.isFinite(db) && Math.round(db) !== c.db_limit_bytes) p.dbLimitBytes = db
+    const sg = Number(stGb) * GB
+    if (stGb && Number.isFinite(sg) && Math.round(sg) !== c.storage_limit_bytes) p.storageLimitBytes = sg
+    return p
+  }
+  const persist = async (p: Parameters<typeof saveConfig>[0], quiet = true) => {
+    if (!Object.keys(p).length) { if (!quiet) toast('success', 'Everything is already saved'); return }
+    setSave({ state: 'saving' })
+    try {
+      await saveConfig(p)
+      setSave({ state: 'saved', at: new Date().toISOString() })
+      if (!quiet) toast('success', 'Sync settings saved')
+      await onSaved()
+    } catch (e) { setSave({ state: 'error', error: (e as Error).message }); if (!quiet) toast('error', (e as Error).message) }
+  }
+  // every change is saved by itself a moment after you stop typing — nothing to fill in again next time
+  const pending = JSON.stringify(changes(false))
+  useEffect(() => {
+    if (pending === '{}') return
+    setSave({ state: 'waiting' })
+    const t = setTimeout(() => void persist(JSON.parse(pending)), 900)
+    return () => clearTimeout(t)
+  }, [pending]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const test = async () => {
     setBusy('test'); setPing(null); setPingErr('')
     try {
       setPing((await testConnection(url.trim())).ping)
+      setSave({ state: 'saved', at: new Date().toISOString() })
       toast('success', 'Connected — address saved. You can turn the sync on.')
       await onSaved()
     } catch (e) { setPingErr((e as Error).message) }
     setBusy('')
   }
-  const save = async () => {
-    setBusy('save')
-    try {
-      await saveConfig({ url: url.trim(), intervalSec: interval, prefer, oldName: oldName.trim(), oldLogo: oldLogo.trim(), dbLimitBytes: Number(dbMb) * MB, storageLimitBytes: Number(stGb) * GB })
-      toast('success', 'Sync settings saved'); await onSaved()
-    } catch (e) { toast('error', (e as Error).message) }
-    setBusy('')
-  }
+  const saveNow = async () => { setBusy('save'); await persist(changes(true), false); setBusy('') }
+  const savedNote = save.state === 'saving' ? <span className="text-mute"><Loader2 className="mr-1 inline size-3.5 animate-spin" />Saving…</span>
+    : save.state === 'waiting' ? <span className="text-mute">Saving in a moment…</span>
+      : save.state === 'error' ? <span className="text-bad"><XCircle className="mr-1 inline size-3.5" />Not saved: {save.error}</span>
+        : <span className="text-ok"><CheckCircle2 className="mr-1 inline size-3.5" />Saved{save.at ? ` ${ago(save.at)}` : c.updated_at ? ` · last change ${fmtDateTime(c.updated_at)}` : ''}</span>
+  // the last successful test, remembered on the server (shown until a new test)
+  const known = !ping && !pingErr && c.url && s.lastPingAt && s.old && url.trim() === c.url
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <Card>
         <CardHeader icon={Plug} title="Connection to the old CRM" subtitle="The address of rexera-connector.php on the old CRM's website (https only)" />
         <div className="grid gap-3 p-4">
           <Input label="Connector address" placeholder="https://old-crm.example.com/rexera-sync/rexera-connector.php" value={url} onChange={(e) => setUrl(e.target.value)}
-            hint="e.g. https://crm.rexera.in/rexera-connector.php — saved automatically when Test connection works" />
+            onBlur={() => { const p = changes(true); if (p.url) void persist({ url: p.url }) }}
+            hint="e.g. https://crm.rexera.in/rexera-connector.php — saved by itself, and kept for next time" />
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant="outline" icon={Plug} loading={busy === 'test'} disabled={!url.trim()} onClick={test}>Test connection</Button>
             <span className="text-xs text-mute">Secret on the server: {st.secret.problem ? <b className="text-bad">{st.secret.problem}</b> : <b className="text-ok">set</b>}</span>
           </div>
           {pingErr && <p className="rounded-lg bg-bad-soft px-3 py-2 text-xs text-bad">{pingErr}</p>}
-          {ping && (
-            <div className="rounded-lg bg-ok-soft px-3 py-2 text-xs">
-              <p className="font-semibold text-ok"><CheckCircle2 className="mr-1 inline size-4" />Connected to {ping.name} — connector v{ping.version}, PHP {ping.php}</p>
-              {Object.entries(ping.databases).map(([k, d]) => <p key={k} className="mt-1 text-mute">{k === 'main' ? 'Main' : 'Billing'} database: MySQL {d.mysql} · {d.tables.length} tables readable ({d.tables.join(', ')})</p>)}
-              <p className="mt-1 text-mute">Uploads folder: {ping.uploads ? 'found' : <b className="text-bad">not found — check uploads_dir</b>}</p>
-            </div>
-          )}
-          <Input label="Old CRM name (shown on this page)" placeholder="Taken from the connector if empty" value={oldName} onChange={(e) => setOldName(e.target.value)} />
-          <Input label="Old CRM logo address (https)" placeholder="https://…/logo.png — taken from the connector if empty" value={oldLogo} onChange={(e) => setOldLogo(e.target.value)} />
+          {(ping || known) && (() => {
+            const p = ping ?? { name: s.old!.name ?? 'Old CRM', version: s.old!.version ?? '?', php: s.old!.php ?? '?', uploads: !!s.old!.uploads, databases: (s.old!.databases ?? {}) as Ping['databases'] }
+            return (
+              <div className="rounded-lg bg-ok-soft px-3 py-2 text-xs">
+                <p className="font-semibold text-ok"><CheckCircle2 className="mr-1 inline size-4" />Connected to {p.name} — connector v{p.version}, PHP {p.php}{!ping && s.lastPingAt ? <span className="font-normal text-mute"> · tested {ago(s.lastPingAt)}</span> : null}</p>
+                {Object.entries(p.databases).map(([k, d]) => <p key={k} className="mt-1 text-mute">{k === 'main' ? 'Main' : 'Billing'} database: MySQL {d.mysql} · {d.tables?.length ?? 0} tables readable ({d.tables?.join(', ')})</p>)}
+                {s.oldTotal != null && <p className="mt-1 text-mute">Records in the old CRM: <b className="text-ink">{s.oldTotal.toLocaleString('en-IN')}</b></p>}
+                <p className="mt-1 text-mute">Uploads folder: {p.uploads ? 'found' : <b className="text-bad">not found — check uploads_dir</b>}</p>
+              </div>
+            )
+          })()}
+          <Input label="Old CRM name (optional)" placeholder={s.old?.name ? `${s.old.name} — from the connector` : 'Taken from the connector if empty'} maxLength={80} value={oldName} onChange={(e) => setOldName(e.target.value)} />
+          <Input label="Old CRM logo address (optional, https)" placeholder="https://…/logo.png — taken from the connector if empty" value={oldLogo} onChange={(e) => setOldLogo(e.target.value)} />
         </div>
       </Card>
       <Card>
-        <CardHeader icon={Settings2} title="How the sync works" subtitle="Applies from the next check" />
+        <CardHeader icon={Settings2} title="How the sync works" subtitle="Saved by itself · applies from the next check" />
         <div className="grid gap-4 p-4">
           <Select label="Check the old CRM for changes every" value={interval} onChange={(e) => setIntervalSec(Number(e.target.value))}
             hint="Each check is one small request; a copy runs only when something changed.">
-            {INTERVALS.map((s) => <option key={s} value={s}>{intervalText(s)}</option>)}
+            {INTERVALS.map((x) => <option key={x} value={x}>{intervalText(x)}</option>)}
           </Select>
           <fieldset>
             <legend className="mb-1.5 text-xs font-semibold text-mute">A record changed in both CRMs</legend>
@@ -431,7 +474,10 @@ function SettingsTab({ st, onSaved }: { st: SyncStatus; onSaved: () => Promise<v
             <Input label="Supabase file storage limit (GB)" inputMode="decimal" value={stGb} onChange={(e) => setStGb(e.target.value.replace(/[^\d.]/g, ''))} hint="Free plan: 1 GB · Pro: 100 GB" />
           </div>
           <p className="text-xs text-mute">Never deleted by a sync: anything in this CRM. Never changed: roles, permissions, settings, team assignments. The old CRM is only read.</p>
-          <div className="flex justify-end"><Button icon={CheckCircle2} loading={busy === 'save'} onClick={save}>Save settings</Button></div>
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <span className="mr-auto text-xs" role="status" aria-live="polite">{savedNote}</span>
+            <Button icon={CheckCircle2} loading={busy === 'save'} onClick={saveNow}>Save</Button>
+          </div>
         </div>
       </Card>
     </div>
