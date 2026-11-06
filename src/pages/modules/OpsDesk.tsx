@@ -12,6 +12,7 @@ import { STAGES, stageColor, stageLabel } from '../../lib/workflow'
 import { addDays, ago, bookingMoney, daysBetween, fmtDate, fmtDateTime, inr, today, ymd } from '../../lib/format'
 import { monthStart } from '../../lib/metrics'
 import { Avatar, Badge, Button, Card, CardHeader, Checkbox, cx, EmptyState, Input, PageHeader, SearchBox, Select, Stat, Table, Td, Th, useRun } from '../../components/ui'
+import { AdminWithChange } from '../../components/ChangeAdmin'
 import { BookingStatusBadge, DeadlineBadge, DecisionButtons, DecisionModal, PriorityBadge, StageTrack } from '../../components/booking'
 import { StageControls } from '../../components/StageControls'
 import { AdminProgressOverview, AutomationAlerts } from '../../components/OpsAutomation'
@@ -214,7 +215,7 @@ function CaseCard({ b, highlight }: { b: Booking; highlight: boolean }) {
       <p className="mt-0.5 truncate text-xs text-mute">{b.serviceName}</p>
 
       <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-4">
-        <div><dt className="text-mute">Assigned to</dt><dd className="mt-0.5 flex items-center gap-1.5 font-semibold"><Avatar name={userName(db, b.opsMemberId)} size={20} />{userName(db, b.opsMemberId)}</dd>{b.adminId && <dd className="mt-0.5 text-mute">Admin: {userName(db, b.adminId)}</dd>}</div>
+        <div><dt className="text-mute">Assigned to</dt><dd className="mt-0.5 flex items-center gap-1.5 font-semibold"><Avatar name={userName(db, b.opsMemberId)} size={20} />{userName(db, b.opsMemberId)}</dd>{b.adminId && <dd className="mt-0.5 text-mute">Admin: <AdminWithChange b={b} compact /></dd>}</div>
         <div><dt className="text-mute">Assigned by Legal</dt><dd className="mt-0.5 font-semibold">{from ? userName(db, from.by) : '—'}</dd>{from && <dd className="text-mute">{fmtDate(from.at)}</dd>}</div>
         <div><dt className="text-mute">Deadline</dt><dd className={cx('mt-0.5 font-semibold', left !== null && left < 0 && b.status !== 'COMPLETED' && 'text-bad')}>{b.deadline ? fmtDate(b.deadline) : '—'}</dd>
           {left !== null && b.status !== 'COMPLETED' && <dd className={left < 0 ? 'text-bad' : left <= 3 ? 'text-warn' : 'text-mute'}>{left < 0 ? `${-left} day(s) late` : left === 0 ? 'due today' : `${left} day(s) left`}</dd>}</div>

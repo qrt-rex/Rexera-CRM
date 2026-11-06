@@ -1546,6 +1546,50 @@ function assignAdminStages(d: DB, b: Booking, by: string, at: string, to: Partia
   }
 }
 
+/**
+ * Change the Admin of a file already given to one: the file's Operations person (or Super Admin / IT), while the
+ * file is still being worked on. The file and every unfinished Admin stage the old Admin held go to the new one
+ * (a stage the new Admin doesn't do — Operations Dashboard → Team — goes to whoever does it, or waits to be forwarded);
+ * finished stages stay as they are. The change, the reason and who made it go into the file's timeline and the
+ * activity log; both Admins are told.
+ */
+export const canReassignAdmin = (d: DB, me: User, b: Booking) =>
+  !!b.adminId && ['WITH_ADMIN', 'OPS_REVIEW', 'ON_HOLD', 'IN_OPERATIONS'].includes(b.status)
+  && (isMaster(me) || (effectivePerms(d, me).has('bookings.process') && b.opsMemberId === me.id))
+export function reassignAdmin(me: User, id: string, adminId: string, reason: string) {
+  mutate((d) => {
+    const b = findB(d, id)
+    assert(canReassignAdmin(d, me, b), 'Only the file’s Operations person can change its Admin while the file is being worked on.')
+    const to = d.users.find((u) => u.id === adminId)
+    assert(to && to.active && rolesOf(to).includes('admin'), 'Pick an active Admin.')
+    assert(to.id !== b.adminId, `${to.name} is already the Admin of this file.`)
+    assert(reason.trim().length >= 3, 'Say why the Admin is being changed.')
+    const at = nowIso(), from = b.adminId!, fromName = userName(d, from)
+    b.adminId = to.id
+    // the old Admin's unfinished stages move with the file
+    const moves: Partial<Record<AdminStageId, string>> = {}
+    let waiting = 0
+    for (const s of ADMIN_STAGES) {
+      const w = b.adminWork?.[s.id]
+      if (!w || w.assignee !== from || !openStage(w)) continue
+      const next = adminMayDo(d, to.id, s.id) ? to.id : routeAdminStage(d, b, s.id, from)
+      if (next) moves[s.id] = next
+      else {
+        w.assignee = undefined
+        w.history.push({ at, by: me.id, status: w.status, note: `${fromName} replaced by ${to.name}, who doesn't do ${s.label} — forward it to an Admin` })
+        w.updatedAt = at; w.updatedBy = me.id
+        waiting++
+      }
+    }
+    if (Object.keys(moves).length) assignAdminStages(d, b, me.id, at, moves, `Admin changed — ${reason.trim()}`)
+    b.comments.push({ id: uid('c-'), by: me.id, at, kind: 'Admin assignment', text: `Admin changed: ${fromName} → ${to.name} — ${reason.trim()}${waiting ? ` (${waiting} stage(s) wait to be forwarded)` : ''}` })
+    notify(d, [to.id], 'A client file is now yours', `${b.bookingId} · ${b.companyName} — from ${fromName}: ${reason.trim()}`, `/bookings/${b.id}`, 'action')
+    notify(d, [from], 'A client file moved to another Admin', `${b.bookingId} · ${b.companyName} → ${to.name}: ${reason.trim()}`, `/bookings/${b.id}`, 'info')
+    audit(d, me.id, 'ADMIN_REASSIGN', `${b.bookingId} · ${b.companyName}: ${reason.trim()}`, { before: fromName, after: to.name, ref: b.id })
+    b.updatedAt = at
+  })
+}
+
 /** The file's Operations person (or Super Admin / IT) gives each Admin stage to an Admin — one by one, to different people. */
 export const canForwardAdminStages = (d: DB, me: User, b: Booking) => ACTIVE_FILE_STATUSES.includes(b.status) && (isMaster(me) || (effectivePerms(d, me).has('bookings.process') && b.opsMemberId === me.id))
 export function forwardAdminStages(me: User, id: string, to: Partial<Record<AdminStageId, string>>, note = '') {
@@ -2773,7 +2817,8 @@ export async function createUser(me: User, i: UserInput, password: string, resum
   assert(isEmail(i.email), 'Enter a valid email.')
   // the dialer rings this number (Blutec agent phone), so every employee needs one
   assert(isPhone(i.phone), 'Enter a valid 10-digit mobile number — the dialer calls it.')
-  assert(i.role !== 'superadmin' || isSA(me), 'Only a Super Admin can create a Super Admin.')
+  // roles are IT Support's (Access Control), so IT may also make a Super Admin
+  assert(i.role !== 'superadmin' || isSA(me) || canManageRoles(me), 'Only a Super Admin or IT Support can create a Super Admin.')
   assert(PASSWORD_RULE.test(password), `Password: ${PASSWORD_HINT}`)
   const holds = (u: User) => u.username.toLowerCase() === i.username.trim().toLowerCase() || u.email.toLowerCase() === i.email.trim().toLowerCase()
   assert(!getDb().users.some((u) => u.active && holds(u)), 'Username or email already used by an active employee.')

@@ -7,7 +7,7 @@ import { useMe } from '../../lib/auth'
 import { createBooking, findDuplicates, needsPriceSplit, PAYMENT_MODES, updateBooking, userName, type BookingInput, type PaymentPartInput } from '../../lib/actions'
 import { BOOKING_TYPES, COMBO_PACKAGES, comboCap, comboMonths, comboType, INDUSTRIES, isFundingService, priceFor } from '../../lib/catalog'
 import { DOC_TYPES } from '../../lib/files'
-import { addDays, fmtDate, inr, isEmail, isGstin, isPan, round2, today, ymd } from '../../lib/format'
+import { addDays, fmtDate, inr, isEmail, isGstin, isPan, round2, successFeeText, today, ymd } from '../../lib/format'
 import { rolesOf } from '../../lib/rbac'
 import { stateForCity } from '../../lib/india'
 import { Button, Card, CardHeader, cx, Input, PageHeader, Select, Textarea, useRun, useSubmitting } from '../../components/ui'
@@ -94,6 +94,10 @@ function BookingFormBody() {
     return { ...x, bookingType: t, services }
   })
 
+  // success fee: 0 is valid (0% / ₹0); only empty, negative or a percentage over 100 is wrong — shown as soon as typed
+  const fee = f.successFee.value
+  const feeError = !Number.isFinite(fee) ? (tried ? 'Enter the success fee (0 if none).' : undefined)
+    : fee < 0 ? 'The success fee can’t be negative.' : f.successFee.type === 'PCT' && fee > 100 ? 'A percentage can be at most 100%.' : undefined
   const e = tried ? {
     companyName: f.companyName.trim().length < 2 ? 'Required' : undefined,
     companyAddress: f.companyAddress.trim().length < 5 ? 'Required' : undefined,
@@ -220,10 +224,13 @@ function BookingFormBody() {
                     <select aria-label="Success fee type" value={f.successFee.type} onChange={(ev) => set('successFee', { ...f.successFee, type: ev.target.value as 'AMOUNT' | 'PCT' })} className="h-10 rounded-xl border border-line bg-card px-2 text-sm">
                       <option value="PCT">%</option><option value="AMOUNT">₹</option>
                     </select>
-                    <input type="number" inputMode="decimal" min={0} aria-label="Success fee" value={f.successFee.value} onChange={(ev) => set('successFee', { ...f.successFee, value: Number(ev.target.value) })}
-                      className="h-10 min-w-0 flex-1 rounded-xl border border-line bg-card px-3 text-sm outline-none focus:border-brand" />
+                    {/* 0 is a real value (0% / ₹0): only an empty box, a negative number or more than 100% is an error */}
+                    <input type="number" inputMode="decimal" min={0} max={f.successFee.type === 'PCT' ? 100 : undefined} step="any" aria-label="Success fee" aria-invalid={!!feeError}
+                      value={Number.isFinite(f.successFee.value) ? f.successFee.value : ''}
+                      onChange={(ev) => set('successFee', { ...f.successFee, value: ev.target.value.trim() === '' ? Number.NaN : Number(ev.target.value) })}
+                      className={cx('h-10 min-w-0 flex-1 rounded-xl border bg-card px-3 text-sm outline-none focus:border-brand', feeError ? 'border-bad' : 'border-line')} />
                   </div>
-                  <p className="mt-1 text-[11px] text-mute">Enter 0 if the client didn't agree to a success fee.</p>
+                  {feeError ? <p className="mt-1 text-[11px] font-semibold text-bad">{feeError}</p> : <p className="mt-1 text-[11px] text-mute">{f.successFee.type === 'PCT' ? '0% to 100%' : '₹0 or more'} — enter 0 if the client didn't agree to a success fee.</p>}
                 </div>
                 <Select label="Priority" value={f.priority} onChange={(ev) => set('priority', ev.target.value as BookingInput['priority'])}><option value="LOW">Low</option><option value="MEDIUM">Medium</option><option value="HIGH">High</option></Select>
               </div>
@@ -287,7 +294,7 @@ function BookingFormBody() {
                 <Row k="Total quoted = advance (part 1)" v={<b>{inr(part1)}</b>} />
                 <Row k={`Advance with GST ${gstRate}%`} v={<b className="text-ok">{inr(withGst(part1))}</b>} />
                 {f.payments.length > 1 && <Row k={`All ${f.payments.length} parts with GST`} v={inr(withGst(paid))} />}
-                <Row k="Success fee" v={f.successFee.value ? (f.successFee.type === 'PCT' ? `${f.successFee.value}%` : inr(f.successFee.value)) : 'None (0)'} />
+                <Row k="Success fee" v={successFeeText({ successFee: f.successFee, successFeePct: 0 })} />
               </>}
             </div>
             <div className="border-t border-line p-4">

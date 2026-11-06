@@ -5,6 +5,15 @@ const inrFmt = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'IN
 const inrCompactFmt = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 1 })
 
 export const inr = (n: number) => inrFmt.format(Math.round((n || 0) * 100) / 100)
+/**
+ * A CRM entry's success fee as text: "5%", "0%", "₹25,000" or "₹0" — 0 is a real value (the client agreed to none),
+ * never shown as empty. Older entries have only successFeePct. `none` is shown when nothing was recorded at all.
+ */
+export const successFeeText = (b: Pick<Booking, 'successFee' | 'successFeePct'>, none = '—') => {
+  const f = b.successFee ?? (b.successFeePct != null ? { type: 'PCT' as const, value: b.successFeePct } : undefined)
+  if (!f || !Number.isFinite(f.value)) return none
+  return f.type === 'PCT' ? `${Math.round(f.value * 100) / 100}%` : inr(f.value)
+}
 export function inrShort(n: number) {
   const a = Math.abs(n)
   if (a >= 1e7) return `₹${inrCompactFmt.format(n / 1e7)} Cr`

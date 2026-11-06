@@ -2,13 +2,14 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Activity, AlertTriangle, Camera, GraduationCap, CheckCircle2, DatabaseBackup, DatabaseZap, Download, Eraser, HardDrive, KeyRound, LayoutGrid, Lock, LogOut, RefreshCcw,
-  ScrollText, ShieldAlert, ShieldCheck, Stethoscope, Unlock, UserCog, Users, Wrench, XCircle, type LucideIcon,
+  ScrollText, ShieldAlert, ShieldCheck, Stethoscope, Unlock, UserCog, UserPlus, Users, Wrench, XCircle, type LucideIcon,
 } from 'lucide-react'
 import type { Role } from '../../lib/types'
-import { approxDataBytes, storageBackend, useDb } from '../../lib/store'
+import { approxDataBytes, getDb, storageBackend, useDb } from '../../lib/store'
 import { CLOUD } from '../../lib/cloud'
 import { useAuth, useMe } from '../../lib/auth'
-import { updateUser, userName } from '../../lib/actions'
+import { createUser, PASSWORD_HINT, PASSWORD_RULE, resetUserPassword, updateUser, userName } from '../../lib/actions'
+import { isPhone, normPhone } from '../../lib/format'
 import { SetPasswordModal } from '../../components/SetPasswordModal'
 import { ROLES, isMaster, roleLabel, rolesOf } from '../../lib/rbac'
 import {
@@ -51,6 +52,7 @@ export function ItDashboard() {
   const [backupOpen, setBackupOpen] = useState(false)
   const [pass, setPass] = useState('')
   const [assignOpen, setAssignOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
   const [resetOpen, setResetOpen] = useState(false)
   const [maintOpen, setMaintOpen] = useState(false)
   const [maintMsg, setMaintMsg] = useState(db.settings.maintenance?.message ?? '')
@@ -110,7 +112,8 @@ export function ItDashboard() {
         <Action icon={Stethoscope} tone="green" label="Run health check" hint="Storage, passwords, owners, backups" busy={busy === 'health'} onClick={check} />
         <Action icon={Camera} tone="cyan" label="Snapshot now" hint={CLOUD ? 'Downloads a backup file to this computer' : 'Saved in this browser · restore any time'} busy={busy === 'snap'} onClick={() => doAndRecheck('snap', () => createSnapshot(me, 'Snapshot from IT dashboard'), 'Snapshot saved')} />
         <Action icon={Download} tone="navy" label="Download backup" hint="Encrypted file of all data" onClick={() => { setPass(''); setBackupOpen(true) }} />
-        <Action icon={UserCog} tone="violet" label="Assign access" hint="Role, extra roles, active" onClick={() => setAssignOpen(true)} />
+        <Action icon={UserPlus} tone="green" label="Create user" hint="One email · one or more roles · password" onClick={() => setCreateOpen(true)} />
+        <Action icon={UserCog} tone="violet" label="Assign access" hint="Main role, extra roles, active" onClick={() => setAssignOpen(true)} />
         <Action icon={KeyRound} tone="orange" label="API keys" hint="Create, rotate, revoke" to="/api-keys" />
         <Action icon={Unlock} tone="amber" label="Unlock all accounts" hint={`${fails.length} with failed sign-ins`} busy={busy === 'unlock'} onClick={() => doAndRecheck('unlock', () => unlockAllAccounts(me), 'All sign-in locks cleared')} />
         <Action icon={RefreshCcw} tone="blue" label="Set a password" hint="Type a new password for someone" onClick={() => setResetOpen(true)} />
@@ -198,6 +201,7 @@ export function ItDashboard() {
         <Input label="Passphrase (8+ characters)" type="password" autoComplete="new-password" value={pass} onChange={(e) => setPass(e.target.value)} autoFocus hint="Needed to restore. Keep it somewhere safe." />
       </Modal>
       <AssignAccess open={assignOpen} onClose={() => setAssignOpen(false)} />
+      <CreateUserIt open={createOpen} onClose={() => setCreateOpen(false)} />
       <SetPasswordModal open={resetOpen} onClose={() => setResetOpen(false)} people={db.users.filter((u) => u.id !== me.id && (rolesOf(me).includes('superadmin') || !rolesOf(u).includes('superadmin'))).sort((a, b) => a.name.localeCompare(b.name))} />
       <Modal open={maintOpen} onClose={() => setMaintOpen(false)} title="Turn on maintenance mode" size="sm"
         footer={<><Button variant="outline" onClick={() => setMaintOpen(false)}>Cancel</Button><Button variant="danger" icon={Wrench} onClick={async () => { if (await run(() => setMaintenance(me, true, maintMsg), 'Maintenance mode on')) { setMaintOpen(false); check() } }}>Turn on</Button></>}>
@@ -249,6 +253,103 @@ function AssignAccess({ open, onClose }: { open: boolean; onClose: () => void })
           <label className="flex items-center justify-between rounded-xl bg-card2 px-3 py-2.5 text-sm font-semibold">Account active <Toggle checked={activeFlag} onChange={setActiveFlag} label="Account active" /></label>
         </>}
       </div>
+    </Modal>
+  )
+}
+
+/**
+ * IT Support: one email, one person, several roles. Ticks every role the person needs (their permissions add up);
+ * the main role decides the dashboard they land on. An email already in the CRM edits that person's roles instead
+ * (and sets a new password only if one is typed). Saved to Supabase at once — everyone's screen updates live.
+ */
+function CreateUserIt({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const db = useDb()
+  const me = useMe()
+  const run = useRun()
+  const blank = { name: '', email: '', phone: '', password: '', confirm: '', roles: ['sales'] as Role[], main: 'sales' as Role, show: false }
+  const [f, setF] = useState(blank)
+  const [tried, setTried] = useState(false)
+  useEffect(() => { if (open) { setF(blank); setTried(false) } }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+  const set = (p: Partial<typeof f>) => setF((x) => ({ ...x, ...p }))
+  const email = f.email.trim().toLowerCase()
+  const existing = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? db.users.find((u) => u.active && u.email.toLowerCase() === email) : undefined
+  // an existing person opens with their own roles
+  useEffect(() => { if (existing) setF((x) => ({ ...x, name: existing.name, roles: rolesOf(existing), main: existing.role })) }, [existing?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  const toggle = (r: Role) => {
+    const roles = f.roles.includes(r) ? f.roles.filter((x) => x !== r) : [...f.roles, r]
+    set({ roles, main: roles.includes(f.main) ? f.main : roles[0] ?? f.main })
+  }
+  const pwNeeded = !existing || !!f.password
+  const err = {
+    name: !existing && f.name.trim().length < 2 ? 'Enter the name.' : '',
+    email: !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? 'Enter a valid email — it is the login ID.' : '',
+    phone: !existing && !isPhone(f.phone) ? 'Enter a 10-digit mobile number.' : '',
+    roles: !f.roles.length ? 'Tick at least one role.' : '',
+    password: pwNeeded && !PASSWORD_RULE.test(f.password) ? PASSWORD_HINT : '',
+    confirm: pwNeeded && f.password !== f.confirm ? 'The two passwords do not match.' : '',
+  }
+  const bad = Object.values(err).some(Boolean)
+  const show = (k: keyof typeof err) => (tried && err[k]) || undefined
+  const usernameFor = (e: string) => {
+    const base = e.split('@')[0]!.replace(/[^a-z0-9._-]/g, '') || 'user'
+    const taken = new Set(db.users.filter((u) => u.active).map((u) => u.username.toLowerCase()))
+    let n = base, i = 2
+    while (taken.has(n)) n = `${base}${i++}`
+    return n
+  }
+  const save = async () => {
+    setTried(true)
+    if (bad) return
+    const extra = f.roles.filter((r) => r !== f.main)
+    const names = f.roles.map(roleLabel).join(', ')
+    if (existing) {
+      const ok = await run(async () => {
+        updateUser(me, existing.id, { role: f.main, extraRoles: extra })
+        if (f.password) await resetUserPassword(me, existing.id, f.password)
+      }, `${existing.name}: ${names}`)
+      if (ok) onClose()
+      return
+    }
+    const label = roleLabel(f.main)
+    const ok = await run(async () => {
+      await createUser(me, { name: f.name.trim(), username: usernameFor(email), email, phone: normPhone(f.phone), role: f.main, department: label, designation: label }, f.password, undefined)
+      const u = getDb().users.find((x) => x.active && x.email.toLowerCase() === email)
+      if (u && extra.length) updateUser(me, u.id, { extraRoles: extra })
+    }, `User created: ${f.name.trim()} · ${names} — share the password privately`)
+    if (ok) onClose()
+  }
+  return (
+    <Modal open={open} onClose={onClose} size="lg" title={existing ? `Edit roles · ${existing.name}` : 'Create user'}
+      subtitle={existing ? `${existing.email} is already in the CRM — change their roles (and password, if you type one)` : 'One email (the login ID), one or more roles. Their access is all their roles together.'}
+      footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button icon={UserPlus} onClick={save}>{existing ? 'Save roles' : 'Create user'}</Button></>}>
+      <form className="grid gap-4 sm:grid-cols-2" autoComplete="off" onSubmit={(e) => { e.preventDefault(); void save() }}>
+        <Input label="Email (login ID)" required type="email" value={f.email} onChange={(e) => set({ email: e.target.value })} error={show('email')} />
+        <Input label="Full name" required value={f.name} disabled={!!existing} onChange={(e) => set({ name: e.target.value })} error={show('name')} />
+        {!existing && <Input label="Mobile" required inputMode="numeric" value={f.phone} onChange={(e) => set({ phone: e.target.value })} error={show('phone')} />}
+        <Select label="Main role (opens their dashboard)" required value={f.main} onChange={(e) => set({ main: e.target.value as Role })} className={existing ? 'sm:col-span-2' : ''}>
+          {f.roles.map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
+        </Select>
+        <fieldset className="sm:col-span-2">
+          <legend className="mb-1 text-xs font-semibold text-mute">Roles <span className="text-bad">*</span> <span className="font-normal">— tick every role this person needs ({f.roles.length} selected)</span></legend>
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Roles">
+            {ROLES.map((r) => {
+              const on = f.roles.includes(r.id)
+              return (
+                <button key={r.id} type="button" aria-pressed={on} onClick={() => toggle(r.id)}
+                  className={cx('inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition', on ? 'border-brand bg-brand text-white' : 'border-line text-ink hover:bg-card2')}>
+                  <span className="size-2 rounded-full" style={{ background: on ? '#fff' : r.color }} />{r.label}{on && r.id === f.main && <span className="rounded bg-white/25 px-1 text-[10px]">main</span>}
+                </button>
+              )
+            })}
+          </div>
+          {show('roles') && <p className="mt-1 text-xs text-bad">{err.roles}</p>}
+        </fieldset>
+        <Input label={existing ? 'New password (optional)' : 'Password'} required={!existing} type={f.show ? 'text' : 'password'} autoComplete="new-password" value={f.password} onChange={(e) => set({ password: e.target.value })} hint={PASSWORD_HINT} error={show('password')} />
+        <Input label="Confirm password" required={pwNeeded} type={f.show ? 'text' : 'password'} autoComplete="new-password" value={f.confirm} onChange={(e) => set({ confirm: e.target.value })} error={show('confirm')} />
+        <label className="flex items-center gap-2 text-xs text-mute sm:col-span-2"><input type="checkbox" checked={f.show} onChange={(e) => set({ show: e.target.checked })} className="accent-[var(--brand)]" />Show password</label>
+        <p className="text-xs text-mute sm:col-span-2">Every role is saved against this one email in Supabase; the person's access is all their roles together and changes on their screen at once — no sign-out needed. The password goes only to Supabase sign-in (encrypted).</p>
+        <button type="submit" hidden />
+      </form>
     </Modal>
   )
 }

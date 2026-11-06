@@ -1,4 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
+import { AdminWithChange } from '../../components/ChangeAdmin'
+import { ProofGallery, type ProofItem } from '../../components/ProofGallery'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Archive, ArrowLeft, CornerUpLeft, Upload, Building2, Layers, Check, CheckCircle2, ChevronRight, CircleDot, Download, FileText, FolderKanban, History, IndianRupee, ListTodo, MessageCircle, MessageSquare, Pencil, Plus, Receipt, Send, ShieldCheck, Trash2, X, Lock, Mail, Gift, Percent, Undo2, Workflow } from 'lucide-react'
 import { AdminChecklist, FollowUpCard, WelcomeCard } from '../../components/WorkflowPanels'
@@ -14,7 +16,7 @@ import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
 import { addComboService, addComment, addComplimentaryService, addDocuments, addPayment, addRefund, commissionNow, deleteRefund, needsPriceSplit, addTask, canEditBooking, canEmailClient, canSendBack, previousStep, sendBack, canForwardAdminStages, canRequestRefund, canRunClientPortal, canMoveStage, deleteDocument, deleteTask, invoiceFromBooking, moveStage, PAYMENT_MODES, setCommission, setDeduction, setPaymentTds, setRefundStatus, toggleTask, userName, verifyPayment, visibleBookings, visibleDocuments, visibleTasks } from '../../lib/actions'
 import { BOOKING_STATUS, STAGES, STAGE_OUTCOMES, stageLabel } from '../../lib/workflow'
-import { ago, bookingMoney, fmtDate, fmtDateTime, gstSplit, inr, today } from '../../lib/format'
+import { ago, bookingMoney, fmtDate, fmtDateTime, gstSplit, inr, successFeeText, today } from '../../lib/format'
 import { isStageOnlyAdmin, roleLabel } from '../../lib/rbac'
 import type { FileRef, LegacyRow } from '../../lib/types'
 import { DOC_TYPES } from '../../lib/files'
@@ -159,11 +161,23 @@ function Overview({ id }: { id: string }) {
   // part payments 2, 3, 4 … are added only by Accounts
   const canPay = can('bookings.accounts')
   const g = gstSplit(pay.amount || 0, b.gstRate, b.state, db.settings.supplierState)
-  const details: [string, string][] = [
+  const details: [string, ReactNode][] = [
     ['Contact person', b.contactPerson], ['Mobile', b.mobile], ['Email', b.email || '—'], ['PAN', b.pan || '—'], ['GSTIN', b.gstin || '—'],
     ['Location', `${b.city || '—'}, ${b.state}`], ['Industry', b.industry || '—'],
-    ['Success fee (after discount)', b.successFee ? (b.successFee.value ? (b.successFee.type === 'PCT' ? `${b.successFee.value}%` : inr(b.successFee.value)) : 'None (0)') : b.successFeePct ? `${b.successFeePct}%` : '—'],
-    ['Team leader', userName(db, b.teamLeadId)], ['Operations', userName(db, b.opsMemberId)], ['Admin', userName(db, b.adminId)], ['Deadline', fmtDate(b.deadline)],
+    ['Success fee (after discount)', successFeeText(b)],
+    // the file's Operations person can change the Admin here (Change) — kept in the timeline
+    ['Team leader', userName(db, b.teamLeadId)], ['Operations', userName(db, b.opsMemberId)], ['Admin', b.adminId ? <AdminWithChange b={b} /> : '—'], ['Deadline', fmtDate(b.deadline)],
+  ]
+  // proof screenshots and documents, shown whole on the right: payment proofs, then proof-like documents and images
+  const proofs: ProofItem[] = [
+    ...b.payments.filter((p) => p.proof).map((p) => ({
+      key: p.id, file: p.proof!, title: `${p.part === 1 ? 'Advance' : `Part ${p.part}`} · ${inr(p.total)}`, sub: `${p.dateUnknown ? 'date not recorded' : fmtDate(p.date)} · ${p.mode}`,
+      badge: <Badge tone={p.verified ? 'green' : 'amber'}>{p.verified ? 'Verified' : 'Unverified'}</Badge>,
+    })),
+    ...visibleDocuments(db, me, b).filter((x) => x.file && (/proof|payment|receipt|screenshot|cheque|bank/i.test(`${x.category} ${x.name}`) || x.file.type.startsWith('image/'))).map((x) => ({
+      key: x.id, file: x.file!, title: x.name, sub: `${x.category} · ${fmtDate(x.at)}`,
+      badge: <Badge tone={x.status === 'VERIFIED' ? 'green' : x.status === 'REJECTED' ? 'red' : 'amber'}>{(x.status ?? 'PENDING').toLowerCase()}</Badge>,
+    })),
   ]
   if (b.address) details.splice(6, 0, ['Address', b.address])
   if (b.paymentContact) details.push(['Payment contact', [b.paymentContact, b.paymentEmail].filter(Boolean).join(' · ')])
@@ -174,16 +188,21 @@ function Overview({ id }: { id: string }) {
   if (b.startupContact) details.push(['Startup contact', [b.startupContact.phone, b.startupContact.email].filter(Boolean).join(' · ')])
   if (b.billing) details.push(['Invoice to', [b.billing.name, b.billing.pan, b.billing.gstin, b.billing.contact, b.billing.email].filter(Boolean).join(' · ')])
   return (
-    <div className="grid gap-5 xl:grid-cols-3">
+    // two columns: the client on the left; money, proof screenshots and refunds on the right (one column on small screens)
+    <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+      <div className="min-w-0 space-y-5">
       <Card className="overflow-hidden">
         <CardHeader title="Client details" icon={Building2} />
         <dl className="divide-y divide-line/70 text-sm">
-          {details.map(([k, v]) => <div key={k} className="flex justify-between gap-3 px-5 py-2.5"><dt className="shrink-0 text-mute">{k}</dt><dd className="min-w-0 break-words text-right font-medium" title={v}>{v}</dd></div>)}
+          {details.map(([k, v]) => <div key={k} className="grid grid-cols-[minmax(8rem,40%)_minmax(0,1fr)] items-baseline gap-3 px-4 py-2"><dt className="text-mute">{k}</dt><dd className="min-w-0 break-words text-right font-medium" title={typeof v === 'string' ? v : undefined}>{v}</dd></div>)}
         </dl>
         {b.remarks && <div className="border-t border-line px-4 py-2.5"><p className="text-[11px] font-semibold text-mute">Remarks</p><p className="whitespace-pre-line text-sm">{b.remarks}</p></div>}
       </Card>
       {(b.services?.length ?? 0) > 0 && <ServicesCard id={b.id} />}
-      <Card className="overflow-hidden xl:col-span-2">
+      {can('bookings.accounts') && <CommissionCard id={b.id} />}
+      </div>
+      <div className="min-w-0 space-y-5">
+      <Card className="overflow-hidden">
         <CardHeader title="Payments & instalments" subtitle={`GST ${b.gstRate}% · ${b.state === db.settings.supplierState ? 'CGST + SGST' : 'IGST'}`} icon={IndianRupee}
           action={canPay && b.status !== 'COMPLETED' && <Button size="sm" icon={Plus} onClick={() => setPayOpen(true)}>Balance payment</Button>} />
         <Table>
@@ -213,8 +232,12 @@ function Overview({ id }: { id: string }) {
           <span className="ml-auto text-mute">Net advance after deduction: <b className="text-ink">{inr(Math.max(0, (b.payments[0]?.amount ?? 0) - b.deduction))}</b></span>
         </div>
       </Card>
-      {can('bookings.accounts') && <CommissionCard id={b.id} />}
+      <Card className="overflow-hidden">
+        <CardHeader title="Proof screenshots & documents" subtitle={proofs.length ? `${proofs.length} file(s) · click a screenshot to view it full size, zoom or download` : undefined} icon={FileText} />
+        <ProofGallery items={proofs} empty="No payment proof or proof document on this file yet." />
+      </Card>
       <RefundsCard b={b} />
+      </div>
       <Modal open={payOpen} onClose={() => setPayOpen(false)} title={`Add part payment ${b.payments.length + 1}`} subtitle="A new instalment on this same CRM entry — it counts in the scorecard and collections of the month it was paid in."
         footer={<><Button variant="outline" onClick={() => setPayOpen(false)}>Cancel</Button><Button onClick={async () => { if (await run(() => addPayment(me, b.id, { ...pay, tdsPct: pay.tds ? pay.tdsPct : undefined }), 'Payment added')) { setPayOpen(false); setPay(blankPay) } }}>Add payment</Button></>}>
         <div className="grid gap-4 sm:grid-cols-2">

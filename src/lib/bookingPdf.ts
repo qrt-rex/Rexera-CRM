@@ -1,7 +1,7 @@
 import type { Booking, DB } from './types'
 import { userName } from './actions'
 import { BOOKING_STATUS, stageLabel } from './workflow'
-import { bookingMoney, fmtDate, fmtDateTime } from './format'
+import { bookingMoney, fmtDate, fmtDateTime, successFeeText } from './format'
 
 /** jsPDF's built-in fonts have no ₹ or curly quotes. */
 const t = (s: unknown) => String(s ?? '').replace(/₹\s?/g, 'Rs. ').replace(/[“”]/g, '"').replace(/[‘’]/g, "'").replace(/[–—]/g, '-').replace(/·/g, '|')
@@ -110,7 +110,7 @@ export async function bookingPdf(db: DB, b: Booking): Promise<Blob> {
   table(['Service', 'Price (excl. GST)'], [...svcs.map((s) => [s.name, s.price ? rs(s.price) : 'in total']), ['Total quoted', rs(b.totalQuoted)], [`GST ${b.gstRate}%`, rs(m.quotedWithGst - b.totalQuoted)], ['Total with GST', rs(m.quotedWithGst)]], [70, 30], [1])
   pairs([
     ['Booking date', fmtDate(b.bookingDate ?? b.createdAt)], ['Mode', b.mode],
-    ['Success fee', b.successFee ? (b.successFee.value ? (b.successFee.type === 'PCT' ? `${b.successFee.value}%` : rs(b.successFee.value)) : 'None') : b.successFeePct ? `${b.successFeePct}%` : '-'],
+    ['Success fee', b.successFee?.type === 'AMOUNT' ? rs(b.successFee.value) : successFeeText(b, '-')],
     ['Deadline', fmtDate(b.deadline)], ['Priority', b.priority.toLowerCase()], ['Entered on', fmtDateTime(b.createdAt)],
   ])
 
