@@ -25,3 +25,7 @@ try {
   clearInterval(sample)
 }
 if (onRender) console.log(`[build] peak memory ${Math.round(Math.max(peak, process.memoryUsage().rss) / 1048576)} MB`)
+
+// the old-CRM import for the server (Old CRM sync) — a separate process, so the two builds never share memory
+const srv = spawnSync(process.execPath, ['scripts/build-server.mjs'], { stdio: 'inherit' })
+if (srv.status !== 0) process.exit(srv.status ?? 1)

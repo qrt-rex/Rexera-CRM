@@ -68,3 +68,7 @@ services:
       # WhatsApp (Interakt → Settings → Developer Settings): welcome message + invoice PDFs. Server only.
       - key: INTERAKT_API_KEY
         sync: false
+      # Old CRM sync (IT dashboard → Old CRM sync): the same 32+ random characters as `secret` in the old CRM's
+      # rexera-connector.config.php. Server only — never in the code.
+      - key: LEGACY_SYNC_SECRET
+        sync: false

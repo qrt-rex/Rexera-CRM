@@ -70,6 +70,7 @@ const Recruitment = lazy(() => import('./pages/hr/Recruitment'))
 const ApiKeys = lazy(() => import('./pages/it/ApiKeys'))
 const BackupPage = lazy(() => import('./pages/it/Backup'))
 const LegacyImport = lazy(() => import('./pages/it/LegacyImport'))
+const LegacySync = lazy(() => import('./pages/it/LegacySync'))
 const Candidates = lazy(() => import('./pages/hr/Candidates'))
 const Letters = lazy(() => import('./pages/hr/Letters'))
 const Apply = lazy(() => import('./pages/Apply'))
@@ -225,6 +226,7 @@ export default function App() {
               <Route path="/api-keys" element={<Guard m="api-keys"><S><ApiKeys /></S></Guard>} />
               <Route path="/backup" element={<Guard m="backup"><S><BackupPage /></S></Guard>} />
               <Route path="/legacy-import" element={<Guard m="legacy-import"><S><LegacyImport /></S></Guard>} />
+              <Route path="/legacy-sync" element={<Guard m="legacy-sync"><S><LegacySync /></S></Guard>} />
               <Route path="/email-center" element={<Guard m="email-center"><S><EmailCenter /></S></Guard>} />
               <Route path="/inbox" element={<S><InboxPage /></S>} />
               <Route path="*" element={<NotFound />} />

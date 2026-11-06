@@ -1,5 +1,5 @@
 import {
-  BarChart3, BellRing, BookOpenCheck, Briefcase, CalendarDays, Clapperboard, Cloud, ClipboardCheck, Coffee, FileText, Package, FolderKanban, Images, IndianRupee,
+  ArrowLeftRight, BarChart3, BellRing, BookOpenCheck, Briefcase, CalendarDays, Clapperboard, Cloud, ClipboardCheck, Coffee, FileText, Package, FolderKanban, Images, IndianRupee,
   BookMarked, Globe, UserRoundCheck, KeyRound, Megaphone, MessagesSquare, Phone, Settings, ShieldCheck, Sparkles, UserCheck, UserCog, UserPlus, Users, UsersRound,
   CalendarCheck2, GraduationCap, Network, ScrollText, Wallet, Receipt, Landmark, Trophy, SlidersHorizontal, Gauge, KeySquare, DatabaseBackup, DatabaseZap, MailPlus, ClipboardList, FilePen, Inbox, Undo2, BadgeCheck, BadgePercent, Layers, FileSignature, Settings2, Workflow, type LucideIcon,
 } from 'lucide-react'
@@ -86,6 +86,8 @@ export const MODULES: ModuleDef[] = [
   // IT Support's panel: roles, permissions and every function, user by user
   { key: 'access-control', path: '/access?tab=roles', label: 'Access Control', desc: 'Roles, permissions and functions — user by user (IT Support)', icon: ShieldCheck, tone: 'navy', perms: ['roles.manage'], group: 'Admin' },
   { key: 'api-keys', path: '/api-keys', label: 'API Keys', desc: 'Keys for integrations: create, rotate, revoke', icon: KeySquare, tone: 'orange', perms: ['access.manage'], group: 'Admin' },
+  // Old CRM → new CRM live copy (ON/OFF, storage, log, setup): IT Support only — the server checks the same
+  { key: 'legacy-sync', path: '/legacy-sync', label: 'Old CRM sync', desc: 'Copy the old PHP CRM live: ON/OFF, storage of both CRMs, log, setup', icon: ArrowLeftRight, tone: 'cyan', perms: [], roles: ['it'], group: 'Admin' },
   { key: 'legacy-import', path: '/legacy-import', label: 'Import from old CRM', desc: 'Load the old PHP CRM .sql dump, checked line by line', icon: DatabaseZap, tone: 'violet', perms: ['access.manage'], group: 'Admin' },
   { key: 'backup', path: '/backup', label: 'Data Backup & Restore', desc: 'Encrypted backups, snapshots, restore', icon: DatabaseBackup, tone: 'cyan', perms: ['access.manage'], group: 'Admin' },
   { key: 'audit', path: '/audit', label: 'Activity Log', desc: 'Every action by every person: role, client, before / after, exact time', icon: ScrollText, tone: 'gray', perms: ['audit.view'], roles: ['superadmin'], group: 'Admin' },

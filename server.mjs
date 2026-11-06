@@ -23,6 +23,7 @@ import { whatsappConfigured } from './server/whatsapp.mjs'
 import { incentiveReport, reportConfig } from './server/incentives.mjs'
 import { blutecEnv, handleBlutec } from './supabase/functions/_shared/blutec.ts'
 import { createEmbedSession, consumeEmbedNonce, handleProxy, handleWsUpgrade } from './server/blutecEmbed.mjs'
+import { handleLegacySync, startLegacySync } from './server/legacySync.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DIST_DIR = path.resolve(__dirname, 'dist')
@@ -190,6 +191,8 @@ function runScheduledJobs(source) {
 }
 const jobsEvery = Number(getEnv('JOBS_INTERVAL_MINUTES')) || 0
 if (jobsEvery >= 5) setInterval(() => runScheduledJobs('timer'), jobsEvery * 60_000).unref()
+// Old CRM sync: while IT Support has it ON, checks the old CRM and copies what changed (server/legacySync.mjs)
+startLegacySync(getEnv)
 
 /** Website enquiry form → CRM lead (server/websiteLeads.mjs). A plain HTML form with a thank-you URL is redirected there. */
 async function handleWebsiteLead(req, res) {
@@ -698,6 +701,16 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === '/api/ai-chat' && req.method === 'POST') {
     return handleAiChat(req, res)
+  }
+
+  // Old CRM sync (server/legacySync.mjs): status, storage, settings, test, copy now, stop — IT Support only
+  if (pathname === '/api/legacy-sync' || pathname.startsWith('/api/legacy-sync/')) {
+    let body = {}
+    if (req.method === 'POST') {
+      try { body = JSON.parse((await readRawBody(req, 16_000)) || '{}') } catch { return sendJson(res, 400, { success: false, message: 'Bad request.' }) }
+    } else if (parsedUrl.searchParams.get('fresh')) body = { fresh: true }
+    const r = await handleLegacySync(getEnv, req.method, pathname, req.headers.authorization, body)
+    return sendJson(res, r.status, r.body)
   }
 
   if (pathname === '/api/users/password' && req.method === 'POST') {
