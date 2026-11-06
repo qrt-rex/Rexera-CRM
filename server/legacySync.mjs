@@ -283,8 +283,18 @@ export async function handleLegacySync(env, method, pathname, authorization, bod
       return ok({ config: await loadConfig(sb) })
     }
     if (method === 'POST' && action === 'test') {
-      const cfg = { ...(await loadConfig(sb)), ...(body.url ? { url: String(body.url).trim() } : {}) }
+      const saved = await loadConfig(sb)
+      const url = body.url ? String(body.url).trim() : ''
+      if (url) { const p = urlProblem(url); if (p) return no(422, p) }
+      const cfg = { ...saved, ...(url ? { url } : {}) }
+      if (!cfg.url) return no(422, 'Enter the connector’s address first.')
       const ping = await call(env, cfg, 'ping', {}, { timeoutMs: 15_000 })
+      // a working address is saved at once (no separate Save needed before turning the sync on)
+      if (url && url !== saved.url) {
+        const { error } = await sb.from('legacy_sync').update({ url, updated_by: me.id, updated_at: new Date().toISOString() }).eq('id', 1)
+        if (error) throw new Error(error.message)
+        await sb.from('audit_log').insert({ at: new Date().toISOString(), by_user: me.id, action: 'LEGACY_SYNC', detail: `Old CRM sync: connector address set to ${url} (tested)` })
+      }
       await saveState(sb, { connected: true, lastPingAt: new Date().toISOString(), old: { name: ping.name, logo: /^https:\/\//.test(ping.logo ?? '') ? ping.logo : null, version: ping.version, php: ping.php, databases: ping.databases, uploads: ping.uploads } })
       return ok({ ping })
     }

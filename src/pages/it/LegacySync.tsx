@@ -71,6 +71,13 @@ export default function LegacySync() {
   }), { added: 0, updated: 0, kept: 0, files: 0 }), [runs])
 
   const toggle = async (on: boolean) => {
+    // nothing to connect to yet → straight to the address box instead of an error
+    if (on && !cfg?.url) {
+      setTab('settings')
+      toast('info', 'First enter the old CRM connector’s address and press Test connection — a working address is saved, then turn the sync on.')
+      return
+    }
+    if (on && st?.secret.problem) { setTab('guide'); toast('error', `LEGACY_SYNC_SECRET on Render: ${st.secret.problem}. See step 2 of the Setup guide.`); return }
     if (!on && !(await confirm('Turn the old CRM sync off?', 'Copying stops at once (a copy in progress stops before it writes). Everything already copied stays in the new CRM. You can turn it on again any time.'))) return
     await act('toggle', () => saveConfig({ enabled: on }), on ? `Old CRM sync is ON — checking every ${intervalText(cfg?.interval_sec ?? 60)}` : 'Old CRM sync is OFF')
   }
@@ -364,7 +371,11 @@ function SettingsTab({ st, onSaved }: { st: SyncStatus; onSaved: () => Promise<v
 
   const test = async () => {
     setBusy('test'); setPing(null); setPingErr('')
-    try { setPing((await testConnection(url.trim())).ping) } catch (e) { setPingErr((e as Error).message) }
+    try {
+      setPing((await testConnection(url.trim())).ping)
+      toast('success', 'Connected — address saved. You can turn the sync on.')
+      await onSaved()
+    } catch (e) { setPingErr((e as Error).message) }
     setBusy('')
   }
   const save = async () => {
@@ -380,7 +391,8 @@ function SettingsTab({ st, onSaved }: { st: SyncStatus; onSaved: () => Promise<v
       <Card>
         <CardHeader icon={Plug} title="Connection to the old CRM" subtitle="The address of rexera-connector.php on the old CRM's website (https only)" />
         <div className="grid gap-3 p-4">
-          <Input label="Connector address" placeholder="https://old-crm.example.com/rexera-sync/rexera-connector.php" value={url} onChange={(e) => setUrl(e.target.value)} />
+          <Input label="Connector address" placeholder="https://old-crm.example.com/rexera-sync/rexera-connector.php" value={url} onChange={(e) => setUrl(e.target.value)}
+            hint="e.g. https://crm.rexera.in/rexera-connector.php — saved automatically when Test connection works" />
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant="outline" icon={Plug} loading={busy === 'test'} disabled={!url.trim()} onClick={test}>Test connection</Button>
             <span className="text-xs text-mute">Secret on the server: {st.secret.problem ? <b className="text-bad">{st.secret.problem}</b> : <b className="text-ok">set</b>}</span>
