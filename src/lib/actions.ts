@@ -1600,9 +1600,23 @@ export function reassignAdmin(me: User, id: string, adminId: string, reason: str
     const b = findB(d, id)
     assert(canManageAdmins(d, me, b), 'Only the file’s Operations person can change its Admin members.')
     const to = activeAdmin(d, adminId)
-    assert(to.id !== b.adminId, `${to.name} is already the main Admin of this file.`)
     assert(reason.trim().length >= 3, 'Say why the Admin is being changed.')
     const at = nowIso(), from = b.adminId!, fromName = userName(d, from), before = membersText(d, b)
+    // the same Admin again: re-assigned — told again, recorded, and stages sent back to Operations are theirs again
+    if (to.id === from) {
+      let back = 0
+      for (const s of ADMIN_STAGES) {
+        const w = b.adminWork?.[s.id]
+        if (!w || !openStage(w) || w.assignee || !adminMayDo(d, to.id, s.id)) continue
+        w.assignee = to.id
+        w.history.push({ at, by: me.id, status: w.status, note: `Re-assigned to ${to.name}${reasonText(reason)}` })
+        w.updatedAt = at; w.updatedBy = me.id
+        back++
+      }
+      adminChange(d, me, b, at, 'ADMIN_REASSIGN', `Re-assigned to ${to.name}${reasonText(reason)}${back ? ` (${back} waiting stage(s) given back)` : ''}`, before)
+      notify(d, [to.id], 'A client file was re-assigned to you', `${b.bookingId} · ${b.companyName}${reasonText(reason)}`, `/bookings/${b.id}`, 'action')
+      return
+    }
     b.adminId = to.id
     b.adminIds = (b.adminIds ?? []).filter((x) => x !== to.id && x !== from)
     if (keepOld) b.adminIds.push(from)

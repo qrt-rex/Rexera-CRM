@@ -16,6 +16,7 @@ import { pipelineTotals } from '../../lib/metrics'
 import { Button, Card, EmptyState, PageHeader, SearchBox, Table, Tabs, Td, Th, usePaged, useRun } from '../../components/ui'
 import { openBookingPdf } from '../../lib/bookingPdf'
 import { BookingStatusBadge, DeadlineBadge, MoneyBar, PriorityBadge } from '../../components/booking'
+import { AdminWithChange } from '../../components/ChangeAdmin'
 import { StageBadge, StageSelect } from '../../components/StageControls'
 import { BookingBoard } from '../../components/BookingBoard'
 import { MiniStat } from '../dashboards/widgets'
@@ -131,7 +132,7 @@ export default function Bookings() {
         </div>
         {!list.length ? <EmptyState icon={Briefcase} title="No CRM entries" text="Try another filter, or create a new entry." /> : layout === 'board' ? <BookingBoard list={list} /> : desk ? (
           <Table>
-            <thead><tr><Th>CRM ID</Th><Th>Company name</Th><Th>BDM / Sales person</Th><Th>Service</Th><Th className="text-right">Amount paid <span className="normal-case">(incl. GST)</span></Th><Th>Status</Th><Th className="text-center">PDF</Th></tr></thead>
+            <thead><tr><Th>CRM ID</Th><Th>Company name</Th><Th>BDM / Sales person</Th><Th>Service</Th><Th className="text-right">Amount paid <span className="normal-case">(incl. GST)</span></Th><Th>Status</Th><Th>Admin</Th><Th className="text-center">PDF</Th></tr></thead>
             <tbody>
               {slice.map((b) => {
                 const m = bookingMoney(b)
@@ -144,6 +145,8 @@ export default function Bookings() {
                     <Td><span className="block max-w-52 truncate" title={b.serviceName}>{b.serviceName}</span></Td>
                     <Td className="whitespace-nowrap text-right"><span className="block font-bold tabular-nums">{inr(m.collected)}</span><span className="text-[11px] text-mute">of {inr(m.quotedWithGst)}{pending ? ` · ${pending} unverified` : ''}</span></Td>
                     <Td><BookingStatusBadge b={b} />{b.opsMemberId && <StageBadge stage={b.stage} label={stageLabel(b.stage, b.stageOutcome)} className="mt-1 flex w-fit max-w-52" />}</Td>
+                    {/* the file's Admin members; its Operations person changes them here at any time (Manage) */}
+                    <Td className="text-xs">{b.adminId ? <AdminWithChange b={b} compact /> : <span className="text-mute">—</span>}</Td>
                     <Td className="text-center"><Button size="sm" variant="outline" icon={FileText} aria-label={`View PDF of ${b.bookingId}`} onClick={() => run(() => openBookingPdf(db, b))}>View</Button></Td>
                   </tr>
                 )
@@ -152,7 +155,7 @@ export default function Bookings() {
           </Table>
         ) : (
           <Table>
-            <thead><tr><Th className="min-w-56">Client</Th><Th>Service</Th><Th>Status · stage</Th><Th className="w-52">Payment</Th><Th>Owner</Th><Th>Created</Th></tr></thead>
+            <thead><tr><Th className="min-w-56">Client</Th><Th>Service</Th><Th>Status · stage</Th><Th className="w-52">Payment</Th><Th>Owner</Th><Th>Admin</Th><Th>Created</Th></tr></thead>
             <tbody>
               {slice.map((b) => (
                 <tr key={b.id} className="hover:bg-card2/60">
@@ -165,6 +168,7 @@ export default function Bookings() {
                   <Td><BookingStatusBadge b={b} /><StageSelect b={b} /></Td>
                   <Td><MoneyBar b={b} /></Td>
                   <Td className="text-xs">{b.createdBy ? userName(db, b.createdBy) : b.ownerName ?? '—'}</Td>
+                  <Td className="text-xs">{b.adminId ? <AdminWithChange b={b} compact /> : <span className="text-mute">—</span>}</Td>
                   <Td className="text-xs text-mute">{fmtDateTime(b.createdAt)}</Td>
                 </tr>
               ))}

@@ -84,21 +84,21 @@ export function ChangeAdminModal({ b, onClose }: { b: Booking; onClose: () => vo
         </section>
 
         <section className="grid gap-3 rounded-lg border border-line p-3">
-          <h4 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-mute"><UserCog className="size-3.5" />Change the main Admin</h4>
+          <h4 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-mute"><UserCog className="size-3.5" />Change or re-assign the main Admin</h4>
           <div className="grid gap-3 sm:grid-cols-2">
             <Select label="New main Admin" value={change.id} onChange={(e) => setChange({ ...change, id: e.target.value })}>
               <option value="">— Pick an Admin —</option>
-              {usersWithRole(db, 'admin').filter((u) => u.active && u.id !== live.adminId).map((u) => <option key={u.id} value={u.id}>{u.name}{members.includes(u.id) ? ' (already a member)' : ''}</option>)}
+              {usersWithRole(db, 'admin').filter((u) => u.active).map((u) => <option key={u.id} value={u.id}>{u.name}{u.id === live.adminId ? ' (current — re-assign)' : members.includes(u.id) ? ' (already a member)' : ''}</option>)}
             </Select>
             <Textarea label="Reason" required rows={1} value={change.reason} onChange={(e) => setChange({ ...change, reason: e.target.value })} placeholder="Why the file moves (workload, leave, expertise…)" />
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <Checkbox checked={change.keep} onChange={(v) => setChange({ ...change, keep: v })} label={`Keep ${mainName} on the file as a member`} />
+            {change.id !== live.adminId && <Checkbox checked={change.keep} onChange={(v) => setChange({ ...change, keep: v })} label={`Keep ${mainName} on the file as a member`} />}
             <span className="flex-1" />
             <Button icon={UserCog} disabled={!change.id || change.reason.trim().length < 3}
-              onClick={async () => { if (await run(() => reassignAdmin(me, live.id, change.id, change.reason, change.keep), 'Main Admin changed')) setChange({ id: '', reason: '', keep: false }) }}>Change Admin</Button>
+              onClick={async () => { if (await run(() => reassignAdmin(me, live.id, change.id, change.reason, change.keep), change.id === live.adminId ? `Re-assigned to ${mainName}` : 'Main Admin changed')) setChange({ id: '', reason: '', keep: false }) }}>{change.id === live.adminId ? 'Re-assign' : 'Change Admin'}</Button>
           </div>
-          <p className="text-[11px] text-mute">{change.keep ? `${mainName} keeps their stages and stays on the file.` : `${mainName} leaves the file; their unfinished Admin stages move to the new main Admin.`}</p>
+          <p className="text-[11px] text-mute">{change.id === live.adminId ? `${mainName} stays the main Admin and is told again; Admin stages waiting to be forwarded go back to them.` : change.keep ? `${mainName} keeps their stages and stays on the file.` : `${mainName} leaves the file; their unfinished Admin stages move to the new main Admin.`}</p>
         </section>
 
         {history.length > 0 && (
