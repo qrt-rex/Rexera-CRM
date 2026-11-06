@@ -3,6 +3,7 @@ import type {
 } from './types'
 import { accessControlOf, canManageRoles, DEFAULT_ROLE_PERMS, effectivePerms, fnKey, isMaster, isStageOnlyAdmin, MASTER_ROLES, ROLES, rolesOf, roleLabel } from './rbac'
 import { MODULES } from './modules'
+import { fileAdmins, isFileAdmin } from './fileAdmins'
 import { clearCloudDb, clone, getDb, mutate, reloadFromCloud, saved } from './store'
 import { CLOUD, cloudSetOwnPassword, cloudSetPassword, cloudSignIn, cloudSignOut, cloudUserId } from './cloud'
 import { bookingBranch, directorBranches, isBranchScoped, leadBranch, NO_BRANCH } from './branches'
@@ -899,7 +900,7 @@ export function deleteLeadUpload(me: User, uploadId: string) {
 // ============================================================ bookings (CRM entries)
 export function visibleBookings(d: DB, me: User): Booking[] {
   // an Admin set up in Operations Dashboard → Team: only the files with work for them
-  if (isStageOnlyAdmin(d, me)) return d.bookings.filter((b) => b.adminId === me.id || Object.values(b.adminWork ?? {}).some((w) => w?.assignee === me.id))
+  if (isStageOnlyAdmin(d, me)) return d.bookings.filter((b) => isFileAdmin(b, me.id) || Object.values(b.adminWork ?? {}).some((w) => w?.assignee === me.id))
   const p = effectivePerms(d, me)
   // Branch Director: only the client files booked by people in their branches
   if (isBranchScoped(me)) {
@@ -1261,14 +1262,14 @@ export function availableDecisions(d: DB, me: User, b: Booking): Decision['kind'
       if (p.has('bookings.legal') && !out.includes('ASSIGN_OPS')) out.push('ASSIGN_OPS')
       break
     case 'WITH_ADMIN':
-      if (p.has('bookings.admin') && (b.adminId === me.id || sa)) out.push('COMPLETE', 'HOLD', 'RETURN_OPS')
+      if (p.has('bookings.admin') && (isFileAdmin(b, me.id) || sa)) out.push('COMPLETE', 'HOLD', 'RETURN_OPS')
       break
     case 'OPS_REVIEW':
       // Admin finished the client work: the assigned Operations member approves it (or sends it back)
       if (p.has('bookings.process') && (b.opsMemberId === me.id || sa)) out.push('APPROVE_DONE', 'RETURN_ADMIN')
       break
     case 'ON_HOLD':
-      if ((p.has('bookings.process') && b.opsMemberId === me.id) || (p.has('bookings.admin') && b.adminId === me.id) || sa) out.push('RESUME')
+      if ((p.has('bookings.process') && b.opsMemberId === me.id) || (p.has('bookings.admin') && isFileAdmin(b, me.id)) || sa) out.push('RESUME')
       break
     case 'REJECTED':
       if (b.createdBy === me.id || sa) out.push('RESUBMIT')
@@ -1547,46 +1548,118 @@ function assignAdminStages(d: DB, b: Booking, by: string, at: string, to: Partia
 }
 
 /**
- * Change the Admin of a file already given to one: the file's Operations person (or Super Admin / IT), while the
- * file is still being worked on. The file and every unfinished Admin stage the old Admin held go to the new one
- * (a stage the new Admin doesn't do — Operations Dashboard → Team — goes to whoever does it, or waits to be forwarded);
- * finished stages stay as they are. The change, the reason and who made it go into the file's timeline and the
- * activity log; both Admins are told.
+ * A file's Admin members — the main Admin (adminId) and others (adminIds) — are managed by the file's Operations
+ * person (or Super Admin / IT) at any time once the file has an Admin, also after the work is completed: change the
+ * main Admin, add members, remove members, make a member the main Admin. Every member works the file like the main
+ * Admin (dashboards, actions, access — see fileAdmins.ts). Unfinished Admin stages of someone leaving the file go to
+ * the main Admin (or to whoever does that stage — Operations Dashboard → Team — or wait to be forwarded); finished
+ * stages stay. Each change goes into the file's timeline ("Admin assignment") and the activity log with before /
+ * after; the people concerned are told.
  */
-export const canReassignAdmin = (d: DB, me: User, b: Booking) =>
-  !!b.adminId && ['WITH_ADMIN', 'OPS_REVIEW', 'ON_HOLD', 'IN_OPERATIONS'].includes(b.status)
+const ADMIN_EDIT_STATUSES: BookingStatus[] = ['IN_OPERATIONS', 'WITH_ADMIN', 'OPS_REVIEW', 'ON_HOLD', 'COMPLETED']
+export const canManageAdmins = (d: DB, me: User, b: Booking) =>
+  !!b.adminId && ADMIN_EDIT_STATUSES.includes(b.status)
   && (isMaster(me) || (effectivePerms(d, me).has('bookings.process') && b.opsMemberId === me.id))
-export function reassignAdmin(me: User, id: string, adminId: string, reason: string) {
+/** @deprecated the same as canManageAdmins (kept for older callers) */
+export const canReassignAdmin = canManageAdmins
+const activeAdmin = (d: DB, userId: string) => {
+  const u = d.users.find((x) => x.id === userId)
+  assert(u && u.active && rolesOf(u).includes('admin'), 'Pick an active Admin.')
+  return u
+}
+const membersText = (d: DB, b: Booking) => fileAdmins(b).map((x) => `${userName(d, x)}${x === b.adminId ? ' (main)' : ''}`).join(', ') || '—'
+/** Moves `from`'s unfinished Admin stages to `to` (or to whoever does the stage, or leaves them to be forwarded). */
+function handOverStages(d: DB, b: Booking, by: string, at: string, from: string, to: string | undefined, note: string) {
+  const moves: Partial<Record<AdminStageId, string>> = {}
+  let waiting = 0
+  for (const s of ADMIN_STAGES) {
+    const w = b.adminWork?.[s.id]
+    if (!w || w.assignee !== from || !openStage(w)) continue
+    const next = to && adminMayDo(d, to, s.id) ? to : routeAdminStage(d, b, s.id, from)
+    if (next) moves[s.id] = next
+    else {
+      w.assignee = undefined
+      w.history.push({ at, by, status: w.status, note: `${userName(d, from)} left the file — forward ${s.label} to an Admin` })
+      w.updatedAt = at; w.updatedBy = by
+      waiting++
+    }
+  }
+  if (Object.keys(moves).length) assignAdminStages(d, b, by, at, moves, note)
+  return waiting
+}
+function adminChange(d: DB, me: User, b: Booking, at: string, action: string, text: string, before: string) {
+  b.comments.push({ id: uid('c-'), by: me.id, at, kind: 'Admin assignment', text })
+  audit(d, me.id, action, `${b.bookingId} · ${b.companyName}: ${text}`, { before, after: membersText(d, b), ref: b.id })
+  b.updatedAt = at
+}
+const reasonText = (r: string) => (r.trim() ? ` — ${r.trim()}` : '')
+
+/** Change the main Admin. `keepOld`: the old main Admin stays on the file as a member (else they leave it). */
+export function reassignAdmin(me: User, id: string, adminId: string, reason: string, keepOld = false) {
   mutate((d) => {
     const b = findB(d, id)
-    assert(canReassignAdmin(d, me, b), 'Only the file’s Operations person can change its Admin while the file is being worked on.')
-    const to = d.users.find((u) => u.id === adminId)
-    assert(to && to.active && rolesOf(to).includes('admin'), 'Pick an active Admin.')
-    assert(to.id !== b.adminId, `${to.name} is already the Admin of this file.`)
+    assert(canManageAdmins(d, me, b), 'Only the file’s Operations person can change its Admin members.')
+    const to = activeAdmin(d, adminId)
+    assert(to.id !== b.adminId, `${to.name} is already the main Admin of this file.`)
     assert(reason.trim().length >= 3, 'Say why the Admin is being changed.')
-    const at = nowIso(), from = b.adminId!, fromName = userName(d, from)
+    const at = nowIso(), from = b.adminId!, fromName = userName(d, from), before = membersText(d, b)
     b.adminId = to.id
-    // the old Admin's unfinished stages move with the file
-    const moves: Partial<Record<AdminStageId, string>> = {}
-    let waiting = 0
-    for (const s of ADMIN_STAGES) {
-      const w = b.adminWork?.[s.id]
-      if (!w || w.assignee !== from || !openStage(w)) continue
-      const next = adminMayDo(d, to.id, s.id) ? to.id : routeAdminStage(d, b, s.id, from)
-      if (next) moves[s.id] = next
-      else {
-        w.assignee = undefined
-        w.history.push({ at, by: me.id, status: w.status, note: `${fromName} replaced by ${to.name}, who doesn't do ${s.label} — forward it to an Admin` })
-        w.updatedAt = at; w.updatedBy = me.id
-        waiting++
-      }
-    }
-    if (Object.keys(moves).length) assignAdminStages(d, b, me.id, at, moves, `Admin changed — ${reason.trim()}`)
-    b.comments.push({ id: uid('c-'), by: me.id, at, kind: 'Admin assignment', text: `Admin changed: ${fromName} → ${to.name} — ${reason.trim()}${waiting ? ` (${waiting} stage(s) wait to be forwarded)` : ''}` })
-    notify(d, [to.id], 'A client file is now yours', `${b.bookingId} · ${b.companyName} — from ${fromName}: ${reason.trim()}`, `/bookings/${b.id}`, 'action')
-    notify(d, [from], 'A client file moved to another Admin', `${b.bookingId} · ${b.companyName} → ${to.name}: ${reason.trim()}`, `/bookings/${b.id}`, 'info')
-    audit(d, me.id, 'ADMIN_REASSIGN', `${b.bookingId} · ${b.companyName}: ${reason.trim()}`, { before: fromName, after: to.name, ref: b.id })
-    b.updatedAt = at
+    b.adminIds = (b.adminIds ?? []).filter((x) => x !== to.id && x !== from)
+    if (keepOld) b.adminIds.push(from)
+    // the old main Admin's unfinished stages move with the file — unless they stay on it
+    const waiting = keepOld ? 0 : handOverStages(d, b, me.id, at, from, to.id, `Admin changed${reasonText(reason)}`)
+    adminChange(d, me, b, at, 'ADMIN_REASSIGN', `Admin changed: ${fromName} → ${to.name}${keepOld ? ` (${fromName} stays as an Admin member)` : ''}${reasonText(reason)}${waiting ? ` (${waiting} stage(s) wait to be forwarded)` : ''}`, before)
+    notify(d, [to.id], 'A client file is now yours', `${b.bookingId} · ${b.companyName} — from ${fromName}${reasonText(reason)}`, `/bookings/${b.id}`, 'action')
+    notify(d, [from], keepOld ? 'Another Admin now leads a file you work on' : 'A client file moved to another Admin', `${b.bookingId} · ${b.companyName} → ${to.name}${reasonText(reason)}`, `/bookings/${b.id}`, 'info')
+  })
+}
+/** Adds an Admin member: everyone already on the file stays. */
+export function addAdminMember(me: User, id: string, adminId: string, note = '') {
+  mutate((d) => {
+    const b = findB(d, id)
+    assert(canManageAdmins(d, me, b), 'Only the file’s Operations person can change its Admin members.')
+    const u = activeAdmin(d, adminId)
+    assert(!isFileAdmin(b, u.id), `${u.name} is already an Admin member of this file.`)
+    const at = nowIso(), before = membersText(d, b)
+    b.adminIds = [...(b.adminIds ?? []), u.id]
+    adminChange(d, me, b, at, 'ADMIN_MEMBER_ADD', `Admin member added: ${u.name}${reasonText(note)}`, before)
+    notify(d, [u.id], 'You were added to a client file', `${b.bookingId} · ${b.companyName} — with ${userName(d, b.adminId)}${reasonText(note)}`, `/bookings/${b.id}`, 'action')
+  })
+}
+/**
+ * Takes an Admin member off the file. Removing the main Admin makes the next member the main Admin; the last Admin
+ * can't be removed (change them instead). Their unfinished stages go to the (new) main Admin.
+ */
+export function removeAdminMember(me: User, id: string, adminId: string, reason: string) {
+  mutate((d) => {
+    const b = findB(d, id)
+    assert(canManageAdmins(d, me, b), 'Only the file’s Operations person can change its Admin members.')
+    assert(isFileAdmin(b, adminId), 'This person is not an Admin member of the file.')
+    const others = fileAdmins(b).filter((x) => x !== adminId)
+    assert(others.length, 'A file keeps at least one Admin — use Change to give it to someone else.')
+    assert(reason.trim().length >= 3, 'Say why this Admin member is removed.')
+    const at = nowIso(), before = membersText(d, b), name = userName(d, adminId)
+    if (b.adminId === adminId) b.adminId = others[0]
+    b.adminIds = others.filter((x) => x !== b.adminId)
+    const waiting = handOverStages(d, b, me.id, at, adminId, b.adminId, `Admin member removed${reasonText(reason)}`)
+    adminChange(d, me, b, at, 'ADMIN_MEMBER_REMOVE', `Admin member removed: ${name}${reasonText(reason)}${waiting ? ` (${waiting} stage(s) wait to be forwarded)` : ''}`, before)
+    notify(d, [adminId], 'You were taken off a client file', `${b.bookingId} · ${b.companyName}${reasonText(reason)}`, `/bookings/${b.id}`, 'info')
+    notify(d, [b.adminId], 'You now lead a client file', `${b.bookingId} · ${b.companyName} — ${name} was removed`, `/bookings/${b.id}`, 'info')
+  })
+}
+/** Makes an Admin member the main Admin; the former main Admin stays on the file as a member. */
+export function makeMainAdmin(me: User, id: string, adminId: string) {
+  mutate((d) => {
+    const b = findB(d, id)
+    assert(canManageAdmins(d, me, b), 'Only the file’s Operations person can change its Admin members.')
+    const members = b.adminIds ?? []
+    assert(members.includes(adminId), 'Pick one of the file’s Admin members.')
+    activeAdmin(d, adminId)
+    const at = nowIso(), before = membersText(d, b), was = b.adminId!
+    b.adminId = adminId
+    b.adminIds = [...members.filter((x) => x !== adminId), was]
+    adminChange(d, me, b, at, 'ADMIN_MAIN', `Main Admin: ${userName(d, was)} → ${userName(d, adminId)} (${userName(d, was)} stays as a member)`, before)
+    notify(d, [adminId], 'You now lead a client file', `${b.bookingId} · ${b.companyName}`, `/bookings/${b.id}`, 'info')
   })
 }
 
@@ -1633,7 +1706,7 @@ export function addAdminStageFiles(me: User, id: string, stage: AdminStageId, fi
 export function canWorkAdminStages(d: DB, me: User, b: Booking) {
   if (isMaster(me)) return true
   const p = effectivePerms(d, me)
-  return (p.has('bookings.admin') && (b.adminId === me.id || Object.values(b.adminWork ?? {}).some((w) => w?.assignee === me.id)))
+  return (p.has('bookings.admin') && (isFileAdmin(b, me.id) || Object.values(b.adminWork ?? {}).some((w) => w?.assignee === me.id)))
     || (p.has('bookings.process') && b.opsMemberId === me.id)
 }
 /** A file's documents someone sees: an Admin set up in Team doesn't see the files of other people's Admin stages. */
@@ -1723,7 +1796,7 @@ export function addFollowUpNote(me: User, id: string, note: string) {
   mutate((d) => {
     const b = findB(d, id)
     assert(b.followUp, 'This file has no follow-up schedule (it starts when Legal approves it).')
-    assert(isMaster(me) || has(me, 'followup.manage') || b.opsMemberId === me.id || b.adminId === me.id, 'Only the file’s Operations person or Admin can record follow-ups.')
+    assert(isMaster(me) || has(me, 'followup.manage') || b.opsMemberId === me.id || isFileAdmin(b, me.id), 'Only the file’s Operations person or Admin can record follow-ups.')
     assert(note.trim().length >= 3, 'Write what was done in the follow-up.')
     b.followUp.lastOn = istToday()
     b.followUp.log.unshift({ at: nowIso(), by: me.id, kind: 'NOTE', note: note.trim() })
@@ -1833,7 +1906,7 @@ export function runDeadlineAlerts(now = Date.now()) {
 export function setFileDeadline(me: User, id: string, deadline: string | null, note = '') {
   mutate((d) => {
     const b = findB(d, id)
-    assert(isMaster(me) || has(me, 'bookings.process', 'bookings.admin', 'followup.manage') || b.opsMemberId === me.id || b.adminId === me.id, 'Only Operations and Admin set a client’s deadline.')
+    assert(isMaster(me) || has(me, 'bookings.process', 'bookings.admin', 'followup.manage') || b.opsMemberId === me.id || isFileAdmin(b, me.id), 'Only Operations and Admin set a client’s deadline.')
     assert(!deadline || /^\d{4}-\d{2}-\d{2}$/.test(deadline), 'Pick a date.')
     const before = b.deadline ? fmtDate(b.deadline) : 'none'
     b.deadline = deadline || ''

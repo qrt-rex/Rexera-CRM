@@ -1,5 +1,6 @@
 import type { AutomationAction, AutomationRecipient, AutomationRule, AutomationRun, Booking, ClientEntry, DB, Invoice, Lead, LeaveRequest, Role, User } from './types'
 import { isMaster, ROLES, rolesOf } from './rbac'
+import { fileAdmins } from './fileAdmins'
 import { getDb, mutate, onCommit } from './store'
 import { ActionError } from './actions'
 import { CLOUD, cloudUserId } from './cloud'
@@ -169,7 +170,8 @@ export function recipientsOf(d: DB, entity: string, r: Rec, to: AutomationRecipi
     if (x.kind === 'owner' && owner) ids.add(owner)
     if (x.kind === 'teamlead') { const tl = entity === 'booking' ? (r as Booking).teamLeadId ?? d.users.find((u) => u.id === owner)?.teamLeadId : d.users.find((u) => u.id === owner)?.teamLeadId; if (tl) ids.add(tl) }
     if (x.kind === 'ops' && entity === 'booking' && (r as Booking).opsMemberId) ids.add((r as Booking).opsMemberId!)
-    if (x.kind === 'admin' && entity === 'booking' && (r as Booking).adminId) ids.add((r as Booking).adminId!)
+    // every Admin member of the file, not only the main Admin
+    if (x.kind === 'admin' && entity === 'booking') for (const a of fileAdmins(r as Booking)) ids.add(a)
     if (x.kind === 'role' && x.role) for (const u of d.users) if (u.active && rolesOf(u).includes(x.role)) ids.add(u.id)
     if (x.kind === 'user' && x.userId) ids.add(x.userId)
   }

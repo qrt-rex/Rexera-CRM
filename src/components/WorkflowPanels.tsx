@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { isFileAdmin } from '../lib/fileAdmins'
 import { BellRing, CalendarClock, ClipboardCheck, Eye, Forward, Mail, MessageCircle, Pause, Play, RefreshCw, Send, Upload } from 'lucide-react'
 import type { AdminStageId, AdminWorkStatus, Booking, Delivery, FileRef } from '../lib/types'
 import { checkFile, saveFile } from '../lib/files'
@@ -100,7 +101,7 @@ export function FollowUpCard({ b }: { b: Booking }) {
   const f = b.followUp
   const t = istToday()
   const active = ACTIVE_FILE_STATUSES.includes(b.status)
-  const mayNote = can('followup.manage') || b.opsMemberId === me.id || b.adminId === me.id || me.role === 'superadmin' || me.role === 'it'
+  const mayNote = can('followup.manage') || b.opsMemberId === me.id || isFileAdmin(b, me.id) || me.role === 'superadmin' || me.role === 'it'
   return (
     <Card className="overflow-hidden">
       <CardHeader title="Follow-up reminder" subtitle={f ? `Every ${f.everyDays} days · started ${fmtDate(f.startedOn)}` : 'Every 15 days while Operations works the file'} icon={CalendarClock}

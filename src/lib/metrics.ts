@@ -1,5 +1,6 @@
 import type { DB, User } from './types'
 import { availableDecisions, visibleBookings, visibleLeads } from './actions'
+import { isFileAdmin } from './fileAdmins'
 import { OPEN_LEAD } from './workflow'
 import { bookingMoney, invoiceTotals, today, ymd } from './format'
 
@@ -39,7 +40,8 @@ export function waitingFor(db: DB, me: User) {
     const d = availableDecisions(db, me, b)
     if (!d.length) return false
     if (b.status === 'IN_OPERATIONS' && (b.opsMemberId ? b.opsMemberId !== me.id : false)) return false
-    if (b.status === 'WITH_ADMIN' && b.adminId && b.adminId !== me.id) return false
+    // with an Admin: only for that file's Admin members (the main Admin and the others the Operations Team added)
+    if (b.status === 'WITH_ADMIN' && b.adminId && !isFileAdmin(b, me.id)) return false
     if (b.status === 'PENDING_TL' && b.teamLeadId && b.teamLeadId !== me.id) return false
     return true
   })

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { isFileAdmin } from '../../lib/fileAdmins'
 import { Link } from 'react-router-dom'
 import {
   BookOpenCheck, Briefcase, CalendarCheck2, CheckCircle2, ClipboardList, FileClock, FileText, FolderKanban, Images, PauseCircle,
@@ -107,11 +108,11 @@ export function AdminDashboard() {
   const limited = isStageOnlyAdmin(db, me)
   const files = limited ? visibleBookings(db, me) : db.bookings
   const waiting = waitingFor(db, me).filter((b) => ['WITH_ADMIN', 'ON_HOLD'].includes(b.status) && (!limited || files.includes(b)))
-  const assigned = files.filter((b) => b.status === 'WITH_ADMIN' && (sa || b.adminId === me.id))
-  const completed = files.filter((b) => b.status === 'COMPLETED' && (sa || b.adminId === me.id))
-  const hold = files.filter((b) => b.status === 'ON_HOLD' && (sa || b.adminId === me.id || (!limited && b.holdFrom === 'WITH_ADMIN')))
+  const assigned = files.filter((b) => b.status === 'WITH_ADMIN' && (sa || isFileAdmin(b, me.id)))
+  const completed = files.filter((b) => b.status === 'COMPLETED' && (sa || isFileAdmin(b, me.id)))
+  const hold = files.filter((b) => b.status === 'ON_HOLD' && (sa || isFileAdmin(b, me.id) || (!limited && b.holdFrom === 'WITH_ADMIN')))
   const monthDone = completed.filter((b) => ymd(b.updatedAt) >= monthStart()).length
-  const sentForApproval = files.filter((b) => b.status === 'OPS_REVIEW' && (sa || b.adminId === me.id)).length
+  const sentForApproval = files.filter((b) => b.status === 'OPS_REVIEW' && (sa || isFileAdmin(b, me.id))).length
   // single stages the Operation team forwarded to me (Pitch Deck, Finance, DPR, Certification, Submission)
   const myStages = files.filter((b) => ACTIVE_FILE_STATUSES.includes(b.status)).flatMap((b) => ADMIN_STAGES
     .filter((s) => { const w = b.adminWork?.[s.id]; return !!w && w.assignee === me.id && !ADMIN_DONE.includes(w.status) && w.status !== 'NOT_NEEDED' })

@@ -1,4 +1,5 @@
 import type { AccessKey, DB, Perm, User } from './types'
+import { isFileAdmin } from './fileAdmins'
 import { breakFor, breakLabel, breakReview, breakUsedMs, canDecideLeave, userName, visibleBookings, visibleLeads } from './actions'
 import { deniedFns, effectivePerms, roleLabel } from './rbac'
 import { MODULES, canSee } from './modules'
@@ -78,10 +79,10 @@ export function buildAiContext(db: DB, me: User): string {
       total: files.length, byStatus,
       waitingForMe: waitingFor(db, me).slice(0, 10).map(row),
       overdue: files.filter((b) => !['COMPLETED', 'REJECTED'].includes(b.status) && b.deadline && b.deadline < t).slice(0, 8).map(row),
-      assignedToMe: files.filter((b) => (b.opsMemberId === me.id || b.adminId === me.id) && !['COMPLETED', 'REJECTED'].includes(b.status)).slice(0, 10).map(row),
+      assignedToMe: files.filter((b) => (b.opsMemberId === me.id || isFileAdmin(b, me.id)) && !['COMPLETED', 'REJECTED'].includes(b.status)).slice(0, 10).map(row),
       recent: [...files].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 6).map(row),
     }
-    const tasks = files.flatMap((b) => b.tasks.filter((x) => !x.done && (x.assignee === me.id || b.opsMemberId === me.id || b.adminId === me.id)).map((x) => ({ task: x.title, file: b.companyName, fileId: b.id, due: x.due ? fmtDate(x.due) : undefined, overdue: !!x.due && x.due < t })))
+    const tasks = files.flatMap((b) => b.tasks.filter((x) => !x.done && (x.assignee === me.id || b.opsMemberId === me.id || isFileAdmin(b, me.id))).map((x) => ({ task: x.title, file: b.companyName, fileId: b.id, due: x.due ? fmtDate(x.due) : undefined, overdue: !!x.due && x.due < t })))
     if (tasks.length) ctx.myOpenTasks = tasks.slice(0, 12)
     if (can('bookings.create')) {
       const own = files.filter((b) => b.createdBy === me.id)

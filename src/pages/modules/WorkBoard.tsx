@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { isFileAdmin } from '../../lib/fileAdmins'
 import { Link } from 'react-router-dom'
 import { FolderKanban } from 'lucide-react'
 import { useDb } from '../../lib/store'
@@ -12,13 +13,13 @@ export default function WorkBoard() {
   const db = useDb()
   const me = useMe()
   // operations/admin open on their own files — unless they have none (e.g. a shared team login), then the whole board
-  const [scope, setScope] = useState<'mine' | 'all'>(() => (me.role === 'operations' || me.role === 'admin') && db.bookings.some((b) => b.opsMemberId === me.id || b.adminId === me.id) ? 'mine' : 'all')
+  const [scope, setScope] = useState<'mine' | 'all'>(() => (me.role === 'operations' || me.role === 'admin') && db.bookings.some((b) => b.opsMemberId === me.id || isFileAdmin(b, me.id)) ? 'mine' : 'all')
   const [member, setMember] = useState('')
   const [q, setQ] = useState('')
   const [overdue, setOverdue] = useState(false)
   const files = useMemo(() => visibleBookings(db, me).filter((b) => b.opsMemberId && ['IN_OPERATIONS', 'WITH_ADMIN', 'OPS_REVIEW', 'ON_HOLD', 'COMPLETED'].includes(b.status))
-    .filter((b) => scope === 'all' || b.opsMemberId === me.id || b.adminId === me.id)
-    .filter((b) => !member || b.opsMemberId === member || b.adminId === member)
+    .filter((b) => scope === 'all' || b.opsMemberId === me.id || isFileAdmin(b, me.id))
+    .filter((b) => !member || b.opsMemberId === member || isFileAdmin(b, member))
     .filter((b) => !overdue || (!!b.deadline && b.deadline < today() && b.status !== 'COMPLETED'))
     .filter((b) => !q || `${b.bookingId} ${b.companyName} ${b.serviceName}`.toLowerCase().includes(q.toLowerCase())), [db, me, scope, member, q, overdue])
   const members = [...usersWithRole(db, 'operations'), ...usersWithRole(db, 'admin')]

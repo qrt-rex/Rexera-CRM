@@ -2,6 +2,7 @@ import type { Booking, DB } from './types'
 import { userName } from './actions'
 import { BOOKING_STATUS, stageLabel } from './workflow'
 import { bookingMoney, fmtDate, fmtDateTime, successFeeText } from './format'
+import { fileAdmins } from './fileAdmins'
 
 /** jsPDF's built-in fonts have no ₹ or curly quotes. */
 const t = (s: unknown) => String(s ?? '').replace(/₹\s?/g, 'Rs. ').replace(/[“”]/g, '"').replace(/[‘’]/g, "'").replace(/[–—]/g, '-').replace(/·/g, '|')
@@ -123,7 +124,7 @@ export async function bookingPdf(db: DB, b: Booking): Promise<Blob> {
   section('People')
   pairs([
     ['BDM / Sales person', b.createdBy ? userName(db, b.createdBy) : b.ownerName ?? '-'], ['Lead closed by', b.closedBy ? userName(db, b.closedBy) : '-'],
-    ['Team leader', userName(db, b.teamLeadId)], ['Operations', userName(db, b.opsMemberId)], ['Admin', userName(db, b.adminId)], ['Status', BOOKING_STATUS[b.status].label],
+    ['Team leader', userName(db, b.teamLeadId)], ['Operations', userName(db, b.opsMemberId)], ['Admin', fileAdmins(b).map((x) => userName(db, x)).join(', ') || '-'], ['Status', BOOKING_STATUS[b.status].label],
   ])
 
   if (b.remarks || b.holdReason || b.stageReason) {

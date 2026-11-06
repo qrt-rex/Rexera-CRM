@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { isFileAdmin } from '../../lib/fileAdmins'
 import { Link } from 'react-router-dom'
 import { Download, FileSpreadsheet, TrendingUp } from 'lucide-react'
 import { useDb } from '../../lib/store'
@@ -35,7 +36,7 @@ export function WorkProgress() {
   const people = useMemo(() => {
     const staff = [...usersWithRole(db, 'admin'), ...usersWithRole(db, 'operations')]
     return staff.map((u) => {
-      const mine = files.filter((b) => b.opsMemberId === u.id || b.adminId === u.id)
+      const mine = files.filter((b) => b.opsMemberId === u.id || isFileAdmin(b, u.id))
       const active = mine.filter((b) => !['COMPLETED', 'REJECTED'].includes(b.status))
       const moves = mine.flatMap((b) => b.stageHistory.filter((h) => inRange(h.at) && (h.by === u.id || (!h.by && b.opsMemberId === u.id))))
       const done = mine.filter((b) => b.status === 'COMPLETED' && b.approvals.some((a) => ['COMPLETED', 'APPROVE_DONE'].includes(a.action) && inRange(a.at)))

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { isFileAdmin } from '../../lib/fileAdmins'
 import { Link, useSearchParams } from 'react-router-dom'
 import { AlarmClock, BellRing, CalendarClock, FileWarning, History, Pause, Play, Users } from 'lucide-react'
 import type { AdminStageId, AdminWorkStatus, Booking } from '../../lib/types'
@@ -42,7 +43,7 @@ export default function Reminders() {
   const shown = deadlines.filter(({ b, x }) => match(b) && (show === 'open' || x.state === show))
   const docs = files.flatMap((b) => ADMIN_STAGES.filter((s) => ['PENDING_UPLOAD', 'RESUBMISSION'].includes(clientDocState(b, s.id) ?? '')).map((s) => ({ b, s, since: b.clientDocs?.[s.id]?.statusAt })))
   const followUps = files.filter((b) => b.followUp).sort((a, c) => (a.followUp!.nextOn).localeCompare(c.followUp!.nextOn))
-  const mayEditFile = (b: Booking) => isMaster(me) || rolesOf(me).some((r) => r === 'operations' || r === 'admin') || b.opsMemberId === me.id || b.adminId === me.id
+  const mayEditFile = (b: Booking) => isMaster(me) || rolesOf(me).some((r) => r === 'operations' || r === 'admin') || b.opsMemberId === me.id || isFileAdmin(b, me.id)
   const { slice, pager } = usePaged(shown, 30, [q, show, tab])
 
   // team-wise: open, due soon, overdue per responsible person

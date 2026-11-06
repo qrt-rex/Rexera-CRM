@@ -1,4 +1,5 @@
 import { ClientSerial } from './booking'
+import { isFileAdmin } from '../lib/fileAdmins'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BellRing, Check, ListTodo, Plus } from 'lucide-react'
@@ -17,7 +18,7 @@ export function TasksPanel({ className, scope = 'mine' }: { className?: string; 
   const [f, setF] = useState({ bookingId: '', title: '', assignee: '', due: '', remind: true })
   const files = useMemo(() => visibleBookings(db, me).filter((b) => !['COMPLETED', 'REJECTED'].includes(b.status) && b.opsMemberId), [db, me])
   const tasks = useMemo(() => files.flatMap((b) => b.tasks.filter((t) => !t.done).map((t) => ({ t, b })))
-    .filter(({ t, b }) => scope === 'all' || t.assignee === me.id || t.by === me.id || b.opsMemberId === me.id || b.adminId === me.id)
+    .filter(({ t, b }) => scope === 'all' || t.assignee === me.id || t.by === me.id || b.opsMemberId === me.id || isFileAdmin(b, me.id))
     .sort((x, y) => (x.t.due ?? '9').localeCompare(y.t.due ?? '9')), [files, scope, me.id])
   const file = files.find((b) => b.id === f.bookingId)
   const people = file ? [file.opsMemberId, file.adminId].filter(Boolean) as string[] : []

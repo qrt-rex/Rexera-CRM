@@ -373,6 +373,8 @@ export interface Booking {
   approvals: Approval[]
   opsMemberId?: string
   adminId?: string
+  /** the file's other Admin members (the Operations Team adds / removes them any time); they work it like the main Admin */
+  adminIds?: string[]
   stage: number
   maxStage: number
   stageHistory: StageMove[]

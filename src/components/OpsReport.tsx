@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { isFileAdmin } from '../lib/fileAdmins'
 import { Link } from 'react-router-dom'
 import { Download, Gauge } from 'lucide-react'
 import type { Booking } from '../lib/types'
@@ -73,11 +74,11 @@ export function OpsReport() {
   const r = range(period, cf, ct, t), p = previous(r)
   const files = useMemo(() => visibleBookings(db, me), [db, me])
   const all = useMemo(() => events(files), [files])
-  const mine = (e: Event) => !who || e.by === who || e.b.opsMemberId === who || e.b.adminId === who
+  const mine = (e: Event) => !who || e.by === who || e.b.opsMemberId === who || isFileAdmin(e.b, who)
   const cur = all.filter((e) => inRange(day(e.at), r.from, r.to) && mine(e)), prev = all.filter((e) => inRange(day(e.at), p.from, p.to) && mine(e))
   const count = (list: Event[], kind: string) => list.filter((e) => e.kind === kind)
   // cases as they stand now (not events)
-  const active = files.filter((b) => ACTIVE_FILE_STATUSES.includes(b.status) && (!who || b.opsMemberId === who || b.adminId === who))
+  const active = files.filter((b) => ACTIVE_FILE_STATUSES.includes(b.status) && (!who || b.opsMemberId === who || isFileAdmin(b, who)))
   const now = [
     { label: 'Active cases', rows: active },
     { label: 'Follow-ups overdue', rows: active.filter((b) => b.followUp && !b.followUp.paused && b.followUp.nextOn < t) },
@@ -92,7 +93,7 @@ export function OpsReport() {
     u, approvedIn: cur.filter((e) => e.kind === 'legalApproved' && e.b.opsMemberId === u.id).length,
     followUps: cur.filter((e) => e.kind === 'followUpDone' && e.by === u.id).length,
     stages: cur.filter((e) => e.kind.startsWith('done:') && e.by === u.id).length,
-    completed: cur.filter((e) => e.kind === 'completed' && (e.b.opsMemberId === u.id || e.b.adminId === u.id)).length,
+    completed: cur.filter((e) => e.kind === 'completed' && (e.b.opsMemberId === u.id || isFileAdmin(e.b, u.id))).length,
   })).filter((x) => x.approvedIn || x.followUps || x.stages || x.completed)
   // stage processing time (days from start to done) for stages finished in the period
   const times = ADMIN_STAGES.map((s) => {

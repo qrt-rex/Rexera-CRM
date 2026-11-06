@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { isFileAdmin } from '../lib/fileAdmins'
 import { Link } from 'react-router-dom'
 import { Check, CheckCircle2, Clock, FilePen, PauseCircle, PlayCircle, RotateCcw, Send, ShieldCheck, UserCog, XCircle, type LucideIcon } from 'lucide-react'
 import type { AdminStageId, Booking } from '../lib/types'
@@ -187,7 +188,7 @@ export function DecisionModal({ b, kind, onClose, onDone }: { b: Booking; kind: 
   if (!kind) return null
   const m = reassign(b, kind) ? { ...DEC_META[kind], label: 'Reassign Operations' } : DEC_META[kind]
   const needsReason = ['REJECT', 'HOLD', 'RETURN_OPS', 'RETURN_ADMIN', 'REQUEST_CHANGES'].includes(kind)
-  const load = (id: string) => db.bookings.filter((x) => (x.opsMemberId === id && x.status === 'IN_OPERATIONS') || (x.adminId === id && x.status === 'WITH_ADMIN')).length
+  const load = (id: string) => db.bookings.filter((x) => (x.opsMemberId === id && x.status === 'IN_OPERATIONS') || (isFileAdmin(x, id) && x.status === 'WITH_ADMIN')).length
   // a document can be given to the chosen Admin unless it is done or isn't one of their documents (Team)
   const pickable = (s: AdminStageId, who = admin) => !!who && adminMayDo(db, who, s) && !(b.adminWork?.[s] && ADMIN_DONE.includes(b.adminWork[s]!.status))
   const pickAdmin = (id: string) => { setAdmin(id); setPicks(ADMIN_STAGES.filter((s) => pickable(s.id, id)).map((s) => s.id)) }
