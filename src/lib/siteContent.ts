@@ -1,6 +1,6 @@
 import type { SiteContent, SiteKey, User } from './types'
 import { effectivePerms } from './rbac'
-import { getDb, mutate } from './store'
+import { clone, getDb, mutate } from './store'
 import { ActionError } from './actions'
 import { nowIso, uid } from './format'
 
@@ -115,9 +115,9 @@ export function publishSite(me: User, keys?: SiteKey[]) {
     for (const r of rows) {
       const problems = contentProblems(siteSection(r.key), r.draft)
       assert(!problems.length, `${siteSection(r.key).label}: ${problems[0]}`)
-      r.published = structuredClone(r.draft)
+      r.published = clone(r.draft)
       r.publishedAt = at; r.publishedBy = me.id
-      ;(d.siteHistory ??= []).unshift({ id: uid('sh-'), key: r.key, content: structuredClone(r.draft), at, by: me.id })
+      ;(d.siteHistory ??= []).unshift({ id: uid('sh-'), key: r.key, content: clone(r.draft), at, by: me.id })
     }
     if (d.siteHistory && d.siteHistory.length > 300) d.siteHistory.length = 300
     log(d, me.id, 'SITE_PUBLISH', rows.map((r) => siteSection(r.key).label).join(', '))
@@ -129,7 +129,7 @@ export function discardSiteDraft(me: User, key: SiteKey) {
   mutate((d) => {
     const r = d.siteContent?.find((x) => x.key === key)
     assert(r && isChanged(r), 'There are no unpublished changes here.')
-    r.draft = structuredClone(r.published ?? emptyContent(siteSection(key)))
+    r.draft = clone(r.published ?? emptyContent(siteSection(key)))
     r.updatedAt = nowIso(); r.updatedBy = me.id
     log(d, me.id, 'SITE_DISCARD', siteSection(key).label)
   })
@@ -142,8 +142,8 @@ export function restoreSiteVersion(me: User, historyId: string) {
     assert(h, 'Version not found.')
     d.siteContent ??= []
     const r = d.siteContent.find((x) => x.key === h.key), at = nowIso()
-    if (r) Object.assign(r, { draft: structuredClone(h.content), updatedAt: at, updatedBy: me.id })
-    else d.siteContent.push({ key: h.key, draft: structuredClone(h.content), updatedAt: at, updatedBy: me.id })
+    if (r) Object.assign(r, { draft: clone(h.content), updatedAt: at, updatedBy: me.id })
+    else d.siteContent.push({ key: h.key, draft: clone(h.content), updatedAt: at, updatedBy: me.id })
     log(d, me.id, 'SITE_RESTORE', `${siteSection(h.key).label}: version of ${h.at}`)
   })
 }
