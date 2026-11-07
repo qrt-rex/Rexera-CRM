@@ -290,13 +290,13 @@ function Overview({ st, storage, storageErr, totals, lastRun, failedFiles, onRef
 }
 
 // ------------------------------------------------------------------ activity log
-const statusBadge = (r: SyncRun) => r.status === 'ok' ? <Badge tone="green">done</Badge> : r.status === 'running' ? <Badge tone="blue"><Loader2 className="size-3 animate-spin" />running</Badge> : r.status === 'stopped' ? <Badge tone="amber">stopped</Badge> : <Badge tone="red">error</Badge>
+const statusBadge = (r: SyncRun) => r.status === 'ok' ? <Badge tone="green">done</Badge> : r.status === 'partial' ? <Badge tone="amber">done · some left</Badge> : r.status === 'running' ? <Badge tone="blue"><Loader2 className="size-3 animate-spin" />running</Badge> : r.status === 'stopped' ? <Badge tone="amber">stopped</Badge> : <Badge tone="red">error</Badge>
 const took = (r: SyncRun) => (r.finished_at ? `${Math.max(1, Math.round((Date.parse(r.finished_at) - Date.parse(r.started_at)) / 1000))} s` : '…')
 
 function RunLog({ runs, userOf, onRetry, running, canRun }: { runs: SyncRun[]; userOf: (id: string | null) => string; onRetry: () => void; running: boolean; canRun: boolean }) {
   const [only, setOnly] = useState<'all' | 'problems'>('all')
   const [open, setOpen] = useState<number | null>(null)
-  const list = only === 'all' ? runs : runs.filter((r) => r.status === 'error' || (r.files?.failed.length ?? 0) > 0)
+  const list = only === 'all' ? runs : runs.filter((r) => r.status === 'error' || r.status === 'partial' || (r.files?.failed.length ?? 0) > 0)
   return (
     <Card>
       <CardHeader icon={History} title="Activity log" subtitle="Every copy: what changed in the old CRM, what was added, updated or kept, files copied — and every error. Checks with nothing new aren't listed."
@@ -340,10 +340,15 @@ function RunLog({ runs, userOf, onRetry, running, canRun }: { runs: SyncRun[]; u
                         {tables.map(([k, c]) => <tr key={k}><td className="py-1 font-mono text-[11px]">{k}</td><td className="py-1 text-right">+{c.added}</td><td className="py-1 text-right">{c.updated} upd.</td><td className="py-1 text-right">{c.kept} kept</td></tr>)}
                       </tbody></table>
                     ) : <p className="text-mute">Nothing new.</p>}
-                    {failed.length > 0 && <>
-                      <p className="mb-1 mt-3 font-semibold text-bad">Files that could not be copied ({failed.length}) — tried again on the next copy</p>
-                      <ul className="max-h-48 space-y-1 overflow-auto">{failed.map((f, i) => <li key={i} className="rounded bg-card px-2 py-1"><span className="font-mono text-[11px]">{f.path}</span> <span className="text-mute">· {f.booking} · {f.error}</span></li>)}</ul>
+                    {!!r.written?.failedRows?.length && <>
+                      <p className="mb-1 mt-3 font-semibold text-bad">Records the database refused ({r.written.failedRows.length}) — the rest were saved; these are tried again (3 times, then set aside)</p>
+                      <ul className="max-h-48 space-y-1 overflow-auto">{r.written.failedRows.map((f, i) => <li key={i} className="rounded bg-card px-2 py-1"><span className="font-mono text-[11px]">{f.table} · {f.key}</span> <span className="text-mute">· {f.error}{f.tries ? ` · try ${f.tries}/3` : ''}</span></li>)}</ul>
                     </>}
+                    {failed.length > 0 && <>
+                      <p className="mb-1 mt-3 font-semibold text-bad">Files that could not be copied ({failed.length}) — tried again on the next copies (3 times, then set aside)</p>
+                      <ul className="max-h-48 space-y-1 overflow-auto">{failed.map((f, i) => <li key={i} className="rounded bg-card px-2 py-1"><span className="font-mono text-[11px]">{f.path}</span> <span className="text-mute">· {f.booking} · {f.error}{f.tries ? ` · try ${f.tries}/3` : ''}</span></li>)}</ul>
+                    </>}
+                    {(r.files?.setAside ?? 0) > 0 && <p className="mt-2 text-mute">{r.files!.setAside} file(s) set aside after 3 failed tries — fix uploads_dir in the connector config, then press Copy everything to try them again.</p>}
                   </div>
                 </div>
               )}
@@ -363,6 +368,7 @@ function SettingsTab({ st, onSaved }: { st: SyncStatus; onSaved: () => Promise<v
   const [url, setUrl] = useState(c.url ?? '')
   const [interval, setIntervalSec] = useState(c.interval_sec)
   const [prefer, setPrefer] = useState(c.prefer)
+  const [autopilot, setAutopilot] = useState(c.autopilot !== false)
   const [oldName, setOldName] = useState(c.old_name ?? '')
   const [oldLogo, setOldLogo] = useState(c.old_logo ?? '')
   const [dbMb, setDbMb] = useState(String(Math.round(c.db_limit_bytes / MB)))
@@ -379,6 +385,7 @@ function SettingsTab({ st, onSaved }: { st: SyncStatus; onSaved: () => Promise<v
     if (withUrl && u && u !== (c.url ?? '') && /^https:\/\/[^/\s]+\.[^/\s]+\//.test(u)) p.url = u
     if (interval !== c.interval_sec) p.intervalSec = interval
     if (prefer !== c.prefer) p.prefer = prefer
+    if (autopilot !== (c.autopilot !== false)) p.autopilot = autopilot
     if (oldName.trim() !== (c.old_name ?? '')) p.oldName = oldName.trim()
     const l = oldLogo.trim()
     if (l !== (c.old_logo ?? '') && (!l || /^https:\/\/\S+\.\S+/.test(l))) p.oldLogo = l
@@ -410,9 +417,10 @@ function SettingsTab({ st, onSaved }: { st: SyncStatus; onSaved: () => Promise<v
   const test = async () => {
     setBusy('test'); setPing(null); setPingErr('')
     try {
-      setPing((await testConnection(url.trim())).ping)
+      const r = await testConnection(url.trim())
+      setPing(r.ping)
       setSave({ state: 'saved', at: new Date().toISOString() })
-      toast('success', 'Connected — address saved. You can turn the sync on.')
+      toast('success', r.autopilot ? `Connected — address saved. Automatic mode: ${r.autopilot}` : 'Connected — address saved. You can turn the sync on.')
       await onSaved()
     } catch (e) { setPingErr((e as Error).message) }
     setBusy('')
@@ -455,6 +463,12 @@ function SettingsTab({ st, onSaved }: { st: SyncStatus; onSaved: () => Promise<v
       <Card>
         <CardHeader icon={Settings2} title="How the sync works" subtitle="Saved by itself · applies from the next check" />
         <div className="grid gap-4 p-4">
+          <label className={cx('flex cursor-pointer items-start gap-3 rounded-xl border p-3 text-sm', autopilot ? 'border-brand bg-brand-soft/40' : 'border-line')}>
+            <span className="min-w-0 flex-1"><b>Automatic mode (recommended)</b>
+              <span className="block text-xs text-mute">The first time Test connection works, it copies everything and turns the sync on by itself. Problems are retried by themselves (waiting longer each time); a record or file that keeps failing is set aside so the rest keeps copying — every problem is listed in the Activity log and the Error log.</span>
+            </span>
+            <Toggle checked={autopilot} onChange={setAutopilot} label="Automatic mode" />
+          </label>
           <Select label="Check the old CRM for changes every" value={interval} onChange={(e) => setIntervalSec(Number(e.target.value))}
             hint="Each check is one small request; a copy runs only when something changed.">
             {INTERVALS.map((x) => <option key={x} value={x}>{intervalText(x)}</option>)}

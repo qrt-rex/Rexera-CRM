@@ -1,10 +1,10 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { AlertTriangle, Home, RefreshCw } from 'lucide-react'
 import { track } from '../lib/activity'
+import { reloadForNewVersion, reportError } from '../lib/errorReport'
 
 /** A page's code file is missing — the CRM was updated while this tab was open (or the connection dropped). */
 const isChunkError = (e: unknown) => /dynamically imported module|Importing a module script failed|error loading dynamically imported|ChunkLoadError|Loading chunk/i.test(e instanceof Error ? e.message : String(e))
-const RELOADED = 'rexera-chunk-reload'
 
 /**
  * One page failing must never blank the whole CRM. A page whose code changed with a new version reloads once (the
@@ -22,15 +22,9 @@ export class ErrorBoundary extends Component<{ children: ReactNode; resetKey?: s
     this.setState({ where: `${location.pathname}${location.search}${files.length ? ` · ${files.join(' › ')}` : ''}` })
     // IT Support sees every screen error in the user activity log
     track('error', error instanceof Error ? error.message : String(error), { detail: files.join(' › ') || undefined, ok: false })
-    if (isChunkError(error)) {
-      // reload at most once a minute, so a real outage doesn't loop
-      let last = 0
-      try { last = Number(sessionStorage.getItem(RELOADED)) || 0 } catch { /* storage blocked */ }
-      if (Date.now() - last > 60_000) {
-        try { sessionStorage.setItem(RELOADED, String(Date.now())) } catch { /* storage blocked */ }
-        location.reload()
-      }
-    }
+    // a new version: reload once (at most once a minute, so a real outage doesn't loop); every page error → Error log
+    const reloaded = isChunkError(error) && reloadForNewVersion()
+    reportError('browser', error, { detail: `${files.join(' › ')}\n${(info.componentStack ?? '').split('\n').slice(0, 6).join('\n')}`.trim(), autoFixed: reloaded ? 'Reloaded the page once with the new version.' : undefined })
   }
 
   componentDidUpdate(prev: { resetKey?: string }) {

@@ -4,6 +4,7 @@ import type { DB } from './types'
 import { buildSeed, SEED_VERSION } from './seed'
 import { upgradeDb } from './hrsuite'
 import { CLOUD, loadCloud, pushChanges, watchCloud, unwatchCloud } from './cloud'
+import { reportError } from './errorReport'
 
 /**
  * Local document store. All collections live in one in-memory document, saved to the browser's IndexedDB
@@ -151,6 +152,8 @@ function pushToCloud(prev: DB, next: DB) {
     const errors = await pushChanges(prev, next)
     if (!errors.length) return
     console.error('Cloud save failed:', errors)
+    // auto-debug: a refused save → Error log, with every reason Supabase gave
+    reportError('save', errors[0], { detail: errors.slice(0, 5).join('\n'), autoFixed: 'Reloaded the data from the database so the screen matches what is saved.' })
     const msg = /row-level security|permission/i.test(errors[0]) ? "You don't have access to save that." : errors[0]
     syncListeners.forEach((l) => l(`Not saved: ${msg}`))
     db = await fromCloud(await loadCloud())

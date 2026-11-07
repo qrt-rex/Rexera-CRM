@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  Activity, AlertTriangle, ArrowLeftRight, Camera, GraduationCap, CheckCircle2, DatabaseBackup, DatabaseZap, Download, Eraser, HardDrive, KeyRound, LayoutGrid, Lock, LogOut, RefreshCcw,
+  Activity, AlertTriangle, ArrowLeftRight, Bug, Camera, GraduationCap, CheckCircle2, DatabaseBackup, DatabaseZap, Download, Eraser, HardDrive, KeyRound, LayoutGrid, Lock, LogOut, RefreshCcw,
   ScrollText, ShieldAlert, ShieldCheck, Stethoscope, Unlock, UserCog, UserPlus, Users, Wrench, XCircle, type LucideIcon,
 } from 'lucide-react'
 import type { Role } from '../../lib/types'
@@ -130,6 +130,7 @@ export function ItDashboard() {
         <Action icon={ShieldCheck} tone="navy" label="Access Control" hint="Roles, permissions, every function — user by user" to="/access?tab=roles" />
         <Action icon={GraduationCap} tone="orange" label="Quiz Management" hint="Make, publish and archive Sales quizzes · every result" to="/quiz?tab=manage" />
         <Action icon={LayoutGrid} tone="cyan" label="Users & access" hint="Each person's role, functions and permissions" to="/access?tab=users" />
+        <Action icon={Bug} tone="red" label="Error log & auto-fix" hint="Every error explained · fixed by itself where safe" to="/error-log" />
         <Action icon={ArrowLeftRight} tone="cyan" label="Old CRM sync" hint="Live copy ON/OFF · storage of both CRMs · log · setup" to="/legacy-sync" />
         <Action icon={DatabaseZap} tone="violet" label="Import from old CRM" hint="Old PHP CRM .sql dump · verified before saving" to="/legacy-import" />
       </div>

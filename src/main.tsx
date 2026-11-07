@@ -4,6 +4,10 @@ import './index.css'
 import { initStore } from './lib/store'
 import { applyTheme, getTheme } from './lib/auth'
 import App from './App'
+import { installErrorReporting } from './lib/errorReport'
+
+// auto-debug: every error is diagnosed, fixed when safe, and listed in the Error log (IT dashboard)
+installErrorReporting()
 
 applyTheme(getTheme())
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => getTheme() === 'system' && applyTheme('system'))

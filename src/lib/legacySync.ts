@@ -6,7 +6,7 @@ import { getSupabase } from './supabase'
  * calls its API (/api/legacy-sync, IT Support only) with the signed-in person's Supabase session.
  */
 export interface SyncConfig {
-  enabled: boolean; url: string | null; interval_sec: number; prefer: 'new' | 'old'; db_limit_bytes: number; storage_limit_bytes: number
+  enabled: boolean; autopilot?: boolean; url: string | null; interval_sec: number; prefer: 'new' | 'old'; db_limit_bytes: number; storage_limit_bytes: number
   old_name: string | null; old_logo: string | null; updated_by: string | null; updated_at: string | null
   state: {
     fingerprint?: unknown; lastCheckAt?: string; lastRunAt?: string; lastOkAt?: string; lastPingAt?: string; connected?: boolean; lastError?: string | null
@@ -16,10 +16,10 @@ export interface SyncConfig {
 }
 export interface Counts { added: number; updated: number; kept: number; same: number }
 export interface SyncRun {
-  id: number; started_at: string; finished_at: string | null; trigger: 'auto' | 'manual' | 'full'; status: 'running' | 'ok' | 'error' | 'stopped'
+  id: number; started_at: string; finished_at: string | null; trigger: 'auto' | 'manual' | 'full'; status: 'running' | 'ok' | 'partial' | 'error' | 'stopped'
   changed_tables: string[] | null; rows_read: number | null; error: string | null; by_user: string | null
-  written: (Record<string, Counts> & { totals?: { added: number; updated: number; kept: number }; notes?: string[] }) | null
-  files: { copied: number; failed: { path: string; doc: string; booking: string; error: string }[]; more: boolean } | null
+  written: (Record<string, Counts> & { totals?: { added: number; updated: number; kept: number }; notes?: string[]; failedRows?: { table: string; key: string; error: string; tries?: number }[] }) | null
+  files: { copied: number; failed: { path: string; doc: string; booking: string; error: string; tries?: number }[]; more: boolean; setAside?: number } | null
 }
 export interface SyncStatus { config: SyncConfig; secret: { set: boolean; problem: string | null }; running: boolean; runs: SyncRun[] }
 export interface TableSize { name: string; rows: number; bytes: number }
@@ -53,9 +53,9 @@ async function api<T>(path: string, method: 'GET' | 'POST' = 'GET', body?: objec
 
 export const loadStatus = () => api<SyncStatus>('')
 export const loadStorage = (fresh = false) => api<SyncStorage>(`/storage${fresh ? '?fresh=1' : ''}`)
-export const saveConfig = (patch: Partial<{ enabled: boolean; url: string; intervalSec: number; prefer: 'new' | 'old'; dbLimitBytes: number; storageLimitBytes: number; oldName: string; oldLogo: string }>) =>
+export const saveConfig = (patch: Partial<{ enabled: boolean; autopilot: boolean; url: string; intervalSec: number; prefer: 'new' | 'old'; dbLimitBytes: number; storageLimitBytes: number; oldName: string; oldLogo: string }>) =>
   api<{ config: SyncConfig }>('/config', 'POST', patch)
-export const testConnection = (url?: string) => api<{ ping: Ping }>('/test', 'POST', url ? { url } : {})
+export const testConnection = (url?: string) => api<{ ping: Ping; autopilot?: string | null }>('/test', 'POST', url ? { url } : {})
 export const runNow = (full = false) => api<{ started: boolean; message?: string }>('/run', 'POST', { full })
 export const stopRun = () => api<{ stopping: boolean }>('/stop', 'POST', {})
 

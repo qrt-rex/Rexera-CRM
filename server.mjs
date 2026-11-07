@@ -24,6 +24,7 @@ import { incentiveReport, reportConfig } from './server/incentives.mjs'
 import { blutecEnv, handleBlutec } from './supabase/functions/_shared/blutec.ts'
 import { createEmbedSession, consumeEmbedNonce, handleProxy, handleWsUpgrade } from './server/blutecEmbed.mjs'
 import { handleLegacySync, startLegacySync } from './server/legacySync.mjs'
+import { handleErrorReport, logError } from './server/errors.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DIST_DIR = path.resolve(__dirname, 'dist')
@@ -154,6 +155,11 @@ function sendJson(res, statusCode, data) {
     'X-Content-Type-Options': 'nosniff',
   })
   res.end(JSON.stringify(data))
+  // Auto-debug: every failure the server answers with (5xx) goes to the Error log with its route
+  if (statusCode >= 500) {
+    const route = String(res.req?.url ?? '').split('?')[0]
+    void logError(getEnv, { source: route.startsWith('/api/legacy-sync') ? 'sync' : 'server', message: String(data?.message || data?.error || `Server error ${statusCode}`), place: `${res.req?.method ?? ''} ${route}`.trim() })
+  }
 }
 
 /** The body exactly as sent (webhook signatures are computed over these bytes). */
@@ -193,6 +199,18 @@ const jobsEvery = Number(getEnv('JOBS_INTERVAL_MINUTES')) || 0
 if (jobsEvery >= 5) setInterval(() => runScheduledJobs('timer'), jobsEvery * 60_000).unref()
 // Old CRM sync: while IT Support has it ON, checks the old CRM and copies what changed (server/legacySync.mjs)
 startLegacySync(getEnv)
+
+// Auto-debug: the server's own crashes go to the Error log (IT dashboard). A rejected promise nobody handled is logged
+// and the server keeps running; an uncaught exception is logged, then the process exits and Render starts it again.
+process.on('unhandledRejection', (reason) => {
+  console.error('[server] unhandled rejection:', reason)
+  void logError(getEnv, { source: 'server', message: reason instanceof Error ? reason : String(reason), place: 'server', autoFixed: 'Logged; the server kept running.' })
+})
+process.on('uncaughtException', (err) => {
+  console.error('[server] uncaught exception:', err)
+  void logError(getEnv, { source: 'server', message: err, place: 'server', autoFixed: 'The server restarted itself (Render starts it again).' })
+    .finally(() => setTimeout(() => process.exit(1), 500))
+})
 
 /** Website enquiry form → CRM lead (server/websiteLeads.mjs). A plain HTML form with a thank-you URL is redirected there. */
 async function handleWebsiteLead(req, res) {
@@ -701,6 +719,14 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === '/api/ai-chat' && req.method === 'POST') {
     return handleAiChat(req, res)
+  }
+
+  // Auto-debug: errors from the signed-in person's browser → Error log (server/errors.mjs)
+  if (pathname === '/api/errors' && req.method === 'POST') {
+    let body
+    try { body = JSON.parse((await readRawBody(req, 64_000)) || '{}') } catch { return sendJson(res, 400, { success: false, message: 'Bad request.' }) }
+    const r = await handleErrorReport(getEnv, req.headers.authorization, body)
+    return sendJson(res, r.status, r.body)
   }
 
   // Old CRM sync (server/legacySync.mjs): status, storage, settings, test, copy now, stop — IT Support only

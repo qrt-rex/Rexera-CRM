@@ -18,6 +18,7 @@ import {
   BILLING_TABLES, INTERVALS, MAIN_TABLES, PAGE, SYNC_TABLES, changedTables, fingerprintKey, planWrites, secretProblem, signRequest,
 } from '../supabase/legacy-sync-protocol.mjs'
 import { crmUser } from './users.mjs'
+import { logError } from './errors.mjs'
 
 const TICK_MS = 5000
 const MAX_FILES_PER_RUN = 200
@@ -134,13 +135,21 @@ async function oldStorage(env, cfg, fresh) {
 }
 
 // ------------------------------------------------------------------ one run
-/** Uploaded files the import points at (old uploads folder) that the new CRM doesn't have yet → crm-files bucket. */
-async function copyFiles(env, sb, cfg, next, shouldStop) {
+/** A file or record that failed this many copies in a row is set aside (listed, no longer blocks the sync). */
+const MAX_TRIES = 3
+
+/**
+ * Uploaded files the import points at (old uploads folder) that the new CRM doesn't have yet → crm-files bucket.
+ * `tries`: path → failed copies so far; a file that failed MAX_TRIES times is set aside (still listed).
+ */
+async function copyFiles(env, sb, cfg, next, shouldStop, tries = {}) {
   const copied = [], failed = []
+  let setAside = 0
   for (const b of next.bookings ?? []) for (const doc of b.documents ?? []) {
     if (doc.file || !doc.legacyPath) continue
-    if (copied.length + failed.length >= MAX_FILES_PER_RUN || shouldStop()) return { copied: copied.length, failed, more: true }
     const path = String(doc.legacyPath)
+    if ((tries[path] ?? 0) >= MAX_TRIES) { setAside++; continue }
+    if (copied.length + failed.length >= MAX_FILES_PER_RUN || shouldStop()) return { copied: copied.length, failed, more: true, setAside }
     // one stable name per old file: copying again never makes a second copy
     const id = `lg-file-${createHash('sha256').update(path).digest('hex').slice(0, 32)}`
     try {
@@ -153,9 +162,30 @@ async function copyFiles(env, sb, cfg, next, shouldStop) {
       doc.file = { id, name: path.split('/').pop() || doc.name, type: got.type, size: got.buf.length, at: doc.at }
       doc.size = got.buf.length
       copied.push(id)
-    } catch (e) { failed.push({ path, doc: doc.id, booking: b.id, error: e.message }) }
+      delete tries[path]
+    } catch (e) { tries[path] = (tries[path] ?? 0) + 1; failed.push({ path, doc: doc.id, booking: b.id, error: e.message, tries: tries[path] }) }
   }
-  return { copied: copied.length, failed, more: false }
+  return { copied: copied.length, failed, more: false, setAside }
+}
+
+/**
+ * Self-healing write: a batch the database refuses is written record by record, so one bad record never stops the
+ * rest. Returns the records that still failed (they are tried again on the next copies).
+ */
+async function writeRows(sb, table, onConflict, list) {
+  const keys = onConflict.split(',')
+  const keyOf = (r) => keys.map((k) => String(r[k] ?? '')).join('|')
+  const failed = []
+  for (let i = 0; i < list.length; i += 200) {
+    const chunk = list.slice(i, i + 200)
+    const { error } = await sb.from(table).upsert(chunk, { onConflict })
+    if (!error) continue
+    for (const row of chunk) {
+      const r = await sb.from(table).upsert([row], { onConflict })
+      if (r.error) failed.push({ table, key: keyOf(row), error: r.error.message })
+    }
+  }
+  return failed
 }
 
 async function runOnce(env, { trigger = 'auto', by } = {}) {
@@ -187,8 +217,10 @@ async function runOnce(env, { trigger = 'auto', by } = {}) {
     const { buildImport } = await import('./dist/legacy-import.mjs').catch(() => { throw new Error('The import module is missing — the server must be built with `npm run build`.') })
     const current = await loadNewCrm(sb)
     const { next, report } = buildImport(main.tables, current, { replaceSampleData: false, billing: bill?.tables })
-    // 4. files the new CRM doesn't have yet
-    const files = await copyFiles(env, sb, cfg, next, shouldStop)
+    // 4. files the new CRM doesn't have yet (each file tried MAX_TRIES times, then set aside)
+    // "Copy everything" gives set-aside files and records a fresh start
+    const fileTries = trigger === 'full' ? {} : { ...(cfg.state?.fileTries ?? {}) }
+    const files = await copyFiles(env, sb, cfg, next, shouldStop, fileTries)
     if (shouldStop()) throw Object.assign(new Error('Stopped — the sync was switched off.'), { stopped: true })
     // 5. only what is new, or changed in the old CRM and untouched here
     const prev = mapAll({ db: current })
@@ -197,28 +229,57 @@ async function runOnce(env, { trigger = 'auto', by } = {}) {
     const synced = await loadSynced(sb)
     const plan = planWrites(prev, nextRows, synced, cfg.prefer === 'old' ? 'old' : 'new')
     if (shouldStop()) throw Object.assign(new Error('Stopped — the sync was switched off.'), { stopped: true })
+    const failedRows = []
     for (const [table, onConflict] of SYNC_TABLES) {
       const list = plan.writes[table] ?? []
-      for (let i = 0; i < list.length; i += 200) {
-        const { error } = await sb.from(table).upsert(list.slice(i, i + 200), { onConflict })
-        if (error) throw new Error(`${table}: ${error.message}`)
-      }
+      if (list.length) failedRows.push(...await writeRows(sb, table, onConflict, list))
     }
-    for (let i = 0; i < plan.hashes.length; i += 500) {
-      const { error } = await sb.from('legacy_sync_rows').upsert(plan.hashes.slice(i, i + 500).map((h) => ({ ...h, synced_at: new Date().toISOString() })), { onConflict: 'table_name,row_key' })
+    // a record that failed is not remembered as copied, so it is tried again next time (MAX_TRIES, then set aside)
+    const rowTries = trigger === 'full' ? {} : { ...(cfg.state?.rowTries ?? {}) }
+    const bad = new Set(failedRows.map((f) => `${f.table}|${f.key}`))
+    for (const f of failedRows) { const k = `${f.table}|${f.key}`; rowTries[k] = (rowTries[k] ?? 0) + 1; f.tries = rowTries[k] }
+    const goodHashes = plan.hashes.filter((h) => !bad.has(`${h.table_name}|${h.row_key}`))
+    for (const h of goodHashes) delete rowTries[`${h.table_name}|${h.row_key}`]
+    for (let i = 0; i < goodHashes.length; i += 500) {
+      const { error } = await sb.from('legacy_sync_rows').upsert(goodHashes.slice(i, i + 500).map((h) => ({ ...h, synced_at: new Date().toISOString() })), { onConflict: 'table_name,row_key' })
       if (error) throw new Error(`legacy_sync_rows: ${error.message}`)
     }
     const totals = Object.values(plan.counts).reduce((t, c) => ({ added: t.added + c.added, updated: t.updated + c.updated, kept: t.kept + c.kept }), { added: 0, updated: 0, kept: 0 })
-    await finish({ status: 'ok', rows_read: main.rows + (bill?.rows ?? 0), written: { ...plan.counts, totals, notes: report.notes?.slice(0, 20) ?? [] }, files })
-    // the fingerprint is remembered only after a complete run (files still to copy → the next check runs again)
-    await saveState(sb, { fingerprint: files.more || files.failed.length ? null : fp, lastCheckAt: now, lastRunAt: now, lastOkAt: new Date().toISOString(), connected: true, lastError: null, lastTotals: totals, oldRows: main.rows + (bill?.rows ?? 0), ...counted })
-    return { ok: true, totals, files }
+    // the plan counted every record; take off the ones that failed (new ones from "added", existing from "updated")
+    for (const f of failedRows) {
+      const keys = SYNC_TABLES.find(([t]) => t === f.table)[1].split(',')
+      const existed = (prev[f.table] ?? []).some((r) => keys.map((k) => String(r[k] ?? '')).join('|') === f.key)
+      const c = plan.counts[f.table]
+      if (existed) { totals.updated--; if (c) c.updated-- } else { totals.added--; if (c) c.added-- }
+    }
+    const partial = failedRows.length > 0 || files.failed.length > 0
+    await finish({ status: partial ? 'partial' : 'ok', rows_read: main.rows + (bill?.rows ?? 0), written: { ...plan.counts, totals, failedRows: failedRows.slice(0, 200), notes: report.notes?.slice(0, 20) ?? [] }, files })
+    // The fingerprint is remembered once nothing is left to retry: more files to copy, or failures still being retried
+    // (fewer than MAX_TRIES), make the next check copy again. Set-aside items no longer hold the sync back.
+    const retrying = files.more || files.failed.some((f) => f.tries < MAX_TRIES) || failedRows.some((f) => f.tries < MAX_TRIES)
+    await saveState(sb, {
+      fingerprint: retrying ? null : fp, lastCheckAt: now, lastRunAt: now, lastOkAt: new Date().toISOString(), connected: true, lastError: null, failStreak: 0,
+      lastTotals: totals, oldRows: main.rows + (bill?.rows ?? 0), fileTries: trimMap(fileTries), rowTries: trimMap(rowTries), ...counted,
+    })
+    // auto-debug: what still failed, grouped by cause, to the Error log
+    for (const [msg, n] of groupBy([...failedRows.map((f) => `${f.table}: ${f.error}`), ...files.failed.map((f) => f.error)])) {
+      void logError(env, { source: 'sync', message: msg, place: 'old CRM sync', count: n, autoFixed: 'Not saved this time; tried again on the next copies (3 times), then set aside so the rest keeps copying.' })
+    }
+    return { ok: true, totals, files, failedRows: failedRows.length }
   } catch (e) {
     await finish({ status: e.stopped ? 'stopped' : 'error', error: e.message })
-    await saveState(sb, { lastCheckAt: now, lastRunAt: now, lastError: e.stopped ? null : e.message, connected: !/reach|answer|signature|expired|connector/i.test(e.message) })
+    const streak = e.stopped ? 0 : (cfg.state?.failStreak ?? 0) + 1
+    await saveState(sb, { lastCheckAt: now, lastRunAt: now, lastError: e.stopped ? null : e.message, failStreak: streak, connected: !/reach|answer|signature|expired|connector/i.test(e.message) })
+    if (!e.stopped) void logError(env, { source: 'sync', message: e.message, place: 'old CRM sync', autoFixed: cfg.enabled ? `Trying again by itself in ${Math.round(retryDelay(cfg.interval_sec, streak) / 60_000) || 1} min.` : undefined })
     throw e
   }
 }
+
+/** Wait before the next try: the check interval, doubled after each failed try in a row (at most 30 minutes). */
+const retryDelay = (intervalSec, streak) => Math.min(30 * 60_000, (intervalSec ?? 60) * 1000 * 2 ** Math.min(streak ?? 0, 6))
+/** keep the retry counters small (a few thousand entries at most) */
+const trimMap = (m) => Object.fromEntries(Object.entries(m).slice(-5000))
+const groupBy = (list) => { const m = new Map(); for (const x of list) m.set(x, (m.get(x) ?? 0) + 1); return [...m].slice(0, 10) }
 
 /** One run at a time (the timer, Copy now and Copy everything share it). */
 function start(env, opts) {
@@ -237,7 +298,8 @@ export function startLegacySync(env) {
       const cfg = await loadConfig(sb)
       if (!cfg.enabled || !cfg.url || secretProblem(secretOf(env))) return
       const last = Date.parse(cfg.state?.lastCheckAt ?? '') || 0
-      if (Date.now() - last < (cfg.interval_sec ?? 60) * 1000) return
+      // after a failure it waits longer each time (self-healing retry), back to normal once a copy works
+      if (Date.now() - last < retryDelay(cfg.interval_sec, cfg.state?.failStreak)) return
       const r = await start(env, { trigger: 'auto' })
       if (r?.error) console.warn(`[legacy-sync] ${r.error}`)
       else if (!r?.skipped) console.log(`[legacy-sync] copied: +${r.totals.added} new, ${r.totals.updated} updated, ${r.totals.kept} kept (changed in the new CRM), ${r.files.copied} file(s)`)
@@ -280,6 +342,7 @@ export async function handleLegacySync(env, method, pathname, authorization, bod
       if ('url' in body) { const u = String(body.url ?? '').trim(); const p = urlProblem(u); if (p && u) return no(422, p); patch.url = u || null }
       if ('intervalSec' in body) { const n = Number(body.intervalSec); if (!INTERVALS.includes(n)) return no(422, 'Pick one of the check intervals.'); patch.interval_sec = n }
       if ('prefer' in body) patch.prefer = body.prefer === 'old' ? 'old' : 'new'
+      if ('autopilot' in body) patch.autopilot = !!body.autopilot
       if ('dbLimitBytes' in body) patch.db_limit_bytes = Math.max(0, Math.round(Number(body.dbLimitBytes) || 0))
       if ('storageLimitBytes' in body) patch.storage_limit_bytes = Math.max(0, Math.round(Number(body.storageLimitBytes) || 0))
       if ('oldName' in body) patch.old_name = String(body.oldName ?? '').slice(0, 80) || null
@@ -311,8 +374,16 @@ export async function handleLegacySync(env, method, pathname, authorization, bod
       // the old CRM's record count and storage at once, so the page shows them before the first copy
       const counted = await call(env, cfg, 'fingerprint').then((r) => oldTotal(r.fingerprint), () => ({}))
       await oldStorage(env, cfg, true)
-      await saveState(sb, { connected: true, lastError: null, lastPingAt: new Date().toISOString(), ...counted, old: { name: ping.name, logo: /^https:\/\//.test(ping.logo ?? '') ? ping.logo : null, version: ping.version, php: ping.php, databases: ping.databases, uploads: ping.uploads } })
-      return ok({ ping })
+      await saveState(sb, { connected: true, lastError: null, failStreak: 0, lastPingAt: new Date().toISOString(), ...counted, old: { name: ping.name, logo: /^https:\/\//.test(ping.logo ?? '') ? ping.logo : null, version: ping.version, php: ping.php, databases: ping.databases, uploads: ping.uploads } })
+      // autopilot: the first time it connects, it copies everything and turns itself on — no further clicks needed
+      let autopilot = null
+      if (saved.autopilot !== false && !saved.state?.lastOkAt && !secretProblem(secretOf(env))) {
+        await sb.from('legacy_sync').update({ enabled: true, updated_by: me.id, updated_at: new Date().toISOString() }).eq('id', 1)
+        await sb.from('audit_log').insert({ at: new Date().toISOString(), by_user: me.id, action: 'LEGACY_SYNC', detail: 'Old CRM sync autopilot: connected — copying everything and keeping it in sync' })
+        autopilot = running ? 'A copy is already running; the sync is now on.' : 'Copying everything now, then keeping it in sync automatically.'
+        if (!running) void start(env, { trigger: 'full', by: me.id })
+      }
+      return ok({ ping, autopilot })
     }
     if (method === 'POST' && action === 'run') {
       if (running) return ok({ started: false, message: 'A copy is already running.' })
