@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   AlertTriangle, ArrowLeftRight, BookOpen, CheckCircle2, ChevronDown, Cloud, Copy, Database, DatabaseZap, Download, FileWarning, HardDrive, History, KeyRound,
-  Loader2, Play, Plug, RefreshCcw, Server, Settings2, ShieldCheck, Square, Wand2, XCircle, type LucideIcon,
+  Loader2, Play, Plug, RefreshCcw, Server, Settings2, ShieldCheck, Square, Users, Wand2, XCircle, type LucideIcon,
 } from 'lucide-react'
 import { useDb } from '../../lib/store'
 import { useMe } from '../../lib/auth'
@@ -12,9 +12,10 @@ import {
   type Ping, type SyncRun, type SyncStatus, type SyncStorage, type TableSize,
 } from '../../lib/legacySync'
 import { Logo } from '../../components/Logo'
+import { LegacyDistribution } from './LegacyDistribution'
 import { Badge, Button, Card, CardHeader, cx, EmptyState, Input, PageHeader, Progress, Select, Tabs, Toggle, useConfirm, useToast } from '../../components/ui'
 
-type Tab = 'overview' | 'log' | 'settings' | 'guide'
+type Tab = 'overview' | 'dist' | 'log' | 'settings' | 'guide'
 const MB = 1048576, GB = 1073741824
 
 /**
@@ -162,12 +163,14 @@ export default function LegacySync() {
 
       <Tabs className="mb-4" value={tab} onChange={setTab} tabs={[
         { id: 'overview', label: 'Storage & statistics', icon: HardDrive },
+        { id: 'dist', label: 'Role-wise distribution', icon: Users },
         { id: 'log', label: 'Activity log', icon: History, count: errors || undefined },
         { id: 'settings', label: 'Settings', icon: Settings2 },
         { id: 'guide', label: 'Setup guide', icon: BookOpen },
       ]} />
 
       {tab === 'overview' && <Overview st={st} storage={storage} storageErr={storageErr} totals={totals} lastRun={lastRun} failedFiles={failedFiles.length} onRefresh={() => refreshStorage(true)} />}
+      {tab === 'dist' && <LegacyDistribution />}
       {tab === 'log' && <RunLog runs={runs} userOf={(id) => (id ? userName(db, id) : '—')} onRetry={() => act('run', () => runNow(false), 'Copy started — failed files are tried again')} running={!!st?.running} canRun={!!cfg?.url} />}
       {tab === 'settings' && st && <SettingsTab st={st} onSaved={async () => { await refresh(); void refreshStorage(true) }} />}
       {tab === 'settings' && !st && <Card><EmptyState icon={Settings2} title="Settings load from the CRM server" text={err || 'Loading…'} /></Card>}

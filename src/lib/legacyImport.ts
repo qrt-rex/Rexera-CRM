@@ -273,6 +273,11 @@ export function buildImport(tables: DumpTables, current: DB, opts: ImportOptions
   }
   const userFromEmail = (e: string | null | undefined) => (e ? byEmail.get(e.trim().toLowerCase()) : undefined)
   const userFromId = (id: string | null | undefined) => (id ? legacyUser.get(id.trim()) : undefined)
+  // the old CRM sometimes has only the sales person's name: matched when exactly one person has it
+  const byName = new Map<string, User | null>()
+  for (const u of base.users) { const k = norm(u.name); byName.set(k, byName.has(k) ? null : u) }
+  const userFromName = (n: string | null | undefined) => (n && norm(n) ? byName.get(norm(n)) ?? undefined : undefined)
+  const hasRole = (u: User | undefined, role: Role) => !!u && (u.role === role || u.extraRoles.includes(role))
 
   // ---------------------------------------------------------- services (merge by name)
   const services: Service[] = base.services.map((s) => ({ ...s }))
@@ -326,10 +331,11 @@ export function buildImport(tables: DumpTables, current: DB, opts: ImportOptions
   for (const r of crm) {
     const id = `lg-b-${r.id}`
     const wf = workflow.get(r.id!)
-    const owner = userFromEmail(r.lead_closed_by_email) ?? userFromId(r.submitted_by)
+    const owner = userFromEmail(r.lead_closed_by_email) ?? userFromId(r.submitted_by) ?? userFromName(r.lead_closed_by)
     const assignee = userFromId(r.assigned_to)
     if (!assignee && !blank(r.assigned_to)) missingAssignee++
-    const ops = assignee && assignee.role === 'operations' ? assignee : undefined
+    // Operations as the main role or an extra role (someone also set up as Admin still gets their old files)
+    const ops = hasRole(assignee, 'operations') ? assignee : undefined
     const createdAt = utc(r.created_at) ?? now
 
     // stage history from the workflow timestamps
