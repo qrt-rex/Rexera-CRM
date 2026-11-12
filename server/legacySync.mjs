@@ -15,7 +15,7 @@ import { createHash } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 import { ORDER, mapAll, rowsToDb } from '../supabase/backup-mapping.mjs'
 import {
-  BILLING_TABLES, INTERVALS, MAIN_TABLES, PAGE, SYNC_TABLES, changedTables, fingerprintKey, planWrites, secretProblem, signRequest,
+  BILLING_TABLES, INTERVALS, MAIN_TABLES, PAGE, SYNC_TABLES, applyRepairs, changedTables, repairStep, fingerprintKey, planWrites, secretProblem, signRequest,
 } from '../supabase/legacy-sync-protocol.mjs'
 import { crmUser } from './users.mjs'
 import { logError } from './errors.mjs'
@@ -172,7 +172,7 @@ async function copyFiles(env, sb, cfg, next, shouldStop, tries = {}) {
  * Self-healing write: a batch the database refuses is written record by record, so one bad record never stops the
  * rest. Returns the records that still failed (they are tried again on the next copies).
  */
-async function writeRows(sb, table, onConflict, list) {
+async function writeRows(sb, table, onConflict, list, repairs, repaired) {
   const keys = onConflict.split(',')
   const keyOf = (r) => keys.map((k) => String(r[k] ?? '')).join('|')
   const failed = []
@@ -180,12 +180,29 @@ async function writeRows(sb, table, onConflict, list) {
     const chunk = list.slice(i, i + 200)
     const { error } = await sb.from(table).upsert(chunk, { onConflict })
     if (!error) continue
-    for (const row of chunk) {
-      const r = await sb.from(table).upsert([row], { onConflict })
-      if (!r.error) continue
+    for (const original of chunk) {
+      // self-repair: fix the one value the database names, and try again (several problems → one after the other)
+      let row = original, r = await sb.from(table).upsert([row], { onConflict })
+      const fixes = []
+      for (let attempt = 0; r.error && attempt < 5; attempt++) {
+        const step = repairStep(table, row, r.error.message)
+        if (!step || fixes.some((f) => f.column === step.column)) break
+        fixes.push({ ...step, from: row[step.column] ?? null })
+        row = { ...row, [step.column]: step.to }
+        r = await sb.from(table).upsert([row], { onConflict })
+      }
+      const key = keyOf(original)
+      if (!r.error) {
+        if (fixes.length) {
+          const k = `${table}|${key}`
+          repairs[k] = { ...(repairs[k] ?? {}), ...Object.fromEntries(fixes.map((f) => [f.column, { from: f.from, to: f.to }])) }
+          for (const f of fixes) repaired.push({ table, key, column: f.column, from: f.from, to: f.to, why: f.why })
+        }
+        continue
+      }
       // a payment / comment / approval refused only because its client file was refused: say so (saved with it)
-      const parent = /foreign key/i.test(r.error.message) ? (row.booking_id ?? row.lead_id ?? row.invoice_id ?? null) : null
-      failed.push({ table, key: keyOf(row), error: r.error.message, ...(parent ? { parent } : {}) })
+      const parent = /foreign key/i.test(r.error.message) ? (original.booking_id ?? original.lead_id ?? original.invoice_id ?? null) : null
+      failed.push({ table, key, error: r.error.message, ...(parent ? { parent } : {}) })
     }
   }
   return failed
@@ -229,13 +246,16 @@ async function runOnce(env, { trigger = 'auto', by } = {}) {
     const prev = mapAll({ db: current })
     const mapped = mapAll({ db: next })
     const nextRows = mapAll({ db: rowsToDb(mapped).db })   // the same shape as read back, so equal rows compare equal
+    // repairs made before are applied again (while the old value is unchanged), so a repaired record compares equal
+    const repairs = { ...(cfg.state?.repairs ?? {}) }
+    applyRepairs(nextRows, repairs)
     const synced = await loadSynced(sb)
     const plan = planWrites(prev, nextRows, synced, cfg.prefer === 'old' ? 'old' : 'new')
     if (shouldStop()) throw Object.assign(new Error('Stopped — the sync was switched off.'), { stopped: true })
-    const failedRows = []
+    const failedRows = [], repaired = []
     for (const [table, onConflict] of SYNC_TABLES) {
       const list = plan.writes[table] ?? []
-      if (list.length) failedRows.push(...await writeRows(sb, table, onConflict, list))
+      if (list.length) failedRows.push(...await writeRows(sb, table, onConflict, list, repairs, repaired))
     }
     // a record that failed is not remembered as copied, so it is tried again next time (MAX_TRIES, then set aside)
     const rowTries = trigger === 'full' ? {} : { ...(cfg.state?.rowTries ?? {}) }
@@ -256,14 +276,18 @@ async function runOnce(env, { trigger = 'auto', by } = {}) {
       if (existed) { totals.updated--; if (c) c.updated-- } else { totals.added--; if (c) c.added-- }
     }
     const partial = failedRows.length > 0 || files.failed.length > 0
-    await finish({ status: partial ? 'partial' : 'ok', rows_read: main.rows + (bill?.rows ?? 0), written: { ...plan.counts, totals, failedRows: failedRows.slice(0, 200), notes: report.notes?.slice(0, 20) ?? [] }, files })
+    await finish({ status: partial ? 'partial' : 'ok', rows_read: main.rows + (bill?.rows ?? 0), written: { ...plan.counts, totals, failedRows: failedRows.slice(0, 200), repaired: repaired.slice(0, 200), notes: report.notes?.slice(0, 20) ?? [] }, files })
     // The fingerprint is remembered once nothing is left to retry: more files to copy, or failures still being retried
     // (fewer than MAX_TRIES), make the next check copy again. Set-aside items no longer hold the sync back.
     const retrying = files.more || files.failed.some((f) => f.tries < MAX_TRIES) || failedRows.some((f) => f.tries < MAX_TRIES)
     await saveState(sb, {
       fingerprint: retrying ? null : fp, lastCheckAt: now, lastRunAt: now, lastOkAt: new Date().toISOString(), connected: true, lastError: null, failStreak: 0,
-      lastTotals: totals, oldRows: main.rows + (bill?.rows ?? 0), fileTries: trimMap(fileTries), rowTries: trimMap(rowTries), ...counted,
+      lastTotals: totals, oldRows: main.rows + (bill?.rows ?? 0), fileTries: trimMap(fileTries), rowTries: trimMap(rowTries), repairs: trimMap(repairs), ...counted,
     })
+    // auto-debug: every repair, grouped by reason, as "fixed automatically" in the Error log
+    for (const [why, n] of groupBy(repaired.map((x) => `${x.table}.${x.column}: ${x.why}`))) {
+      void logError(env, { source: 'sync', message: `Old CRM data repaired — ${why}`, place: 'old CRM sync', count: n, autoFixed: 'Repaired automatically and saved; the old value is kept in the Old CRM sync activity log.' })
+    }
     // auto-debug: what still failed, grouped by cause, to the Error log
     for (const [msg, n] of groupBy([...failedRows.map((f) => `${f.table}: ${f.error}`), ...files.failed.map((f) => f.error)])) {
       void logError(env, { source: 'sync', message: msg, place: 'old CRM sync', count: n, autoFixed: 'Not saved this time; tried again on the next copies (3 times), then set aside so the rest keeps copying.' })
@@ -312,7 +336,7 @@ export function startLegacySync(env) {
 }
 
 /** for the tests (server/legacySync.test.mjs): talk to a connector without the database */
-export const forTests = { call, readOld }
+export const forTests = { call, readOld, writeRows }
 
 // ------------------------------------------------------------------ the IT dashboard's API
 const ok = (body) => ({ status: 200, body: { success: true, ...body } })

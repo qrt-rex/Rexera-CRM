@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { changedTables, fingerprintKey, planWrites, rowHash, signRequest, signedText, verifyRequest } from './legacy-sync-protocol.mjs'
+import { applyRepairs, changedTables, fingerprintKey, planWrites, repairStep, rowHash, signRequest, signedText, verifyRequest } from './legacy-sync-protocol.mjs'
 
 const secret = 'x'.repeat(40)
 
@@ -54,4 +54,22 @@ r = planWrites({ bookings: [b2new] }, { bookings: [b2old] }, new Map(), 'new', T
 assert.deepEqual(r.counts.bookings, { added: 0, updated: 0, kept: 1, same: 0 })
 assert.equal(rowHash({ a: 1 }), rowHash({ a: 1 })); assert.notEqual(rowHash({ a: 1 }), rowHash({ a: 2 }))
 
+// ------------------------------------------------------------------ self-repair of refused old data
+const bk = { id: 'lg-b-1', created_by: 'lg-u-99', stage: 12, gst_rate: 18, company: 'x'.repeat(30), total_quoted: -500, booking_id: 'lg-b-0', note: 'abc', paid_on: '0000-00-00' }
+assert.deepEqual(repairStep('bookings', bk, 'insert or update on table "bookings" violates foreign key constraint "bookings_created_by_fkey"'), { column: 'created_by', to: null, why: 'pointed at a record that is not in the CRM (e.g. a removed user) — link left empty' })
+assert.equal(repairStep('booking_comments', bk, 'violates foreign key constraint "booking_comments_booking_id_fkey"'), null, 'a missing client file is never cut — the comment waits for it')
+assert.equal(repairStep('bookings', bk, 'new row for relation "bookings" violates check constraint "bookings_stage_check"').to, 9, 'stage kept in 1–9')
+assert.equal(repairStep('bookings', bk, 'new row for relation "bookings" violates check constraint "bookings_total_quoted_check"').to, 0)
+assert.equal(repairStep('bookings', bk, 'value too long for type character varying(20)').to.length, 20)
+assert.deepEqual(repairStep('bookings', bk, 'null value in column "mode" of relation "bookings" violates not-null constraint').to, '')
+assert.equal(repairStep('bookings', bk, 'null value in column "amount" violates not-null constraint').to, 0)
+assert.equal(repairStep('bookings', bk, 'invalid input syntax for type date: "0000-00-00"').column, 'paid_on')
+assert.equal(repairStep('bookings', bk, 'something else'), null)
+// repairs made once are applied again to the same old value — and dropped when the old CRM corrects it
+const rows = { bookings: [{ id: 'lg-b-1', stage: 12 }, { id: 'lg-b-2', stage: 3 }] }
+const repairs = { 'bookings|lg-b-1': { stage: { from: 12, to: 9 } }, 'bookings|lg-b-2': { stage: { from: 15, to: 9 } } }
+assert.equal(applyRepairs(rows, repairs, T), 1)
+assert.deepEqual(rows.bookings.map((r) => r.stage), [9, 3], 'lg-b-2 was corrected in the old CRM: its old repair no longer applies')
+
+console.log('✓ old CRM sync: self-repair of refused old data (missing links, empty values, ranges, too long, bad dates)')
 console.log('✓ old CRM sync: signed requests, change detection, adds new records, applies old-CRM changes, never overwrites new-CRM work or deletes')

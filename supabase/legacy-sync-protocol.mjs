@@ -132,6 +132,82 @@ export function planWrites(prev, next, synced, prefer = 'new', tables = SYNC_TAB
   return { writes, hashes, counts }
 }
 
+// ------------------------------------------------------------------ self-repair of old data the database refuses
+/** links to a parent record: refused only while the parent itself is missing — never cut, saved with the parent */
+const PARENT_COLS = ['booking_id', 'lead_id', 'invoice_id', 'upload_id']
+/** known ranges of the new CRM's rules */
+const RANGES = { stage: [1, 9], max_stage: [1, 9], gst_rate: [0, 28], success_fee_pct: [0, 100], part: [1, 1000], position: [0, 100000] }
+/** the column a constraint is about: Postgres names them "<table>_<column>_check" / "<table>_<column>_fkey" */
+const columnOf = (table, constraint, row, suffix) => {
+  const c = constraint.startsWith(`${table}_`) && constraint.endsWith(suffix) ? constraint.slice(table.length + 1, -suffix.length) : ''
+  return c && c in row ? c : null
+}
+/** a sensible value for an empty required column, from its name */
+export function defaultFor(column) {
+  if (/(_at|_on|date|time)$/.test(column)) return new Date().toISOString()
+  if (/^stage$|^max_stage$|^part$/.test(column)) return 1
+  if (/amount|total|pct|rate|count|price|fee|qty|position|deduction|balance|paid/.test(column)) return 0
+  if (/^(is|has)_|active|enabled|verified/.test(column)) return false
+  return ''
+}
+
+/**
+ * One repair for a record the database refused (or null when it can't be repaired here). Changes only the one value
+ * the error names; the caller retries, so several problems in one record are repaired one after the other.
+ * Returns { column, to, why }.
+ */
+export function repairStep(table, row, message) {
+  const msg = String(message ?? '')
+  let m
+  if ((m = msg.match(/violates foreign key constraint "([^"]+)"/))) {
+    const col = columnOf(table, m[1], row, '_fkey')
+    if (!col || PARENT_COLS.includes(col) || row[col] == null) return null
+    return { column: col, to: null, why: 'pointed at a record that is not in the CRM (e.g. a removed user) — link left empty' }
+  }
+  if ((m = msg.match(/null value in column "([^"]+)"/))) {
+    const col = m[1]
+    return { column: col, to: defaultFor(col), why: 'empty in the old CRM — filled with a default' }
+  }
+  if ((m = msg.match(/value too long for type character varying\((\d+)\)/))) {
+    const n = Number(m[1])
+    const col = Object.keys(row).find((k) => typeof row[k] === 'string' && row[k].length > n)
+    return col ? { column: col, to: row[col].slice(0, n), why: `longer than ${n} characters — shortened` } : null
+  }
+  if ((m = msg.match(/violates check constraint "([^"]+)"/))) {
+    const col = columnOf(table, m[1], row, '_check')
+    if (!col) return null
+    const v = row[col]
+    if (RANGES[col] && typeof v === 'number') {
+      const [lo, hi] = RANGES[col]
+      const to = Math.min(hi, Math.max(lo, v))
+      return to !== v ? { column: col, to, why: `outside the allowed ${lo}–${hi} — set to ${to}` } : null
+    }
+    if (typeof v === 'number' && v < 0) return { column: col, to: 0, why: 'negative, not allowed here — set to 0' }
+    if (v !== null && v !== undefined && v !== '') return { column: col, to: null, why: 'a value this field does not accept — left empty (the old value is in the log)' }
+    return null
+  }
+  if ((m = msg.match(/invalid input (?:syntax|value) for (?:type )?[\w ]+: "([^"]*)"/)) || (m = msg.match(/(?:date\/time field value|value) out of range[^"]*"([^"]*)"/))) {
+    const bad = m[1]
+    const col = Object.keys(row).find((k) => row[k] != null && String(row[k]) === bad)
+    return col ? { column: col, to: null, why: `"${bad}" is not a valid value for this field — left empty` } : null
+  }
+  return null
+}
+
+/** Repairs made before (table|key → column → {from, to}), applied again to the newly read old data while the old value is unchanged. */
+export function applyRepairs(rows, repairs, tables = SYNC_TABLES) {
+  let n = 0
+  for (const [table, onConflict] of tables) {
+    const keys = onConflict.split(',')
+    for (const row of rows[table] ?? []) {
+      const fix = repairs?.[`${table}|${keys.map((k) => String(row[k] ?? '')).join('|')}`]
+      if (!fix) continue
+      for (const [col, { from, to }] of Object.entries(fix)) if (JSON.stringify(row[col] ?? null) === JSON.stringify(from ?? null)) { row[col] = to; n++ }
+    }
+  }
+  return n
+}
+
 /** "1.2 GB" */
 export const bytesText = (n) => {
   if (n == null || !Number.isFinite(n)) return '—'

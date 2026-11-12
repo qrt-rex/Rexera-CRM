@@ -18,7 +18,8 @@ export interface Counts { added: number; updated: number; kept: number; same: nu
 export interface SyncRun {
   id: number; started_at: string; finished_at: string | null; trigger: 'auto' | 'manual' | 'full'; status: 'running' | 'ok' | 'partial' | 'error' | 'stopped'
   changed_tables: string[] | null; rows_read: number | null; error: string | null; by_user: string | null
-  written: (Record<string, Counts> & { totals?: { added: number; updated: number; kept: number }; notes?: string[]; failedRows?: { table: string; key: string; error: string; tries?: number; parent?: string }[] }) | null
+  written: (Record<string, Counts> & { totals?: { added: number; updated: number; kept: number }; notes?: string[]; failedRows?: { table: string; key: string; error: string; tries?: number; parent?: string }[]
+    repaired?: { table: string; key: string; column: string; from: unknown; to: unknown; why: string }[] }) | null
   files: { copied: number; failed: { path: string; doc: string; booking: string; error: string; tries?: number }[]; more: boolean; setAside?: number } | null
 }
 export interface SyncStatus { config: SyncConfig; secret: { set: boolean; problem: string | null }; running: boolean; runs: SyncRun[] }

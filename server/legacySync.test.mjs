@@ -99,5 +99,35 @@ r = await sync(store, synced)
 assert.equal(r.plan.counts.bookings.added, 1)
 assert.equal(store.bookings.length, 3, 'never duplicated, never deleted')
 
+// 6. self-repair: a database that refuses like Supabase does — bad values are repaired one by one and saved, a
+//    payment whose client file is missing waits for it, and repairs are remembered for the next copy
+const saved = {}
+const users = new Set(['lg-u-1'])
+const fakeDb = {
+  from: (table) => ({
+    upsert: async (rows) => {
+      for (const r of rows) {
+        if (table === 'bookings' && r.created_by && !users.has(r.created_by)) return { error: { message: 'insert or update on table "bookings" violates foreign key constraint "bookings_created_by_fkey"' } }
+        if (table === 'bookings' && (r.stage < 1 || r.stage > 9)) return { error: { message: 'new row for relation "bookings" violates check constraint "bookings_stage_check"' } }
+        if (table === 'bookings' && r.mode == null) return { error: { message: 'null value in column "mode" of relation "bookings" violates not-null constraint' } }
+        if (table === 'booking_payments' && !saved.bookings?.some((b) => b.id === r.booking_id)) return { error: { message: 'insert or update on table "booking_payments" violates foreign key constraint "booking_payments_booking_id_fkey"' } }
+      }
+      ;(saved[table] ??= []).push(...rows)
+      return { error: null }
+    },
+  }),
+}
+const repairs = {}, repaired = []
+const bad = await forTests.writeRows(fakeDb, 'bookings', 'id', [
+  { id: 'lg-b-1', created_by: 'lg-u-1', stage: 2, mode: 'Refundable' },
+  { id: 'lg-b-2', created_by: 'lg-u-404', stage: 14, mode: null },   // three problems in one record
+], repairs, repaired)
+assert.deepEqual(bad, [], 'every record saved')
+assert.deepEqual(saved.bookings.find((b) => b.id === 'lg-b-2'), { id: 'lg-b-2', created_by: null, stage: 9, mode: '' })
+assert.deepEqual(repaired.map((x) => x.column).sort(), ['created_by', 'mode', 'stage'])
+assert.deepEqual(repairs['bookings|lg-b-2'].stage, { from: 14, to: 9 }, 'remembered for the next copy')
+const badPay = await forTests.writeRows(fakeDb, 'booking_payments', 'id', [{ id: 'lg-p-1', booking_id: 'lg-b-1' }, { id: 'lg-p-9', booking_id: 'lg-b-missing' }], repairs, repaired)
+assert.equal(badPay.length, 1); assert.equal(badPay[0].parent, 'lg-b-missing', 'a payment never loses its client file — it waits for it')
+
 server.close()
-console.log(`✓ old CRM sync end to end: signed reads (${calls} calls, wrong secret refused), first copy, no duplicates, old-CRM change applied, new-CRM work kept, new client added`)
+console.log(`✓ old CRM sync end to end: signed reads (${calls} calls, wrong secret refused), first copy, no duplicates, old-CRM change applied, new-CRM work kept, new client added, refused data repaired and saved`)

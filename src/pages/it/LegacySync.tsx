@@ -309,7 +309,8 @@ function RunLog({ runs, userOf, onRetry, running, canRun }: { runs: SyncRun[]; u
         {list.map((r) => {
           const t = r.written?.totals
           const failed = r.files?.failed ?? []
-          const tables = Object.entries(r.written ?? {}).filter(([k]) => k !== 'totals' && k !== 'notes') as [string, { added: number; updated: number; kept: number }][]
+          // only the per-table counts (not the totals, notes, repaired or failed lists)
+          const tables = Object.entries(r.written ?? {}).filter(([k, v]) => k !== 'totals' && !Array.isArray(v) && typeof v === 'object' && v !== null && 'added' in v) as [string, { added: number; updated: number; kept: number }][]
           return (
             <li key={r.id}>
               <button className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-left text-sm hover:bg-card2/60" onClick={() => setOpen(open === r.id ? null : r.id)}>
@@ -319,6 +320,8 @@ function RunLog({ runs, userOf, onRetry, running, canRun }: { runs: SyncRun[]; u
                 <span className="ml-auto flex flex-wrap items-center gap-1.5 text-[11px]">
                   {t && <><Badge tone="green">+{t.added}</Badge><Badge tone="blue">{t.updated} updated</Badge>{t.kept > 0 && <Badge tone="violet">{t.kept} kept</Badge>}</>}
                   {(r.files?.copied ?? 0) > 0 && <Badge tone="orange">{r.files!.copied} files</Badge>}
+                  {(r.written?.repaired?.length ?? 0) > 0 && <Badge tone="violet">{r.written!.repaired!.length} repaired</Badge>}
+                  {(r.written?.failedRows?.length ?? 0) > 0 && <Badge tone="red">{r.written!.failedRows!.length} records left</Badge>}
                   {failed.length > 0 && <Badge tone="red">{failed.length} files failed</Badge>}
                   <ChevronDown className={cx('size-4 text-mute transition', open === r.id && 'rotate-180')} />
                 </span>
@@ -340,11 +343,18 @@ function RunLog({ runs, userOf, onRetry, running, canRun }: { runs: SyncRun[]; u
                         {tables.map(([k, c]) => <tr key={k}><td className="py-1 font-mono text-[11px]">{k}</td><td className="py-1 text-right">+{c.added}</td><td className="py-1 text-right">{c.updated} upd.</td><td className="py-1 text-right">{c.kept} kept</td></tr>)}
                       </tbody></table>
                     ) : <p className="text-mute">Nothing new.</p>}
+                    {!!r.written?.repaired?.length && <>
+                      <p className="mb-1 mt-3 font-semibold text-violet-600 dark:text-violet-300">Repaired automatically and saved ({r.written.repaired.length}) — the old value is kept here</p>
+                      <ul className="max-h-48 space-y-1 overflow-auto">{r.written.repaired.map((f, i) => (
+                        <li key={i} className="rounded bg-card px-2 py-1"><span className="font-mono text-[11px]">{f.table} · {f.key} · {f.column}</span> <span className="text-mute">· {f.why} · was <b className="text-ink">{JSON.stringify(f.from)}</b> → now <b className="text-ink">{JSON.stringify(f.to)}</b></span></li>
+                      ))}</ul>
+                    </>}
                     {!!r.written?.failedRows?.length && <>
                       <p className="mb-1 mt-3 font-semibold text-bad">Records the database refused ({r.written.failedRows.length}) — the rest were saved; these are tried again (3 times, then set aside)</p>
                       <ul className="max-h-48 space-y-1 overflow-auto">{r.written.failedRows.map((f, i) => {
                         const waits = f.parent && r.written!.failedRows!.some((x) => x.key === f.parent)
-                        return <li key={i} className="rounded bg-card px-2 py-1"><span className="font-mono text-[11px]">{f.table} · {f.key}</span> <span className="text-mute">· {waits ? `waits for its client file ${f.parent} (above) — saved together with it` : f.error}{f.tries ? ` · try ${f.tries}/3` : ''}</span></li>
+                        return <li key={i} className="rounded bg-card px-2 py-1"><span className="font-mono text-[11px]">{f.table} · {f.key}</span> <span className="text-mute">· {waits ? `waits for its client file ${f.parent} (above) — saved together with it`
+                          : f.parent ? `its record ${f.parent} is not in the old CRM's data either (deleted there?) — kept aside after 3 tries` : f.error}{f.tries ? ` · try ${f.tries}/3` : ''}</span></li>
                       })}</ul>
                     </>}
                     {failed.length > 0 && <>
