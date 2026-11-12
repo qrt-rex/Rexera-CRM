@@ -4,6 +4,7 @@ import type { Scheme } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
 import { deleteScheme, upsertScheme, userName } from '../../lib/actions'
+import { canEditSchemesUser } from '../../lib/rbac'
 import { fmtDate, fmtDateTime, inr } from '../../lib/format'
 import { istToday, schemeDaysLeft, schemeDuration, schemeState, type SchemeState } from '../../../supabase/workflow-rules.mjs'
 import { Badge, Button, Card, EmptyState, Input, Modal, PageHeader, SearchBox, Tabs, Textarea, Toggle, useConfirm, useRun } from '../../components/ui'
@@ -30,7 +31,8 @@ export default function Schemes() {
   const { can } = useAuth()
   const run = useRun()
   const [confirm, node] = useConfirm()
-  const manage = can('schemes.manage')
+  // the Operation Team, IT Support and Super Admin only (by role — the database checks the same)
+  const manage = canEditSchemesUser(me) && can('schemes.manage')
   const t = istToday()
   const [q, setQ] = useState('')
   // price-wise and scheme-wise (category)

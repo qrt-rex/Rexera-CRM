@@ -45,7 +45,7 @@ export const MODULES: ModuleDef[] = [
   { key: 'schemes', path: '/schemes', label: 'Schemes', desc: 'Government schemes and offers', icon: Sparkles, tone: 'green', perms: ['schemes.view', 'schemes.manage'], group: 'Content' },
   // Rexy's Scheme Checker rules: Super Admin and the Operation team only (not IT)
   { key: 'scheme-rules', path: '/scheme-rules', label: 'Scheme Checker Rules', desc: 'Government schemes, eligibility conditions, documents — what Rexy checks', icon: BadgeCheck, tone: 'green', perms: ['eligibility.manage'], roles: ['superadmin', 'operations'], group: 'Content' },
-  { key: 'sales-kit', path: '/sales-kit', label: 'Sales Kit', desc: 'Every scheme: benefits, eligibility, last date and our charge', icon: BookMarked, tone: 'orange', perms: [], group: 'Content' },
+  { key: 'sales-kit', path: '/sales-kit', label: 'Sales Kit & Scheme Kits', desc: 'Every scheme with advanced filters; organise them into Scheme Kits (personal or shared)', icon: BookMarked, tone: 'orange', perms: [], group: 'Content' },
   { key: 'content', path: '/content', label: 'Flyers, Posts & Sales Info', desc: 'Marketing material and sales scripts', icon: Images, tone: 'orange', perms: ['content.view', 'content.manage'], group: 'Content' },
   { key: 'broadcasts', path: '/broadcasts', label: 'Broadcasts', desc: 'Company updates with acknowledgement', icon: Megaphone, tone: 'red', perms: ['broadcasts.view', 'broadcasts.manage'], group: 'Content' },
   // the Digital Media section: only the Digital Media team (and Super Admin / IT)

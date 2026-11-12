@@ -6,6 +6,7 @@ import { useAuth, useMe } from '../../lib/auth'
 import { needsPriceSplit, saveService } from '../../lib/actions'
 import { BOOKING_TYPES, COMBO_PACKAGES, comboCap, isFundingService, priceFor } from '../../lib/catalog'
 import { inr } from '../../lib/format'
+import { rolesOf } from '../../lib/rbac'
 import { Badge, Button, Card, CardHeader, Checkbox, EmptyState, Input, Modal, PageHeader, SearchBox, Select, Table, Td, Th, useRun } from '../../components/ui'
 
 const PRICE_TYPES = BOOKING_TYPES.filter((t) => t.id !== 'SINGLE')
@@ -14,7 +15,9 @@ const PRICE_TYPES = BOOKING_TYPES.filter((t) => t.id !== 'SINGLE')
 export default function Services() {
   const db = useDb()
   const { can } = useAuth()
-  const manage = can('schemes.manage')
+  const me = useMe()
+  // the price list: the scheme editors and Admin (Admin no longer edits schemes, but keeps the services)
+  const manage = can('schemes.manage') || rolesOf(me).includes('admin')
   const [q, setQ] = useState('')
   const [cat, setCat] = useState('')
   const [edit, setEdit] = useState<{ id?: string; s: Omit<Service, 'id'> } | null>(null)

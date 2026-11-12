@@ -657,6 +657,24 @@ export interface SalesKitItem {
   updatedBy?: string
 }
 
+/** Sales Kit → advanced filter (also what a Scheme Kit can be built from). Empty lists / '' = any. */
+export interface SchemeFilter {
+  q: string; categories: string[]; types: string[]; orgs: string[]; places: string[]; sectors: string[]; entities: string[]
+  /** open · week · month · rolling · closed */
+  closing: string[]
+  amount: string; charge: string
+}
+/**
+ * A Scheme Kit: a named list of Sales Kit schemes — picked by hand and / or every scheme matching a saved filter, minus
+ * the ones hidden from it. Personal (only its owner sees it) or shared with everyone (made and changed by the
+ * Operation Team, IT Support and Super Admin).
+ */
+export interface SchemeKit {
+  id: string; name: string; description?: string; color?: string
+  schemeIds: string[]; excludedIds?: string[]; filter?: SchemeFilter; sort?: string
+  shared: boolean; ownerId: string; position: number; createdAt: string; updatedAt?: string; updatedBy?: string
+}
+
 /** Company branch: invoices show its address and GSTIN. */
 export interface Branch {
   id: string; name: string; /** short code shown on dashboards, e.g. AMD-A */ code?: string; address: string; city: string; state: string; pin: string; gstin: string; phone: string; email: string
@@ -1212,6 +1230,8 @@ export interface DB {
   /** Document Form Builder: forms sent to clients by secure link, and what came back */
   docForms?: DocForm[]
   salesKit?: SalesKitItem[]
+  /** Sales Kit → Scheme Kits (personal and shared) */
+  schemeKits?: SchemeKit[]
   /** Rexy's Scheme Checker (empty = the built-in schemes) */
   eligibilitySchemes?: EligibilityScheme[]
   /** Automation Center: custom rules and the built-in on / off switches (IT Support edits) */

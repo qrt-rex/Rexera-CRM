@@ -1,7 +1,8 @@
 import type {
-  AccessControl, FnAction, AdminStageId, AdminWorkStatus, Booking, BookingStatus, BookingType, BDoc, Delivery, Service, WorkflowSettings, Branch, BreakPolicy, Call, CallOutcome, ClientEmailLog, Shift, CandidateApplication, CandidateForm, DaySession, DB, EventItem, FileRef, Invoice, InvoiceItem, Lead, LeaveType, Milestone, Perm, Post, Role, SalesKitItem, Scheme, User,
+  AccessControl, FnAction, AdminStageId, AdminWorkStatus, Booking, BookingStatus, BookingType, BDoc, Delivery, Service, WorkflowSettings, Branch, BreakPolicy, Call, CallOutcome, ClientEmailLog, Shift, CandidateApplication, CandidateForm, DaySession, DB, EventItem, FileRef, Invoice, InvoiceItem, Lead, LeaveType, Milestone, Perm, Post, Role, SalesKitItem, Scheme, SchemeKit, User,
 } from './types'
-import { accessControlOf, canManageRoles, DEFAULT_ROLE_PERMS, effectivePerms, fnKey, isMaster, isStageOnlyAdmin, MASTER_ROLES, ROLES, rolesOf, roleLabel } from './rbac'
+import { accessControlOf, canEditSchemesUser, canManageRoles, DEFAULT_ROLE_PERMS, effectivePerms, fnKey, isMaster, isStageOnlyAdmin, MASTER_ROLES, ROLES, rolesOf, roleLabel } from './rbac'
+import { filterCount, kitProblem } from '../../supabase/scheme-kit-rules.mjs'
 import { MODULES } from './modules'
 import { fileAdmins, isFileAdmin } from './fileAdmins'
 import { clearCloudDb, clone, getDb, mutate, reloadFromCloud, saved } from './store'
@@ -923,7 +924,8 @@ export const needsPriceSplit = (s: { name: string; category?: string }) => !isFu
  * GST, and a price for each booking type (Single, Multiple, Combo 3 / 6 / 9 / 12 months; blank = the Single price).
  */
 export function saveService(me: User, s: Omit<Service, 'id'>, id?: string) {
-  need(me, 'schemes.manage')
+  // the services list: the scheme editors and Admin (Admin no longer edits schemes, but still keeps the price list)
+  assert(has(me, 'schemes.manage') || rolesOf(me).includes('admin'), 'You do not have permission to do that.')
   assert(s.name.trim().length >= 2, 'Enter the service name.')
   assert(s.category.trim(), 'Pick or type a category.')
   assert(Number.isFinite(s.price) && s.price >= 0, 'The single-booking price must be 0 or more.')
@@ -2598,9 +2600,92 @@ export function cancelInvoice(me: User, id: string) {
 
 // ============================================================ content
 export type SalesKitInput = Omit<SalesKitItem, 'id' | 'position' | 'updatedAt' | 'updatedBy'>
-/** Sales Kit: everyone reads it; the Operation team (saleskit.manage) adds, edits and removes schemes. */
+/** Schemes wherever they are: the Operation Team, IT Support and Super Admin only (by role — the database checks the same). */
+function needSchemeEditor(me: User) {
+  assert(canEditSchemesUser(me), 'Only the Operation Team, IT Support and Super Admin can change schemes.')
+}
+
+/**
+ * Sales Kit → Import schemes from a sheet: the rows the preview showed (new and update only). New schemes are added at
+ * the end of their category; updates change only the fields the sheet has. One notification to sales for the new ones.
+ */
+export function importSalesKit(me: User, rows: { v: SalesKitInput; id?: string; action: string; changes: string[] }[]) {
+  needSchemeEditor(me)
+  return mutate((d) => {
+    d.salesKit ??= []
+    const at = nowIso()
+    let added = 0, updated = 0
+    for (const r of rows) {
+      const name = r.v.name.trim(), category = r.v.category.trim()
+      if (!name || !category) continue
+      if (r.action === 'update' && r.id) {
+        const cur = d.salesKit.find((s) => s.id === r.id)
+        if (!cur) continue
+        for (const f of r.changes as (keyof SalesKitInput)[]) (cur as unknown as Record<string, unknown>)[f] = String(r.v[f] ?? '').trim()
+        cur.updatedAt = at; cur.updatedBy = me.id
+        updated++
+      } else if (r.action === 'new') {
+        const position = 1 + Math.max(0, ...d.salesKit.filter((s) => s.category === category).map((s) => s.position))
+        d.salesKit.push({ ...r.v, name, category, registrationCharge: r.v.registrationCharge?.trim() || undefined, id: uid('sk-'), position, updatedAt: at, updatedBy: me.id })
+        added++
+      }
+    }
+    if (added) notify(d, usersWithRole(d, 'sales', 'teamlead').map((u) => u.id), 'Sales Kit: new schemes', `${added} scheme(s) added`, '/sales-kit', 'info')
+    audit(d, me.id, 'SALES_KIT_IMPORT', `Schemes from a sheet: ${added} added, ${updated} updated`)
+    return { added, updated }
+  })
+}
+
+// ------------------------------------------------------------ Scheme Kits
+export type SchemeKitInput = Pick<SchemeKit, 'name' | 'description' | 'color' | 'schemeIds' | 'excludedIds' | 'filter' | 'sort' | 'shared'>
+/** A kit: anyone makes their own; shared kits (everyone sees them) are made and changed by the scheme editors. */
+export function saveSchemeKit(me: User, k: SchemeKitInput, id?: string) {
+  return mutate((d) => {
+    d.schemeKits ??= []
+    const cur = id ? d.schemeKits.find((x) => x.id === id) : undefined
+    if (id) assert(cur, 'Kit not found.')
+    const owner = cur?.ownerId ?? me.id
+    const may = (shared: boolean, ownerId: string) => (shared ? canEditSchemesUser(me) : ownerId === me.id)
+    if (cur) assert(may(cur.shared, cur.ownerId), cur.shared ? 'Shared kits are changed by the Operation Team, IT Support and Super Admin.' : 'Only its owner changes this kit.')
+    assert(!k.shared || canEditSchemesUser(me), 'Only the Operation Team, IT Support and Super Admin can share a kit with everyone.')
+    const known = new Set((d.salesKit ?? []).map((s) => s.id))
+    const v = {
+      name: k.name.trim(), description: k.description?.trim() || undefined, color: k.color || undefined,
+      schemeIds: [...new Set(k.schemeIds)].filter((x) => known.has(x)), excludedIds: k.excludedIds?.filter((x) => known.has(x)).length ? k.excludedIds.filter((x) => known.has(x)) : undefined,
+      filter: k.filter && filterCount(k.filter) ? k.filter : undefined, sort: k.sort || undefined, shared: !!k.shared,
+    }
+    const problem = kitProblem({ ...v, id, ownerId: owner }, d.schemeKits)
+    assert(!problem, problem ?? '')
+    const at = nowIso()
+    if (cur) { Object.assign(cur, v, { updatedAt: at, updatedBy: me.id }); audit(d, me.id, 'SCHEME_KIT_EDIT', `${cur.name}${cur.shared ? ' (shared)' : ''}`); return cur.id }
+    const position = 1 + Math.max(0, ...d.schemeKits.map((x) => x.position))
+    const kit: SchemeKit = { ...v, id: uid('kit-'), ownerId: me.id, position, createdAt: at }
+    d.schemeKits.push(kit)
+    audit(d, me.id, 'SCHEME_KIT_ADD', `${kit.name}${kit.shared ? ' (shared)' : ''}`)
+    return kit.id
+  })
+}
+/** Add or take out one scheme (from the scheme's “Add to kit” menu). A scheme the kit's filter brings in is hidden instead. */
+export function toggleKitScheme(me: User, kitId: string, schemeId: string, on: boolean) {
+  const k = getDb().schemeKits?.find((x) => x.id === kitId)
+  assert(k, 'Kit not found.')
+  const ids = on ? [...k.schemeIds.filter((x) => x !== schemeId), schemeId] : k.schemeIds.filter((x) => x !== schemeId)
+  const excluded = on ? (k.excludedIds ?? []).filter((x) => x !== schemeId) : [...new Set([...(k.excludedIds ?? []), ...(k.filter ? [schemeId] : [])])]
+  return saveSchemeKit(me, { ...k, schemeIds: ids, excludedIds: excluded }, k.id)
+}
+export function deleteSchemeKit(me: User, id: string) {
+  mutate((d) => {
+    const k = d.schemeKits?.find((x) => x.id === id)
+    assert(k, 'Kit not found.')
+    assert(k.shared ? canEditSchemesUser(me) : k.ownerId === me.id, k.shared ? 'Shared kits are removed by the Operation Team, IT Support and Super Admin.' : 'Only its owner removes this kit.')
+    d.schemeKits = d.schemeKits!.filter((x) => x.id !== id)
+    audit(d, me.id, 'SCHEME_KIT_DELETE', k.name)
+  })
+}
+
+/** Sales Kit: everyone reads it; the Operation Team, IT Support and Super Admin add, edit and remove schemes. */
 export function saveSalesKitItem(me: User, x: SalesKitInput, id?: string) {
-  need(me, 'saleskit.manage')
+  needSchemeEditor(me)
   const v = { ...x, name: x.name.trim(), category: x.category.trim() }
   for (const k of ['benefits', 'sectors', 'eligibility', 'lastDate', 'organisation', 'schemeType', 'applicableFor', 'minCharge'] as const) v[k] = (x[k] ?? '').trim()
   v.registrationCharge = x.registrationCharge?.trim() || undefined
@@ -2624,7 +2709,7 @@ export function saveSalesKitItem(me: User, x: SalesKitInput, id?: string) {
   })
 }
 export function deleteSalesKitItem(me: User, id: string) {
-  need(me, 'saleskit.manage')
+  needSchemeEditor(me)
   mutate((d) => {
     const cur = d.salesKit?.find((s) => s.id === id)
     assert(cur, 'Scheme not found.')
@@ -2636,7 +2721,7 @@ export function deleteSalesKitItem(me: User, id: string) {
 
 /** Schemes: Admin and the Operation team only (sales see them read-only). Price and dates are checked; the end date can't be before the start. */
 export function upsertScheme(me: User, s: Omit<Scheme, 'id' | 'createdAt' | 'by' | 'updatedAt' | 'updatedBy'> & { id?: string }) {
-  need(me, 'schemes.manage')
+  needSchemeEditor(me)
   assert(s.title.trim(), 'Title is required.')
   assert(s.price == null || (Number.isFinite(s.price) && s.price >= 0), 'Price must be 0 or more.')
   assert(!s.startDate === !s.endDate, 'Enter both the start date and the end date (or neither).')
@@ -2657,7 +2742,7 @@ export function upsertScheme(me: User, s: Omit<Scheme, 'id' | 'createdAt' | 'by'
   })
 }
 export function deleteScheme(me: User, id: string) {
-  need(me, 'schemes.manage')
+  needSchemeEditor(me)
   mutate((d) => {
     const x = d.schemes.find((y) => y.id === id)
     if (x) archiveDeleted(d, me.id, { module: 'Schemes', kind: 'Scheme', label: x.title, data: x })

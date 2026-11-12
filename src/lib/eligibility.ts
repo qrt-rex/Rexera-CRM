@@ -12,7 +12,7 @@ import { archiveDeleted } from './recycle'
  * built-in schemes are used; the first change saves the built-in set, then applies the change.
  */
 function assert(cond: unknown, msg: string): asserts cond { if (!cond) throw new ActionError(msg) }
-const need = (me: User) => assert(canEditSchemeRules(getDb(), me), 'Only Super Admin and the Operation team can change the Scheme Checker rules.')
+const need = (me: User) => assert(canEditSchemeRules(getDb(), me), 'Only the Operation Team, IT Support and Super Admin can change the Scheme Checker rules.')
 
 const byPosition = (a: EligibilityScheme, b: EligibilityScheme) => a.position - b.position || a.name.localeCompare(b.name)
 /** True while the built-in schemes are in use (nothing saved yet). */

@@ -245,6 +245,15 @@ export function upgradeDb(d: DB): DB {
     d.rolePerms.operations = [...new Set([...(d.rolePerms.operations ?? []), 'eligibility.manage' as Perm])]
     d.upgrades.push('scheme-checker-1')
   }
+  d.schemeKits ??= []
+  if (!d.upgrades.includes('scheme-editors-1')) {
+    // schemes wherever they are: the Operation Team (and IT Support / Super Admin, who hold everything) — nobody else
+    const SCHEME_PERMS: Perm[] = ['schemes.manage', 'saleskit.manage', 'eligibility.manage']
+    // the same as the database update: every other role loses them (IT Support / Super Admin keep theirs)
+    for (const r of Object.keys(d.rolePerms) as Role[]) if (!['operations', 'it', 'superadmin'].includes(r)) d.rolePerms[r] = (d.rolePerms[r] ?? []).filter((p) => !SCHEME_PERMS.includes(p))
+    d.rolePerms.operations = [...new Set([...(d.rolePerms.operations ?? []), ...SCHEME_PERMS])]
+    d.upgrades.push('scheme-editors-1')
+  }
   if (!d.upgrades.includes('portal-view-1')) {
     // every client's portal logins and progress for the Operation team and Admin (the live CRM: its migration)
     for (const r of ['operations', 'admin'] as const) d.rolePerms[r] = [...new Set([...(d.rolePerms[r] ?? []), 'portal.view' as Perm])]

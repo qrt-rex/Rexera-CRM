@@ -145,7 +145,12 @@ export function mapAll(backup) {
     organisation: x.organisation ?? '', scheme_type: x.schemeType ?? '', applicable_for: x.applicableFor ?? '', min_charge: x.minCharge ?? '', registration_charge: s(x.registrationCharge),
     updated_at: s(x.updatedAt), updated_by: uref(x.updatedBy),
   }))
-  t.site_content = (d.siteContent ?? []).map((x) => ({ key: x.key, draft: x.draft ?? null, published: x.published ?? null, updated_at: x.updatedAt, updated_by: uref(x.updatedBy), published_at: s(x.publishedAt), published_by: uref(x.publishedBy) }))
+  t.scheme_kits = (d.schemeKits ?? []).map((k) => ({
+    id: k.id, name: k.name, description: s(k.description), color: s(k.color), scheme_ids: k.schemeIds ?? [], excluded_ids: k.excludedIds ?? [],
+    filter: k.filter ?? null, sort: s(k.sort), shared: !!k.shared, owner_id: k.ownerId, position: k.position ?? 0, created_at: k.createdAt,
+    updated_at: s(k.updatedAt), updated_by: uref(k.updatedBy),
+  }))
+  t.site_content =(d.siteContent ?? []).map((x) => ({ key: x.key, draft: x.draft ?? null, published: x.published ?? null, updated_at: x.updatedAt, updated_by: uref(x.updatedBy), published_at: s(x.publishedAt), published_by: uref(x.publishedBy) }))
   t.eligibility_schemes = (d.eligibilitySchemes ?? []).map((x) => ({
     id: x.id, position: x.position, active: x.active !== false, name: x.name, kind: x.kind ?? '', agency: x.agency ?? '', url: x.url ?? '', service_match: x.serviceMatch ?? '',
     status_note: x.statusNote ?? '', summary: x.summary ?? '', benefits: x.benefits ?? [], documents: x.documents ?? [], process: x.process ?? [], conditions: x.conditions ?? [],
@@ -198,7 +203,7 @@ export const ORDER = [
   ['message_templates', 'id'], ['emails', 'id'], ['email_automations', 'key'], ['app_settings', 'key'], ['api_keys', 'id'],
   ['backup_log', 'id'], ['candidate_forms', 'id'], ['candidate_applications', 'id'], ['candidate_letters', 'id'], ['deleted_items', 'id'], ['recruitment_datasets', 'id'], ['recruitment_rows', 'dataset_id,row_no'],
   ['company_assets', 'id'], ['stock_items', 'id'], ['company_expenses', 'id'], ['legacy_files', 'path'],
-  ['doc_forms', 'id'], ['doc_form_submissions', 'id'], ['sales_kit', 'id'], ['eligibility_schemes', 'id'], ['automation_rules', 'id'], ['automation_runs', 'id'],
+  ['doc_forms', 'id'], ['doc_form_submissions', 'id'], ['sales_kit', 'id'], ['scheme_kits', 'id'], ['eligibility_schemes', 'id'], ['automation_rules', 'id'], ['automation_runs', 'id'],
   ['site_content', 'key'], ['site_content_history', 'id'], ['website_lead_log', 'id'],
   ['client_accounts', 'id'], ['client_activity', 'id'], ['client_doc_uploads', 'id'], ['media_items', 'id'], ['client_entries', 'id'], ['client_messages', 'id'],
 ]
@@ -395,7 +400,12 @@ export function rowsToDb(input) {
       organisation: x.organisation ?? '', schemeType: x.scheme_type ?? '', applicableFor: x.applicable_for ?? '', minCharge: x.min_charge ?? '', registrationCharge: u(x.registration_charge),
       updatedAt: u(x.updated_at), updatedBy: u(x.updated_by),
     })),
+    schemeKits: rows('scheme_kits').map((k) => opt({
+      id: k.id, name: k.name, description: u(k.description), color: u(k.color), schemeIds: k.scheme_ids ?? [], excludedIds: k.excluded_ids?.length ? k.excluded_ids : undefined,
+      filter: u(k.filter), sort: u(k.sort), shared: !!k.shared, ownerId: k.owner_id, position: k.position ?? 0, createdAt: k.created_at,
+      updatedAt: u(k.updated_at), updatedBy: u(k.updated_by),
+    })),
   }
-  const imports = rows('recruitment_datasets').map((x) => opt({ id: x.id, name: x.name, fileName: x.file_name, sheet: u(x.sheet), kind: x.kind, columns: x.columns, importedAt: x.imported_at, importedBy: x.imported_by ?? '', bytes: x.bytes ?? 0, rows: [...datasetRows(x.id)].sort((a, b) => a.row_no - b.row_no).map((r) => r.cells) }))
+  const imports =rows('recruitment_datasets').map((x) => opt({ id: x.id, name: x.name, fileName: x.file_name, sheet: u(x.sheet), kind: x.kind, columns: x.columns, importedAt: x.imported_at, importedBy: x.imported_by ?? '', bytes: x.bytes ?? 0, rows: [...datasetRows(x.id)].sort((a, b) => a.row_no - b.row_no).map((r) => r.cells) }))
   return { db, imports }
 }

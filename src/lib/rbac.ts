@@ -1,5 +1,6 @@
 import type { AccessControl, AccessKey, CustomRole, DB, FnAction, FnKey, Perm, Role, User } from './types'
 import { mayManagePortalLogins } from '../../supabase/portal-rules.mjs'
+import { canEditSchemes } from '../../supabase/scheme-kit-rules.mjs'
 
 export const ROLES: { id: Role; label: string; short: string; color: string; desc: string }[] = [
   { id: 'superadmin', label: 'Super Admin', short: 'SA', color: '#2E3A8C', desc: 'Everything, every dashboard, final say' },
@@ -56,9 +57,9 @@ export const PERM_GROUPS: { group: string; perms: { id: Perm; label: string }[] 
       { id: 'content.manage', label: 'Create / edit flyers & posts (Admin, Operation Team)' },
       { id: 'salesinfo.manage', label: 'Add / edit sales information (Team Leader, Admin, Operation Team)' },
       { id: 'schemes.view', label: 'View schemes' },
-      { id: 'schemes.manage', label: 'Add / edit schemes (Admin, Operation Team)' },
-      { id: 'saleskit.manage', label: 'Edit the Sales Kit (Operation Team only)' },
-      { id: 'eligibility.manage', label: 'Edit the Scheme Checker rules — schemes, conditions, documents (Super Admin & Operation Team only)' },
+      { id: 'schemes.manage', label: 'Add / edit schemes (Operation Team, IT Support, Super Admin only)' },
+      { id: 'saleskit.manage', label: 'Edit the Sales Kit and shared Scheme Kits (Operation Team, IT Support, Super Admin only)' },
+      { id: 'eligibility.manage', label: 'Edit the Scheme Checker rules — schemes, conditions, documents (Operation Team, IT Support, Super Admin only)' },
       { id: 'media.view', label: 'See company (internal) media on dashboards' },
       { id: 'media.manage', label: 'Digital Media section: dashboard, posts, flyers — create, assign, publish (Digital Media only)' },
       { id: 'broadcasts.view', label: 'View broadcasts' },
@@ -122,7 +123,7 @@ const common: Perm[] = ['broadcasts.view', 'messages.use', 'schemes.view', 'cont
 export const DEFAULT_ROLE_PERMS: Record<Role, Perm[]> = {
   // roles & permissions are IT Support's alone — not even the Super Admin's (unless IT allows it for that person)
   superadmin: ALL_PERMS.filter((p) => p !== 'roles.manage' && p !== 'quiz.manage'),
-  admin: [...common, 'bookings.all', 'bookings.admin', 'content.manage', 'salesinfo.manage', 'schemes.manage', 'employees.view', 'documents.forms', 'reports.view', 'followup.manage', 'forms.manage', 'workflow.manage', 'portal.view', 'refunds.request'],
+  admin: [...common, 'bookings.all', 'bookings.admin', 'content.manage', 'salesinfo.manage', 'employees.view', 'documents.forms', 'reports.view', 'followup.manage', 'forms.manage', 'workflow.manage', 'portal.view', 'refunds.request'],
   accounts: [...common, 'bookings.all', 'bookings.accounts', 'billing.create', 'billing.manage', 'refunds.manage', 'reports.view', 'reports.export'],
   legal: [...common, 'bookings.all', 'bookings.legal', 'documents.forms', 'leave.approve', 'reports.view', 'portal.view', 'refunds.request'],
   operations: [...common, 'bookings.all', 'bookings.process', 'content.manage', 'salesinfo.manage', 'schemes.manage', 'employees.view', 'documents.forms', 'reports.view', 'events.manage', 'forms.manage', 'saleskit.manage', 'eligibility.manage', 'portal.view', 'refunds.request'],
@@ -166,11 +167,11 @@ export const RESERVED: Partial<Record<Perm, Role[]>> = {
   'payroll.manage': ['superadmin', 'hr'],
   'incentives.manage': ['superadmin', 'hr'],
   // schemes, flyers & posts: Admin and the Operation team; sales information: also Team Leaders (Super Admin / IT always)
-  'schemes.manage': ['superadmin', 'admin', 'operations'],
-  // the Sales Kit everyone reads is edited by the Operation team only
-  'saleskit.manage': ['superadmin', 'operations'],
-  // Rexy's Scheme Checker rules: Super Admin and the Operation team — not IT (see canEditSchemeRules)
-  'eligibility.manage': ['superadmin', 'operations'],
+  // schemes wherever they are (Schemes, Sales Kit + shared Scheme Kits, Scheme Checker): the Operation Team, IT Support
+  // and Super Admin only — nobody else, even if given the permission by name (the database checks app.can_edit_schemes())
+  'schemes.manage': ['superadmin', 'it', 'operations'],
+  'saleskit.manage': ['superadmin', 'it', 'operations'],
+  'eligibility.manage': ['superadmin', 'it', 'operations'],
   'content.manage': ['superadmin', 'admin', 'operations', 'digitalmedia'],
   // the Digital Media section (dashboard, posts, flyers) belongs to the Digital Media team only
   'media.manage': ['superadmin', 'digitalmedia'],
@@ -187,14 +188,10 @@ export const isMaster = (u: User) => rolesOf(u).some((r) => MASTER_ROLES.include
 /** Sales people and team leaders see clients' numbers masked (+91 XXXXXXXX78); they call through the dialer. */
 export const seesMaskedPhones = (u: User) => rolesOf(u).every((r) => r === 'sales' || r === 'teamlead')
 
-/**
- * Who edits the Scheme Checker rules: Super Admin, and the Operation team while they hold eligibility.manage. IT
- * Support holds every permission but is left out on purpose (the database applies the same rule).
- */
-export const canEditSchemeRules = (db: DB, u: User) => {
-  const roles = rolesOf(u)
-  return roles.includes('superadmin') || (roles.includes('operations') && effectivePerms(db, u).has('eligibility.manage'))
-}
+/** Who edits the Scheme Checker rules: like every scheme — the Operation Team, IT Support and Super Admin. */
+export const canEditSchemeRules = (_db: DB, u: User) => canEditSchemes(rolesOf(u))
+/** Schemes wherever they are: the Operation Team, IT Support and Super Admin only (by role, not by permission). */
+export const canEditSchemesUser = (u: User | null | undefined) => !!u && u.active !== false && canEditSchemes(rolesOf(u))
 
 /** Who creates client portal logins (ID + password), sets passwords, links entries, deactivates: IT Support only (the server applies the same). */
 export const canManagePortalLogins = (u: User | null | undefined) => !!u && mayManagePortalLogins(rolesOf(u))
