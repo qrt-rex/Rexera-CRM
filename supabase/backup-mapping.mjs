@@ -13,6 +13,8 @@ export function mapAll(backup) {
     role: u.role, team_lead_id: null, department: u.department ?? '', designation: u.designation ?? '', joined_on: u.joinedOn,
     exit_on: s(u.exitOn), active: u.active, salary: u.salary ?? null, sales_target: u.target ?? null, address: u.address ?? {},
     legacy_id: u.legacyId ?? null, legacy_role: u.legacyRole ?? null, needs_password_reset: !!u.needsPasswordReset, resume: u.resume ?? null,
+    // written only once someone was deleted (or undeleted: ''), so the CRM works before 20261112000000_user_delete.sql
+    ...(u.deletedAt !== undefined ? { deleted_at: s(u.deletedAt), deleted_by: s(u.deletedBy) } : {}),
     photo_url: s(u.photo), shift: u.shift ?? null, branch_id: s(u.branchId), branch_ids: u.branchIds ?? [],
   }))
   t.app_users_team = d.users.filter((u) => uref(u.teamLeadId)).map((u) => ({ id: u.id, team_lead_id: u.teamLeadId }))
@@ -237,6 +239,7 @@ export function rowsToDb(input) {
     joinedOn: r.joined_on, exitOn: u(r.exit_on), active: r.active, passHash: '', photo: u(r.photo_url),
     address: r.address && Object.keys(r.address).length ? r.address : undefined, salary: u(r.salary), target: u(r.sales_target),
     legacyId: u(r.legacy_id), legacyRole: u(r.legacy_role), needsPasswordReset: r.needs_password_reset || undefined, resume: u(r.resume),
+    deletedAt: u(r.deleted_at), deletedBy: u(r.deleted_by),
     shift: u(r.shift), branchId: u(r.branch_id), branchIds: r.branch_ids?.length ? r.branch_ids : undefined,
   }))
 

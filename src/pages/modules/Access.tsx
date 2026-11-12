@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Building2, Check, KeyRound, Lock, Minus, Plus, RefreshCcw, Save, Settings2, ShieldCheck, Trash2, UserCog, Users, X } from 'lucide-react'
+import { Building2, Check, KeyRound, Lock, Minus, Plus, RefreshCcw, RotateCcw, Save, Settings2, ShieldCheck, Trash2, UserCog, Users, X } from 'lucide-react'
 import type { AccessKey, Branch, FnAction, Perm, Role, User } from '../../lib/types'
 import { useDb, resetDemoData } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
-import { assignCustomRole, createCustomRole, deleteCustomRole, saveBranches, setRoleFn, setRolePerms, setUserFn, updateCustomRole, updateSettings, updateUser, userName } from '../../lib/actions'
+import { assignCustomRole, createCustomRole, deleteCustomRole, deleteUser, isDeleted, undeleteUser, saveBranches, setRoleFn, setRolePerms, setUserFn, updateCustomRole, updateSettings, updateUser, userName } from '../../lib/actions'
 import { CityInput, PhoneInput, StateSelect } from '../../components/fields'
 import {
   accessControlOf, ALL_PERMS, canManageRoles, customRoleOf, DEFAULT_ROLE_PERMS, deniedFns, effectivePerms, FN_ACTIONS, fnKey, MASTER_ROLES, PERM_GROUPS, RESERVED, ROLES, roleLabel, rolesOf,
@@ -50,6 +50,7 @@ function UsersTab() {
   const db = useDb()
   const me = useMe()
   const run = useRun()
+  const { can } = useAuth()
   const [confirm, node] = useConfirm()
   const [q, setQ] = useState('')
   const [open, setOpen] = useState<User | null>(null)
@@ -57,13 +58,26 @@ function UsersTab() {
   const meSA = rolesOf(me).includes('superadmin')
   const it = canManageRoles(me)
   const ac = accessControlOf(db)
-  const list = db.users.filter((u) => !q || `${u.name} ${u.username} ${u.email} ${roleName(db, u)}`.toLowerCase().includes(q.toLowerCase()))
+  // Active by default; removed (can't sign in) and deleted accounts on their own tabs
+  const [show, setShow] = useState<'active' | 'removed' | 'deleted' | 'all'>('active')
+  const stateOf = (u: User) => (isDeleted(u) ? 'deleted' : u.active ? 'active' : 'removed')
+  const counts = { active: 0, removed: 0, deleted: 0 }
+  for (const u of db.users) counts[stateOf(u)]++
+  const list = db.users.filter((u) => (show === 'all' || stateOf(u) === show) && (!q || `${u.name} ${u.username} ${u.email} ${roleName(db, u)}`.toLowerCase().includes(q.toLowerCase())))
   const cur = open ? db.users.find((u) => u.id === open.id)! : null
+  const del = async (u: User) => {
+    if (!(await confirm(`Delete ${u.name}?`, `${u.name} can never sign in again and disappears from every list. Their history stays — client files keep them as sales owner; attendance, payroll, messages and the activity log are untouched.${u.active ? ' Their open leads go back to Unassigned.' : ''} You can undo it in Users → Deleted.`, true))) return
+    run(() => deleteUser(me, u.id), `${u.name} deleted`)
+  }
 
   return (
     <Card className="overflow-hidden">
       <div className="flex flex-wrap items-center gap-3 border-b border-line p-4">
         <SearchBox value={q} onChange={setQ} placeholder="Search users or roles…" className="max-w-md flex-1" />
+        <Tabs value={show} onChange={setShow} tabs={[
+          { id: 'active', label: 'Active', count: counts.active }, { id: 'removed', label: 'Removed', count: counts.removed },
+          { id: 'deleted', label: 'Deleted', count: counts.deleted }, { id: 'all', label: 'All' },
+        ]} />
         {!it && <span className="flex items-center gap-1.5 text-xs text-mute"><Lock className="size-3.5" />Roles and permissions are changed by IT Support only.</span>}
       </div>
       <Table>
@@ -79,7 +93,7 @@ function UsersTab() {
               <tr key={u.id} className={u.active ? '' : 'opacity-60'}>
                 <Td><span className="flex items-center gap-3"><Avatar name={u.name} photo={u.photo} size={34} /><span><span className="block font-semibold">{u.name}{self && <Badge tone="navy" className="ml-2">you</Badge>}</span><span className="text-xs text-mute">@{u.username} · {u.email}</span></span></span></Td>
                 <Td>
-                  {it && !self && !custom ? (
+                  {it && !self && !custom && !isDeleted(u) ? (
                     <select value={u.role} onChange={async (e) => { const role = e.target.value as Role; if (await confirm(`Make ${u.name} ${roleLabel(role)}?`, `${u.name}'s access changes at once — from ${roleLabel(u.role)} to ${roleLabel(role)}.`)) run(() => updateUser(me, u.id, { role }), 'Role changed') }} className="h-9 rounded-lg border border-line bg-card px-2 text-sm" aria-label="Role">
                       {ROLES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
                     </select>
@@ -87,15 +101,20 @@ function UsersTab() {
                 </Td>
                 <Td className="text-xs">{u.extraRoles.length ? u.extraRoles.map(roleLabel).join(', ') : <span className="text-mute">—</span>}</Td>
                 <Td className="text-xs">{own ? <><Badge tone="green">+{u.grants.length}</Badge> <Badge tone="red">−{u.denies.length}</Badge></> : <span className="text-mute">—</span>}{ac.userRole[u.id] && !custom && <Badge tone="amber" className="ml-1">role removed</Badge>}</Td>
-                <Td><Toggle checked={u.active} label="Active" onChange={async (v) => {
+                <Td>{isDeleted(u) ? <Badge tone="red">deleted</Badge> : <Toggle checked={u.active} label="Active" onChange={async (v) => {
                   if (accountLocked) return
                   // deactivating signs the person out at once: ask first
                   if (!v && !(await confirm(`Deactivate ${u.name}?`, `${u.name} is signed out at once and can't sign in until you activate the account again. Their records stay.`, true))) return
                   run(() => updateUser(me, u.id, { active: v }), v ? 'Activated' : 'Deactivated')
-                }} /></Td>
+                }} />}</Td>
                 <Td className="text-right"><span className="inline-flex gap-1">
-                  <Button size="sm" variant="soft" icon={UserCog} onClick={() => setOpen(u)}>{it && !self ? 'Manage access' : 'View access'}</Button>
-                  <Button size="sm" variant="ghost" icon={RefreshCcw} aria-label="Set a new password" title="Set a new password" disabled={accountLocked} onClick={() => setPwFor(u)} />
+                  {isDeleted(u) ? (
+                    <Button size="sm" variant="outline" icon={RotateCcw} disabled={accountLocked} onClick={() => run(() => undeleteUser(me, u.id), `${u.name} is back in Removed — activate to let them sign in`)}>Undo delete</Button>
+                  ) : <>
+                    <Button size="sm" variant="soft" icon={UserCog} onClick={() => setOpen(u)}>{it && !self ? 'Manage access' : 'View access'}</Button>
+                    <Button size="sm" variant="ghost" icon={RefreshCcw} aria-label="Set a new password" title="Set a new password" disabled={accountLocked} onClick={() => setPwFor(u)} />
+                    {can('access.manage') && <Button size="sm" variant="ghost" icon={Trash2} aria-label={`Delete ${u.name}`} title="Delete user" disabled={accountLocked} className="text-bad hover:bg-bad-soft" onClick={() => void del(u)} />}
+                  </>}
                 </span></Td>
               </tr>
             )

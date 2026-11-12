@@ -84,6 +84,9 @@ export interface User {
   resume?: FileRef
   /** own shift (HR → Break Time); anything left out follows the company break policy */
   shift?: Shift
+  /** deleted in Access Management: never signs in, hidden everywhere, history kept ('' = undeleted) */
+  deletedAt?: string
+  deletedBy?: string
   /** the branch this person works in (Access → Settings → branches) */
   branchId?: string
   /** Branch Director: the branches they run (empty = every branch) */

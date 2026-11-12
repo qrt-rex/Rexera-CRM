@@ -33,7 +33,8 @@ export default function Employees() {
   const manage = can('employees.manage', 'access.manage')
   const [showRemoved, setShowRemoved] = useState(false)
   const [removing, setRemoving] = useState<{ id: string; lastDay: string; reason: string } | null>(null)
-  const list = useMemo(() => db.users.filter((u) => (showRemoved ? !u.active : u.active) && (!role || u.role === role) && (!q || `${u.name} ${u.email} ${u.designation} ${u.department}`.toLowerCase().includes(q.toLowerCase()))), [db.users, q, role, showRemoved])
+  // deleted accounts (Access Management → Delete) are not listed here
+  const list = useMemo(() => db.users.filter((u) => !u.deletedAt && (showRemoved ? !u.active : u.active) && (!role || u.role === role) && (!q || `${u.name} ${u.email} ${u.designation} ${u.department}`.toLowerCase().includes(q.toLowerCase()))), [db.users, q, role, showRemoved])
   const removable = db.users.filter((u) => u.active && u.id !== me.id).sort((a, b) => a.name.localeCompare(b.name))
   const open = params.get('open') ? db.users.find((u) => u.id === params.get('open')) : undefined
   useEffect(() => {
@@ -64,7 +65,7 @@ export default function Employees() {
       <div className="mb-5 flex flex-wrap gap-3">
         <SearchBox value={q} onChange={setQ} placeholder="Search people…" className="min-w-60 flex-1" />
         <select value={role} onChange={(e) => setRole(e.target.value as Role | '')} className="h-10 rounded-xl border border-line bg-card px-3 text-sm" aria-label="Role"><option value="">All roles</option>{ROLES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}</select>
-        <Tabs value={showRemoved ? 'removed' : 'active'} onChange={(v) => setShowRemoved(v === 'removed')} tabs={[{ id: 'active', label: 'Active', count: db.users.filter((u) => u.active).length }, { id: 'removed', label: 'Removed', count: db.users.filter((u) => !u.active).length }]} />
+        <Tabs value={showRemoved ? 'removed' : 'active'} onChange={(v) => setShowRemoved(v === 'removed')} tabs={[{ id: 'active', label: 'Active', count: db.users.filter((u) => u.active).length }, { id: 'removed', label: 'Removed', count: db.users.filter((u) => !u.active && !u.deletedAt).length }]} />
       </div>
       {!list.length && <EmptyState icon={UsersRound} title={showRemoved ? 'Nobody has been removed' : 'Nobody matches'} />}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">

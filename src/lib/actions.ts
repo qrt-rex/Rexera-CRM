@@ -2933,6 +2933,7 @@ export function updateUser(me: User, id: string, patch: Partial<Pick<User, 'name
   mutate((d) => {
     const u = d.users.find((x) => x.id === id)
     assert(u, 'User not found.')
+    assert(!(patch.active && u.deletedAt), `${u.name} was deleted — Undo delete first (Access Management → Users → Deleted).`)
     if ('phone' in patch) { patch.phone = normPhone(patch.phone ?? ''); assert(isPhone(patch.phone), 'Enter a valid 10-digit mobile number — the dialer calls it.') }
     checkBranches(d, patch)
     // roles, extra roles and per-person permissions / functions: IT Support only (Access Control)
@@ -2995,6 +2996,7 @@ export function restoreEmployee(me: User, id: string) {
   mutate((d) => {
     const u = d.users.find((x) => x.id === id)
     assert(u && !u.active, 'Employee not found or already active.')
+    assert(!u.deletedAt, `${u.name} was deleted — Access Management → Users → Deleted → Undo delete first.`)
     assert(!rolesOf(u).some((r) => MASTER_ROLES.includes(r)) || isSA(me), 'Only a Super Admin can restore a Super Admin or IT account.')
     const username = unremoved(u.username), email = unremoved(u.email)
     assert(!d.users.some((x) => x.id !== u.id && (x.username.toLowerCase() === username.toLowerCase() || x.email.toLowerCase() === email.toLowerCase())), `${username} / ${email} now belongs to someone else — change it on that account first.`)
@@ -3002,6 +3004,49 @@ export function restoreEmployee(me: User, id: string) {
     u.active = true
     u.exitOn = undefined
     audit(d, me.id, 'EMPLOYEE_RESTORE', u.name)
+  })
+}
+
+/**
+ * Access Management → Delete: the account is gone from the CRM — can't sign in, hidden from every list and picker —
+ * while the person's history stays (client files keep their sales owner; attendance, payroll, messages and the activity
+ * log are untouched). An active person is first removed as in Employees (open leads back to Unassigned, nobody keeps
+ * them as team leader). Undo: Access Management → Users → Deleted.
+ */
+export const isDeleted = (u: Pick<User, 'deletedAt'>) => !!u.deletedAt
+export function deleteUser(me: User, id: string) {
+  need(me, 'access.manage')
+  return mutate((d) => {
+    const u = d.users.find((x) => x.id === id)
+    assert(u, 'User not found.')
+    assert(!isDeleted(u), `${u.name} is already deleted.`)
+    assert(u.id !== me.id, "You can't delete yourself.")
+    assert(!rolesOf(u).some((r) => MASTER_ROLES.includes(r)) || isSA(me), 'Only a Super Admin can delete a Super Admin or IT account.')
+    assert(!rolesOf(u).includes('superadmin') || d.users.some((x) => x.id !== u.id && x.active && !isDeleted(x) && rolesOf(x).includes('superadmin')), 'At least one active Super Admin must remain.')
+    let freed = 0
+    if (u.active) {
+      u.active = false
+      u.exitOn = u.exitOn ?? today()
+      for (const l of d.leads) if (l.assignedTo === u.id && OPEN_LEAD.includes(l.status)) { l.assignedTo = undefined; l.assignedAt = undefined; leadEvent(l, me.id, `Back to Unassigned — ${u.name} deleted`); freed++ }
+      for (const x of d.users) if (x.teamLeadId === u.id) x.teamLeadId = undefined
+    }
+    // the username and email are free for someone new
+    if (!u.username.includes('#removed-')) u.username += REMOVED_TAG(u.id)
+    if (!u.email.includes('#removed-')) u.email += REMOVED_TAG(u.id)
+    u.deletedAt = nowIso(); u.deletedBy = me.id
+    audit(d, me.id, 'USER_DELETE', `${u.name} (${unremoved(u.email)}) deleted${freed ? ` · ${freed} lead(s) unassigned` : ''}`)
+    return freed
+  })
+}
+/** Undo a delete: the person is back in the list as Removed (activate them, or Restore in Employees, to let them sign in). */
+export function undeleteUser(me: User, id: string) {
+  need(me, 'access.manage')
+  mutate((d) => {
+    const u = d.users.find((x) => x.id === id)
+    assert(u && isDeleted(u), 'User not found or not deleted.')
+    assert(!rolesOf(u).some((r) => MASTER_ROLES.includes(r)) || isSA(me), 'Only a Super Admin can bring back a Super Admin or IT account.')
+    u.deletedAt = ''; u.deletedBy = ''
+    audit(d, me.id, 'USER_UNDELETE', `${u.name} back in the list (removed — not signed in yet)`)
   })
 }
 
