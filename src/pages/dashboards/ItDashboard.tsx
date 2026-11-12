@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  Activity, AlertTriangle, ArrowLeftRight, Bug, Camera, GraduationCap, CheckCircle2, DatabaseBackup, DatabaseZap, Download, Eraser, HardDrive, KeyRound, LayoutGrid, Lock, LogOut, RefreshCcw,
+  Activity, AlertTriangle, ArrowLeftRight, Bug, Camera, FileSpreadsheet, GraduationCap, CheckCircle2, DatabaseBackup, DatabaseZap, Download, Eraser, HardDrive, KeyRound, LayoutGrid, Lock, LogOut, RefreshCcw,
   ScrollText, ShieldAlert, ShieldCheck, Stethoscope, Unlock, UserCog, UserPlus, Users, Wrench, XCircle, type LucideIcon,
 } from 'lucide-react'
 import type { Role } from '../../lib/types'
@@ -21,6 +21,7 @@ import { Avatar, Badge, Button, Card, Checkbox, cx, Input, Modal, Select, Textar
 import { Greeting, LoginLogoutCard, Section, ViewAll } from './widgets'
 import { UserActivity } from '../../components/UserActivity'
 import { DeletedFiles } from '../../components/DeletedFiles'
+import { BulkUsers } from '../../components/BulkUsers'
 
 type Tone = 'navy' | 'green' | 'orange' | 'red' | 'violet' | 'blue' | 'amber' | 'gray' | 'cyan'
 const chip: Record<Tone, string> = {
@@ -53,6 +54,7 @@ export function ItDashboard() {
   const [pass, setPass] = useState('')
   const [assignOpen, setAssignOpen] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
+  const [bulkOpen, setBulkOpen] = useState(false)
   const [resetOpen, setResetOpen] = useState(false)
   const [maintOpen, setMaintOpen] = useState(false)
   const [maintMsg, setMaintMsg] = useState(db.settings.maintenance?.message ?? '')
@@ -113,6 +115,7 @@ export function ItDashboard() {
         <Action icon={Camera} tone="cyan" label="Snapshot now" hint={CLOUD ? 'Downloads a backup file to this computer' : 'Saved in this browser · restore any time'} busy={busy === 'snap'} onClick={() => doAndRecheck('snap', () => createSnapshot(me, 'Snapshot from IT dashboard'), 'Snapshot saved')} />
         <Action icon={Download} tone="navy" label="Download backup" hint="Encrypted file of all data" onClick={() => { setPass(''); setBackupOpen(true) }} />
         <Action icon={UserPlus} tone="green" label="Create user" hint="One email · one or more roles · password" onClick={() => setCreateOpen(true)} />
+        <Action icon={FileSpreadsheet} tone="green" label="Add users from a sheet" hint="Whole team at once · roles, branch, password · replace old users" onClick={() => setBulkOpen(true)} />
         <Action icon={UserCog} tone="violet" label="Assign access" hint="Main role, extra roles, active" onClick={() => setAssignOpen(true)} />
         <Action icon={KeyRound} tone="orange" label="API keys" hint="Create, rotate, revoke" to="/api-keys" />
         <Action icon={Unlock} tone="amber" label="Unlock all accounts" hint={`${fails.length} with failed sign-ins`} busy={busy === 'unlock'} onClick={() => doAndRecheck('unlock', () => unlockAllAccounts(me), 'All sign-in locks cleared')} />
@@ -204,6 +207,7 @@ export function ItDashboard() {
       </Modal>
       <AssignAccess open={assignOpen} onClose={() => setAssignOpen(false)} />
       <CreateUserIt open={createOpen} onClose={() => setCreateOpen(false)} />
+      <BulkUsers open={bulkOpen} onClose={() => setBulkOpen(false)} />
       <SetPasswordModal open={resetOpen} onClose={() => setResetOpen(false)} people={db.users.filter((u) => u.id !== me.id && (rolesOf(me).includes('superadmin') || !rolesOf(u).includes('superadmin'))).sort((a, b) => a.name.localeCompare(b.name))} />
       <Modal open={maintOpen} onClose={() => setMaintOpen(false)} title="Turn on maintenance mode" size="sm"
         footer={<><Button variant="outline" onClick={() => setMaintOpen(false)}>Cancel</Button><Button variant="danger" icon={Wrench} onClick={async () => { if (await run(() => setMaintenance(me, true, maintMsg), 'Maintenance mode on')) { setMaintOpen(false); check() } }}>Turn on</Button></>}>

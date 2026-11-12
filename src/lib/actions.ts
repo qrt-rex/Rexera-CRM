@@ -2898,12 +2898,13 @@ export const PASSWORD_RULE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,16
 export const PASSWORD_HINT = '8–16 characters with upper case, lower case, a number and a symbol.'
 
 /** HR sets the first password; the resume is optional here (the public application form requires one). */
-export async function createUser(me: User, i: UserInput, password: string, resume: FileRef | undefined) {
+export async function createUser(me: User, i: UserInput, password: string, resume: FileRef | undefined, opts: { phoneOptional?: boolean; noWelcome?: boolean } = {}) {
   need(me, 'access.manage', 'employees.manage')
   assert(i.name.trim() && i.username.trim(), 'Name and username are required.')
   assert(isEmail(i.email), 'Enter a valid email.')
-  // the dialer rings this number (Blutec agent phone), so every employee needs one
-  assert(isPhone(i.phone), 'Enter a valid 10-digit mobile number — the dialer calls it.')
+  // the dialer rings this number (Blutec agent phone), so every employee needs one (a bulk import from a sheet
+  // without mobiles adds it later in Employees)
+  assert(isPhone(i.phone) || (opts.phoneOptional && !i.phone), 'Enter a valid 10-digit mobile number — the dialer calls it.')
   // roles are IT Support's (Access Control), so IT may also make a Super Admin
   assert(i.role !== 'superadmin' || isSA(me) || canManageRoles(me), 'Only a Super Admin or IT Support can create a Super Admin.')
   assert(PASSWORD_RULE.test(password), `Password: ${PASSWORD_HINT}`)
@@ -2921,7 +2922,7 @@ export async function createUser(me: User, i: UserInput, password: string, resum
     const created: User = { ...i, id, username: i.username.trim(), email: i.email.trim().toLowerCase(), phone: i.phone ? normPhone(i.phone) : '', extraRoles: [], grants: [], denies: [], joinedOn: i.joinedOn || today(), active: true, passHash, resume }
     m.users.push(created)
     audit(m, me.id, 'USER_CREATE', `${i.name} (${roleLabel(i.role)})`)
-    fireAutomation(m, 'welcome', [created])
+    if (!opts.noWelcome) fireAutomation(m, 'welcome', [created])
   })
   // the CRM row must exist before the server creates the sign-in account for it
   if (CLOUD) { await saved(); await cloudSetPassword(id, password) }
