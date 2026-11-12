@@ -14,7 +14,7 @@ import { sendOtpEmailClient } from '../lib/emailClient'
 
 const DEV_MODE = import.meta.env.DEV || import.meta.env.VITE_DEMO === '1'
 /** When the code can't be emailed, show it on screen: developer mode, or the Super Admin turned it on for the live CRM
- *  (Access â†’ Settings â†’ Sign-in; the settings are loaded once the password is accepted). */
+ *  (Access → Settings → Sign-in; the settings are loaded once the password is accepted). */
 const codeOnScreen = () => DEV_MODE || getDb().settings.loginCodeOnScreen === true
 
 export default function Login() {
@@ -53,7 +53,7 @@ export default function Login() {
     setBusy(true)
     try {
       const r = await loginStep1(login, password)
-      // the email code is switched off (Access â†’ Settings): signed in with the password
+      // the email code is switched off (Access → Settings): signed in with the password
       if (r.signedIn) {
         signIn(r.signedIn)
         const u = getDb().users.find((x) => x.id === r.signedIn)!
@@ -115,12 +115,13 @@ export default function Login() {
     if (d && i === 5 && next.join('').length === 6) verify(next.join(''))
   }
 
-  const masked = email.replace(/^(.{2}).*(@.*)$/, '$1â€¢â€¢â€¢$2')
+  const masked = email.replace(/^(.{2}).*(@.*)$/, '$1•••$2')
   const demo = ROLES.map((r) => ({ ...r, user: db.users.find((u) => u.role === r.id && u.active) })).filter((r) => r.user)
 
   return (
-    <div className="min-h-screen bg-[#2E3A8C] p-0 lg:p-3">
-      <div className="mx-auto flex min-h-screen max-w-[1400px] overflow-hidden bg-white lg:min-h-[calc(100vh-24px)] lg:rounded-sm">
+    // the whole screen, edge to edge: introduction on the left, the form on the right (only the form on phones)
+    <div className="min-h-dvh w-full bg-[#33408F]">
+      <div className="flex min-h-dvh w-full overflow-hidden bg-white">
         {/* left: introduction, welcome video and services + India time */}
         <section className="relative hidden flex-1 flex-col overflow-hidden bg-[#FFFCFB] p-10 lg:flex">
           <div aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(#2E3A8C0a_1px,transparent_1px),linear-gradient(90deg,#2E3A8C0a_1px,transparent_1px)] [background-size:40px_40px] [mask-image:linear-gradient(to_bottom,black,transparent_85%)]" />
@@ -166,7 +167,7 @@ export default function Login() {
                 <label className="mb-1.5 block text-[15px] font-medium" htmlFor="password">Password</label>
                 <div className="relative mb-2">
                   <Lock className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-[#2E3A8C]/50" />
-                  <input id="password" type={show ? 'text' : 'password'} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
+                  <input id="password" type={show ? 'text' : 'password'} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••"
                     className="h-14 w-full rounded-2xl border-2 border-[#F4A12A] bg-[#FFFCFB] pl-12 pr-12 text-[15px] text-[#111827] shadow-[0_6px_0_#F4A12A] outline-none placeholder:text-[#9CA3AF] focus:ring-4 focus:ring-white/30" />
                   <button type="button" onClick={() => setShow((s) => !s)} aria-label={show ? 'Hide password' : 'Show password'} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#2E3A8C]/60 hover:text-[#2E3A8C]">
                     {show ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
@@ -182,8 +183,8 @@ export default function Login() {
 
                 {DEV_MODE && (
                   <div className="mt-8 rounded-2xl border border-white/15 bg-white/5 p-4">
-                    <p className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#F4A12A]"><KeyRound className="size-3.5" />Accounts Â· developer mode</p>
-                    <p className="mb-3 text-[11px] text-white/60">Fills the email â€” type that account's password.</p>
+                    <p className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#F4A12A]"><KeyRound className="size-3.5" />Accounts · developer mode</p>
+                    <p className="mb-3 text-[11px] text-white/60">Fills the email — type that account's password.</p>
                     <div className="flex flex-wrap gap-2">
                       {demo.map((r) => (
                         <button type="button" key={r.id} title={r.user!.email} onClick={() => {
@@ -222,7 +223,7 @@ export default function Login() {
                 )}
                 {master && noMail && (
                   <div role="status" className="mt-4 rounded-xl border border-amber-400/40 bg-amber-500/20 px-4 py-3 text-center text-xs text-amber-100">
-                    <p>The code email could not be sent. As <b>Super Admin / IT Support</b> you can continue with the password you entered â€” this sign-in is recorded in the activity log.</p>
+                    <p>The code email could not be sent. As <b>Super Admin / IT Support</b> you can continue with the password you entered — this sign-in is recorded in the activity log.</p>
                     <button type="button" onClick={continueWithoutCode} className="mt-2.5 rounded-xl bg-white px-4 py-2 text-sm font-bold text-[#2E3A8C] hover:bg-white/90">Continue without the code</button>
                   </div>
                 )}
@@ -260,7 +261,7 @@ export default function Login() {
               </div>
             )}
           </div>
-          <p className="relative mt-10 text-center text-[11px] text-white/50">Â© {new Date().getFullYear()} Rexera Financial Services Pvt. Ltd.</p>
+          <p className="relative mt-10 text-center text-[11px] text-white/50">© {new Date().getFullYear()} Rexera Financial Services Pvt. Ltd.</p>
         </section>
       </div>
       <ResetPasswordModal open={forgot} onClose={() => setForgot(false)} />
