@@ -13,8 +13,11 @@ return [
   // optional: the old billing database (staff full names, invoices) — remove this line if there is none
   'billing' => ['host' => 'localhost', 'port' => 3306, 'name' => 'u000000000_bill', 'user' => 'u000000000_reader', 'pass' => 'database-password'],
 
-  // the folder of the old CRM's uploaded files (client documents, payment screenshots, agreements)
-  'uploads_dir' => __DIR__ . '/../uploads',
+  // the folder of the old CRM's uploaded files (client documents, payment screenshots, agreements).
+  // Connector in the website's main folder (next to the old CRM's index.php): __DIR__ . '/uploads'.
+  // Connector in a sub-folder such as rexera-sync/: __DIR__ . '/../uploads'.
+  // (From connector 1.1 an "uploads" folder next to the connector or one level up is also found by itself.)
+  'uploads_dir' => __DIR__ . '/uploads',
 
   // shown in the new CRM's IT dashboard
   'crm_name' => 'Rexera CRM (old)',

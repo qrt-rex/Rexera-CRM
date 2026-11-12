@@ -13,7 +13,7 @@
  */
 declare(strict_types=1);
 
-const CONNECTOR_VERSION = '1.0.0';
+const CONNECTOR_VERSION = '1.1.0';
 const MAX_SKEW_SEC = 300;
 const MAX_PAGE = 2000;
 const MAX_FILE_BYTES = 52428800; // 50 MB
@@ -21,6 +21,8 @@ const MAIN_TABLES = ['users', 'services', 'service_stage_master', 'crm', 'crm_co
   'client_documents', 'leads', 'lead_uploads', 'lead_assignments', 'lead_activity', 'notifications'];
 const BILLING_TABLES = ['users', 'invoices', 'invoice_items'];
 
+// PHP warnings never go into a reply (they would break the JSON and could show server paths)
+ini_set('display_errors', '0');
 header('X-Content-Type-Options: nosniff');
 header('Cache-Control: no-store');
 
@@ -101,8 +103,39 @@ function folder_size(string $dir): array {
   return $out;
 }
 
+// ---------------------------------------------------------------------------- uploaded files
+/**
+ * The old CRM's uploads folder(s): the one in the config, and — found by itself, so a wrong uploads_dir doesn't stop
+ * the copy — an "uploads" folder next to this file or one level up. Only these folders can be read.
+ */
+function upload_dirs(array $config): array {
+  $out = [];
+  foreach ([(string)($config['uploads_dir'] ?? ''), __DIR__ . '/uploads', dirname(__DIR__) . '/uploads'] as $d) {
+    // @: a folder outside the host's open_basedir limit warns instead of answering — a warning would break the JSON reply
+    $r = $d !== '' ? @realpath($d) : false;
+    if ($r !== false && @is_dir($r) && !in_array($r, $out, true)) $out[] = $r;
+  }
+  return $out;
+}
+/** Never handed out, whatever the path: code and settings files (this connector's config holds passwords). */
+function readable_file(string $full): bool {
+  return !preg_match('/\.(php\d?|phtml|phar|inc|ini|env|htaccess|htpasswd|sql|log|sh|py|pl|cgi)$/i', $full) && basename($full)[0] !== '.';
+}
+/** A requested path (as the old CRM stored it, e.g. "uploads/client_documents/…") → the file, inside an uploads folder only. */
+function find_upload(array $dirs, string $rel): ?string {
+  $rel = ltrim(str_replace('\\', '/', $rel), '/');
+  if ($rel === '' || strpos($rel, "\0") !== false) return null;
+  $tries = [$rel, (string)preg_replace('#^\.?/?uploads/#i', '', $rel)];
+  foreach ($dirs as $base) foreach (array_unique($tries) as $t) {
+    $full = @realpath($base . '/' . $t);
+    if ($full !== false && strpos($full, $base . DIRECTORY_SEPARATOR) === 0 && @is_file($full) && readable_file($full)) return $full;
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------- actions
-$uploads = isset($config['uploads_dir']) ? realpath((string)$config['uploads_dir']) : false;
+$dirs = upload_dirs($config);
+$uploads = $dirs[0] ?? false;
 
 switch ($action) {
   case 'ping': {
@@ -126,7 +159,10 @@ switch ($action) {
       usort($tables, fn($a, $b) => $b['bytes'] <=> $a['bytes']);
       $out['databases'][$which] = ['bytes' => $total, 'tables' => $tables];
     }
-    if ($uploads !== false) $out['files'] = folder_size($uploads);
+    // the uploads folder with the most files (the real one, when the config points at a wrong or empty folder)
+    $best = null;
+    foreach ($dirs as $d) { $s = folder_size($d) + ['dir' => basename($d)]; if (!$best || $s['files'] > $best['files']) $best = $s; }
+    if ($best) $out['files'] = $best;
     $base = $uploads !== false ? $uploads : __DIR__;
     $free = @disk_free_space($base); $all = @disk_total_space($base);
     $out['disk'] = ['free' => $free === false ? null : (float)$free, 'total' => $all === false ? null : (float)$all];
@@ -167,11 +203,10 @@ switch ($action) {
   }
 
   case 'file': {
-    if ($uploads === false) fail(400, 'No uploads_dir in the config.');
-    $rel = ltrim(str_replace('\\', '/', (string)($_GET['path'] ?? '')), '/');
-    $full = realpath($uploads . '/' . $rel);
-    // only inside the uploads folder
-    if ($full === false || strpos($full, $uploads . DIRECTORY_SEPARATOR) !== 0 || !is_file($full)) fail(404, 'File not found.');
+    if (!$dirs) fail(400, 'No uploads_dir in the config, and no uploads folder next to the connector.');
+    // only inside an uploads folder, never code or settings files
+    $full = find_upload($dirs, (string)($_GET['path'] ?? ''));
+    if ($full === null) fail(404, 'File not found.');
     $size = filesize($full);
     if ($size === false || $size > MAX_FILE_BYTES) fail(413, 'File too large to copy (over 50 MB).');
     $type = function_exists('mime_content_type') ? (mime_content_type($full) ?: 'application/octet-stream') : 'application/octet-stream';

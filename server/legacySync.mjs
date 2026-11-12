@@ -182,7 +182,10 @@ async function writeRows(sb, table, onConflict, list) {
     if (!error) continue
     for (const row of chunk) {
       const r = await sb.from(table).upsert([row], { onConflict })
-      if (r.error) failed.push({ table, key: keyOf(row), error: r.error.message })
+      if (!r.error) continue
+      // a payment / comment / approval refused only because its client file was refused: say so (saved with it)
+      const parent = /foreign key/i.test(r.error.message) ? (row.booking_id ?? row.lead_id ?? row.invoice_id ?? null) : null
+      failed.push({ table, key: keyOf(row), error: r.error.message, ...(parent ? { parent } : {}) })
     }
   }
   return failed

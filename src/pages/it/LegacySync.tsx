@@ -8,7 +8,7 @@ import { useMe } from '../../lib/auth'
 import { userName } from '../../lib/actions'
 import { ago, fmtDateTime } from '../../lib/format'
 import {
-  INTERVALS, bytes, intervalText, loadStatus, loadStorage, newSecret, runNow, saveConfig, stopRun, testConnection,
+  INTERVALS, LATEST_CONNECTOR, bytes, connectorOutdated, intervalText, loadStatus, loadStorage, newSecret, runNow, saveConfig, stopRun, testConnection,
   type Ping, type SyncRun, type SyncStatus, type SyncStorage, type TableSize,
 } from '../../lib/legacySync'
 import { Logo } from '../../components/Logo'
@@ -342,7 +342,10 @@ function RunLog({ runs, userOf, onRetry, running, canRun }: { runs: SyncRun[]; u
                     ) : <p className="text-mute">Nothing new.</p>}
                     {!!r.written?.failedRows?.length && <>
                       <p className="mb-1 mt-3 font-semibold text-bad">Records the database refused ({r.written.failedRows.length}) — the rest were saved; these are tried again (3 times, then set aside)</p>
-                      <ul className="max-h-48 space-y-1 overflow-auto">{r.written.failedRows.map((f, i) => <li key={i} className="rounded bg-card px-2 py-1"><span className="font-mono text-[11px]">{f.table} · {f.key}</span> <span className="text-mute">· {f.error}{f.tries ? ` · try ${f.tries}/3` : ''}</span></li>)}</ul>
+                      <ul className="max-h-48 space-y-1 overflow-auto">{r.written.failedRows.map((f, i) => {
+                        const waits = f.parent && r.written!.failedRows!.some((x) => x.key === f.parent)
+                        return <li key={i} className="rounded bg-card px-2 py-1"><span className="font-mono text-[11px]">{f.table} · {f.key}</span> <span className="text-mute">· {waits ? `waits for its client file ${f.parent} (above) — saved together with it` : f.error}{f.tries ? ` · try ${f.tries}/3` : ''}</span></li>
+                      })}</ul>
                     </>}
                     {failed.length > 0 && <>
                       <p className="mb-1 mt-3 font-semibold text-bad">Files that could not be copied ({failed.length}) — tried again on the next copies (3 times, then set aside)</p>
@@ -453,6 +456,12 @@ function SettingsTab({ st, onSaved }: { st: SyncStatus; onSaved: () => Promise<v
                 {Object.entries(p.databases).map(([k, d]) => <p key={k} className="mt-1 text-mute">{k === 'main' ? 'Main' : 'Billing'} database: MySQL {d.mysql} · {d.tables?.length ?? 0} tables readable ({d.tables?.join(', ')})</p>)}
                 {s.oldTotal != null && <p className="mt-1 text-mute">Records in the old CRM: <b className="text-ink">{s.oldTotal.toLocaleString('en-IN')}</b></p>}
                 <p className="mt-1 text-mute">Uploads folder: {p.uploads ? 'found' : <b className="text-bad">not found — check uploads_dir</b>}</p>
+                {connectorOutdated(p.version) && (
+                  <p className="mt-2 rounded-md bg-warn-soft px-2 py-1.5 text-warn">
+                    <b>Connector update {LATEST_CONNECTOR} available</b> — it finds the old CRM's uploads folder by itself, so files copy even if uploads_dir is wrong.{' '}
+                    <a className="font-semibold underline" href="/old-crm-connector/rexera-connector.php" download="rexera-connector.php">Download</a> and replace rexera-connector.php on the old CRM's website (the config file stays), then Test connection.
+                  </p>
+                )}
               </div>
             )
           })()}

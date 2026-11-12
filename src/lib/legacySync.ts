@@ -18,7 +18,7 @@ export interface Counts { added: number; updated: number; kept: number; same: nu
 export interface SyncRun {
   id: number; started_at: string; finished_at: string | null; trigger: 'auto' | 'manual' | 'full'; status: 'running' | 'ok' | 'partial' | 'error' | 'stopped'
   changed_tables: string[] | null; rows_read: number | null; error: string | null; by_user: string | null
-  written: (Record<string, Counts> & { totals?: { added: number; updated: number; kept: number }; notes?: string[]; failedRows?: { table: string; key: string; error: string; tries?: number }[] }) | null
+  written: (Record<string, Counts> & { totals?: { added: number; updated: number; kept: number }; notes?: string[]; failedRows?: { table: string; key: string; error: string; tries?: number; parent?: string }[] }) | null
   files: { copied: number; failed: { path: string; doc: string; booking: string; error: string; tries?: number }[]; more: boolean; setAside?: number } | null
 }
 export interface SyncStatus { config: SyncConfig; secret: { set: boolean; problem: string | null }; running: boolean; runs: SyncRun[] }
@@ -35,6 +35,9 @@ export interface SyncStorage {
 export interface Ping { name: string; logo?: string; version: string; php: string; time: string; uploads: boolean; databases: Record<string, { mysql: string; tables: string[] }> }
 
 export const INTERVALS = [15, 30, 60, 300, 900] as const
+/** the newest connector (public/old-crm-connector/rexera-connector.php CONNECTOR_VERSION) */
+export const LATEST_CONNECTOR = '1.1.0'
+export const connectorOutdated = (v?: string) => !!v && v.localeCompare(LATEST_CONNECTOR, undefined, { numeric: true }) < 0
 export const intervalText = (s: number) => (s < 60 ? `${s} seconds` : s === 60 ? '1 minute' : `${s / 60} minutes`)
 
 async function api<T>(path: string, method: 'GET' | 'POST' = 'GET', body?: object): Promise<T> {
