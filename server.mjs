@@ -25,6 +25,7 @@ import { blutecEnv, handleBlutec } from './supabase/functions/_shared/blutec.ts'
 import { createEmbedSession, consumeEmbedNonce, handleProxy, handleWsUpgrade } from './server/blutecEmbed.mjs'
 import { handleLegacySync, startLegacySync } from './server/legacySync.mjs'
 import { handleErrorReport, logError } from './server/errors.mjs'
+import { handleUserSheet } from './server/userSheet.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DIST_DIR = path.resolve(__dirname, 'dist')
@@ -719,6 +720,14 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === '/api/ai-chat' && req.method === 'POST') {
     return handleAiChat(req, res)
+  }
+
+  // IT dashboard → Add users from a sheet: a Google Sheets link, downloaded here (server/userSheet.mjs)
+  if (pathname === '/api/users/sheet' && req.method === 'POST') {
+    let body
+    try { body = JSON.parse((await readRawBody(req, 4_000)) || '{}') } catch { return sendJson(res, 400, { success: false, message: 'Bad request.' }) }
+    const r = await handleUserSheet(getEnv, req.headers.authorization, body)
+    return sendJson(res, r.status, r.body)
   }
 
   // Auto-debug: errors from the signed-in person's browser → Error log (server/errors.mjs)

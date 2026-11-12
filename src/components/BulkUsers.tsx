@@ -1,9 +1,9 @@
 import { useMemo, useRef, useState } from 'react'
-import { AlertTriangle, CheckCircle2, FileSpreadsheet, Loader2, Upload, UserMinus, UserPlus, Users, XCircle } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, FileSpreadsheet, Link2, Loader2, Upload, UserMinus, UserPlus, Users, XCircle } from 'lucide-react'
 import { useDb } from '../lib/store'
 import { useMe } from '../lib/auth'
 import { roleLabel } from '../lib/rbac'
-import { applyUsers, planUsers, readSheets, type ApplyResult, type Plan } from '../lib/bulkUsers'
+import { applyUsers, planUsers, readGoogleSheet, readSheets, type ApplyResult, type Plan } from '../lib/bulkUsers'
 import { Badge, Button, Checkbox, cx, Modal, Progress, Select, useConfirm } from './ui'
 
 /**
@@ -24,6 +24,8 @@ export function BulkUsers({ open, onClose }: { open: boolean; onClose: () => voi
   const [busy, setBusy] = useState<{ done: number; total: number } | null>(null)
   const [results, setResults] = useState<ApplyResult[] | null>(null)
   const [show, setShow] = useState<'all' | 'create' | 'update' | 'skip'>('all')
+  const [link, setLink] = useState('')
+  const [reading, setReading] = useState(false)
 
   const plan: Plan | null = useMemo(() => (sheets ? planUsers(sheets, db, me) : null), [sheets, db, me])
   const removing = removeIds ?? plan?.remove.map((u) => u.id) ?? []
@@ -42,6 +44,12 @@ export function BulkUsers({ open, onClose }: { open: boolean; onClose: () => voi
   }, [plan])
 
   const reset = () => { setSheets(null); setFileName(''); setErr(''); setRemoveIds(null); setTeamLeads({}); setResults(null); setShow('all') }
+  const fromLink = async () => {
+    setReading(true); setErr('')
+    try { const s = await readGoogleSheet(link.trim()); setRemoveIds(null); setTeamLeads({}); setResults(null); setSheets(s); setFileName('Google Sheet') }
+    catch (e) { setErr((e as Error).message) }
+    setReading(false)
+  }
   const pick = async (f: File | undefined) => {
     if (!f) return
     reset()
@@ -83,6 +91,16 @@ export function BulkUsers({ open, onClose }: { open: boolean; onClose: () => voi
         </div>
       )}
 
+      {!results && !plan && (
+        <form className="mb-3 flex flex-wrap items-end gap-2" onSubmit={(e) => { e.preventDefault(); void fromLink() }}>
+          <label className="min-w-[16rem] flex-1">
+            <span className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-mute"><Link2 className="size-3.5" />Google Sheets link</span>
+            <input value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/…" className="h-10 w-full rounded-xl border border-line bg-card px-3 text-sm" />
+          </label>
+          <Button type="submit" icon={FileSpreadsheet} loading={reading} disabled={!link.trim()}>Read the sheet</Button>
+          <span className="basis-full text-[11px] text-mute">The sheet must be shared “Anyone with the link” (Viewer). Every tab is read. Or choose a downloaded file below.</span>
+        </form>
+      )}
       {!results && !plan && (
         <button type="button" onClick={() => input.current?.click()} className="flex w-full flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-line px-6 py-10 text-center hover:border-brand hover:bg-brand-soft/30">
           <FileSpreadsheet className="size-10 text-brand-ink" />
