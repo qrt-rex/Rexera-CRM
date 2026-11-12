@@ -3,6 +3,7 @@ import type {
 } from './types'
 import { accessControlOf, canEditSchemesUser, canManageRoles, DEFAULT_ROLE_PERMS, effectivePerms, fnKey, isMaster, isStageOnlyAdmin, MASTER_ROLES, ROLES, rolesOf, roleLabel } from './rbac'
 import { filterCount, kitProblem } from '../../supabase/scheme-kit-rules.mjs'
+import { linkedMaster, linkNew, type MasterKind } from '../../supabase/scheme-master-rules.mjs'
 import { MODULES } from './modules'
 import { fileAdmins, isFileAdmin } from './fileAdmins'
 import { clearCloudDb, clone, getDb, mutate, reloadFromCloud, saved } from './store'
@@ -939,6 +940,7 @@ export function saveService(me: User, s: Omit<Service, 'id'>, id?: string) {
     if (id) {
       const x = d.services.find((y) => y.id === id)
       assert(x, 'Service not found.')
+      noRenameHere(d, 'service', id, x.name, name)
       Object.assign(x, base)
       if (!base.prices) delete x.prices
       audit(d, me.id, 'SERVICE_EDIT', name)
@@ -946,6 +948,8 @@ export function saveService(me: User, s: Omit<Service, 'id'>, id?: string) {
     }
     const nid = uid('svc-')
     d.services.push({ id: nid, ...base })
+    // its name joins the Scheme Kit (only the scheme editors write the Scheme Kit; Admin's new services are added there later)
+    if (canEditSchemesUser(me)) linkNew(d.schemeMaster ?? [], 'service', { id: nid, name, category: base.category }, () => uid('ms-'), nowIso())
     audit(d, me.id, 'SERVICE_ADD', name)
     return nid
   })
@@ -2600,6 +2604,15 @@ export function cancelInvoice(me: User, id: string) {
 
 // ============================================================ content
 export type SalesKitInput = Omit<SalesKitItem, 'id' | 'position' | 'updatedAt' | 'updatedBy'>
+/**
+ * A scheme's name is set only in the Scheme Kit: an item linked to it (a service, Sales Kit scheme, scheme or Scheme
+ * Checker scheme) can't be renamed in its own list — the Scheme Kit renames it everywhere at once.
+ */
+export function noRenameHere(d: DB, kind: MasterKind, id: string, before: string, after: string) {
+  if (before.trim() === after.trim()) return
+  const m = linkedMaster(d.schemeMaster ?? [], kind, id)
+  assert(!m, `The name of “${m?.name}” is managed in the Scheme Kit — rename it there and it changes everywhere.`)
+}
 /** Schemes wherever they are: the Operation Team, IT Support and Super Admin only (by role — the database checks the same). */
 function needSchemeEditor(me: User) {
   assert(canEditSchemesUser(me), 'Only the Operation Team, IT Support and Super Admin can change schemes.')
@@ -2626,7 +2639,11 @@ export function importSalesKit(me: User, rows: { v: SalesKitInput; id?: string; 
         updated++
       } else if (r.action === 'new') {
         const position = 1 + Math.max(0, ...d.salesKit.filter((s) => s.category === category).map((s) => s.position))
-        d.salesKit.push({ ...r.v, name, category, registrationCharge: r.v.registrationCharge?.trim() || undefined, id: uid('sk-'), position, updatedAt: at, updatedBy: me.id })
+        // a name already in the Scheme Kit (or an old name of one) takes the Scheme Kit's name
+        const item = { ...r.v, name, category, registrationCharge: r.v.registrationCharge?.trim() || undefined, id: uid('sk-'), position, updatedAt: at, updatedBy: me.id }
+        const m = linkNew(d.schemeMaster ?? [], 'salesKit', item, () => uid('ms-'), at)
+        if (m) item.name = m.name
+        d.salesKit.push(item)
         added++
       }
     }
@@ -2648,7 +2665,8 @@ export function saveSchemeKit(me: User, k: SchemeKitInput, id?: string) {
     const may = (shared: boolean, ownerId: string) => (shared ? canEditSchemesUser(me) : ownerId === me.id)
     if (cur) assert(may(cur.shared, cur.ownerId), cur.shared ? 'Shared kits are changed by the Operation Team, IT Support and Super Admin.' : 'Only its owner changes this kit.')
     assert(!k.shared || canEditSchemesUser(me), 'Only the Operation Team, IT Support and Super Admin can share a kit with everyone.')
-    const known = new Set((d.salesKit ?? []).map((s) => s.id))
+    // Scheme Kit schemes (and Sales Kit ids of kits made before the Scheme Kit had its own list)
+    const known = new Set([...(d.schemeMaster ?? []).map((s) => s.id), ...(d.salesKit ?? []).map((s) => s.id)])
     const v = {
       name: k.name.trim(), description: k.description?.trim() || undefined, color: k.color || undefined,
       schemeIds: [...new Set(k.schemeIds)].filter((x) => known.has(x)), excludedIds: k.excludedIds?.filter((x) => known.has(x)).length ? k.excludedIds.filter((x) => known.has(x)) : undefined,
@@ -2698,12 +2716,17 @@ export function saveSalesKitItem(me: User, x: SalesKitInput, id?: string) {
     if (id) {
       const cur = d.salesKit.find((s) => s.id === id)
       assert(cur, 'Scheme not found.')
+      noRenameHere(d, 'salesKit', id, cur.name, v.name)
       Object.assign(cur, v, { updatedAt: at, updatedBy: me.id })
       audit(d, me.id, 'SALES_KIT_EDIT', `${cur.category}: ${cur.name}`)
       return
     }
     const position = 1 + Math.max(0, ...d.salesKit.filter((s) => s.category === v.category).map((s) => s.position))
-    d.salesKit.push({ ...v, id: uid('sk-'), position, updatedAt: at, updatedBy: me.id })
+    const item = { ...v, id: uid('sk-'), position, updatedAt: at, updatedBy: me.id }
+    // linked to its Scheme Kit scheme (a new name becomes a new Scheme Kit scheme)
+    const m = linkNew(d.schemeMaster ?? [], 'salesKit', item, () => uid('ms-'), at)
+    if (m) item.name = m.name
+    d.salesKit.push(item)
     notify(d, usersWithRole(d, 'sales', 'teamlead').map((u) => u.id), 'Sales Kit: new scheme', `${v.category} · ${v.name}`, '/sales-kit', 'info')
     audit(d, me.id, 'SALES_KIT_ADD', `${v.category}: ${v.name}`)
   })
@@ -2732,11 +2755,15 @@ export function upsertScheme(me: User, s: Omit<Scheme, 'id' | 'createdAt' | 'by'
     if (s.id) {
       const x = d.schemes.find((y) => y.id === s.id)
       assert(x, 'Scheme not found.')
+      noRenameHere(d, 'scheme', x.id, x.title, clean.title)
       Object.assign(x, clean)
       audit(d, me.id, 'SCHEME_EDIT', `${x.title}${x.endDate ? ` · ${x.startDate} → ${x.endDate}` : ''}${x.price != null ? ` · ₹${x.price}` : ''}`)
       return
     }
-    d.schemes.unshift({ ...clean, id: uid('sc-'), createdAt: at, by: me.id })
+    const nid = uid('sc-')
+    const m = linkNew(d.schemeMaster ?? [], 'scheme', { id: nid, name: clean.title, category: clean.category }, () => uid('ms-'), at)
+    if (m) clean.title = m.name
+    d.schemes.unshift({ ...clean, id: nid, createdAt: at, by: me.id })
     notify(d, usersWithRole(d, 'sales', 'teamlead').map((u) => u.id), 'New scheme published', clean.title, '/schemes', 'info')
     audit(d, me.id, 'SCHEME_ADD', clean.title)
   })

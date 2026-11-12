@@ -10,6 +10,7 @@ import { daysBetween, fmtDate, inr, today, uid } from '../../lib/format'
 import { checkScheme, DEFAULT_SCHEMES, DEFAULTS_CHECKED, describeRule, FIELDS, OPS, schemeProblems, STATUS, type EligibilityProfile } from '../../../supabase/eligibility-rules.mjs'
 import { CHECK_ICON, Lakh, loadCheckedProfile, ProfileFields, serviceFor } from '../../components/EligibilityChecker'
 import { Badge, Button, Card, Checkbox, cx, EmptyState, Input, Menu, MenuItem, Modal, PageHeader, Select, Tabs, Textarea, useConfirm, useRun, useSubmitting, useToast } from '../../components/ui'
+import { SchemeNameField } from '../../components/SchemeNameField'
 import { MiniStat } from '../dashboards/widgets'
 
 /** Rules older than this are flagged: government schemes change, so the team re-checks them against the official site. */
@@ -145,7 +146,7 @@ function SchemeEditor({ id, initial, onClose }: { id?: string; initial: SchemeIn
 
       {tab === 'details' && (
         <div className="grid gap-4 sm:grid-cols-2">
-          <Input label="Scheme name" required value={f.name} onChange={(e) => set('name', e.target.value)} className="sm:col-span-2" placeholder="e.g. PMEGP — Prime Minister’s Employment Generation Programme" />
+          <SchemeNameField kind="checker" id={id} required value={f.name} onChange={(name) => set('name', name)} className="sm:col-span-2" placeholder="e.g. PMEGP — Prime Minister’s Employment Generation Programme" />
           <Input label="Kind" value={f.kind} onChange={(e) => set('kind', e.target.value)} placeholder="Loan + subsidy, Grant, Registration…" />
           <Input label="Agency" value={f.agency} onChange={(e) => set('agency', e.target.value)} placeholder="KVIC, banks, DPIIT…" />
           <Input label="Official site" value={f.url} onChange={(e) => set('url', e.target.value)} placeholder="https://…" />

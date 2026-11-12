@@ -26,6 +26,7 @@ const WorkBoard = lazy(() => import('./pages/modules/WorkBoard'))
 const Documents = lazy(() => import('./pages/modules/Documents'))
 const Schemes = lazy(() => import('./pages/modules/Schemes'))
 const SalesKit = lazy(() => import('./pages/modules/SalesKit'))
+const SchemeKit = lazy(() => import('./pages/modules/SchemeKit'))
 const SchemeRules = lazy(() => import('./pages/modules/SchemeRules'))
 const AutomationCenter = lazy(() => import('./pages/modules/AutomationCenter'))
 const Reminders = lazy(() => import('./pages/modules/Reminders'))
@@ -182,6 +183,7 @@ export default function App() {
               <Route path="/documents" element={<Guard m="documents"><S><Documents /></S></Guard>} />
               <Route path="/schemes" element={<Guard m="schemes"><S><Schemes /></S></Guard>} />
               <Route path="/sales-kit" element={<Guard m="sales-kit"><S><SalesKit /></S></Guard>} />
+              <Route path="/scheme-kit" element={<Guard m="scheme-kit"><S><SchemeKit /></S></Guard>} />
               <Route path="/scheme-rules" element={<Guard m="scheme-rules"><S><SchemeRules /></S></Guard>} />
               <Route path="/automation" element={<Guard m="automation"><S><AutomationCenter /></S></Guard>} />
               <Route path="/client-messages" element={<Guard m="client-messages"><S><ClientMessages /></S></Guard>} />

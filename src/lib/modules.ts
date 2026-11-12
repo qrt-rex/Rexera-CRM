@@ -1,5 +1,5 @@
 import {
-  ArrowLeftRight, BarChart3, BellRing, Bug, BookOpenCheck, Briefcase, CalendarDays, Clapperboard, Cloud, ClipboardCheck, Coffee, FileText, Package, FolderKanban, Images, IndianRupee,
+  ArrowLeftRight, BarChart3, BellRing, Bug, Library, BookOpenCheck, Briefcase, CalendarDays, Clapperboard, Cloud, ClipboardCheck, Coffee, FileText, Package, FolderKanban, Images, IndianRupee,
   BookMarked, Globe, UserRoundCheck, KeyRound, Megaphone, MessagesSquare, Phone, Settings, ShieldCheck, Sparkles, UserCheck, UserCog, UserPlus, Users, UsersRound,
   CalendarCheck2, GraduationCap, Network, ScrollText, Wallet, Receipt, Landmark, Trophy, SlidersHorizontal, Gauge, KeySquare, DatabaseBackup, DatabaseZap, MailPlus, ClipboardList, FilePen, Inbox, Undo2, BadgeCheck, BadgePercent, Layers, FileSignature, Settings2, Workflow, type LucideIcon,
 } from 'lucide-react'
@@ -45,7 +45,9 @@ export const MODULES: ModuleDef[] = [
   { key: 'schemes', path: '/schemes', label: 'Schemes', desc: 'Government schemes and offers', icon: Sparkles, tone: 'green', perms: ['schemes.view', 'schemes.manage'], group: 'Content' },
   // Rexy's Scheme Checker rules: Super Admin and the Operation team only (not IT)
   { key: 'scheme-rules', path: '/scheme-rules', label: 'Scheme Checker Rules', desc: 'Government schemes, eligibility conditions, documents — what Rexy checks', icon: BadgeCheck, tone: 'green', perms: ['eligibility.manage'], roles: ['superadmin', 'operations'], group: 'Content' },
-  { key: 'sales-kit', path: '/sales-kit', label: 'Sales Kit & Scheme Kits', desc: 'Every scheme with advanced filters; organise them into Scheme Kits (personal or shared)', icon: BookMarked, tone: 'orange', perms: [], group: 'Content' },
+  // the master list of schemes: names are set only here and change everywhere; kits and advanced filters
+  { key: 'scheme-kit', path: '/scheme-kit', label: 'Scheme Kit', desc: 'The master list of schemes — names set here change everywhere; kits and advanced filters', icon: Library, tone: 'navy', perms: [], group: 'Content' },
+  { key: 'sales-kit', path: '/sales-kit', label: 'Sales Kit', desc: 'What sales tells clients: benefits, eligibility, last date and our charge', icon: BookMarked, tone: 'orange', perms: [], group: 'Content' },
   { key: 'content', path: '/content', label: 'Flyers, Posts & Sales Info', desc: 'Marketing material and sales scripts', icon: Images, tone: 'orange', perms: ['content.view', 'content.manage'], group: 'Content' },
   { key: 'broadcasts', path: '/broadcasts', label: 'Broadcasts', desc: 'Company updates with acknowledgement', icon: Megaphone, tone: 'red', perms: ['broadcasts.view', 'broadcasts.manage'], group: 'Content' },
   // the Digital Media section: only the Digital Media team (and Super Admin / IT)

@@ -246,6 +246,7 @@ export function upgradeDb(d: DB): DB {
     d.upgrades.push('scheme-checker-1')
   }
   d.schemeKits ??= []
+  d.schemeMaster ??= []
   if (!d.upgrades.includes('scheme-editors-1')) {
     // schemes wherever they are: the Operation Team (and IT Support / Super Admin, who hold everything) — nobody else
     const SCHEME_PERMS: Perm[] = ['schemes.manage', 'saleskit.manage', 'eligibility.manage']

@@ -1,7 +1,8 @@
 import type { DB, EligibilityCondition, EligibilityRule, EligibilityScheme, User } from './types'
 import { canEditSchemeRules } from './rbac'
 import { getDb, mutate } from './store'
-import { ActionError } from './actions'
+import { ActionError, noRenameHere } from './actions'
+import { linkNew } from '../../supabase/scheme-master-rules.mjs'
 import { nowIso, uid } from './format'
 import { DEFAULT_SCHEMES, FIELDS, schemeProblems } from '../../supabase/eligibility-rules.mjs'
 import { archiveDeleted } from './recycle'
@@ -25,7 +26,7 @@ function audit(d: DB, me: User, action: string, detail: string) {
   if (d.audit.length > 1000) d.audit.length = 1000
 }
 /** Saves the built-in set the first time anything is changed, so every scheme is then a row of its own. */
-function materialise(d: DB, me: User) {
+export function materialise(d: DB, me: User) {
   if (d.eligibilitySchemes?.length) return
   const at = nowIso()
   d.eligibilitySchemes = structuredClone(DEFAULT_SCHEMES).map((s) => ({ ...s, updatedAt: at, updatedBy: me.id }))
@@ -66,6 +67,7 @@ export function saveEligibilityScheme(me: User, x: SchemeInput, id?: string) {
     if (id) {
       const cur = list.find((s) => s.id === id)
       assert(cur, 'Scheme not found — it may have been removed.')
+      noRenameHere(d, 'checker', id, cur.name, v.name)
       Object.assign(cur, v, { updatedAt: at, updatedBy: me.id })
       if (!v.subsidy) delete cur.subsidy
       if (!v.bands) delete cur.bands
@@ -73,6 +75,9 @@ export function saveEligibilityScheme(me: User, x: SchemeInput, id?: string) {
       return cur.id
     }
     const s: EligibilityScheme = { ...v, id: uid('es-'), position: 1 + Math.max(0, ...list.map((y) => y.position)), updatedAt: at, updatedBy: me.id }
+    // linked to its Scheme Kit scheme (a new name becomes a new Scheme Kit scheme)
+    const m = linkNew(d.schemeMaster ?? [], 'checker', s, () => uid('ms-'), at)
+    if (m) s.name = m.name
     list.push(s)
     audit(d, me, 'SCHEME_RULES_ADD', `${s.name} · ${s.conditions.length} conditions`)
     return s.id

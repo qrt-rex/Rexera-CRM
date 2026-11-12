@@ -657,6 +657,17 @@ export interface SalesKitItem {
   updatedBy?: string
 }
 
+/**
+ * The Scheme Kit's master record of a scheme — the only place its name is set. Linked to the same scheme in Services,
+ * the Sales Kit, Schemes and the Scheme Checker; renaming it renames it in all of them (and in CRM entries, client
+ * entries and Digital Media). Old names are kept as aliases.
+ */
+export interface SchemeMaster {
+  id: string; name: string; category: string; active: boolean; description?: string
+  aliases: string[]; serviceIds: string[]; salesKitIds: string[]; schemeIds: string[]; checkerIds: string[]
+  position: number; createdAt: string; updatedAt?: string; updatedBy?: string
+}
+
 /** Sales Kit → advanced filter (also what a Scheme Kit can be built from). Empty lists / '' = any. */
 export interface SchemeFilter {
   q: string; categories: string[]; types: string[]; orgs: string[]; places: string[]; sectors: string[]; entities: string[]
@@ -1230,8 +1241,10 @@ export interface DB {
   /** Document Form Builder: forms sent to clients by secure link, and what came back */
   docForms?: DocForm[]
   salesKit?: SalesKitItem[]
-  /** Sales Kit → Scheme Kits (personal and shared) */
+  /** Scheme Kits (personal and shared) */
   schemeKits?: SchemeKit[]
+  /** the Scheme Kit's master list of schemes (names managed only there) */
+  schemeMaster?: SchemeMaster[]
   /** Rexy's Scheme Checker (empty = the built-in schemes) */
   eligibilitySchemes?: EligibilityScheme[]
   /** Automation Center: custom rules and the built-in on / off switches (IT Support edits) */

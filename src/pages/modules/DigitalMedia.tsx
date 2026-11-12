@@ -5,6 +5,7 @@ import type { FileRef, MediaItem, MediaWork } from '../../lib/types'
 import { useDb } from '../../lib/store'
 import { useMe } from '../../lib/auth'
 import { userName, visibleBookings } from '../../lib/actions'
+import { masterNames } from '../../lib/schemeMaster'
 import { addMediaFiles, canManageMedia, canWorkMedia, createMedia, deleteMedia, mayTakeMedia, removeMediaFile, setMediaWork, unpublishMedia, updateMedia, visibleMedia, type MediaForm } from '../../lib/media'
 import { deleteFile, fileSize, openFile, saveMediaFile } from '../../lib/files'
 import { ago, fmtDate, fmtDateTime } from '../../lib/format'
@@ -205,7 +206,8 @@ export function MediaFormModal({ form, onClose, onSaved }: {
   const input = useRef<HTMLInputElement>(null)
   const { upload, view, busy } = useUploads()
   const set = <K extends keyof MediaForm>(k: K, v: MediaForm[K]) => { setD((x) => ({ ...x, [k]: v })); setErrors((x) => ({ ...x, [k]: '', ...(k === 'internal' || k === 'external' ? { publication: '' } : {}) })) }
-  const schemes = [...new Set([...db.schemes.map((s) => s.title), ...(db.salesKit ?? []).map((s) => s.name)].filter(Boolean))].sort()
+  // the Scheme Kit's names (the official ones; renamed there, they change on every post too)
+  const schemes = db.schemeMaster?.length ? masterNames(db) : [...new Set([...db.schemes.map((s) => s.title), ...(db.salesKit ?? []).map((s) => s.name)].filter(Boolean))].sort()
   // only the Digital Media team (who can open this section) is assigned media
   const staff = db.users.filter((u) => (u.active && mayTakeMedia(db, u)) || u.id === d.assignedTo)
   const bookings = visibleBookings(db, me)

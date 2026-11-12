@@ -5,6 +5,7 @@ import { useDb } from '../../lib/store'
 import { useAuth, useMe } from '../../lib/auth'
 import { deleteScheme, upsertScheme, userName } from '../../lib/actions'
 import { canEditSchemesUser } from '../../lib/rbac'
+import { SchemeNameField } from '../../components/SchemeNameField'
 import { fmtDate, fmtDateTime, inr } from '../../lib/format'
 import { istToday, schemeDaysLeft, schemeDuration, schemeState, type SchemeState } from '../../../supabase/workflow-rules.mjs'
 import { Badge, Button, Card, EmptyState, Input, Modal, PageHeader, SearchBox, Tabs, Textarea, Toggle, useConfirm, useRun } from '../../components/ui'
@@ -120,7 +121,7 @@ export default function Schemes() {
       <Modal open={!!edit} onClose={() => setEdit(null)} title={edit?.id ? 'Edit scheme' : 'New scheme'}
         footer={<><Button variant="outline" onClick={() => setEdit(null)}>Cancel</Button><Button onClick={async () => { if (edit && await run(() => upsertScheme(me, { ...edit, startDate: edit.startDate || undefined, endDate: edit.endDate || undefined }), 'Scheme saved')) setEdit(null) }}>Save</Button></>}>
         {edit && <div className="grid gap-4 sm:grid-cols-2">
-          <Input label="Scheme name" required value={edit.title} onChange={(e) => setEdit({ ...edit, title: e.target.value })} className="sm:col-span-2" />
+          <SchemeNameField kind="scheme" id={edit.id} required value={edit.title} onChange={(title) => setEdit({ ...edit, title })} className="sm:col-span-2" />
           <Input label="Price (₹)" type="number" min={0} value={edit.price ?? ''} onChange={(e) => setEdit({ ...edit, price: e.target.value === '' ? undefined : Number(e.target.value) })} />
           <Input label="Category" value={edit.category} onChange={(e) => setEdit({ ...edit, category: e.target.value })} />
           <Input label="Start date" type="date" value={edit.startDate ?? ''} onChange={(e) => setEdit({ ...edit, startDate: e.target.value })} />

@@ -145,6 +145,11 @@ export function mapAll(backup) {
     organisation: x.organisation ?? '', scheme_type: x.schemeType ?? '', applicable_for: x.applicableFor ?? '', min_charge: x.minCharge ?? '', registration_charge: s(x.registrationCharge),
     updated_at: s(x.updatedAt), updated_by: uref(x.updatedBy),
   }))
+  t.scheme_master = (d.schemeMaster ?? []).map((m) => ({
+    id: m.id, name: m.name, category: m.category, active: m.active !== false, description: s(m.description), aliases: m.aliases ?? [],
+    service_ids: m.serviceIds ?? [], sales_kit_ids: m.salesKitIds ?? [], scheme_ids: m.schemeIds ?? [], checker_ids: m.checkerIds ?? [],
+    position: m.position ?? 0, created_at: m.createdAt, updated_at: s(m.updatedAt), updated_by: uref(m.updatedBy),
+  }))
   t.scheme_kits = (d.schemeKits ?? []).map((k) => ({
     id: k.id, name: k.name, description: s(k.description), color: s(k.color), scheme_ids: k.schemeIds ?? [], excluded_ids: k.excludedIds ?? [],
     filter: k.filter ?? null, sort: s(k.sort), shared: !!k.shared, owner_id: k.ownerId, position: k.position ?? 0, created_at: k.createdAt,
@@ -203,7 +208,7 @@ export const ORDER = [
   ['message_templates', 'id'], ['emails', 'id'], ['email_automations', 'key'], ['app_settings', 'key'], ['api_keys', 'id'],
   ['backup_log', 'id'], ['candidate_forms', 'id'], ['candidate_applications', 'id'], ['candidate_letters', 'id'], ['deleted_items', 'id'], ['recruitment_datasets', 'id'], ['recruitment_rows', 'dataset_id,row_no'],
   ['company_assets', 'id'], ['stock_items', 'id'], ['company_expenses', 'id'], ['legacy_files', 'path'],
-  ['doc_forms', 'id'], ['doc_form_submissions', 'id'], ['sales_kit', 'id'], ['scheme_kits', 'id'], ['eligibility_schemes', 'id'], ['automation_rules', 'id'], ['automation_runs', 'id'],
+  ['doc_forms', 'id'], ['doc_form_submissions', 'id'], ['sales_kit', 'id'], ['scheme_master', 'id'], ['scheme_kits', 'id'], ['eligibility_schemes', 'id'], ['automation_rules', 'id'], ['automation_runs', 'id'],
   ['site_content', 'key'], ['site_content_history', 'id'], ['website_lead_log', 'id'],
   ['client_accounts', 'id'], ['client_activity', 'id'], ['client_doc_uploads', 'id'], ['media_items', 'id'], ['client_entries', 'id'], ['client_messages', 'id'],
 ]
@@ -399,6 +404,11 @@ export function rowsToDb(input) {
       id: x.id, category: x.category, position: x.position, name: x.name, benefits: x.benefits ?? '', sectors: x.sectors ?? '', eligibility: x.eligibility ?? '', lastDate: x.last_date ?? '',
       organisation: x.organisation ?? '', schemeType: x.scheme_type ?? '', applicableFor: x.applicable_for ?? '', minCharge: x.min_charge ?? '', registrationCharge: u(x.registration_charge),
       updatedAt: u(x.updated_at), updatedBy: u(x.updated_by),
+    })),
+    schemeMaster: rows('scheme_master').map((m) => opt({
+      id: m.id, name: m.name, category: m.category, active: m.active !== false, description: u(m.description), aliases: m.aliases ?? [],
+      serviceIds: m.service_ids ?? [], salesKitIds: m.sales_kit_ids ?? [], schemeIds: m.scheme_ids ?? [], checkerIds: m.checker_ids ?? [],
+      position: m.position ?? 0, createdAt: m.created_at, updatedAt: u(m.updated_at), updatedBy: u(m.updated_by),
     })),
     schemeKits: rows('scheme_kits').map((k) => opt({
       id: k.id, name: k.name, description: u(k.description), color: u(k.color), schemeIds: k.scheme_ids ?? [], excludedIds: k.excluded_ids?.length ? k.excluded_ids : undefined,

@@ -37,8 +37,8 @@ export function schemeIn(db: DB, text: string) {
   const t = text.toLowerCase()
   return schemeNames(db).sort((a, b) => b.length - a.length).find((n) => n.length > 2 && t.includes(n.toLowerCase()))
 }
-/** Every scheme name the CRM knows (Schemes and Sales Kit), once each. */
-export const schemeNames = (db: DB) => [...new Map([...db.schemes.map((s) => s.title), ...(db.salesKit ?? []).map((x) => x.name)]
+/** Every scheme name the CRM knows — the Scheme Kit's first (the official names), then Schemes and Sales Kit — once each. */
+export const schemeNames = (db: DB) => [...new Map([...(db.schemeMaster ?? []).filter((m) => m.active).map((m) => m.name), ...db.schemes.map((s) => s.title), ...(db.salesKit ?? []).map((x) => x.name)]
   .map((n) => n.trim()).filter(Boolean).map((n) => [n.toLowerCase(), n])).values()]
 /** A scheme's price: the Schemes price, else the Sales Kit charge. */
 export const schemePrice = (db: DB, name?: string) => {

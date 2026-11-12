@@ -7,6 +7,7 @@ import { needsPriceSplit, saveService } from '../../lib/actions'
 import { BOOKING_TYPES, COMBO_PACKAGES, comboCap, isFundingService, priceFor } from '../../lib/catalog'
 import { inr } from '../../lib/format'
 import { rolesOf } from '../../lib/rbac'
+import { SchemeNameField } from '../../components/SchemeNameField'
 import { Badge, Button, Card, CardHeader, Checkbox, EmptyState, Input, Modal, PageHeader, SearchBox, Select, Table, Td, Th, useRun } from '../../components/ui'
 
 const PRICE_TYPES = BOOKING_TYPES.filter((t) => t.id !== 'SINGLE')
@@ -88,7 +89,7 @@ function ServiceForm({ init, id, cats, onClose }: { init: Omit<Service, 'id'>; i
     <Modal open onClose={onClose} title={id ? `Edit ${init.name}` : 'Add service'} size="lg"
       footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={async () => { if (await run(() => saveService(me, s, id), 'Service saved')) onClose() }}>Save</Button></>}>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Input label="Service name" required value={s.name} onChange={(e) => setS({ ...s, name: e.target.value })} className="sm:col-span-2" />
+        <SchemeNameField kind="service" id={id} label="Service name" required value={s.name} onChange={(name) => setS({ ...s, name })} className="sm:col-span-2" />
         <Input label="Category" required value={s.category} onChange={(e) => setS({ ...s, category: e.target.value })} list="svc-cats" hint="Funding: “Government Grants & Schemes” or “Funding & Investment” (not loans)" />
         <datalist id="svc-cats">{cats.map((c) => <option key={c} value={c} />)}</datalist>
         <Select label="GST %" value={s.gstRate} onChange={(e) => setS({ ...s, gstRate: Number(e.target.value) })}>{[0, 5, 12, 18, 28].map((r) => <option key={r} value={r}>{r}%</option>)}</Select>

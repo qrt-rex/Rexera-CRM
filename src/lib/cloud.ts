@@ -92,6 +92,8 @@ const SPECS: Spec[] = [
   { key: 'salesKit', table: 'sales_kit', order: ['position', true] },
   // Scheme Kits: personal (owner only) and shared (everyone reads; Operations / IT / Super Admin change them)
   { key: 'schemeKits', table: 'scheme_kits', order: ['position', true] },
+  // the Scheme Kit's master list of schemes (names set only there; staff read, scheme editors write)
+  { key: 'schemeMaster', table: 'scheme_master', order: ['position', true] },
   { key: 'eligibilitySchemes', table: 'eligibility_schemes', order: ['position', true] },
   // Automation Center: rules and switches (IT Support writes), and what they did (any staff browser adds; same id = done)
   { key: 'automationRules', table: 'automation_rules', order: ['position', true] },
