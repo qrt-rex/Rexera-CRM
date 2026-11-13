@@ -2,18 +2,18 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { BlutecSync } from '../components/BlutecSync'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
-  BadgeCheck, Bell, ChevronDown, ChevronRight, Home, LayoutGrid, LogOut, Mail, Menu as MenuIcon, Moon, Search, Settings, ShieldCheck, Sun, UserCheck, X, Monitor,
+  BadgeCheck, Bell, Check, ChevronDown, ChevronRight, Home, LayoutGrid, LogOut, Mail, Menu as MenuIcon, Moon, Search, Settings, ShieldCheck, Sun, UserCheck, X, Monitor,
   HelpCircle, SlidersHorizontal, Users, CalendarCheck2, CalendarDays, TrendingUp, GraduationCap, FileText, Inbox, PartyPopper, BarChart3,
   Wallet, Receipt, Landmark, Trophy, Briefcase, Wrench, MailPlus, ClipboardList, FilePen, Coffee, Package, PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react'
-import type { Perm, User } from '../lib/types'
+import type { Perm, Role, User } from '../lib/types'
 import { Rexy } from '../components/hr/Mascots'
 import { getDb, useDb } from '../lib/store'
 import { builtinOn, runScheduledRules, startAutomations } from '../lib/automation'
 import { startActivity, stopActivity, track } from '../lib/activity'
 import { applyTheme, getTheme, useAuth, useMe, type Theme } from '../lib/auth'
 import { MESSAGES_ENABLED, MODULES, canSee, moduleLabel } from '../lib/modules'
-import { canOpenDashboard, isMaster, ROLES, roleLabel } from '../lib/rbac'
+import { canOpenDashboard, dashboardsOf, homeDashboard, isMaster, ROLES, roleLabel } from '../lib/rbac'
 import { CLOUD } from '../lib/cloud'
 import { markRead, overdueLeadsOf, runBreakMonitor, runComboReminders, runDeadlineAlerts, runFollowUpReminders, runPrecheckReminders, runSchemeAlerts, runTaskReminders, unseenLeadsOf } from '../lib/actions'
 import { runScheduledAutomations } from '../lib/email'
@@ -113,7 +113,9 @@ export function Shell() {
     return () => window.removeEventListener('keydown', on)
   }, [])
   const maintenance = useDb().settings.maintenance
-  const hrMode = me.role === 'hr' || loc.pathname.startsWith('/dashboard/hr') || HR_PATHS.some((p) => loc.pathname.startsWith(p))
+  // the HR menu goes with the HR dashboard: on a dashboard, only on HR's; elsewhere, while HR is the dashboard in use
+  const onDash = loc.pathname.startsWith('/dashboard/')
+  const hrMode = onDash ? loc.pathname.startsWith('/dashboard/hr') : HR_PATHS.some((p) => loc.pathname.startsWith(p)) || homeDashboard(me) === 'hr'
   const [help, setHelp] = useState(false)
   const title = pageTitle(loc.pathname, me)
   useEffect(() => { document.title = `${title} · Rexera CRM` }, [title])
@@ -135,7 +137,7 @@ export function Shell() {
         mini ? 'w-[68px]' : 'w-60',
         mobileNav ? 'translate-x-0' : '-translate-x-full')}>
         <div className={cx('flex h-14 shrink-0 items-center', mini ? 'justify-center' : 'justify-between px-4')}>
-          <Link to={`/dashboard/${me.role}`} aria-label="Home" title={mini ? 'Dashboard' : undefined}>{mini ? <Mark className="h-9" /> : <Logo />}</Link>
+          <Link to={`/dashboard/${homeDashboard(me)}`} aria-label="Home" title={mini ? 'Dashboard' : undefined}>{mini ? <Mark className="h-9" /> : <Logo />}</Link>
           <button className="lg:hidden text-mute" onClick={() => setMobileNav(false)} aria-label="Close menu"><X className="size-5" /></button>
         </div>
         {hrMode ? <HrSidebar mini={mini} /> : <Sidebar mini={mini} onExpand={toggleSidebar} />}
@@ -156,6 +158,7 @@ export function Shell() {
             <kbd className="hidden rounded-md border border-line bg-card px-1.5 py-0.5 text-[10px] font-semibold sm:inline">Ctrl K</kbd>
           </button>
           <div className="flex shrink-0 items-center gap-0.5">
+            <DashboardSwitcher />
             <button onClick={cycleTheme} title={`Theme: ${theme}`} aria-label="Change theme" className="hidden size-9 place-items-center rounded-lg text-mute hover:bg-card2 hover:text-ink sm:grid"><ThemeIcon className="size-5" /></button>
             {MESSAGES_ENABLED && can('messages.use') && (
               <Link to="/messages" aria-label="Messages" className="relative hidden size-9 place-items-center rounded-lg text-mute hover:bg-card2 hover:text-ink sm:grid">
@@ -274,9 +277,9 @@ function Sidebar({ mini, onExpand }: { mini: boolean; onExpand: () => void }) {
   if (mini) return (
     <div className="flex min-h-0 flex-1 flex-col">
       <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2.5 pb-3" aria-label="Main">
-        <NavLink to={`/dashboard/${me.role}`} title="Dashboard" className={({ isActive }) => cx(item, isActive ? active : idle)}><Home className="size-[18px]" /><Label mini>Dashboard</Label></NavLink>
+        <NavLink to={`/dashboard/${homeDashboard(me)}`} title="Dashboard" className={({ isActive }) => cx(item, isActive ? active : idle)}><Home className="size-[18px]" /><Label mini>Dashboard</Label></NavLink>
         <NavLink to="/attendance" title="Attendance Board" className={({ isActive }) => cx(item, isActive ? active : idle)}><UserCheck className="size-[18px]" /><Label mini>Attendance Board</Label></NavLink>
-        {isMaster(me) && <button onClick={() => { if (!(openGroups['dash'] ?? false)) toggle('dash'); onExpand() }} title="All dashboards" className={cx(item, 'w-full', idle)}><LayoutGrid className="size-[18px]" /><Label mini>All dashboards</Label></button>}
+        {dashboardsOf(me).length > 1 && <button onClick={() => { if (!(openGroups['dash'] ?? false)) toggle('dash'); onExpand() }} title={isMaster(me) ? 'All dashboards' : 'My dashboards'} className={cx(item, 'w-full', idle)}><LayoutGrid className="size-[18px]" /><Label mini>{isMaster(me) ? 'All dashboards' : 'My dashboards'}</Label></button>}
         {groups.map((g) => (
           <div key={g} className="space-y-0.5 border-t border-line/70 pt-1.5 mt-1.5" role="group" aria-label={g}>
             {visible.filter((m) => m.group === g).map((m) => (
@@ -301,13 +304,14 @@ function Sidebar({ mini, onExpand }: { mini: boolean; onExpand: () => void }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <nav className="min-h-0 flex-1 space-y-px overflow-y-auto px-2.5 pb-3" aria-label="Main">
-        <NavLink to={`/dashboard/${me.role}`} className={({ isActive }) => cx(item, isActive ? active : idle)}><Home className="size-[18px]" />Dashboard</NavLink>
+        <NavLink to={`/dashboard/${homeDashboard(me)}`} className={({ isActive }) => cx(item, isActive ? active : idle)}><Home className="size-[18px]" />Dashboard</NavLink>
         <NavLink to="/attendance" className={({ isActive }) => cx(item, isActive ? active : idle)}><UserCheck className="size-[18px]" />Attendance Board</NavLink>
-        {isMaster(me) && (
-          <SideGroup label="All dashboards" open={openGroups['dash'] ?? false} onToggle={() => toggle('dash')} icon={LayoutGrid}>
-            {ROLES.filter((r) => canOpenDashboard(me, r.id)).map((r) => (
+        {/* everyone with more than one role switches between their dashboards here (Super Admin / IT: every dashboard) */}
+        {dashboardsOf(me).length > 1 && (
+          <SideGroup label={isMaster(me) ? 'All dashboards' : 'My dashboards'} open={openGroups['dash'] ?? !isMaster(me)} onToggle={() => toggle('dash')} icon={LayoutGrid}>
+            {dashboardsOf(me).map((id) => ROLES.find((r) => r.id === id)!).map((r) => (
               <NavLink key={r.id} to={`/dashboard/${r.id}`} className={({ isActive }) => cx(item, 'py-1.5 pl-9 text-[13px]', isActive ? active : idle)}>
-                <span className="size-2 rounded-full" style={{ background: r.color }} />{r.label}
+                <span className="size-2 rounded-full" style={{ background: r.color }} />{r.label}{r.id === me.role && <span className="ml-auto text-[10px] font-normal text-mute">main</span>}
               </NavLink>
             ))}
           </SideGroup>
@@ -373,7 +377,7 @@ function HrSidebar({ mini }: { mini: boolean }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <nav className={cx('min-h-0 flex-1 space-y-0.5 overflow-y-auto pb-3', mini ? 'px-2.5' : 'px-3')} aria-label="HR">
-        <NavLink to={`/dashboard/${isMaster(me) ? 'hr' : me.role}`} title={mini ? 'Dashboard' : undefined} className={({ isActive }) => cx(item, 'mb-2 py-2.5 text-sm', isActive ? 'bg-brand text-white shadow-md shadow-brand/25' : 'text-ink/80 hover:bg-white/70 dark:hover:bg-white/5')}>
+        <NavLink to={`/dashboard/${canOpenDashboard(me, 'hr') ? 'hr' : homeDashboard(me)}`} title={mini ? 'Dashboard' : undefined} className={({ isActive }) => cx(item, 'mb-2 py-2.5 text-sm', isActive ? 'bg-brand text-white shadow-md shadow-brand/25' : 'text-ink/80 hover:bg-white/70 dark:hover:bg-white/5')}>
           <Home className="size-[18px]" /><Label mini={mini}>Dashboard</Label>
         </NavLink>
         {HR_MENU.filter((m) => (m.to !== '/messages' || MESSAGES_ENABLED) && (!m.perms.length || can(...m.perms))).map((m) => {
@@ -487,7 +491,8 @@ function NotificationBubble() {
   const done = () => { setSeenAt(n.at); try { localStorage.setItem(seenKey, n.at) } catch { /* ignore */ } }
   return (
     // sits just under the header's bell icon, pointing up at it
-    <div className="no-print anim-fade-up fixed right-3 top-[76px] z-[60] w-[min(88vw,320px)] sm:right-20 lg:right-[168px]">
+    // under the top bar's layer (z-30): menus opening from the top bar (dashboards, calendar, account) stay on top of it
+    <div className="no-print anim-fade-up fixed right-3 top-[76px] z-[25] w-[min(88vw,320px)] sm:right-20 lg:right-[168px]">
       <div className="relative rounded-[28px] border-[3px] border-ink bg-card p-4 pr-9 shadow-[6px_6px_0_var(--ink)] dark:border-line dark:shadow-pop">
         <svg className="absolute -top-[22px] right-8 text-ink dark:text-line" width="34" height="24" viewBox="0 0 34 24"><path d="M2 24 L30 2 L20 24" fill="var(--card)" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" /></svg>
         <button aria-label="Dismiss" className="absolute right-3 top-3 text-mute hover:text-ink" onClick={done}><X className="size-4" /></button>
@@ -500,5 +505,49 @@ function NotificationBubble() {
         </div>
       </div>
     </div>
+  )
+}
+
+/**
+ * Top bar: switch between the dashboards of every role on this person's account (Admin + Legal + HR → three) — shown
+ * when there is more than one. The one in use is ticked; it is also where Dashboard and the next sign-in go.
+ */
+function DashboardSwitcher() {
+  const me = useMe()
+  const nav = useNavigate()
+  const loc = useLocation()
+  const list = dashboardsOf(me)
+  if (list.length < 2) return null
+  const here = loc.pathname.match(/^\/dashboard\/([a-z]+)/)?.[1] as Role | undefined
+  const current = here && list.includes(here) ? here : homeDashboard(me)
+  const role = ROLES.find((r) => r.id === current)
+  return (
+    <Menu width="w-64" trigger={(open) => (
+      <button aria-label={`Dashboard: ${role?.label ?? ''} — switch dashboard`} aria-expanded={open} title="Switch dashboard"
+        className={cx('flex h-9 items-center gap-2 rounded-lg border px-2 text-[13px] font-semibold transition sm:px-2.5', open ? 'border-brand bg-brand-soft text-brand-ink' : 'border-line text-ink hover:bg-card2')}>
+        <LayoutGrid className="size-4 text-mute" />
+        <span className="size-2 shrink-0 rounded-full" style={{ background: role?.color }} />
+        <span className="hidden max-w-36 truncate md:inline">{role?.label} dashboard</span>
+        <ChevronDown className="size-3.5 text-mute" />
+      </button>
+    )}>
+      {(close) => (
+        <div role="menu" aria-label="Your dashboards">
+          <p className="border-b border-line px-3.5 py-2 text-[11px] font-bold uppercase tracking-wider text-mute">{isMaster(me) ? 'All dashboards' : `Your dashboards · ${list.length}`}</p>
+          {list.map((id) => {
+            const r = ROLES.find((x) => x.id === id)!
+            return (
+              <button key={id} role="menuitemradio" aria-checked={id === current} onClick={() => { close(); nav(`/dashboard/${id}`) }}
+                className={cx('flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-sm hover:bg-card2', id === current && 'bg-brand-soft/50 font-semibold')}>
+                <span className="size-2.5 shrink-0 rounded-full" style={{ background: r.color }} />
+                <span className="min-w-0 flex-1 truncate">{r.label}</span>
+                {id === me.role && <span className="text-[10px] text-mute">main</span>}
+                {id === current && <Check className="size-4 text-brand-ink" />}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </Menu>
   )
 }

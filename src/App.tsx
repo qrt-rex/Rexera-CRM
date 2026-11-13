@@ -5,7 +5,7 @@ import { AuthProvider, useAuth } from './lib/auth'
 import { ToastProvider, Button, Skeleton, useToast } from './components/ui'
 import { onSyncError } from './lib/store'
 import { Shell } from './layout/Shell'
-import { canOpenDashboard, fnKey } from './lib/rbac'
+import { canOpenDashboard, fnKey, homeDashboard, rememberDashboard } from './lib/rbac'
 import { moduleByKey, canSee } from './lib/modules'
 import { FnScopeCtx, setFnGate } from './lib/fnScope'
 import type { FnAction, Perm, Role } from './lib/types'
@@ -100,8 +100,11 @@ function Guard({ m, perm, children }: { m: string; perm?: Perm; children: ReactN
 function DashboardRoute() {
   const { user } = useAuth()
   const { role } = useParams()
+  const ok = !!user && !!role && canOpenDashboard(user, role as Role)
+  // the dashboard in use: Dashboard, the logo and the next sign-in come back to it
+  useEffect(() => { if (ok) rememberDashboard(user!, role as Role) }, [ok, user, role])
   if (!user) return null
-  if (!role || !canOpenDashboard(user, role as Role)) return <Navigate to={`/dashboard/${user.role}`} replace />
+  if (!ok) return <Navigate to={`/dashboard/${homeDashboard(user)}`} replace />
   return <Dashboard role={role as Role} />
 }
 
@@ -110,13 +113,13 @@ function BranchRoute() {
   const { user } = useAuth()
   const { id } = useParams()
   if (!user) return null
-  if (!id || !canOpenDashboard(user, 'branchdirector')) return <Navigate to={`/dashboard/${user.role}`} replace />
+  if (!id || !canOpenDashboard(user, 'branchdirector')) return <Navigate to={`/dashboard/${homeDashboard(user)}`} replace />
   return <BranchDashboard branchId={id} />
 }
 
 function HomeRedirect() {
   const { user } = useAuth()
-  return <Navigate to={user ? `/dashboard/${user.role}` : '/login'} replace />
+  return <Navigate to={user ? `/dashboard/${homeDashboard(user)}` : '/login'} replace />
 }
 
 function NotFound() {

@@ -5,7 +5,7 @@ import { useAuth } from '../lib/auth'
 import { getDb, useDb } from '../lib/store'
 import { loginStep1, resendCode, signInWithoutCode, verifyCode } from '../lib/actions'
 import { DEMO_PASSWORD, PRESET_USERS } from '../lib/seed'
-import { ROLES } from '../lib/rbac'
+import { homeDashboard, ROLES } from '../lib/rbac'
 import { Logo } from '../components/Logo'
 import { IstClock, LoginShowcase, LoginVideo, useMedia } from '../components/LoginShowcase'
 import { ResetPasswordModal } from '../components/ResetPasswordModal'
@@ -41,9 +41,9 @@ export default function Login() {
   const boxes = useRef<(HTMLInputElement | null)[]>([])
 
   useEffect(() => { if (step === 'code') setTimeout(() => boxes.current[0]?.focus(), 50) }, [step])
-  // signing in always lands on the person's dashboard
+  // signing in lands on the dashboard the person used last (one of their roles' dashboards), else their main role's
   const wide = useMedia('(min-width: 1024px)') // one video only: in the left panel on big screens, above the form on phones
-  if (user) return <Navigate to={`/dashboard/${user.role}`} replace />
+  if (user) return <Navigate to={`/dashboard/${homeDashboard(user)}`} replace />
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -57,7 +57,7 @@ export default function Login() {
       if (r.signedIn) {
         signIn(r.signedIn)
         const u = getDb().users.find((x) => x.id === r.signedIn)!
-        nav(`/dashboard/${u.role}`, { replace: true })
+        nav(`/dashboard/${homeDashboard(u)}`, { replace: true })
         return
       }
       setToken(r.token); setDevCode(r.devCode); setEmail(r.email); setStep('code'); setCode(['', '', '', '', '', '']); setMaster(r.master); setNoMail('')
@@ -79,7 +79,7 @@ export default function Login() {
       const uid = signInWithoutCode(token, noMail)
       signIn(uid)
       const u = db.users.find((x) => x.id === uid)!
-      nav(`/dashboard/${u.role}`, { replace: true })
+      nav(`/dashboard/${homeDashboard(u)}`, { replace: true })
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Sign-in failed')
       if (e instanceof Error && /Sign in again/.test(e.message)) setStep('password')
@@ -93,7 +93,7 @@ export default function Login() {
       const uid = verifyCode(token, digits)
       signIn(uid)
       const u = db.users.find((x) => x.id === uid)!
-      nav(`/dashboard/${u.role}`, { replace: true })
+      nav(`/dashboard/${homeDashboard(u)}`, { replace: true })
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Verification failed')
       if (e instanceof Error && /Sign in again/.test(e.message)) setStep('password')

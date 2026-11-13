@@ -285,3 +285,22 @@ export function canOpenDashboard(u: User, slug: Role) {
   if (slug === 'it') return rolesOf(u).includes('it')
   return rolesOf(u).includes(slug) || isMaster(u)
 }
+/**
+ * The dashboards a person can switch between: one per role they hold (main role first) — Admin + Legal + HR gives
+ * three. Super Admin / IT Support: every dashboard they may open.
+ */
+export function dashboardsOf(u: User): Role[] {
+  const own = rolesOf(u).filter((r) => canOpenDashboard(u, r))
+  return isMaster(u) ? [...own, ...ROLES.map((r) => r.id).filter((r) => !own.includes(r) && canOpenDashboard(u, r))] : own
+}
+
+/** The dashboard last opened on this computer (per person) — where Dashboard, the logo and sign-in take them back. */
+const LAST_DASH = (id: string) => `rexera-last-dashboard:${id}`
+export function homeDashboard(u: User): Role {
+  let last: string | null = null
+  try { last = localStorage.getItem(LAST_DASH(u.id)) } catch { /* storage blocked */ }
+  return last && dashboardsOf(u).includes(last as Role) ? (last as Role) : u.role
+}
+export function rememberDashboard(u: User, role: Role) {
+  try { if (dashboardsOf(u).includes(role)) localStorage.setItem(LAST_DASH(u.id), role) } catch { /* storage blocked */ }
+}
