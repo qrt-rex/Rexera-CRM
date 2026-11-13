@@ -8,7 +8,6 @@ import { DEMO_PASSWORD, PRESET_USERS } from '../lib/seed'
 import { homeDashboard, ROLES } from '../lib/rbac'
 import { Logo } from '../components/Logo'
 import { IstClock, LoginShowcase, LoginVideo, useMedia } from '../components/LoginShowcase'
-import { ResetPasswordModal } from '../components/ResetPasswordModal'
 import { cx } from '../components/ui'
 import { sendOtpEmailClient } from '../lib/emailClient'
 
@@ -35,7 +34,6 @@ export default function Login() {
   const [master, setMaster] = useState(false)
   const [noMail, setNoMail] = useState('')
   const [code, setCode] = useState(['', '', '', '', '', ''])
-  const [forgot, setForgot] = useState(false)
   // read on every render: a sign-out can happen while this page is already open
   const reason = sessionStorage.getItem('rexera-signout-reason')
   const boxes = useRef<(HTMLInputElement | null)[]>([])
@@ -179,7 +177,6 @@ export default function Login() {
                     {busy ? <Loader2 className="size-6 animate-spin" /> : 'Login'}
                   </button>
                 </div>
-                <button type="button" onClick={() => setForgot(true)} className="mt-6 text-sm text-white/85 hover:text-white hover:underline">Forgot password?</button>
 
                 {DEV_MODE && (
                   <div className="mt-8 rounded-2xl border border-white/15 bg-white/5 p-4">
@@ -264,7 +261,6 @@ export default function Login() {
           <p className="relative mt-10 text-center text-[11px] text-white/50">© {new Date().getFullYear()} Rexera Financial Services Pvt. Ltd.</p>
         </section>
       </div>
-      <ResetPasswordModal open={forgot} onClose={() => setForgot(false)} />
     </div>
   )
 }

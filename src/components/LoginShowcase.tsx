@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { Volume2, VolumeX } from 'lucide-react'
 import { cx } from './ui'
 
 /**
@@ -69,10 +68,9 @@ export function IstClock({ size = 'md', className }: { size?: 'sm' | 'md'; class
 }
 
 // ------------------------------------------------------------------------------------------------ video
-/** Plays muted on a loop (browsers only autoplay silent video); the button turns the sound on. */
+/** Plays muted on a loop (browsers only autoplay silent video) — there is no sound button. */
 export function LoginVideo({ className }: { className?: string }) {
   const ref = useRef<HTMLVideoElement>(null)
-  const [muted, setMuted] = useState(true)
   const still = useMedia('(prefers-reduced-motion: reduce)') // people who turn motion off get a paused video with controls
   useEffect(() => {
     // React never writes the `muted` attribute, so the browser's silent-autoplay rule doesn't apply — mute and start it here
@@ -81,23 +79,10 @@ export function LoginVideo({ className }: { className?: string }) {
     v.defaultMuted = true; v.muted = true
     v.play().catch(() => {})
   }, [still])
-  const toggle = () => {
-    const v = ref.current
-    if (!v) return
-    v.muted = !muted
-    setMuted(!muted)
-    if (v.paused) v.play().catch(() => {})
-  }
   return (
     <div className={cx('relative overflow-hidden bg-black', className)}>
       <video ref={ref} src="/login-video.mp4" className="block aspect-video w-full object-cover" autoPlay={!still} muted loop playsInline preload="auto"
         controls={still} aria-label="Rexera welcome video" />
-      {!still && (
-        <button type="button" onClick={toggle} aria-label={muted ? 'Turn sound on' : 'Turn sound off'} title={muted ? 'Sound on' : 'Sound off'}
-          className="absolute bottom-3 right-3 grid size-9 place-items-center rounded-full bg-black/50 text-white backdrop-blur transition hover:bg-black/70">
-          {muted ? <VolumeX className="size-[18px]" /> : <Volume2 className="size-[18px]" />}
-        </button>
-      )}
     </div>
   )
 }
