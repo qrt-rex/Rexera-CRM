@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { Bell, KeyRound, LogOut, Monitor, Moon, Palette, Save, Settings as SettingsIcon, ShieldCheck, Sun, Trash2, Upload, User as UserIcon } from 'lucide-react'
 import { useDb } from '../../lib/store'
 import { applyTheme, getTheme, useAuth, useMe, type Theme } from '../../lib/auth'
-import { changePassword, PASSWORD_HINT, PASSWORD_RULE, updateProfile } from '../../lib/actions'
+import { updateProfile } from '../../lib/actions'
 import { fmtDateTime } from '../../lib/format'
 import { roleLabel, rolesOf } from '../../lib/rbac'
 import { POPUP_KEY } from '../../layout/Shell'
@@ -11,7 +11,6 @@ import { Badge, Button, Card, CardHeader, cx, Input, PageHeader, Toggle, useRun,
 import { CityInput, PhoneInput, StateSelect } from '../../components/fields'
 import { PhotoCropper, PHOTO_MAX_BYTES } from '../../components/PhotoCropper'
 import { ZoomAvatar } from '../../components/PhotoZoom'
-import { ResetPasswordModal } from '../../components/ResetPasswordModal'
 
 type Tab = 'profile' | 'security' | 'notifications' | 'appearance'
 
@@ -93,25 +92,10 @@ function Security() {
   const db = useDb()
   const me = useMe()
   const { signOut, perms } = useAuth()
-  const run = useRun()
-  const [p, setP] = useState({ next: '', again: '', show: false })
-  const [forgot, setForgot] = useState(false)
   const lastSignIn = db.audit.find((a) => a.by === me.id && a.action === 'SIGN_IN')
-  const err = p.next && !PASSWORD_RULE.test(p.next) ? PASSWORD_HINT : p.again && p.again !== p.next ? 'Does not match' : ''
+  // passwords are set by IT Support (IT dashboard → Set a password) — there is no "change password" here
   return (
     <div className="space-y-5">
-      <Card className="overflow-hidden">
-        <CardHeader title="Change password" icon={KeyRound} />
-        <div className="grid gap-4 p-4 sm:grid-cols-2">
-          <Input label="New password" type={p.show ? 'text' : 'password'} autoComplete="new-password" value={p.next} onChange={(e) => setP({ ...p, next: e.target.value })} hint={PASSWORD_HINT} error={err === PASSWORD_HINT ? err : undefined} />
-          <Input label="Re-type new password" type={p.show ? 'text' : 'password'} autoComplete="new-password" value={p.again} onChange={(e) => setP({ ...p, again: e.target.value })} error={err === 'Does not match' ? err : undefined} />
-          <label className="flex items-center gap-2 text-xs text-mute sm:col-span-2"><input type="checkbox" checked={p.show} onChange={(e) => setP({ ...p, show: e.target.checked })} className="accent-[var(--brand)]" />Show password</label>
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line p-4">
-          <button className="text-sm font-semibold text-brand-ink hover:underline" onClick={() => setForgot(true)}>Forgot password? Get a code on {me.email}</button>
-          <Button disabled={!p.next || !!err || p.next !== p.again} onClick={async () => { if (await run(() => changePassword(me, p.next, p.again), 'Password changed')) setP({ next: '', again: '', show: false }) }}>Update password</Button>
-        </div>
-      </Card>
       <Card className="overflow-hidden">
         <CardHeader title="Sign-in & access" icon={ShieldCheck} />
         <div className="grid gap-3 p-4 text-sm sm:grid-cols-2">
@@ -120,9 +104,11 @@ function Security() {
           <div className="rounded-xl bg-card2 p-3"><p className="text-xs text-mute">Roles</p><p className="font-semibold">{rolesOf(me).map(roleLabel).join(', ')}</p></div>
           <div className="rounded-xl bg-card2 p-3"><p className="text-xs text-mute">Permissions</p><p className="font-semibold">{perms.size} granted</p></div>
         </div>
-        <div className="border-t border-line p-4"><Button variant="outline" icon={LogOut} onClick={() => signOut()}>Sign out everywhere</Button></div>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line p-4">
+          <p className="flex items-center gap-2 text-xs text-mute"><KeyRound className="size-4" />Your password is set by IT Support — ask them if you need a new one.</p>
+          <Button variant="outline" icon={LogOut} onClick={() => signOut()}>Sign out everywhere</Button>
+        </div>
       </Card>
-      <ResetPasswordModal open={forgot} onClose={() => setForgot(false)} email={me.email} />
     </div>
   )
 }
