@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Briefcase, Building2, FileStack, Mail, Pencil, Phone, Plus, RotateCcw, UserMinus, UsersRound } from 'lucide-react'
+import { Briefcase, Building2, FileSpreadsheet, FileStack, Lock, Mail, Pencil, Phone, Plus, RotateCcw, UserMinus, UsersRound } from 'lucide-react'
+import { EmployeeImport } from '../../components/EmployeeImport'
 import { ADMIN_DONE, ADMIN_STAGES, workflowSettings } from '../../../supabase/workflow-rules.mjs'
 import { branchList, branchName } from '../../lib/branches'
 import type { FileRef, Role, User } from '../../lib/types'
@@ -10,7 +11,7 @@ import { adminStageAccess, createUser, PASSWORD_HINT, PASSWORD_RULE, removeEmplo
 import { collections, dayStatus, monthStart } from '../../lib/metrics'
 import { ROLES, roleColor, roleLabel, rolesOf } from '../../lib/rbac'
 import { fmtDate, inr, today } from '../../lib/format'
-import { Avatar, Badge, Button, Card, Checkbox, Drawer, EmptyState, Input, Modal, PageHeader, SearchBox, Select, Tabs, Textarea, useRun } from '../../components/ui'
+import { Avatar, Badge, Button, Card, Checkbox, cx, Drawer, EmptyState, Input, Modal, PageHeader, SearchBox, Select, Tabs, Textarea, useRun } from '../../components/ui'
 import { RESUME_TYPES } from '../../lib/files'
 import { FileField, FileLink } from '../../components/FileField'
 import { PhoneInput } from '../../components/fields'
@@ -32,6 +33,7 @@ export default function Employees() {
   const closeForm = () => { setForm({ open: false, data: blank }); setPw({ password: '', confirm: '', show: false }); setResume(undefined); setTried(false) }
   const manage = can('employees.manage', 'access.manage')
   const [showRemoved, setShowRemoved] = useState(false)
+  const [importing, setImporting] = useState(false)
   const [removing, setRemoving] = useState<{ id: string; lastDay: string; reason: string } | null>(null)
   // deleted accounts (Access Management → Delete) are not listed here
   const list = useMemo(() => db.users.filter((u) => !u.deletedAt && (showRemoved ? !u.active : u.active) && (!role || u.role === role) && (!q || `${u.name} ${u.email} ${u.designation} ${u.department}`.toLowerCase().includes(q.toLowerCase()))), [db.users, q, role, showRemoved])
@@ -59,6 +61,7 @@ export default function Employees() {
     <div>
       <PageHeader title="Employee Details" subtitle={`${db.users.filter((u) => u.active).length} active people across ${new Set(db.users.map((u) => u.department)).size} departments`} icon={UsersRound}
         actions={manage && <>
+          <Button variant="outline" icon={FileSpreadsheet} onClick={() => setImporting(true)}>Import from a sheet</Button>
           <Button variant="outline" icon={UserMinus} onClick={() => setRemoving({ id: '', lastDay: today(), reason: '' })}>Remove employee</Button>
           <Button variant="accent" icon={Plus} onClick={() => { closeForm(); setForm({ open: true, data: blank }) }}>Add employee</Button>
         </>} />
@@ -111,6 +114,7 @@ export default function Employees() {
               ))}
               {open.resume && manage && <div className="col-span-2 rounded-xl bg-card2 px-3 py-2"><p className="text-[11px] text-mute">Resume</p><FileLink file={open.resume} /></div>}
             </div>
+            {manage && <PrivateDetails userId={open.id} />}
             {rolesOf(open).includes('admin') && (() => {
               const docs = adminStageAccess(db, open.id), limited = !!workflowSettings(db.settings.workflow).adminStageAccess?.[open.id]
               const items = db.bookings.flatMap((b) => ADMIN_STAGES.map((s) => b.adminWork?.[s.id]).filter((w) => w?.assignee === open.id && w.status !== 'NOT_NEEDED'))
@@ -158,6 +162,7 @@ export default function Employees() {
         </div>}
       </Modal>
 
+      {manage && <EmployeeImport open={importing} onClose={() => setImporting(false)} />}
       <Modal open={form.open} onClose={closeForm} title={form.user ? `Edit ${form.user.name}` : 'Add employee'} size="lg"
         subtitle={form.user ? 'Role and access are changed in Access Management.' : 'Set their first password (attaching a resume is optional). They can change the password later in Settings → Security.'}
         footer={<><Button variant="outline" onClick={closeForm}>Cancel</Button><Button onClick={save}>Save</Button></>}>
@@ -195,5 +200,41 @@ export default function Employees() {
         )}
       </Modal>
     </div>
+  )
+}
+
+/** HR's register for one person: personal contacts, bank (masked until shown), salary parts and this month's attendance marks. */
+function PrivateDetails({ userId }: { userId: string }) {
+  const db = useDb()
+  const [reveal, setReveal] = useState(false)
+  const p = (db.employeePrivate ?? []).find((x) => x.userId === userId)
+  const month = today().slice(0, 7)
+  const marks = (db.attendanceMarks ?? []).filter((m) => m.userId === userId && m.date.startsWith(month)).sort((a, b) => a.date.localeCompare(b.date))
+  const count = (k: string) => marks.filter((m) => m.mark === k).length
+  const money = (v?: number) => (v == null ? '—' : inr(v))
+  if (!p && !marks.length) return null
+  return (
+    <Card className="p-4">
+      <p className="flex items-center gap-2 text-sm font-bold"><Lock className="size-4" />Personal &amp; bank <span className="text-[11px] font-normal text-mute">— HR register · seen by HR, Super Admin, IT and the person</span></p>
+      {p && (
+        <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+          {[['Gender', p.gender], ['Personal mobile', p.personalPhone], ['Personal email', p.personalEmail], ['Bank', p.bankName],
+            ['Account no.', p.bankAccount ? (reveal ? p.bankAccount : `•••• ${p.bankAccount.slice(-4)}`) : undefined], ['IFSC', p.bankIfsc],
+            ['CTC', money(p.ctc)], ['Basic', money(p.basic)], ['HRA', money(p.hra)], ['Allowance', money(p.allowance)], ['PF', money(p.pf)], ['PT', money(p.pt)]].map(([k, v]) => (
+            <div key={k} className="rounded-xl bg-card2 px-3 py-2"><p className="text-[11px] text-mute">{k}</p><p className="truncate font-semibold">{v || '—'}</p></div>
+          ))}
+        </div>
+      )}
+      {p?.bankAccount && <button className="mt-2 text-xs font-semibold text-brand-ink hover:underline" onClick={() => setReveal(!reveal)}>{reveal ? 'Hide account number' : 'Show account number'}</button>}
+      {marks.length > 0 && (
+        <div className="mt-3">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-mute">Attendance marks · {month} — P {count('P')} · A {count('A')} · H {count('H')}{count('L') ? ` · L ${count('L')}` : ''}</p>
+          <div className="mt-1.5 flex flex-wrap gap-1">{marks.map((m) => (
+            <span key={m.id} title={m.date} className={cx('grid size-7 place-items-center rounded-md text-[11px] font-bold', m.mark === 'P' ? 'bg-ok-soft text-ok' : m.mark === 'A' ? 'bg-bad-soft text-bad' : m.mark === 'H' ? 'bg-warn-soft text-warn' : 'bg-info-soft text-info')}>{Number(m.date.slice(8))}</span>
+          ))}</div>
+          <p className="mt-1 text-[11px] text-mute">Payroll for the month uses these marks for those days.</p>
+        </div>
+      )}
+    </Card>
   )
 }

@@ -145,6 +145,13 @@ export function mapAll(backup) {
     organisation: x.organisation ?? '', scheme_type: x.schemeType ?? '', applicable_for: x.applicableFor ?? '', min_charge: x.minCharge ?? '', registration_charge: s(x.registrationCharge),
     updated_at: s(x.updatedAt), updated_by: uref(x.updatedBy),
   }))
+  t.employee_private = (d.employeePrivate ?? []).map((p) => ({
+    user_id: p.userId, gender: s(p.gender), personal_phone: s(p.personalPhone), personal_email: s(p.personalEmail),
+    bank_name: s(p.bankName), bank_account: s(p.bankAccount), bank_ifsc: s(p.bankIfsc),
+    ctc: p.ctc ?? null, basic: p.basic ?? null, hra: p.hra ?? null, allowance: p.allowance ?? null, pf: p.pf ?? null, pt: p.pt ?? null,
+    updated_at: s(p.updatedAt), updated_by: uref(p.updatedBy),
+  }))
+  t.attendance_marks = (d.attendanceMarks ?? []).map((a) => ({ id: a.id, user_id: a.userId, day: a.date, mark: a.mark, source: s(a.source), updated_at: s(a.updatedAt), updated_by: uref(a.updatedBy) }))
   t.scheme_master = (d.schemeMaster ?? []).map((m) => ({
     id: m.id, name: m.name, category: m.category, active: m.active !== false, description: s(m.description), aliases: m.aliases ?? [],
     service_ids: m.serviceIds ?? [], sales_kit_ids: m.salesKitIds ?? [], scheme_ids: m.schemeIds ?? [], checker_ids: m.checkerIds ?? [],
@@ -208,7 +215,7 @@ export const ORDER = [
   ['message_templates', 'id'], ['emails', 'id'], ['email_automations', 'key'], ['app_settings', 'key'], ['api_keys', 'id'],
   ['backup_log', 'id'], ['candidate_forms', 'id'], ['candidate_applications', 'id'], ['candidate_letters', 'id'], ['deleted_items', 'id'], ['recruitment_datasets', 'id'], ['recruitment_rows', 'dataset_id,row_no'],
   ['company_assets', 'id'], ['stock_items', 'id'], ['company_expenses', 'id'], ['legacy_files', 'path'],
-  ['doc_forms', 'id'], ['doc_form_submissions', 'id'], ['sales_kit', 'id'], ['scheme_master', 'id'], ['scheme_kits', 'id'], ['eligibility_schemes', 'id'], ['automation_rules', 'id'], ['automation_runs', 'id'],
+  ['doc_forms', 'id'], ['doc_form_submissions', 'id'], ['sales_kit', 'id'], ['employee_private', 'user_id'], ['attendance_marks', 'id'], ['scheme_master', 'id'], ['scheme_kits', 'id'], ['eligibility_schemes', 'id'], ['automation_rules', 'id'], ['automation_runs', 'id'],
   ['site_content', 'key'], ['site_content_history', 'id'], ['website_lead_log', 'id'],
   ['client_accounts', 'id'], ['client_activity', 'id'], ['client_doc_uploads', 'id'], ['media_items', 'id'], ['client_entries', 'id'], ['client_messages', 'id'],
 ]
@@ -229,6 +236,8 @@ export function rowsToDb(input) {
   const t = Object.fromEntries(Object.entries(input).map(([k, list]) => [k, (list ?? []).map(normalizeRow)]))
   const rows = (name) => t[name] ?? []
   const u = (v) => (v === null ? undefined : v)
+  /** numeric columns come back from Postgres as text */
+  const nn = (v) => (v === null || v === undefined || v === '' ? undefined : Number(v))
   const opt = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== null))
   const group = (name, key) => {
     const m = new Map()
@@ -405,6 +414,13 @@ export function rowsToDb(input) {
       organisation: x.organisation ?? '', schemeType: x.scheme_type ?? '', applicableFor: x.applicable_for ?? '', minCharge: x.min_charge ?? '', registrationCharge: u(x.registration_charge),
       updatedAt: u(x.updated_at), updatedBy: u(x.updated_by),
     })),
+    employeePrivate: rows('employee_private').map((p) => opt({
+      userId: p.user_id, gender: u(p.gender), personalPhone: u(p.personal_phone), personalEmail: u(p.personal_email),
+      bankName: u(p.bank_name), bankAccount: u(p.bank_account), bankIfsc: u(p.bank_ifsc),
+      ctc: nn(p.ctc), basic: nn(p.basic), hra: nn(p.hra), allowance: nn(p.allowance), pf: nn(p.pf), pt: nn(p.pt),
+      updatedAt: u(p.updated_at), updatedBy: u(p.updated_by),
+    })),
+    attendanceMarks: rows('attendance_marks').map((a) => opt({ id: a.id, userId: a.user_id, date: String(a.day).slice(0, 10), mark: a.mark, source: u(a.source), updatedAt: u(a.updated_at), updatedBy: u(a.updated_by) })),
     schemeMaster: rows('scheme_master').map((m) => opt({
       id: m.id, name: m.name, category: m.category, active: m.active !== false, description: u(m.description), aliases: m.aliases ?? [],
       serviceIds: m.service_ids ?? [], salesKitIds: m.sales_kit_ids ?? [], schemeIds: m.scheme_ids ?? [], checkerIds: m.checker_ids ?? [],

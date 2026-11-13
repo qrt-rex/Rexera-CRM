@@ -12,9 +12,10 @@ export async function handleUserSheet(env, authorization, body) {
   const me = await crmUser(env, authorization).catch(() => null)
   if (!me) return { status: 401, body: { success: false, message: 'Sign in again.' } }
   // users: IT Support / Super Admin · schemes (Sales Kit import): the scheme editors — Operation Team, IT, Super Admin
-  const schemes = body?.purpose === 'schemes'
-  const allowed = schemes ? ['operations', 'it', 'superadmin'] : ['it', 'superadmin']
-  if (!me.roles.some((r) => allowed.includes(r))) return { status: 403, body: { success: false, message: schemes ? 'Importing schemes is for the Operation Team, IT Support and Super Admin.' : 'Adding users from a sheet is for IT Support and Super Admin.' } }
+  // employees (HR's register): HR / Super Admin / IT
+  const schemes = body?.purpose === 'schemes', employees = body?.purpose === 'employees'
+  const allowed = schemes ? ['operations', 'it', 'superadmin'] : employees ? ['hr', 'it', 'superadmin'] : ['it', 'superadmin']
+  if (!me.roles.some((r) => allowed.includes(r))) return { status: 403, body: { success: false, message: schemes ? 'Importing schemes is for the Operation Team, IT Support and Super Admin.' : employees ? 'Importing employees is for HR, IT Support and Super Admin.' : 'Adding users from a sheet is for IT Support and Super Admin.' } }
   const id = googleSheetId(body?.url)
   if (!id) return { status: 422, body: { success: false, message: 'Paste a Google Sheets link (https://docs.google.com/spreadsheets/d/…).' } }
   const ctrl = new AbortController()

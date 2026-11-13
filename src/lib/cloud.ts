@@ -94,6 +94,9 @@ const SPECS: Spec[] = [
   { key: 'schemeKits', table: 'scheme_kits', order: ['position', true] },
   // the Scheme Kit's master list of schemes (names set only there; staff read, scheme editors write)
   { key: 'schemeMaster', table: 'scheme_master', order: ['position', true] },
+  // HR's register: private details (only the person, HR, Super Admin, IT receive rows) and attendance marks
+  { key: 'employeePrivate', table: 'employee_private', idProp: 'userId', idCol: 'user_id', order: ['user_id', true] },
+  { key: 'attendanceMarks', table: 'attendance_marks', order: ['day', false] },
   { key: 'eligibilitySchemes', table: 'eligibility_schemes', order: ['position', true] },
   // Automation Center: rules and switches (IT Support writes), and what they did (any staff browser adds; same id = done)
   { key: 'automationRules', table: 'automation_rules', order: ['position', true] },

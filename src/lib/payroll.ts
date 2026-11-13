@@ -27,7 +27,8 @@ export function recentMonths(n = 12) {
 export interface MonthAttendance { workingDays: number; present: number; half: number; leave: number; lopLeave: number; absent: number; beforeJoin: number; paidDays: number; lopDays: number }
 
 /**
- * Rules: Sundays are paid · days before the joining date are loss of pay · a day started but not ended (or
+ * Rules: Sundays are paid · days before the joining date are loss of pay · a day HR marked (P present, H half day,
+ * L paid leave, A absent unless on approved paid leave) counts by its mark · a day started but not ended (or
  * shorter than 5 h) is a half day · approved CL/SL/EL is paid, LOP leave is not · a working day with no
  * punch and no leave is absent · days after today, and days before attendance tracking began, are paid.
  */
@@ -35,11 +36,26 @@ export function attendanceFor(db: DB, u: User, month: string): MonthAttendance {
   const t = today()
   const tracking = db.sessions.reduce((min, s) => (s.date < min ? s.date : min), '9999-12-31')
   const r: MonthAttendance = { workingDays: 0, present: 0, half: 0, leave: 0, lopLeave: 0, absent: 0, beforeJoin: 0, paidDays: 0, lopDays: 0 }
+  // HR's marks (set by hand or imported from HR's register) decide those days, before sign-ins
+  const marks = new Map((db.attendanceMarks ?? []).filter((m) => m.userId === u.id && m.date.startsWith(month)).map((m) => [m.date, m.mark]))
   for (const d of monthDays(month)) {
     const sunday = new Date(d + 'T00:00:00').getDay() === 0
     if (!sunday) r.workingDays++
     if (d < u.joinedOn) { r.lopDays++; r.beforeJoin++; continue }
-    if (sunday || d > t || d < tracking) { r.paidDays++; continue }
+    if (sunday || d > t) { r.paidDays++; continue }
+    const mk = marks.get(d)
+    if (mk) {
+      if (mk === 'P') { r.paidDays++; r.present++ }
+      else if (mk === 'H') { r.paidDays += 0.5; r.lopDays += 0.5; r.half++ }
+      else if (mk === 'L') { r.paidDays++; r.leave++ }
+      else {
+        // marked absent: an approved paid leave still pays the day
+        const lv = db.leaves.find((l) => l.userId === u.id && l.status === 'APPROVED' && l.from <= d && l.to >= d)
+        if (lv && lv.type !== 'LOP') { r.paidDays++; r.leave++ } else { r.lopDays++; r.absent++ }
+      }
+      continue
+    }
+    if (d < tracking) { r.paidDays++; continue }
     const s = db.sessions.find((x) => x.userId === u.id && x.date === d)
     if (s) {
       const hours = s.logoutAt ? (new Date(s.logoutAt).getTime() - new Date(s.loginAt).getTime()) / 3600000 : d === t ? 9 : 0

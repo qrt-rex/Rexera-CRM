@@ -20,7 +20,7 @@ export const planUsers = (sheets: { name: string; rows: unknown[][] }[], d: DB, 
   plan0(sheets, { users: d.users, branches: d.settings.branches ?? [], me })
 
 /** A Google Sheets link → the same sheets, read by the CRM server (the sheet must be shared "anyone with the link"). */
-export async function readGoogleSheet(url: string, purpose: 'users' | 'schemes' = 'users'): Promise<{ name: string; rows: unknown[][] }[]> {
+export async function readGoogleSheet(url: string, purpose: 'users' | 'schemes' | 'employees' = 'users'): Promise<{ name: string; rows: unknown[][] }[]> {
   if (!googleSheetId(url)) throw new Error('Paste a Google Sheets link (https://docs.google.com/spreadsheets/d/…).')
   if (!CLOUD) throw new Error('Reading a Google Sheet goes through the live CRM server — on this copy, download the sheet as .xlsx and choose the file.')
   const token = (await (await getSupabase()).auth.getSession()).data.session?.access_token ?? ''

@@ -93,6 +93,21 @@ export interface User {
   branchIds?: string[]
 }
 
+/**
+ * An employee's private details (HR's register): seen only by the person, HR (employees.manage), Super Admin and
+ * IT Support — kept apart from the user list everyone on the staff reads.
+ */
+export interface EmployeePrivate {
+  userId: string
+  gender?: string; personalPhone?: string; personalEmail?: string
+  bankName?: string; bankAccount?: string; bankIfsc?: string
+  /** monthly salary parts from HR's register (₹) */
+  ctc?: number; basic?: number; hra?: number; allowance?: number; pf?: number; pt?: number
+  updatedAt?: string; updatedBy?: string
+}
+/** A day's attendance set by HR (or imported from HR's register): P present · H half day · A absent · L paid leave. Payroll uses it over sign-ins. */
+export interface AttendanceMark { id: string; userId: string; date: string; mark: 'P' | 'H' | 'A' | 'L'; source?: string; updatedAt?: string; updatedBy?: string }
+
 /** A person's own break window, time zone and weekly off days. */
 export interface Shift { breakStart?: string; breakEnd?: string; timeZone?: string; offDays?: number[] }
 
@@ -1245,6 +1260,10 @@ export interface DB {
   schemeKits?: SchemeKit[]
   /** the Scheme Kit's master list of schemes (names managed only there) */
   schemeMaster?: SchemeMaster[]
+  /** HR's private employee details (only the person, HR, Super Admin and IT receive them) */
+  employeePrivate?: EmployeePrivate[]
+  /** attendance set by HR / imported from HR's register */
+  attendanceMarks?: AttendanceMark[]
   /** Rexy's Scheme Checker (empty = the built-in schemes) */
   eligibilitySchemes?: EligibilityScheme[]
   /** Automation Center: custom rules and the built-in on / off switches (IT Support edits) */
