@@ -249,6 +249,14 @@ export function upgradeDb(d: DB): DB {
   d.schemeMaster ??= []
   d.employeePrivate ??= []
   d.attendanceMarks ??= []
+  d.hrForms ??= []
+  d.hrFormSubmissions ??= []
+  d.hrFormNotes ??= []
+  if (!d.upgrades.includes('hr-forms-1')) {
+    // HR Form Builder: HR manages employee forms (the live CRM gets this from its migration)
+    d.rolePerms.hr = [...new Set([...(d.rolePerms.hr ?? []), 'hrforms.manage' as Perm])]
+    d.upgrades.push('hr-forms-1')
+  }
   if (!d.upgrades.includes('scheme-editors-1')) {
     // schemes wherever they are: the Operation Team (and IT Support / Super Admin, who hold everything) — nobody else
     const SCHEME_PERMS: Perm[] = ['schemes.manage', 'saleskit.manage', 'eligibility.manage']

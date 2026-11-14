@@ -97,6 +97,10 @@ const SPECS: Spec[] = [
   // HR's register: private details (only the person, HR, Super Admin, IT receive rows) and attendance marks
   { key: 'employeePrivate', table: 'employee_private', idProp: 'userId', idCol: 'user_id', order: ['user_id', true] },
   { key: 'attendanceMarks', table: 'attendance_marks', order: ['day', false] },
+  // HR Form Builder: forms (staff read published ones), submissions (the employee's own; HR all), HR's notes (HR only)
+  { key: 'hrForms', table: 'hr_forms', order: ['created_at', false] },
+  { key: 'hrFormSubmissions', table: 'hr_form_submissions', order: ['started_at', false] },
+  { key: 'hrFormNotes', table: 'hr_form_notes', order: ['at', true] },
   { key: 'eligibilitySchemes', table: 'eligibility_schemes', order: ['position', true] },
   // Automation Center: rules and switches (IT Support writes), and what they did (any staff browser adds; same id = done)
   { key: 'automationRules', table: 'automation_rules', order: ['position', true] },

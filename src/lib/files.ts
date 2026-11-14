@@ -13,7 +13,9 @@ import { cloudConfig, getSupabase, supabaseKey } from './supabase'
 const BUCKET = 'crm-files'
 /** Digital Media files (ids start with media-) have their own private bucket: bigger files, videos. */
 const MEDIA_BUCKET = 'media-files'
-const bucketFor = (id: string) => (id.startsWith('media-') ? MEDIA_BUCKET : BUCKET)
+/** HR Form Builder uploads (hrf-<employee id>~…): a private bucket only the employee and HR can read. */
+const HR_FORM_BUCKET = 'hr-form-files'
+const bucketFor = (id: string) => (id.startsWith('media-') ? MEDIA_BUCKET : id.startsWith('hrf-') ? HR_FORM_BUCKET : BUCKET)
 const bucket = async (id = '') => (await getSupabase()).storage.from(bucketFor(id))
 const DB_NAME = 'rexera-files', STORE = 'files'
 
@@ -51,6 +53,21 @@ export async function saveFile(f: File): Promise<FileRef> {
   const ref: FileRef = { id: uid('file-'), name: f.name, type: f.type || 'application/octet-stream', size: f.size, at: nowIso() }
   if (CLOUD) {
     const { error } = await (await bucket()).upload(ref.id, f, { contentType: ref.type, upsert: false })
+    if (error) throw new Error(`Could not upload ${f.name}: ${error.message}`)
+  }
+  await tx('readwrite', (s) => { s.put({ ...ref, blob: f }) })
+  return ref
+}
+/**
+ * A file an employee uploads in an HR form: stored as hrf-<their id>~<random> in the private hr-form-files bucket
+ * (only they and HR can open it). Size and type are checked by the form field before this is called.
+ */
+export async function saveHrFormFile(f: File, userId: string): Promise<FileRef> {
+  const rand = [...crypto.getRandomValues(new Uint8Array(12))].map((b) => b.toString(36).padStart(2, '0')).join('')
+  const ext = (f.name.split('.').pop() ?? '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8)
+  const ref: FileRef = { id: `hrf-${userId}~${rand}${ext ? '.' + ext : ''}`, name: f.name, type: f.type || 'application/octet-stream', size: f.size, at: nowIso() }
+  if (CLOUD) {
+    const { error } = await (await bucket(ref.id)).upload(ref.id, f, { contentType: ref.type, upsert: false })
     if (error) throw new Error(`Could not upload ${f.name}: ${error.message}`)
   }
   await tx('readwrite', (s) => { s.put({ ...ref, blob: f }) })

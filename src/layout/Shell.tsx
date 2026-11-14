@@ -4,7 +4,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import {
   BadgeCheck, Bell, Check, ChevronDown, ChevronRight, Home, LayoutGrid, LogOut, Mail, Menu as MenuIcon, Moon, Search, Settings, ShieldCheck, Sun, UserCheck, X, Monitor,
   HelpCircle, SlidersHorizontal, Users, CalendarCheck2, CalendarDays, TrendingUp, GraduationCap, FileText, Inbox, PartyPopper, BarChart3,
-  Wallet, Receipt, Landmark, Trophy, Briefcase, Wrench, MailPlus, ClipboardList, FilePen, Coffee, Package, PanelLeftClose, PanelLeftOpen,
+  Wallet, Receipt, Landmark, Trophy, Briefcase, Wrench, MailPlus, ClipboardList, FilePen, Coffee, Package, PanelLeftClose, PanelLeftOpen, ClipboardCheck, FileSignature,
 } from 'lucide-react'
 import type { FileRef, Perm, Role, User } from '../lib/types'
 import { useFileUrl } from '../components/ProofGallery'
@@ -18,6 +18,9 @@ import { canOpenDashboard, dashboardsOf, homeDashboard, isMaster, ROLES, roleLab
 import { CLOUD } from '../lib/cloud'
 import { markRead, overdueLeadsOf, runBreakMonitor, runComboReminders, runDeadlineAlerts, runFollowUpReminders, runPrecheckReminders, runSchemeAlerts, runTaskReminders, unseenLeadsOf } from '../lib/actions'
 import { runScheduledAutomations } from '../lib/email'
+import { myForms, runHrFormReminders } from '../lib/hrForms'
+import { canFill, SENT, statusOf } from '../../supabase/hr-form-rules.mjs'
+import type { HrSubStatus } from '../lib/types'
 import { ago, today } from '../lib/format'
 import { Avatar, Button, cx, Menu, MenuItem, Modal } from '../components/ui'
 import { Logo, Mark } from '../components/Logo'
@@ -46,7 +49,9 @@ function pageTitle(path: string, me: User) {
   if (dash) return `${roleLabel(dash[1] as never)} Dashboard`
   if (path.startsWith('/bookings/new')) return 'New CRM Entry'
   if (/^\/bookings\/.+/.test(path)) return 'CRM Entry'
-  const m = [...MODULES].sort((a, b) => b.path.length - a.path.length).find((x) => path.startsWith(x.path.split('?')[0]!))
+  // the longest matching page path; a module that is a page itself wins over a tab of it (/hr-forms vs ?tab=responses)
+  const base = (p: string) => p.split('?')[0]!
+  const m = [...MODULES].sort((a, b) => base(b.path).length - base(a.path).length || Number(a.path.includes('?')) - Number(b.path.includes('?'))).find((x) => path.startsWith(base(x.path)))
   return m ? moduleLabel(m, me) : `${roleLabel(role as never)} Dashboard`
 }
 
@@ -88,6 +93,13 @@ export function Shell() {
   }, [companyJobs])
   // event rules: run in this browser right after the change that starts them
   useEffect(() => { startAutomations() }, [])
+  // HR forms due within 2 days: each person reminds themselves (their own browser, once a day per form)
+  useEffect(() => {
+    const tick = () => { try { runHrFormReminders(getDb().users.find((u) => u.id === me.id) ?? me) } catch { /* never block the app */ } }
+    tick()
+    const t = setInterval(tick, 30 * 60000)
+    return () => clearInterval(t)
+  }, [me.id])  // eslint-disable-line react-hooks/exhaustive-deps
   // user activity (IT Support → User activity): every page and click of the signed-in person
   useEffect(() => { startActivity(me); return () => stopActivity() }, [me.id, me.role])  // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { track('page', title || loc.pathname, { path: `${loc.pathname}${loc.search}` }) }, [loc.pathname, loc.search])  // eslint-disable-line react-hooks/exhaustive-deps
@@ -210,6 +222,7 @@ export function Shell() {
           <BreakBanner />
           <BreakPrompt />
           <BlutecSync />
+          {!loc.pathname.startsWith('/my-forms') && <MyFormsBanner />}
           {maintenance?.on && isMaster(me) && (
             <div className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-warn/40 bg-warn-soft px-4 py-3 text-sm text-warn">
               <Wrench className="size-4" /><b>Maintenance mode is on</b><span className="text-ink/70">Only IT Support and Super Admin can use the app.{maintenance.message ? ` Message: “${maintenance.message}”` : ''}</span>
@@ -338,7 +351,7 @@ function Sidebar({ mini, onExpand }: { mini: boolean; onExpand: () => void }) {
 }
 
 // Email Center is a workspace page: it opens in the normal layout (HR still sees it in their own menu)
-const HR_PATHS = ['/payroll', '/payslips', '/pf', '/incentives', '/incentive-settings', '/break-settings', '/assets', '/recruitment', '/candidates', '/letters', '/performance', '/salary-status']
+const HR_PATHS = ['/payroll', '/payslips', '/pf', '/incentives', '/incentive-settings', '/break-settings', '/assets', '/recruitment', '/candidates', '/letters', '/performance', '/salary-status', '/hr-forms']
 
 /** HR navigation: each item keeps its own colour; only pages that exist and the user may open are listed. */
 const HR_MENU: { label: string; to: string; icon: typeof Home; color: string; perms: Perm[] }[] = [
@@ -355,6 +368,9 @@ const HR_MENU: { label: string; to: string; icon: typeof Home; color: string; pe
   { label: 'Assets & Expenses', to: '/assets', icon: Package, color: 'text-violet-600 bg-violet-100 dark:bg-violet-500/15 dark:text-violet-300', perms: ['assets.manage'] },
   { label: 'Recruitment', to: '/recruitment', icon: Briefcase, color: 'text-blue-600 bg-blue-100 dark:bg-blue-500/15 dark:text-blue-300', perms: ['recruitment.manage'] },
   { label: 'Candidate Forms', to: '/candidates', icon: ClipboardList, color: 'text-indigo-600 bg-indigo-100 dark:bg-indigo-500/15 dark:text-indigo-300', perms: ['recruitment.manage'] },
+  { label: 'HR Form Builder', to: '/hr-forms', icon: FileSignature, color: 'text-violet-600 bg-violet-100 dark:bg-violet-500/15 dark:text-violet-300', perms: ['hrforms.manage'] },
+  { label: 'Form Responses', to: '/hr-forms?tab=responses', icon: ClipboardCheck, color: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-500/15 dark:text-emerald-300', perms: ['hrforms.manage'] },
+  { label: 'My Forms', to: '/my-forms', icon: ClipboardList, color: 'text-sky-600 bg-sky-100 dark:bg-sky-500/15 dark:text-sky-300', perms: [] },
   { label: 'Letters', to: '/letters', icon: FilePen, color: 'text-fuchsia-600 bg-fuchsia-100 dark:bg-fuchsia-500/15 dark:text-fuchsia-300', perms: ['employees.manage'] },
   { label: 'Performance', to: '/performance', icon: TrendingUp, color: 'text-violet-600 bg-violet-100 dark:bg-violet-500/15 dark:text-violet-300', perms: ['performance.view'] },
   { label: 'Training & Development', to: '/events', icon: GraduationCap, color: 'text-amber-600 bg-amber-100 dark:bg-amber-500/15 dark:text-amber-300', perms: [] },
@@ -380,7 +396,7 @@ function HrSidebar({ mini }: { mini: boolean }) {
           <Home className="size-[18px]" /><Label mini={mini}>Dashboard</Label>
         </NavLink>
         {HR_MENU.filter((m) => (m.to !== '/messages' || MESSAGES_ENABLED) && (!m.perms.length || can(...m.perms))).map((m) => {
-          const active = m.to.includes('?') ? here === m.to : loc.pathname === m.to
+          const active = m.to.includes('?') ? here.startsWith(m.to) : loc.pathname === m.to && !(m.to === '/hr-forms' && /tab=responses/.test(loc.search))
           return (
             <Link key={m.label} to={m.to} title={mini ? m.label : undefined} className={cx(item, active ? 'bg-white text-ink shadow-sm dark:bg-white/10' : 'text-ink/80 hover:bg-white/70 dark:hover:bg-white/5')}>
               <span className={cx('grid size-7 shrink-0 place-items-center rounded-lg', m.color)}><m.icon className="size-4" /></span><Label mini={mini}>{m.label}</Label>
@@ -402,6 +418,26 @@ function HrSidebar({ mini }: { mini: boolean }) {
             : <span className={cx('grid h-6 min-w-6 place-items-center rounded-full px-1.5 text-[11px] font-bold', unread.emails ? 'bg-accent text-white' : 'bg-white text-brand-ink dark:bg-white/10')}>{unread.emails}</span>}
         </NavLink>
       </div>
+    </div>
+  )
+}
+
+/** "You have N forms to fill" on every page (until the person opens My Forms or closes it for this session). */
+function MyFormsBanner() {
+  const db = useDb()
+  const me = useMe()
+  const [hidden, setHidden] = useState(() => { try { return sessionStorage.getItem('rexera-myforms-hide') === '1' } catch { return false } })
+  const t = today()
+  const todo = useMemo(() => myForms(db, me).filter((x) => !SENT.includes(statusOf(x.sub) as HrSubStatus) && canFill(x.form, x.sub, t)), [db.hrForms, db.hrFormSubmissions, me, t])  // eslint-disable-line react-hooks/exhaustive-deps
+  if (hidden || !todo.length) return null
+  const fix = todo.filter((x) => x.sub?.status === 'CHANGES_REQUESTED').length
+  const soon = todo.filter((x) => x.form.deadline).sort((a, b) => a.form.deadline!.localeCompare(b.form.deadline!))[0]
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-brand/25 bg-brand-soft px-4 py-2.5 text-sm text-brand-ink">
+      <ClipboardCheck className="size-4 shrink-0" />
+      <span className="min-w-0 flex-1"><b>{todo.length} form{todo.length === 1 ? '' : 's'} to fill</b>{fix ? ` · ${fix} sent back for correction` : ''}{soon ? ` · next due ${soon.form.deadline === t ? 'today' : new Date(`${soon.form.deadline}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}` : ''}</span>
+      <Link to={todo.length === 1 ? `/my-forms?open=${todo[0]!.form.id}` : '/my-forms'} className="font-semibold underline">Open My Forms</Link>
+      <button onClick={() => { setHidden(true); try { sessionStorage.setItem('rexera-myforms-hide', '1') } catch { /* ignore */ } }} aria-label="Hide until next sign-in" className="text-brand-ink/70 hover:text-brand-ink"><X className="size-4" /></button>
     </div>
   )
 }

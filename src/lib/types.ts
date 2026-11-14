@@ -18,6 +18,7 @@ export type Perm =
   | 'email.send' | 'assets.manage'
   | 'media.view' | 'media.manage'
   | 'roles.manage' | 'quiz.manage'
+  | 'hrforms.manage'
 
 /** What a person may do inside a module (Access Control → functions). */
 export type FnAction = 'view' | 'create' | 'edit' | 'delete' | 'download' | 'export' | 'approve' | 'send'
@@ -905,6 +906,57 @@ export interface BreakPolicy {
 
 /** An uploaded file kept in the browser's file store (lib/files.ts); records only hold this reference. */
 export interface FileRef { id: string; name: string; type: string; size: number; at: string }
+
+// ------------------------------------------------------------------ HR Form Builder (supabase/hr-form-rules.mjs)
+export type HrFieldType = 'text' | 'textarea' | 'email' | 'phone' | 'number' | 'date' | 'select' | 'multiselect' | 'checkbox' | 'radio' | 'file' | 'files' | 'image' | 'employee'
+/**
+ * One field of an HR form. minLength / maxLength: characters (text), or how many choices (checkboxes / multi-select);
+ * min / max: the value (number); pattern: a regular expression the answer must match (short / long text).
+ * Files: accept (pdf, word, excel, image — empty = all), maxSizeMb, maxFiles (multiple upload).
+ */
+export interface HrFormField {
+  id: string; type: HrFieldType; label: string; required: boolean
+  placeholder?: string; help?: string
+  minLength?: number; maxLength?: number; min?: number; max?: number
+  pattern?: string; patternMessage?: string
+  options?: string[]
+  accept?: ('pdf' | 'word' | 'excel' | 'image')[]; maxSizeMb?: number; maxFiles?: number
+}
+/** Who fills a form: everyone, chosen people, departments, branches and / or role groups (any match). */
+export interface HrFormAssign { everyone?: boolean; userIds?: string[]; departments?: string[]; branchIds?: string[]; roles?: Role[] }
+export type HrFormStatus = 'DRAFT' | 'PUBLISHED' | 'UNPUBLISHED' | 'ARCHIVED'
+export interface HrForm {
+  id: string; title: string; description?: string; status: HrFormStatus
+  fields: HrFormField[]
+  /** editing a published form's fields starts a new version; earlier versions are kept (submissions keep theirs too) */
+  version: number; versions: { version: number; at: string; by: string; fields: HrFormField[] }[]
+  assign: HrFormAssign
+  /** last day to submit (yyyy-mm-dd); after it only corrections HR asked for can be sent */
+  deadline?: string
+  /** employees may save a draft and come back */
+  allowDraft: boolean
+  /** the HR people who review its submissions (empty = every HR manager) */
+  reviewerIds: string[]
+  createdBy: string; createdAt: string; updatedAt?: string; updatedBy?: string; publishedAt?: string
+}
+export type HrSubStatus = 'IN_PROGRESS' | 'SUBMITTED' | 'UNDER_REVIEW' | 'CHANGES_REQUESTED' | 'APPROVED' | 'REJECTED'
+/** text / choice / date / employee: string · number: number · checkboxes / multi-select: string[] · files: FileRef[] */
+export type HrAnswer = string | number | string[] | FileRef[] | null
+/**
+ * One employee's submission of one form (one per person per form). `fields` is the form as it was when they filled
+ * it, so editing the form later never changes what they answered.
+ */
+export interface HrFormSubmission {
+  id: string; formId: string; formVersion: number; userId: string; status: HrSubStatus
+  fields: HrFormField[]; answers: Record<string, HrAnswer>
+  startedAt: string; updatedAt?: string; submittedAt?: string
+  reviewedBy?: string; reviewedAt?: string
+  /** shown to the employee: why it was rejected, or what to correct */
+  reviewNote?: string
+  history: { at: string; by: string; action: string; note?: string }[]
+}
+/** HR's internal comment on a submission (never shown to the employee). */
+export interface HrFormNote { id: string; submissionId: string; by: string; at: string; text: string }
 /** An old-CRM upload that isn't linked to a client file: where it was, and our best guess of what it is. */
 export interface LegacyFile { path: string; file: FileRef; kind: string }
 
@@ -1267,6 +1319,10 @@ export interface DB {
   employeePrivate?: EmployeePrivate[]
   /** attendance set by HR / imported from HR's register */
   attendanceMarks?: AttendanceMark[]
+  /** HR Form Builder: forms HR makes for employees, each employee's submission, HR's internal notes */
+  hrForms?: HrForm[]
+  hrFormSubmissions?: HrFormSubmission[]
+  hrFormNotes?: HrFormNote[]
   /** Rexy's Scheme Checker (empty = the built-in schemes) */
   eligibilitySchemes?: EligibilityScheme[]
   /** Automation Center: custom rules and the built-in on / off switches (IT Support edits) */

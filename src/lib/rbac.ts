@@ -88,6 +88,7 @@ export const PERM_GROUPS: { group: string; perms: { id: Perm; label: string }[] 
       { id: 'performance.view', label: 'Performance report cards' },
       { id: 'recruitment.manage', label: 'Recruitment & data import' },
       { id: 'assets.manage', label: 'Company assets, inventory & expenses' },
+      { id: 'hrforms.manage', label: 'HR Form Builder: create, publish and assign employee forms; review every response' },
     ],
   },
   {
@@ -135,7 +136,7 @@ export const DEFAULT_ROLE_PERMS: Record<Role, Perm[]> = {
   hr: [
     ...common, 'attendance.all', 'leave.approve', 'employees.view', 'employees.manage', 'events.manage', 'broadcasts.manage',
     'templates.manage', 'reports.view', 'reports.export', 'audit.view',
-    'payroll.view', 'payroll.manage', 'incentives.manage', 'recruitment.manage', 'performance.view', 'email.send', 'assets.manage',
+    'payroll.view', 'payroll.manage', 'incentives.manage', 'recruitment.manage', 'performance.view', 'email.send', 'assets.manage', 'hrforms.manage',
   ],
   it: [...ALL_PERMS],
   support: [...common, 'bookings.all', 'documents.forms', 'templates.manage'],

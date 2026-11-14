@@ -75,6 +75,8 @@ const LegacySync = lazy(() => import('./pages/it/LegacySync'))
 const ErrorLog = lazy(() => import('./pages/it/ErrorLog'))
 const Candidates = lazy(() => import('./pages/hr/Candidates'))
 const Letters = lazy(() => import('./pages/hr/Letters'))
+const HrForms = lazy(() => import('./pages/hr/HrForms'))
+const MyForms = lazy(() => import('./pages/modules/MyForms'))
 const Apply = lazy(() => import('./pages/Apply'))
 const PublicForm = lazy(() => import('./pages/PublicForm'))
 const Forms = lazy(() => import('./pages/modules/Forms'))
@@ -229,6 +231,8 @@ export default function App() {
               <Route path="/recruitment" element={<Guard m="recruitment"><S><Recruitment /></S></Guard>} />
               <Route path="/candidates" element={<Guard m="candidates"><S><Candidates /></S></Guard>} />
               <Route path="/letters" element={<Guard m="letters"><S><Letters /></S></Guard>} />
+              <Route path="/hr-forms" element={<Guard m="hr-forms"><S><HrForms /></S></Guard>} />
+              <Route path="/my-forms" element={<Guard m="my-forms"><S><MyForms /></S></Guard>} />
               <Route path="/api-keys" element={<Guard m="api-keys"><S><ApiKeys /></S></Guard>} />
               <Route path="/backup" element={<Guard m="backup"><S><BackupPage /></S></Guard>} />
               <Route path="/legacy-import" element={<Guard m="legacy-import"><S><LegacyImport /></S></Guard>} />

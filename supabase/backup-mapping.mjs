@@ -154,6 +154,20 @@ export function mapAll(backup) {
     updated_at: s(p.updatedAt), updated_by: uref(p.updatedBy),
   }))
   t.attendance_marks = (d.attendanceMarks ?? []).map((a) => ({ id: a.id, user_id: a.userId, day: a.date, mark: a.mark, source: s(a.source), updated_at: s(a.updatedAt), updated_by: uref(a.updatedBy) }))
+  // HR Form Builder
+  t.hr_forms = (d.hrForms ?? []).map((f) => ({
+    id: f.id, title: f.title, description: s(f.description), status: f.status, fields: f.fields ?? [], version: f.version ?? 1, versions: f.versions ?? [],
+    assign: f.assign ?? {}, deadline: s(f.deadline), allow_draft: f.allowDraft !== false, reviewer_ids: f.reviewerIds ?? [],
+    created_by: uref(f.createdBy), created_at: f.createdAt, updated_at: s(f.updatedAt), updated_by: uref(f.updatedBy), published_at: s(f.publishedAt),
+  }))
+  const hrFormIds = new Set((d.hrForms ?? []).map((f) => f.id))
+  t.hr_form_submissions = (d.hrFormSubmissions ?? []).filter((x) => userIds.has(x.userId) && hrFormIds.has(x.formId)).map((x) => ({
+    id: x.id, form_id: x.formId, form_version: x.formVersion ?? 1, user_id: x.userId, status: x.status, fields: x.fields ?? [], answers: x.answers ?? {},
+    started_at: x.startedAt, updated_at: s(x.updatedAt), submitted_at: s(x.submittedAt), reviewed_by: uref(x.reviewedBy), reviewed_at: s(x.reviewedAt),
+    review_note: s(x.reviewNote), history: x.history ?? [],
+  }))
+  const hrSubIds = new Set(t.hr_form_submissions.map((x) => x.id))
+  t.hr_form_notes = (d.hrFormNotes ?? []).filter((n) => hrSubIds.has(n.submissionId)).map((n) => ({ id: n.id, submission_id: n.submissionId, by_user: uref(n.by), at: n.at, body: n.text }))
   t.scheme_master = (d.schemeMaster ?? []).map((m) => ({
     id: m.id, name: m.name, category: m.category, active: m.active !== false, description: s(m.description), aliases: m.aliases ?? [],
     service_ids: m.serviceIds ?? [], sales_kit_ids: m.salesKitIds ?? [], scheme_ids: m.schemeIds ?? [], checker_ids: m.checkerIds ?? [],
@@ -217,7 +231,7 @@ export const ORDER = [
   ['message_templates', 'id'], ['emails', 'id'], ['email_automations', 'key'], ['app_settings', 'key'], ['api_keys', 'id'],
   ['backup_log', 'id'], ['candidate_forms', 'id'], ['candidate_applications', 'id'], ['candidate_letters', 'id'], ['deleted_items', 'id'], ['recruitment_datasets', 'id'], ['recruitment_rows', 'dataset_id,row_no'],
   ['company_assets', 'id'], ['stock_items', 'id'], ['company_expenses', 'id'], ['legacy_files', 'path'],
-  ['doc_forms', 'id'], ['doc_form_submissions', 'id'], ['sales_kit', 'id'], ['employee_private', 'user_id'], ['attendance_marks', 'id'], ['scheme_master', 'id'], ['scheme_kits', 'id'], ['eligibility_schemes', 'id'], ['automation_rules', 'id'], ['automation_runs', 'id'],
+  ['doc_forms', 'id'], ['doc_form_submissions', 'id'], ['sales_kit', 'id'], ['employee_private', 'user_id'], ['attendance_marks', 'id'], ['hr_forms', 'id'], ['hr_form_submissions', 'id'], ['hr_form_notes', 'id'], ['scheme_master', 'id'], ['scheme_kits', 'id'], ['eligibility_schemes', 'id'], ['automation_rules', 'id'], ['automation_runs', 'id'],
   ['site_content', 'key'], ['site_content_history', 'id'], ['website_lead_log', 'id'],
   ['client_accounts', 'id'], ['client_activity', 'id'], ['client_doc_uploads', 'id'], ['media_items', 'id'], ['client_entries', 'id'], ['client_messages', 'id'],
 ]
@@ -424,6 +438,17 @@ export function rowsToDb(input) {
       updatedAt: u(p.updated_at), updatedBy: u(p.updated_by),
     })),
     attendanceMarks: rows('attendance_marks').map((a) => opt({ id: a.id, userId: a.user_id, date: String(a.day).slice(0, 10), mark: a.mark, source: u(a.source), updatedAt: u(a.updated_at), updatedBy: u(a.updated_by) })),
+    hrForms: rows('hr_forms').map((f) => opt({
+      id: f.id, title: f.title, description: u(f.description), status: f.status, fields: f.fields ?? [], version: f.version ?? 1, versions: f.versions ?? [],
+      assign: f.assign ?? {}, deadline: f.deadline ? String(f.deadline).slice(0, 10) : undefined, allowDraft: f.allow_draft !== false, reviewerIds: f.reviewer_ids ?? [],
+      createdBy: f.created_by ?? '', createdAt: f.created_at, updatedAt: u(f.updated_at), updatedBy: u(f.updated_by), publishedAt: u(f.published_at),
+    })),
+    hrFormSubmissions: rows('hr_form_submissions').map((x) => opt({
+      id: x.id, formId: x.form_id, formVersion: x.form_version ?? 1, userId: x.user_id, status: x.status, fields: x.fields ?? [], answers: x.answers ?? {},
+      startedAt: x.started_at, updatedAt: u(x.updated_at), submittedAt: u(x.submitted_at), reviewedBy: u(x.reviewed_by), reviewedAt: u(x.reviewed_at),
+      reviewNote: u(x.review_note), history: x.history ?? [],
+    })),
+    hrFormNotes: rows('hr_form_notes').map((n) => ({ id: n.id, submissionId: n.submission_id, by: n.by_user ?? '', at: n.at, text: n.body })),
     schemeMaster: rows('scheme_master').map((m) => opt({
       id: m.id, name: m.name, category: m.category, active: m.active !== false, description: u(m.description), aliases: m.aliases ?? [],
       serviceIds: m.service_ids ?? [], salesKitIds: m.sales_kit_ids ?? [], schemeIds: m.scheme_ids ?? [], checkerIds: m.checker_ids ?? [],

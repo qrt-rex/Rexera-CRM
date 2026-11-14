@@ -12,6 +12,7 @@ import { addDays, fmtDate, today, ymd } from '../../lib/format'
 import { Avatar, Badge, cx, Table, Td, Th } from '../../components/ui'
 import { Bao, Cloud, Kabir, Meera, MiniLaptop, PaperPlane, Plant, Rexy, Twinkle } from '../../components/hr/Mascots'
 import { LoginLogoutCard, useNow } from './widgets'
+import { analytics, responseRows, STATUS_LABEL } from '../../../supabase/hr-form-rules.mjs'
 
 // ------------------------------------------------------------------ helpers
 const reduced = () => typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -60,6 +61,48 @@ function Panel({ title, icon: Icon, action, children, className, chip }: { title
 }
 const ViewAll = ({ to, label = 'View All' }: { to: string; label?: string }) => <Link to={to} className="inline-flex items-center gap-0.5 text-xs font-bold text-brand-ink hover:underline">{label}<ChevronRight className="size-3.5" /></Link>
 const Empty = ({ text }: { text: string }) => <p className="px-5 py-8 text-center text-sm text-mute">{text}</p>
+
+/** HR Form Builder at a glance: forms, what's waiting for review, pending / overdue, and the newest submissions. */
+function EmployeeFormsPanel() {
+  const db = useDb()
+  const data = useMemo(() => {
+    const forms = db.hrForms ?? []
+    const rows = responseRows({ forms, subs: db.hrFormSubmissions ?? [], users: db.users, today: today() })
+    return { a: analytics({ forms, rows }), recent: rows.filter((r) => r.sub?.submittedAt).sort((x, y) => (y.sub!.submittedAt ?? '').localeCompare(x.sub!.submittedAt ?? '')).slice(0, 4) }
+  }, [db.hrForms, db.hrFormSubmissions, db.users])
+  const { a } = data
+  const tiles: [string, number, string, Pastel][] = [
+    ['Active forms', a.activeForms, '/hr-forms', 'violet'], ['To review', a.underReview, '/hr-forms?tab=responses&status=SUBMITTED', 'sky'],
+    ['Pending', a.pending, '/hr-forms?tab=responses&status=OPEN', 'amber'], ['Approved', a.approved, '/hr-forms?tab=responses&status=APPROVED', 'emerald'],
+  ]
+  return (
+    <Panel title="Employee Forms" icon={FileSignature} chip={a.overdue ? `${a.overdue} overdue` : undefined}
+      action={<span className="flex items-center gap-3"><Link to="/hr-forms?edit=new" className="text-xs font-bold text-brand-ink hover:underline">+ New form</Link><ViewAll to="/hr-forms?tab=responses" label="Responses" /></span>}>
+      <div className="grid gap-4 px-5 pb-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+        <div className="grid grid-cols-2 gap-2">
+          {tiles.map(([label, n, to, tone]) => (
+            <Link key={label} to={to} className={cx('rounded-xl px-3 py-2.5 transition hover:brightness-95', PASTEL[tone].tile)}>
+              <span className="block text-2xl font-extrabold tabular-nums">{n}</span><span className="text-xs font-semibold">{label}</span>
+            </Link>
+          ))}
+        </div>
+        {!data.recent.length ? <Empty text={a.totalForms ? 'No submissions yet.' : 'Create a form — employees fill it in My Forms and their answers land here.'} /> : (
+          <ul className="divide-y divide-line/70">
+            {data.recent.map((r) => (
+              <li key={r.key}>
+                <Link to={`/hr-forms?tab=responses&open=${r.sub!.id}`} className="flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-card2">
+                  <Avatar name={r.user.name} photo={r.user.photo} size={34} />
+                  <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{r.user.name}</span><span className="block truncate text-xs text-mute">{r.form.title}</span></span>
+                  <Badge tone={r.status === 'APPROVED' ? 'green' : r.status === 'REJECTED' ? 'red' : r.status === 'SUBMITTED' ? 'violet' : 'amber'}>{STATUS_LABEL[r.status]}</Badge>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Panel>
+  )
+}
 
 // ------------------------------------------------------------------ page
 export function HrDashboard() {
@@ -164,6 +207,8 @@ export function HrDashboard() {
       </div>
 
       {canAttendance && <LateBreakAlerts />}
+
+      {can('hrforms.manage') && <EmployeeFormsPanel />}
 
       {/* 3. middle row */}
       <div className="grid gap-5 lg:grid-cols-2 xl:grid-cols-3">
@@ -444,6 +489,8 @@ function QuickActions() {
     { to: '/letters?type=internship', label: 'Internship Letter', icon: GraduationCap, tone: 'sky', show: can('employees.manage') },
     { to: '/letters?type=experience', label: 'Experience Letter', icon: Award, tone: 'emerald', show: can('employees.manage') },
     { to: '/candidates', label: 'Candidate Form', icon: ClipboardList, tone: 'amber', show: can('recruitment.manage') },
+    { to: '/hr-forms?edit=new', label: 'New Employee Form', icon: FileSignature, tone: 'violet', show: can('hrforms.manage') },
+    { to: '/hr-forms?tab=responses', label: 'Form Responses', icon: ClipboardCheck, tone: 'green', show: can('hrforms.manage') },
     { to: '/attendance', label: 'Mark Attendance', icon: UserCheck, tone: 'green', show: true },
     { to: '/leave?new=1', label: 'Apply Leave', icon: CalendarPlus, tone: 'pink', show: true },
     { to: '/leave', label: 'Approve Leave', icon: ClipboardCheck, tone: 'amber', show: can('leave.approve') },

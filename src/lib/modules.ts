@@ -71,6 +71,10 @@ export const MODULES: ModuleDef[] = [
   { key: 'break-settings', path: '/break-settings', label: 'Break Time', desc: 'Lunch break window, late-break warning and HR alerts', icon: Coffee, tone: 'amber', perms: ['employees.manage'], group: 'People', hrOnly: true },
   { key: 'performance', path: '/performance', label: 'Performance', desc: 'Report cards and scores', icon: Gauge, tone: 'violet', perms: ['performance.view'], group: 'People', hrOnly: true },
   { key: 'candidates', path: '/candidates', label: 'Candidate Forms', desc: 'Share an apply link; resumes come in here', icon: ClipboardList, tone: 'violet', perms: ['recruitment.manage'], group: 'People', hrOnly: true },
+  // HR Form Builder: HR makes employee forms and reviews the responses; every employee fills theirs in My Forms
+  { key: 'hr-forms', path: '/hr-forms', label: 'HR Form Builder', desc: 'Create employee forms with drag and drop, publish, assign, deadlines', icon: FileSignature, tone: 'violet', perms: ['hrforms.manage'], group: 'People', hrOnly: true },
+  { key: 'hr-form-responses', path: '/hr-forms?tab=responses', label: 'Form Responses', desc: 'Every employee submission: review, approve, reject, corrections, export', icon: Inbox, tone: 'green', perms: ['hrforms.manage'], group: 'People', hrOnly: true },
+  { key: 'my-forms', path: '/my-forms', label: 'My Forms', desc: 'Forms HR asked you to fill: upload documents, save a draft, submit, see the status', icon: ClipboardCheck, tone: 'blue', perms: [], group: 'People' },
   { key: 'letters', path: '/letters', label: 'Letters', desc: 'Joining, internship and experience letters (PDF)', icon: FilePen, tone: 'pink', perms: ['employees.manage'], group: 'People', hrOnly: true },
   { key: 'recruitment', path: '/recruitment', label: 'Recruitment', desc: 'Import CSV / Excel files into tables', icon: Briefcase, tone: 'navy', perms: ['recruitment.manage'], group: 'People', hrOnly: true },
   { key: 'events', path: '/events', label: 'Events & Calendar', desc: 'Meetings, trainings, holidays', icon: CalendarDays, tone: 'pink', perms: [], group: 'People' },
