@@ -2,6 +2,7 @@ import type { BComment, BDoc, Booking, BookingStatus, DB, Invoice, Lead, LeadUpl
 import { invoiceTotals, normPhone, round2 } from './format'
 import { PRESET_USERS } from './seed'
 import { dispositionToStatus, guessCategory, STAGES, stageLabel } from './workflow'
+import { live, makePeople, placeAssignee, teamLeadFor } from '../../supabase/legacy-people-rules.mjs'
 
 /**
  * Import from the old PHP CRM (phpMyAdmin / MariaDB .sql dump).
@@ -227,6 +228,7 @@ export function buildImport(tables: DumpTables, current: DB, opts: ImportOptions
     return new Set([titleCase(local.replace(/[._-]+/g, ' ').replace(/\d+/g, '').trim() || local), ...[...(nameVotes.get(email)?.keys() ?? [])].map((n) => titleCase(n.toLowerCase())), ...(fullNames.has(email) ? [titleCase(fullNames.get(email)!.toLowerCase())] : [])])
   }
   let namesFound = 0, namesSplit = 0, renamed = 0
+  const createdIds = new Set<string>()
   for (const r of T('users')) {
     const email = (r.email ?? '').trim().toLowerCase()
     const legacyRole = (r.role ?? '').trim()
@@ -261,22 +263,22 @@ export function buildImport(tables: DumpTables, current: DB, opts: ImportOptions
       joinedOn: day(utc(r.created_at)) ?? now.slice(0, 10), active: true, passHash: '', needsPasswordReset: true,
       legacyId: Number(r.id), legacyRole,
     }
-    base.users.push(u); byEmail.set(email, u); legacyUser.set(r.id!, u); created++
+    base.users.push(u); byEmail.set(email, u); legacyUser.set(r.id!, u); createdIds.add(u.id); created++
   }
   if (created) notes.push(`The old CRM keeps names as the email name run together (e.g. “sudhanshusingh”). Of ${created} new users, ${namesFound} had a proper name, ${namesSplit} were split at a common surname (“Sudhanshu Singh”) and ${created - namesFound - namesSplit} keep one word — check names in Employees.`)
   if (renamed) notes.push(`${renamed} user(s) imported earlier get the better name (names you changed yourself are kept).`)
-  const managerUser = manager ? legacyUser.get(manager.id!) : undefined
+  // Person by person (supabase/legacy-people-rules.mjs): each old user id → their account here, following IT's person
+  // map (Old CRM sync → Role-wise distribution) for people who now work under another account or whose old account is gone.
+  const people = makePeople(base.users, current.settings.legacyPeople ?? {})
+  const managerUser = manager ? people.byOldId(manager.id) : undefined
   const allIds = new Set(base.users.map((u) => u.id))
   for (const u of base.users) {
     if (u.teamLeadId && !allIds.has(u.teamLeadId)) u.teamLeadId = undefined          // sample team leader removed
-    if (!u.teamLeadId && managerUser && u.id !== managerUser.id && (u.role === 'sales' || u.legacyRole?.toLowerCase() === 'employee')) u.teamLeadId = managerUser.id
+    // only people this copy adds get the old Manager as team leader; existing teams are IT's (Role-wise distribution → Teams)
+    if (createdIds.has(u.id) && !u.teamLeadId && live(managerUser) && u.id !== managerUser.id && (u.role === 'sales' || u.legacyRole?.toLowerCase() === 'employee')) u.teamLeadId = managerUser.id
   }
-  const userFromEmail = (e: string | null | undefined) => (e ? byEmail.get(e.trim().toLowerCase()) : undefined)
-  const userFromId = (id: string | null | undefined) => (id ? legacyUser.get(id.trim()) : undefined)
-  // the old CRM sometimes has only the sales person's name: matched when exactly one person has it
-  const byName = new Map<string, User | null>()
-  for (const u of base.users) { const k = norm(u.name); byName.set(k, byName.has(k) ? null : u) }
-  const userFromName = (n: string | null | undefined) => (n && norm(n) ? byName.get(norm(n)) ?? undefined : undefined)
+  const userFromEmail = (e: string | null | undefined) => people.byEmail(e)
+  const userFromId = (id: string | null | undefined) => people.byOldId(id)
   const hasRole = (u: User | undefined, role: Role) => !!u && (u.role === role || u.extraRoles.includes(role))
 
   // ---------------------------------------------------------- services (merge by name)
@@ -331,11 +333,11 @@ export function buildImport(tables: DumpTables, current: DB, opts: ImportOptions
   for (const r of crm) {
     const id = `lg-b-${r.id}`
     const wf = workflow.get(r.id!)
-    const owner = userFromEmail(r.lead_closed_by_email) ?? userFromId(r.submitted_by) ?? userFromName(r.lead_closed_by)
+    const owner = people.ownerOf(r)
     const assignee = userFromId(r.assigned_to)
     if (!assignee && !blank(r.assigned_to)) missingAssignee++
-    // Operations as the main role or an extra role (someone also set up as Admin still gets their old files)
-    const ops = hasRole(assignee, 'operations') ? assignee : undefined
+    // the old "Admin Member" who processed the file: Operations here, or an Admin here (then the file is With Admin)
+    const ops = hasRole(assignee, 'operations') || hasRole(assignee, 'admin') ? assignee : undefined
     const createdAt = utc(r.created_at) ?? now
 
     // stage history from the workflow timestamps
@@ -359,7 +361,11 @@ export function buildImport(tables: DumpTables, current: DB, opts: ImportOptions
     else if (/^rejected$/i.test(raw)) status = 'REJECTED'
     else if (/^pending$/i.test(raw) || raw === '') status = r.approved_at ? 'PENDING_LEGAL' : 'PENDING_TL'
     else { status = 'ON_HOLD'; holdReason = raw; holdFrom = 'IN_OPERATIONS'; if (!/hold|pending|under process|not complete|kyc|waiting/i.test(raw)) unknownStatus++ }
-    const becomes = status === 'IN_OPERATIONS' ? `With Operations · stage ${stageLabel(stage, stageOutcome)}` : status === 'ON_HOLD' ? `On hold · “${raw}”` : status === 'PENDING_LEGAL' ? 'Pending Legal' : status === 'REJECTED' ? 'Rejected' : status
+    // where the old assignee works now (active people only; an inactive Operations person stays recorded as before)
+    const place = placeAssignee(status, live(assignee) ? assignee : undefined) ?? (hasRole(assignee, 'operations') && (status === 'IN_OPERATIONS' || status === 'ON_HOLD') ? { opsMemberId: assignee!.id } : null)
+    if (place?.status) status = place.status
+    if (place?.holdFrom) holdFrom = place.holdFrom
+    const becomes = status === 'WITH_ADMIN' ? `With Admin · stage ${stageLabel(stage, stageOutcome)}` : status === 'IN_OPERATIONS' ? `With Operations · stage ${stageLabel(stage, stageOutcome)}` : status === 'ON_HOLD' ? `On hold · “${raw}”` : status === 'PENDING_LEGAL' ? 'Pending Legal' : status === 'REJECTED' ? 'Rejected' : status
     const key = `${raw}\u0000${becomes}`
     const sc = statusCount.get(key) ?? { count: 0, becomes }
     sc.count++; statusCount.set(key, sc)
@@ -437,8 +443,8 @@ export function buildImport(tables: DumpTables, current: DB, opts: ImportOptions
       city: r.city ?? '', state: r.state ?? '', industry: r.industry ?? r.sector ?? '', serviceId: svc?.id ?? '', serviceName: r.service ?? '',
       mode: r.mode === 'Refundable' ? 'Refundable' : 'Non-Refundable', successFeePct: num(r.percentage), totalQuoted: num(r.total_quoted), gstRate,
       deduction: ded ? round2(ded.reduce((s, d) => s + num(d.deducted_amount), 0)) : 0, payments,
-      createdBy: owner?.id ?? '', teamLeadId: managerUser?.id, status, holdFrom, holdReason, approvals,
-      opsMemberId: status === 'IN_OPERATIONS' || status === 'ON_HOLD' ? ops?.id : undefined, stage, maxStage, stageHistory, ...(stageOutcome ? { stageOutcome } : {}),
+      createdBy: owner?.id ?? '', teamLeadId: teamLeadFor(owner, managerUser, people.byId), status, holdFrom, holdReason, approvals,
+      opsMemberId: place?.opsMemberId, ...(place?.adminId ? { adminId: place.adminId } : {}), stage, maxStage, stageHistory, ...(stageOutcome ? { stageOutcome } : {}),
       comments: timeline, documents, tasks: [], priority: 'MEDIUM', deadline: '', createdAt, updatedAt,
       address: txt(r.address) || undefined, website: txt(r.website) || undefined, cin: txt(r.cin_llp) || undefined,
       startupContact: txt(r.startup_contact) || txt(r.startup_email) ? { phone: txt(r.startup_contact), email: txt(r.startup_email) } : undefined,

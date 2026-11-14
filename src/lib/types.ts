@@ -1040,6 +1040,8 @@ export interface Settings {
   dialerCampaigns?: Record<string, string[]>
   /** client message templates edited by the Operation Team / Admin (missing = the built-in text) */
   clientTemplates?: Partial<Record<string, { subject?: string; email?: string; whatsapp?: string; updatedAt?: string; updatedBy?: string }>>
+  /** old CRM person map (IT Support): old CRM user id → the new CRM account that holds their old work */
+  legacyPeople?: Record<string, string>
 }
 /** Round robin: `next` is the position in `userIds` that gets the next lead (wraps back to the first person). */
 export interface LeadAssign { on: boolean; userIds: string[]; next: number }
