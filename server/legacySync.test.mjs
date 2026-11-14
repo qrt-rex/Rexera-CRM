@@ -26,6 +26,15 @@ const old = {
     { id: '12', company_name: 'Beta Tech LLP', contact_person: 'Meera Beta', company_mobile: '9876500012', company_email: 'b@beta.test', service: 'Trademark', status: 'Pending', submitted_by: '1', lead_closed_by_email: 'asha@old.test', advance_amount: '5000', advance_with_gst: '5900', payment_date: '2026-01-06', created_at: '2026-01-06 12:00:00' },
   ],
 }
+// the old uploads folder (connector 1.2 `files` / `file`)
+const disk = {
+  'screenshots/SS_6ae5ab71d09c9_pay.jpeg': 'jpeg-bytes',
+  'client_documents/9876500011/doc_9876500011_20260105_110245_aa.pdf': 'pdf-bytes',
+  'client_documents/9876500011/extra_photo.jpg': 'jpg-bytes',
+  'approved_pdfs/AlphaFoodsPvtLtd_SeedFund.pdf': 'agreement-bytes',
+  'misc/orphan.png': 'png-bytes',
+}
+let filesApi = false
 let calls = 0, refused = 0
 const server = http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x')
@@ -35,7 +44,13 @@ const server = http.createServer(async (req, res) => {
   const send = (status, body) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)) }
   if (bad) { refused++; return send(401, { ok: false, error: bad }) }
   calls++
-  if (action === 'ping') return send(200, { ok: true, app: 'rexera-connector', databases: { main: { tables: Object.keys(old) } } })
+  if (action === 'ping') return send(200, { ok: true, app: 'rexera-connector', databases: { main: { tables: Object.keys(old) } }, ...(filesApi ? { files: true } : {}) })
+  if (action === 'files') return send(200, { ok: true, total: Object.keys(disk).length, files: Object.entries(disk).slice(Number(params.offset), Number(params.offset) + Number(params.limit)).map(([path, b]) => ({ path, size: b.length, mtime: 1767600000 })) })
+  if (action === 'file') {
+    const p = String(params.path).replace(/^uploads\//, '')
+    if (!(p in disk)) return send(404, { ok: false, error: 'File not found.' })
+    res.writeHead(200, { 'Content-Type': 'application/octet-stream' }); return res.end(disk[p])
+  }
   if (action === 'fingerprint') return send(200, { ok: true, fingerprint: { main: Object.fromEntries(Object.entries(old).map(([t, r]) => [t, `${r.length}:${JSON.stringify(r).length}`])) } })
   if (action === 'rows') {
     const rows = old[params.table] ?? []
@@ -129,5 +144,50 @@ assert.deepEqual(repairs['bookings|lg-b-2'].stage, { from: 14, to: 9 }, 'remembe
 const badPay = await forTests.writeRows(fakeDb, 'booking_payments', 'id', [{ id: 'lg-p-1', booking_id: 'lg-b-1' }, { id: 'lg-p-9', booking_id: 'lg-b-missing' }], repairs, repaired)
 assert.equal(badPay.length, 1); assert.equal(badPay[0].parent, 'lg-b-missing', 'a payment never loses its client file — it waits for it')
 
+// 7. files (connector 1.2): every upload copied once and linked where it belongs
+filesApi = true
+old.crm[0].payment_screenshot = 'SS_6ae5ab71d09c9_pay.jpeg'
+old.client_documents = [{ id: '501', crm_id: '11', doc_type: 'KYC', doc_title: 'PAN card', original_file_name: 'pan.pdf', file_path: 'uploads/client_documents/9876500011/doc_9876500011_20260105_110245_aa.pdf', file_size: '9', uploaded_at: '2026-01-05 11:02:45', uploaded_by: '1' }]
+await sync(store, synced)
+const { syncUploads, fileLinkWrites } = await import('./legacySync.mjs')
+const lib = await import('./dist/legacy-import.mjs')
+const bucket = new Map()
+async function files() {
+  const current = rowsToDb(store).db
+  const { next } = lib.buildImport((await forTests.readOld(env, cfg, 'main', Object.keys(old), () => false)).tables, current, { replaceSampleData: false })
+  const list = await forTests.listOldFiles(env, cfg)
+  const up = await syncUploads({
+    list, lib, next, stored: new Set(bucket.keys()),
+    fetchFile: (path) => forTests.call(env, cfg, 'file', { path }, { raw: true }),
+    upload: async (id, buf, type) => { bucket.set(id, { buf: String(buf), type }) },
+  })
+  const w = fileLinkWrites(current, next, mapAll)
+  // apply as the server does: only the proof / file columns, new documents, the unlinked list
+  for (const p of w.payments) Object.assign(store.booking_payments.find((x) => x.id === p.id), { proof: p.proof, proof_name: p.proof_name })
+  for (const d of w.docUpdates) Object.assign(store.booking_documents.find((x) => x.id === d.id), { file: d.file, size_bytes: d.size_bytes })
+  store.booking_documents.push(...w.newDocs)
+  store.legacy_files = [...(store.legacy_files ?? []).filter((x) => !w.archive.some((a) => a.path === x.path)), ...w.archive]
+  return { up, w }
+}
+let f = await files()
+assert.equal(f.up.copied, 5, 'every file in the uploads folder copied'); assert.equal(bucket.size, 5)
+assert.equal(f.w.payments.length, 1, 'screenshot → the advance payment (found by name in a sub-folder)')
+const pay = store.booking_payments.find((p) => p.id === 'lg-p-11-1')
+assert.ok(pay.proof?.id.startsWith('lg-f-')); assert.equal(bucket.get(pay.proof.id).buf, 'jpeg-bytes'); assert.equal(pay.proof.type, 'image/jpeg')
+const doc = store.booking_documents.find((d) => d.id === 'lg-d-501')
+assert.equal(bucket.get(doc.file.id).buf, 'pdf-bytes', 'client document → its own record')
+const added = store.booking_documents.filter((d) => d.booking_id === 'lg-b-11' && /^lg-d-(ag|up)-/.test(d.id))
+assert.ok(added.some((d) => d.category === 'Agreement'), 'signed agreement → the client file'); assert.ok(added.some((d) => /^lg-d-up-/.test(d.id)), 'other upload in the client folder → the client file')
+assert.deepEqual(store.legacy_files.map((x) => x.path), ['misc/orphan.png'], 'nothing lost: the rest kept as unlinked old files')
+// again: nothing copied twice, nothing written twice; the import keeps the links
+f = await files()
+assert.equal(f.up.copied, 0); assert.deepEqual([f.w.payments.length, f.w.docUpdates.length, f.w.newDocs.length, f.w.archive.length], [0, 0, 0, 0])
+r = await sync(store, synced)
+assert.ok(store.booking_payments.find((p) => p.id === 'lg-p-11-1').proof, 'a later copy keeps the screenshot')
+// a proof someone attached by hand in the new CRM is never replaced
+store.booking_payments.find((p) => p.id === 'lg-p-11-1').proof = { id: 'file-hand', name: 'x.png', type: 'image/png', size: 1, at: '2026-01-01T00:00:00Z' }
+f = await files()
+assert.equal(f.w.payments.length, 0, 'hand-attached proof kept')
+
 server.close()
-console.log(`✓ old CRM sync end to end: signed reads (${calls} calls, wrong secret refused), first copy, no duplicates, old-CRM change applied, new-CRM work kept, new client added, refused data repaired and saved`)
+console.log(`✓ old CRM sync end to end: signed reads (${calls} calls, wrong secret refused), first copy, no duplicates, old-CRM change applied, new-CRM work kept, new client added, refused data repaired and saved, every uploaded file copied once and linked (screenshots, documents, agreements, client folders, the rest kept)`)

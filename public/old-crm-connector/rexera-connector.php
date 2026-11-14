@@ -13,7 +13,9 @@
  */
 declare(strict_types=1);
 
-const CONNECTOR_VERSION = '1.1.0';
+const CONNECTOR_VERSION = '1.2.0';
+const INDEX_TTL = 600; // the list of uploaded files is rebuilt at most every 10 minutes
+const MAX_LIST = 5000;
 const MAX_SKEW_SEC = 300;
 const MAX_PAGE = 2000;
 const MAX_FILE_BYTES = 52428800; // 50 MB
@@ -109,12 +111,45 @@ function folder_size(string $dir): array {
  * the copy — an "uploads" folder next to this file or one level up. Only these folders can be read.
  */
 function upload_dirs(array $config): array {
+  $cands = [];
+  $conf = (string)($config['uploads_dir'] ?? '');
+  if ($conf !== '') {
+    $cands[] = $conf;
+    // a config pointing inside the uploads folder (e.g. uploads/client_documents): the uploads folder itself
+    $p = $conf;
+    for ($i = 0; $i < 4; $i++) { $p = dirname($p); if (strtolower(basename($p)) === 'uploads') { $cands[] = $p; break; } }
+  }
+  $root = (string)($_SERVER['DOCUMENT_ROOT'] ?? '');
+  if ($root !== '') { $cands[] = $root . '/uploads'; $cands[] = $root . '/public_html/uploads'; }
+  $cands[] = __DIR__ . '/uploads';
+  $cands[] = dirname(__DIR__) . '/uploads';
+  $cands[] = dirname(__DIR__, 2) . '/uploads';
   $out = [];
-  foreach ([(string)($config['uploads_dir'] ?? ''), __DIR__ . '/uploads', dirname(__DIR__) . '/uploads'] as $d) {
+  foreach ($cands as $d) {
     // @: a folder outside the host's open_basedir limit warns instead of answering — a warning would break the JSON reply
-    $r = $d !== '' ? @realpath($d) : false;
+    $r = @realpath($d);
     if ($r !== false && @is_dir($r) && !in_array($r, $out, true)) $out[] = $r;
   }
+  // the folder with the most files first (the real uploads folder, when the config points at a wrong or empty one)
+  usort($out, fn($a, $b) => folder_size($b)['files'] <=> folder_size($a)['files']);
+  return $out;
+}
+/**
+ * Every uploaded file in the main uploads folder: [path inside it, size, modified time], cached for INDEX_TTL seconds.
+ * The new CRM matches these to the old client files (payment screenshots, documents, signed agreements, other uploads).
+ */
+function upload_index(string $dir): array {
+  $cache = sys_get_temp_dir() . '/rexera-connector-index-' . md5($dir) . '.json';
+  if (is_file($cache) && filemtime($cache) > time() - INDEX_TTL) { $c = json_decode((string)file_get_contents($cache), true); if (is_array($c)) return $c; }
+  $out = [];
+  $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS));
+  foreach ($it as $f) {
+    if (!$f->isFile() || !readable_file($f->getPathname())) continue;
+    $rel = str_replace('\\', '/', substr($f->getPathname(), strlen($dir) + 1));
+    $out[] = [$rel, (int)$f->getSize(), (int)$f->getMTime()];
+  }
+  usort($out, fn($a, $b) => strcmp($a[0], $b[0]));
+  @file_put_contents($cache, json_encode($out));
   return $out;
 }
 /** Never handed out, whatever the path: code and settings files (this connector's config holds passwords). */
@@ -130,6 +165,15 @@ function find_upload(array $dirs, string $rel): ?string {
     $full = @realpath($base . '/' . $t);
     if ($full !== false && strpos($full, $base . DIRECTORY_SEPARATOR) === 0 && @is_file($full) && readable_file($full)) return $full;
   }
+  // the old CRM often stored only the file name (payment screenshots): find it anywhere in the uploads folder
+  $name = strtolower(basename($rel));
+  if ($dirs && $name !== '') {
+    foreach (upload_index($dirs[0]) as $f) {
+      if (strtolower(basename($f[0])) !== $name) continue;
+      $full = @realpath($dirs[0] . '/' . $f[0]);
+      if ($full !== false && strpos($full, $dirs[0] . DIRECTORY_SEPARATOR) === 0 && @is_file($full) && readable_file($full)) return $full;
+    }
+  }
   return null;
 }
 
@@ -140,7 +184,7 @@ $uploads = $dirs[0] ?? false;
 switch ($action) {
   case 'ping': {
     $out = ['ok' => true, 'app' => 'rexera-connector', 'version' => CONNECTOR_VERSION, 'php' => PHP_VERSION, 'name' => (string)($config['crm_name'] ?? 'Old CRM'),
-      'logo' => (string)($config['logo_url'] ?? ''), 'time' => date('c'), 'databases' => [], 'uploads' => $uploads !== false];
+      'logo' => (string)($config['logo_url'] ?? ''), 'time' => date('c'), 'databases' => [], 'uploads' => $uploads !== false, 'files' => true];
     foreach (['main', 'billing'] as $which) {
       $pdo = db($config, $which);
       if ($pdo) $out['databases'][$which] = ['mysql' => $pdo->query('SELECT VERSION()')->fetchColumn(), 'tables' => existing_tables($pdo, tables_of($which))];
@@ -171,7 +215,8 @@ switch ($action) {
 
   case 'fingerprint': {
     // per table "rows:checksum" — the new CRM copies again only when something changed
-    $out = ['ok' => true, 'fingerprint' => []];
+    // the version too: a new connector makes the new CRM copy again (e.g. files it could not find before)
+    $out = ['ok' => true, 'version' => CONNECTOR_VERSION, 'fingerprint' => []];
     foreach (['main', 'billing'] as $which) {
       $pdo = db($config, $which);
       if (!$pdo) continue;
@@ -200,6 +245,16 @@ switch ($action) {
     $rows = $pdo->query("SELECT * FROM `$table` ORDER BY $order LIMIT $limit OFFSET $offset")->fetchAll();
     $total = (int)$pdo->query("SELECT COUNT(*) FROM `$table`")->fetchColumn();
     reply(200, ['ok' => true, 'columns' => $cols, 'rows' => $rows, 'total' => $total]);
+  }
+
+  case 'files': {
+    // every uploaded file (path inside the uploads folder, size, modified), page by page
+    if (!$dirs) fail(400, 'No uploads_dir in the config, and no uploads folder next to the connector.');
+    $all = upload_index($dirs[0]);
+    $offset = max(0, (int)($_GET['offset'] ?? 0));
+    $limit = min(MAX_LIST, max(1, (int)($_GET['limit'] ?? MAX_LIST)));
+    $page = array_map(fn($f) => ['path' => $f[0], 'size' => $f[1], 'mtime' => $f[2]], array_slice($all, $offset, $limit));
+    reply(200, ['ok' => true, 'dir' => basename($dirs[0]), 'total' => count($all), 'files' => $page]);
   }
 
   case 'file': {

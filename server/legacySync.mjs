@@ -21,7 +21,9 @@ import { crmUser } from './users.mjs'
 import { logError } from './errors.mjs'
 
 const TICK_MS = 5000
-const MAX_FILES_PER_RUN = 200
+const MAX_FILES_PER_RUN = 300
+/** a run stops copying files after this long (the next run goes on where it stopped) */
+const FILES_TIME_MS = 4 * 60_000
 const OLD_STATS_TTL = 5 * 60_000
 
 let running = null, stopRequested = false, oldStats = null, timer = null
@@ -168,6 +170,106 @@ async function copyFiles(env, sb, cfg, next, shouldStop, tries = {}) {
   return { copied: copied.length, failed, more: false, setAside }
 }
 
+/** Every file in the old CRM's uploads folder (connector 1.2+ `files`), page by page. */
+async function listOldFiles(env, cfg) {
+  const out = []
+  for (let offset = 0; ; offset += 5000) {
+    const r = await call(env, cfg, 'files', { offset, limit: 5000 }, { timeoutMs: 120_000 })
+    out.push(...(r.files ?? []))
+    if ((r.files ?? []).length < 5000 || out.length >= (r.total ?? 0)) return out
+  }
+}
+/** Names of the old-CRM files already in the crm-files bucket (lg-f-…). */
+async function storedOldFiles(sb) {
+  const out = new Set()
+  for (let offset = 0; ; offset += 1000) {
+    const { data, error } = await sb.storage.from('crm-files').list('', { limit: 1000, offset, search: 'lg-f-', sortBy: { column: 'name', order: 'asc' } })
+    if (error) throw new Error(`crm-files: ${error.message}`)
+    for (const o of data ?? []) if (o.name.startsWith('lg-f-')) out.add(o.name)
+    if ((data ?? []).length < 1000) return out
+  }
+}
+
+/**
+ * The old uploads → the new CRM (pure apart from the three functions passed in): every file in the old uploads folder
+ * is copied once (crm-files bucket, id lg-f-… from its path) and linked where it belongs — payment screenshot → the
+ * payment's proof, client document → that document, signed agreement → an Agreement document on the client file,
+ * other uploads in a client's folder → that client's file, the rest kept as "unlinked old CRM files" so nothing is lost
+ * (src/lib/legacyFiles.ts, the same matching as IT → Import from old CRM). Linked files first. `next` gets the links.
+ */
+export async function syncUploads({ list, fetchFile, upload, stored, lib, next, shouldStop = () => false, tries = {}, max = MAX_FILES_PER_RUN, timeMs = FILES_TIME_MS }) {
+  const disk = list.map((f) => ({ path: f.path, size: Number(f.size) || 0, lastModified: f.mtime ? Number(f.mtime) * 1000 : undefined }))
+  const plan = lib.planFiles(next, disk)
+  const todo = plan.files.filter((f) => !stored.has(f.id)).sort((a, b) => Number(!a.links.length) - Number(!b.links.length))
+  const started = Date.now()
+  let copied = 0, setAside = 0, more = false
+  const failed = []
+  for (const f of todo) {
+    if ((tries[f.path] ?? 0) >= MAX_TRIES) { setAside++; continue }
+    if (copied + failed.length >= max || Date.now() - started > timeMs || shouldStop()) { more = true; break }
+    try {
+      const got = await fetchFile(f.path)
+      await upload(f.id, got.buf, f.type !== 'application/octet-stream' ? f.type : got.type)
+      stored.add(f.id); copied++
+      delete tries[f.path]
+    } catch (e) { tries[f.path] = (tries[f.path] ?? 0) + 1; failed.push({ path: f.path, error: e.message, tries: tries[f.path] }) }
+  }
+  lib.applyFiles(next, plan, stored)
+  const s = plan.stats
+  return {
+    copied, failed, more, setAside,
+    summary: {
+      onDisk: s.onDisk, stored: plan.files.filter((f) => stored.has(f.id)).length, bytes: s.bytes,
+      proofs: s.proofs, proofsExpected: s.proofsExpected, docs: s.docs, docsExpected: s.docsExpected, agreements: s.agreementLinks, uploads: s.uploads,
+      archived: s.archived, missing: plan.missing.length, missingSample: plan.missing.slice(0, 20),
+    },
+  }
+}
+
+/**
+ * The file links `next` has and the new CRM doesn't yet, as targeted writes: only the proof / file columns of existing
+ * payments and documents (anything else edited in the new CRM stays), new documents (agreements, receipts, uploads
+ * from a client's folder) and the unlinked-files list. Pure.
+ */
+export function fileLinkWrites(current, next, mapAll) {
+  const cur = new Map(current.bookings.map((b) => [b.id, b]))
+  const payments = [], docUpdates = [], newDocBookings = new Set(), newDocIds = new Set()
+  for (const b of next.bookings) {
+    if (!b.id.startsWith('lg-')) continue
+    const was = cur.get(b.id)
+    for (const p of b.payments ?? []) {
+      if (!p.proof?.id?.startsWith('lg-f-')) continue
+      const old = was?.payments?.find((x) => x.id === p.id)
+      // (a payment written by this same copy is not in `current` yet: updated too)
+      if (!old || (old.proof?.id !== p.proof.id && (!old.proof || old.proof.id.startsWith('lg-f-')))) payments.push({ id: p.id, proof: p.proof, proof_name: p.proofName ?? p.proof.name })
+    }
+    for (const d of b.documents ?? []) {
+      if (!d.file?.id?.startsWith('lg-f-')) continue
+      const old = was?.documents?.find((x) => x.id === d.id)
+      if (!old) { newDocBookings.add(b.id); newDocIds.add(d.id) }
+      else if (old.file?.id !== d.file.id && (!old.file || old.file.id.startsWith('lg-f-'))) docUpdates.push({ id: d.id, file: d.file, size_bytes: d.size ?? d.file.size })
+    }
+  }
+  let newDocs = []
+  if (newDocIds.size) {
+    const rows = mapAll({ db: { ...next, bookings: next.bookings.filter((b) => newDocBookings.has(b.id)) } }).booking_documents ?? []
+    newDocs = rows.filter((r) => newDocIds.has(r.id))
+  }
+  const curFiles = new Map((current.legacyFiles ?? []).map((x) => [x.path.toLowerCase(), x.file?.id]))
+  const archive = (next.legacyFiles ?? []).filter((x) => curFiles.get(x.path.toLowerCase()) !== x.file?.id).map((x) => ({ path: x.path, file: x.file, kind: x.kind ?? '' }))
+  return { payments, docUpdates, newDocs, archive }
+}
+
+/** Runs `fn` over `items`, `n` at a time; returns the errors. */
+async function pool(items, n, fn) {
+  const errors = []
+  let i = 0
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => {
+    while (i < items.length) { const x = items[i++]; try { await fn(x) } catch (e) { errors.push(e.message) } }
+  }))
+  return errors
+}
+
 /**
  * Self-healing write: a batch the database refuses is written record by record, so one bad record never stops the
  * rest. Returns the records that still failed (they are tried again on the next copies).
@@ -216,10 +318,14 @@ async function runOnce(env, { trigger = 'auto', by } = {}) {
   const shouldStop = () => stopRequested
   const now = new Date().toISOString()
   // 1. anything changed?
-  const fp = (await call(env, cfg, 'fingerprint')).fingerprint ?? {}
+  const fpRes = await call(env, cfg, 'fingerprint')
+  const fp = fpRes.fingerprint ?? {}
   const before = cfg.state?.fingerprint
   const counted = oldTotal(fp)
-  if (trigger === 'auto' && before && fingerprintKey(before) === fingerprintKey(fp)) {
+  // a new connector on the old CRM (e.g. one that finds the uploads folder): copy again, and retry files set aside
+  const connectorVersion = fpRes.version ?? null
+  const newConnector = connectorVersion !== (cfg.state?.connectorVersion ?? null)
+  if (trigger === 'auto' && before && !newConnector && fingerprintKey(before) === fingerprintKey(fp)) {
     await saveState(sb, { lastCheckAt: now, connected: true, lastError: null, ...counted })
     return { skipped: true }
   }
@@ -234,13 +340,16 @@ async function runOnce(env, { trigger = 'auto', by } = {}) {
     const main = await readOld(env, cfg, 'main', mainNames, shouldStop)
     const bill = billNames.length ? await readOld(env, cfg, 'billing', billNames, shouldStop) : null
     // 3. the CRM's own old-CRM import, on the new CRM as it is now
-    const { buildImport } = await import('./dist/legacy-import.mjs').catch(() => { throw new Error('The import module is missing — the server must be built with `npm run build`.') })
+    const lib = await import('./dist/legacy-import.mjs').catch(() => { throw new Error('The import module is missing — the server must be built with `npm run build`.') })
     const current = await loadNewCrm(sb)
-    const { next, report } = buildImport(main.tables, current, { replaceSampleData: false, billing: bill?.tables })
+    const { next, report } = lib.buildImport(main.tables, current, { replaceSampleData: false, billing: bill?.tables })
     // 4. files the new CRM doesn't have yet (each file tried MAX_TRIES times, then set aside)
-    // "Copy everything" gives set-aside files and records a fresh start
-    const fileTries = trigger === 'full' ? {} : { ...(cfg.state?.fileTries ?? {}) }
-    const files = await copyFiles(env, sb, cfg, next, shouldStop, fileTries)
+    // "Copy everything" (or a new connector) gives set-aside files and records a fresh start
+    const fileTries = trigger === 'full' || newConnector ? {} : { ...(cfg.state?.fileTries ?? {}) }
+    // connector 1.2+ lists the whole uploads folder: every file is copied and linked after the records (step 6);
+    // older connectors: only the client documents the old CRM names
+    const filesApi = ping.files === true
+    const files = filesApi ? { copied: 0, failed: [], more: false, setAside: 0 } : await copyFiles(env, sb, cfg, next, shouldStop, fileTries)
     if (shouldStop()) throw Object.assign(new Error('Stopped — the sync was switched off.'), { stopped: true })
     // 5. only what is new, or changed in the old CRM and untouched here
     const prev = mapAll({ db: current })
@@ -267,6 +376,31 @@ async function runOnce(env, { trigger = 'auto', by } = {}) {
       const { error } = await sb.from('legacy_sync_rows').upsert(goodHashes.slice(i, i + 500).map((h) => ({ ...h, synced_at: new Date().toISOString() })), { onConflict: 'table_name,row_key' })
       if (error) throw new Error(`legacy_sync_rows: ${error.message}`)
     }
+    // 6. every uploaded file: copied once, then linked to its payment / document / client file
+    if (filesApi && !shouldStop()) {
+      const list = await listOldFiles(env, cfg)
+      const stored = await storedOldFiles(sb)
+      const up = await syncUploads({
+        list, stored, lib, next, shouldStop, tries: fileTries,
+        fetchFile: (path) => call(env, cfg, 'file', { path }, { raw: true, timeoutMs: 60_000 }),
+        upload: async (id, buf, type) => {
+          const r = await sb.storage.from('crm-files').upload(id, buf, { contentType: type, upsert: false })
+          if (r.error && !/exists|duplicate/i.test(r.error.message)) throw new Error(r.error.message)
+        },
+      })
+      const w = fileLinkWrites(current, next, mapAll)
+      const linkErrors = [
+        ...await pool(w.payments, 8, async (p) => { const { error } = await sb.from('booking_payments').update({ proof: p.proof, proof_name: p.proof_name }).eq('id', p.id); if (error) throw new Error(`payment proof: ${error.message}`) }),
+        ...await pool(w.docUpdates, 8, async (d) => { const { error } = await sb.from('booking_documents').update({ file: d.file, size_bytes: d.size_bytes }).eq('id', d.id); if (error) throw new Error(`document: ${error.message}`) }),
+      ]
+      for (let i = 0; i < w.newDocs.length; i += 200) { const { error } = await sb.from('booking_documents').upsert(w.newDocs.slice(i, i + 200), { onConflict: 'id' }); if (error) linkErrors.push(`new documents: ${error.message}`) }
+      for (let i = 0; i < w.archive.length; i += 500) { const { error } = await sb.from('legacy_files').upsert(w.archive.slice(i, i + 500), { onConflict: 'path' }); if (error) linkErrors.push(`unlinked files: ${error.message}`) }
+      Object.assign(files, {
+        copied: up.copied, failed: up.failed, more: up.more, setAside: up.setAside, summary: up.summary,
+        linked: { proofs: w.payments.length, documents: w.docUpdates.length, newDocuments: w.newDocs.length, unlinked: w.archive.length },
+        linkErrors: [...new Set(linkErrors)].slice(0, 20), linkErrorCount: linkErrors.length,
+      })
+    }
     const totals = Object.values(plan.counts).reduce((t, c) => ({ added: t.added + c.added, updated: t.updated + c.updated, kept: t.kept + c.kept }), { added: 0, updated: 0, kept: 0 })
     // the plan counted every record; take off the ones that failed (new ones from "added", existing from "updated")
     for (const f of failedRows) {
@@ -279,9 +413,10 @@ async function runOnce(env, { trigger = 'auto', by } = {}) {
     await finish({ status: partial ? 'partial' : 'ok', rows_read: main.rows + (bill?.rows ?? 0), written: { ...plan.counts, totals, failedRows: failedRows.slice(0, 200), repaired: repaired.slice(0, 200), notes: report.notes?.slice(0, 20) ?? [] }, files })
     // The fingerprint is remembered once nothing is left to retry: more files to copy, or failures still being retried
     // (fewer than MAX_TRIES), make the next check copy again. Set-aside items no longer hold the sync back.
-    const retrying = files.more || files.failed.some((f) => f.tries < MAX_TRIES) || failedRows.some((f) => f.tries < MAX_TRIES)
+    const retrying = files.more || files.failed.some((f) => f.tries < MAX_TRIES) || failedRows.some((f) => f.tries < MAX_TRIES) || (files.linkErrorCount ?? 0) > 0
     await saveState(sb, {
       fingerprint: retrying ? null : fp, lastCheckAt: now, lastRunAt: now, lastOkAt: new Date().toISOString(), connected: true, lastError: null, failStreak: 0,
+      connectorVersion, filesApi, ...(files.summary ? { files: { ...files.summary, at: new Date().toISOString(), more: files.more } } : {}),
       lastTotals: totals, oldRows: main.rows + (bill?.rows ?? 0), fileTries: trimMap(fileTries), rowTries: trimMap(rowTries), repairs: trimMap(repairs), ...counted,
     })
     // auto-debug: every repair, grouped by reason, as "fixed automatically" in the Error log
@@ -289,7 +424,7 @@ async function runOnce(env, { trigger = 'auto', by } = {}) {
       void logError(env, { source: 'sync', message: `Old CRM data repaired — ${why}`, place: 'old CRM sync', count: n, autoFixed: 'Repaired automatically and saved; the old value is kept in the Old CRM sync activity log.' })
     }
     // auto-debug: what still failed, grouped by cause, to the Error log
-    for (const [msg, n] of groupBy([...failedRows.map((f) => `${f.table}: ${f.error}`), ...files.failed.map((f) => f.error)])) {
+    for (const [msg, n] of groupBy([...failedRows.map((f) => `${f.table}: ${f.error}`), ...files.failed.map((f) => f.error), ...(files.linkErrors ?? [])])) {
       void logError(env, { source: 'sync', message: msg, place: 'old CRM sync', count: n, autoFixed: 'Not saved this time; tried again on the next copies (3 times), then set aside so the rest keeps copying.' })
     }
     return { ok: true, totals, files, failedRows: failedRows.length }
@@ -336,7 +471,7 @@ export function startLegacySync(env) {
 }
 
 /** for the tests (server/legacySync.test.mjs): talk to a connector without the database */
-export const forTests = { call, readOld, writeRows }
+export const forTests = { call, readOld, writeRows, listOldFiles }
 
 // ------------------------------------------------------------------ the IT dashboard's API
 const ok = (body) => ({ status: 200, body: { success: true, ...body } })
