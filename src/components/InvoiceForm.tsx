@@ -61,7 +61,7 @@ export function InvoiceFormModal({ existing, onClose }: { existing?: Invoice; on
           <Select label="Branch" required value={branchId} disabled={branchLocked} onChange={(e) => setBranchId(e.target.value)} className="sm:col-span-3"
             hint={branchLocked ? 'Only Accounts can move a saved invoice to another branch' : branch ? [branch.address, branch.city, branch.state, branch.gstin && `GSTIN ${branch.gstin}`].filter(Boolean).join(' · ') : 'Its address, GSTIN and bank details print on the invoice'}>
             <option value="">— Select branch —</option>
-            {branches.map((b) => <option key={b.id} value={b.id}>{b.code?.trim() && b.code.trim() !== b.name ? `${b.code.trim()} · ${b.name}` : b.name}{b.city ? ` — ${b.city}` : ''}</option>)}
+            {branches.map((b) => <option key={b.id} value={b.id}>{b.name || b.code}{b.city && !b.name.toLowerCase().includes(b.city.toLowerCase()) ? ` — ${b.city}` : ''}</option>)}
           </Select>
         ) : (
           <p className="rounded-xl bg-warn-soft px-3 py-2 text-xs text-warn sm:col-span-3">

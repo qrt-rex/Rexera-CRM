@@ -176,7 +176,7 @@ export default function Employees() {
           <Input label="Monthly salary (₹)" type="number" value={form.data.salary ?? ''} onChange={(e) => setForm({ ...form, data: { ...form.data, salary: e.target.value ? Number(e.target.value) : undefined } })} />
           {(form.data.role === 'sales' || form.data.role === 'teamlead') && <Input label="Monthly sales target (₹)" type="number" min={0} value={form.data.target ?? ''} onChange={(e) => setForm({ ...form, data: { ...form.data, target: e.target.value ? Number(e.target.value) : undefined } })} />}
           <Select label="Branch" value={form.data.branchId ?? ''} onChange={(e) => setForm({ ...form, data: { ...form.data, branchId: e.target.value || undefined } })} hint={branchList(db).length ? 'Used for branch-wise reports' : 'Add branches in Access Management → Settings'}>
-            <option value="">— No branch —</option>{branchList(db).map((b) => <option key={b.id} value={b.id}>{b.code ? `${b.code} · ${b.name}` : b.name}</option>)}
+            <option value="">— No branch —</option>{branchList(db).map((b) => <option key={b.id} value={b.id}>{b.name || b.code}</option>)}
           </Select>
           {form.data.role === 'branchdirector' && (
             <div className="sm:col-span-2">

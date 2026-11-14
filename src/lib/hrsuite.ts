@@ -47,7 +47,7 @@ export function upgradeDb(d: DB): DB {
   d.emails ??= []
   // invoice branches — addresses are filled in by Super Admin / IT under Access → Settings
   d.settings.branches ??= [
-    { id: 'br-amd-a', name: 'Ahmedabad (A)', address: '', city: 'Ahmedabad', state: 'Gujarat', pin: '', gstin: d.settings.companyGstin ?? '', phone: '', email: '' },
+    { id: 'br-amd-a', name: 'Ahmedabad-A (Head Office)', address: '', city: 'Ahmedabad', state: 'Gujarat', pin: '', gstin: d.settings.companyGstin ?? '', phone: '', email: '' },
     { id: 'br-amd-y', name: 'Ahmedabad (Y)', address: '', city: 'Ahmedabad', state: 'Gujarat', pin: '', gstin: d.settings.companyGstin ?? '', phone: '', email: '' },
     { id: 'br-vdr', name: 'Vadodara', address: '', city: 'Vadodara', state: 'Gujarat', pin: '', gstin: d.settings.companyGstin ?? '', phone: '', email: '' },
   ]

@@ -420,7 +420,7 @@ function ExpenseForm({ init, id, onClose }: { init: ExpenseInput; id?: string; o
       <div className="grid gap-4 sm:grid-cols-2">
         <Input label="Date" type="date" required max={today()} value={f.date} onChange={(e) => set({ date: e.target.value })} />
         <Select label="Branch" value={f.branchId ?? ''} onChange={(e) => set({ branchId: e.target.value || undefined })} hint="ALL = shared by every branch / head office">
-          <option value="">ALL (common)</option>{branchList(db).map((b) => <option key={b.id} value={b.id}>{branchCode(db, b.id)} · {b.name}</option>)}
+          <option value="">ALL (common)</option>{branchList(db).map((b) => <option key={b.id} value={b.id}>{branchCode(db, b.id)}</option>)}
         </Select>
         <Select label="Category" value={f.category} onChange={(e) => set({ category: e.target.value })}>{EXPENSE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</Select>
         <Input label="Description" required value={f.description} onChange={(e) => set({ description: e.target.value })} placeholder="e.g. Office internet — October" className="sm:col-span-2" />

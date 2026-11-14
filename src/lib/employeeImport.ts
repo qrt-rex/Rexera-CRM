@@ -23,16 +23,20 @@ export function planEmployeeImport(sheets: { name: string; rows: unknown[][] }[]
   return planEmployees(sheets, { users: d.users, privates, month, monthDays: month ? daysIn(month) : 31 })
 }
 
-/** Branch codes in the sheet → the CRM's branches (a branch not there yet is added: AMD-A, AMD-Y, BRD, AMD …). */
-const BRANCH_NAMES: Record<string, string> = { 'AMD-A': 'Ahmedabad - A', 'AMD-Y': 'Ahmedabad - Y', BRD: 'Vadodara', AMD: 'Ahmedabad (Head office)' }
+/** Branch codes in the sheet → the CRM's branches (a branch not there yet is added: AMD-A, AMD-Y, BRD …). */
+const BRANCH_NAMES: Record<string, string> = { 'AMD-A': 'Ahmedabad-A (Head Office)', 'AMD-Y': 'Ahmedabad - Y', BRD: 'Vadodara' }
+/** other names a sheet uses for a branch: the head office (AMD) is Ahmedabad-A */
+const SAME_AS: Record<string, string> = { AMD: 'AMD-A', 'HEAD-OFFICE': 'AMD-A', 'AHMEDABAD-HEAD-OFFICE': 'AMD-A', 'AMD-HEAD-OFFICE': 'AMD-A' }
+export const canonBranch = (k: string) => SAME_AS[k] ?? k
 const key = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '')
 export function branchPlan(d: DB, rows: EmployeeRow[]) {
   const known = d.settings.branches ?? []
   const keys = [...new Set(rows.map((r) => r.v.branchKey).filter(Boolean))]
   const found = new Map<string, string>(), missing: string[] = []
   for (const k of keys) {
-    const hit = known.find((b) => [b.code ?? '', b.name].some((x) => key(x) === key(k) || (BRANCH_NAMES[k] && key(x) === key(BRANCH_NAMES[k]!))))
-    if (hit) found.set(k, hit.id); else missing.push(k)
+    const c = canonBranch(k)
+    const hit = known.find((b) => [b.code ?? '', b.name].some((x) => key(x) === key(c) || (BRANCH_NAMES[c] && key(x) === key(BRANCH_NAMES[c]!))))
+    if (hit) found.set(k, hit.id); else if (!missing.includes(c)) missing.push(c)
   }
   return { found, missing }
 }
@@ -55,6 +59,8 @@ export function applyEmployeeImport(me: User, rows: EmployeeRow[], month: string
       const made: Branch[] = missing.map((k) => ({ id: uid('br-'), code: k, name: BRANCH_NAMES[k] ?? k, address: '', city: (BRANCH_NAMES[k] ?? '').replace(/\s*[-(].*$/, ''), state: BRANCH_NAMES[k] ? 'Gujarat' : '', pin: '', gstin: '', phone: '', email: '' }))
       d.settings.branches = [...(d.settings.branches ?? []), ...made]
       made.forEach((b, i) => found.set(missing[i]!, b.id))
+      // the sheet's other names for a branch just added (AMD → AMD-A)
+      for (const r of todo) { const k = r.v.branchKey; if (k && !found.has(k) && found.has(canonBranch(k))) found.set(k, found.get(canonBranch(k))!) }
     }
     d.employeePrivate ??= []
     d.attendanceMarks ??= []

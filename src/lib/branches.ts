@@ -10,15 +10,19 @@ import { bookingMoney, today, ymd } from './format'
 export const NO_BRANCH = '__none__'
 export const branchList = (db: DB) => db.settings.branches ?? []
 export const branchName = (db: DB, id?: string) => (id && id !== NO_BRANCH ? branchList(db).find((b) => b.id === id)?.name ?? 'Unknown branch' : 'No branch set')
-/** Short code (AMD-A) — falls back to the name. */
+/**
+ * How a branch is shown everywhere: its name ("Ahmedabad-A (Head Office)"), never the bare code — the code (AMD-A)
+ * is only the short badge on a branch card (branchBadge).
+ */
 export const branchCode = (db: DB, id?: string) => {
   const b = id && id !== NO_BRANCH ? branchList(db).find((x) => x.id === id) : undefined
-  return b ? b.code?.trim() || b.name : 'No branch'
+  return b ? b.name || b.code?.trim() || 'Branch' : 'No branch'
 }
-/** "AMD-A · Ahmedabad (A)" */
-export const branchLabel = (db: DB, id?: string) => {
+export const branchLabel = (db: DB, id?: string) => branchCode(db, id) === 'No branch' ? branchName(db, id) : branchCode(db, id)
+/** the short badge on a branch card: the code (AMD-A), else the name's initials */
+export const branchBadge = (db: DB, id?: string) => {
   const b = id && id !== NO_BRANCH ? branchList(db).find((x) => x.id === id) : undefined
-  return b ? (b.code?.trim() && b.code.trim() !== b.name ? `${b.code.trim()} · ${b.name}` : b.name) : branchName(db, id)
+  return b?.code?.trim() || (b?.name ?? '?').split(/\s+/).map((w) => w[0]).join('').slice(0, 3).toUpperCase()
 }
 /**
  * The branch an invoice is issued from: the one saved on it (picked on the invoice form, or the creator's branch when

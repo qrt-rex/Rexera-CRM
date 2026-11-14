@@ -19,7 +19,8 @@ const key = (s) => String(s).toUpperCase().replace(/[^A-Z0-9]/g, '')
 
 /** Branch names the sheets use for the same branch (code ↔ city). */
 export const ALIASES = [
-  ['AMD-A', 'Ahmedabad - A', ['AMDA', 'AHMEDABADA']],
+  // Ahmedabad-A is the head office: "AMD" / "Head office" in a sheet mean this branch
+  ['AMD-A', 'Ahmedabad-A (Head Office)', ['AMDA', 'AHMEDABADA', 'AMD', 'HEADOFFICE', 'AHMEDABADHEADOFFICE', 'AMDHEADOFFICE', 'AHMEDABADAHEADOFFICE']],
   ['AMD-Y', 'Ahmedabad - Y', ['AMDY', 'AHMEDABADY']],
   ['BRD', 'Vadodara', ['BRD', 'VADODARA', 'BARODA']],
 ]

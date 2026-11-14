@@ -13,7 +13,7 @@ import { BOOKING_STATUS, LEAD_STATUS, OPEN_LEAD } from '../../lib/workflow'
 import { dayStatus, monthStart, todaySession } from '../../lib/metrics'
 import { bookingMoney, fmtDate, fmtTime, inr, inrShort, today, ymd } from '../../lib/format'
 import {
-  assignableLeads, branchBookings, branchCode, branchLabel, branchList, branchName, branchStaff, collectionsTrend, directorBranches,
+  assignableLeads, branchBadge, branchBookings, branchCode, branchLabel, branchList, branchName, branchStaff, collectionsTrend, directorBranches,
   directorsOf, leadBranch, NO_BRANCH, progressFor, salesTeam, seesUnbranched, type Progress,
 } from '../../lib/branches'
 import { buildScorecard, money, pctText, SCORE_PERIODS, scorecardImage, type ScorePeriod } from '../../lib/scorecard'
@@ -100,7 +100,7 @@ function BranchView({ id }: { id: string }) {
     <>
       {/* branch details */}
       <Card className="mb-5 flex flex-wrap items-center gap-x-8 gap-y-3 p-4 text-sm">
-        <span className="flex items-center gap-3"><span className="grid size-11 place-items-center rounded-xl bg-brand-soft font-extrabold text-brand-ink">{code.slice(0, 5)}</span>
+        <span className="flex items-center gap-3"><span className="grid size-11 place-items-center rounded-xl bg-brand-soft font-extrabold text-brand-ink">{branchBadge(db, id).slice(0, 5)}</span>
           <span><b className="block">{branch?.name}</b><span className="text-xs text-mute">{[branch?.city, branch?.state].filter(Boolean).join(', ') || 'Address not set'}</span></span></span>
         {branch?.address && <span className="flex items-center gap-1.5 text-mute"><MapPin className="size-4" />{branch.address}{branch.pin ? ` – ${branch.pin}` : ''}</span>}
         {branch?.phone && <span className="flex items-center gap-1.5 text-mute"><Phone className="size-4" />{branch.phone}</span>}
@@ -266,7 +266,7 @@ export function BranchCards({ ids, className }: { ids?: string[]; className?: st
         return (
           <Link key={id} to={`/branches/${id}`} className="group rounded-2xl border border-line bg-card p-4 shadow-card transition hover:-translate-y-0.5 hover:shadow-pop">
             <div className="flex items-center gap-3">
-              <span className="grid h-11 min-w-11 place-items-center rounded-xl bg-brand-soft px-2 text-sm font-extrabold text-brand-ink">{branchCode(db, id)}</span>
+              <span className="grid h-11 min-w-11 place-items-center rounded-xl bg-brand-soft px-2 text-sm font-extrabold text-brand-ink">{branchBadge(db, id)}</span>
               <span className="min-w-0 flex-1"><span className="block truncate font-bold">{branchName(db, id)}</span><span className="text-xs text-mute">{staff.length} staff · {present} in today · {team.length} in sales</span></span>
               <ChevronRight className="size-5 text-mute transition group-hover:translate-x-0.5 group-hover:text-ink" />
             </div>
