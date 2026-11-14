@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Briefcase, Building2, FileSpreadsheet, FileStack, Lock, Mail, Pencil, Phone, Plus, RotateCcw, UserMinus, UsersRound } from 'lucide-react'
+import { Briefcase, Building2, Download, FileSpreadsheet, FileStack, Lock, Mail, Pencil, Phone, Plus, RotateCcw, UserMinus, UsersRound } from 'lucide-react'
 import { EmployeeImport } from '../../components/EmployeeImport'
 import { ADMIN_DONE, ADMIN_STAGES, workflowSettings } from '../../../supabase/workflow-rules.mjs'
 import { branchList, branchName } from '../../lib/branches'
@@ -15,6 +15,28 @@ import { Avatar, Badge, Button, Card, Checkbox, cx, Drawer, EmptyState, Input, M
 import { RESUME_TYPES } from '../../lib/files'
 import { FileField, FileLink } from '../../components/FileField'
 import { PhoneInput } from '../../components/fields'
+
+/** Every active employee with every field — the CRM's own, HR's register and every custom field — as Excel. */
+async function exportEmployees(db: ReturnType<typeof useDb>) {
+  const XLSX = await import('xlsx')
+  const fields = db.settings.employeeFields ?? []
+  const priv = new Map((db.employeePrivate ?? []).map((p) => [p.userId, p]))
+  const uan = new Map((db.pfAccounts ?? []).map((a) => [a.userId, a.uan]))
+  const rows = db.users.filter((u) => u.active && !u.deletedAt).sort((a, b) => a.name.localeCompare(b.name)).map((u) => {
+    const p = priv.get(u.id)
+    return {
+      Name: u.name, 'Employee ID': u.username, 'Office email': u.email, Mobile: u.phone, Department: u.department, Designation: u.designation,
+      Branch: u.branchId ? branchName(db, u.branchId) : '', 'Joining date': u.joinedOn, Role: roleLabel(u.role), 'CTC (₹)': p?.ctc ?? u.salary ?? '',
+      Gender: p?.gender ?? '', 'Personal mobile': p?.personalPhone ?? '', 'Personal email': p?.personalEmail ?? '', Address: u.address?.line ?? '',
+      'Bank name': p?.bankName ?? '', 'Bank account': p?.bankAccount ?? '', IFSC: p?.bankIfsc ?? '', Basic: p?.basic ?? '', HRA: p?.hra ?? '', Allowance: p?.allowance ?? '', PF: p?.pf ?? '', PT: p?.pt ?? '',
+      'UAN (PF)': uan.get(u.id) || p?.custom?.uan || '',
+      ...Object.fromEntries(fields.filter((f) => f.key !== 'uan').map((f) => [f.label, p?.custom?.[f.key] ?? ''])),
+    }
+  })
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Employees')
+  XLSX.writeFile(wb, `employees-${today()}.xlsx`)
+}
 
 const blank: UserInput = { name: '', username: '', email: '', phone: '', role: 'sales', department: 'Sales', designation: 'Business Development Executive' }
 
@@ -62,6 +84,7 @@ export default function Employees() {
       <PageHeader title="Employee Details" subtitle={`${db.users.filter((u) => u.active).length} active people across ${new Set(db.users.map((u) => u.department)).size} departments`} icon={UsersRound}
         actions={manage && <>
           <Button variant="outline" icon={FileSpreadsheet} onClick={() => setImporting(true)}>Import from a sheet</Button>
+          <Button variant="outline" icon={Download} onClick={() => run(() => exportEmployees(db), 'Employee data downloaded (every field)')}>Export all fields</Button>
           <Button variant="outline" icon={UserMinus} onClick={() => setRemoving({ id: '', lastDay: today(), reason: '' })}>Remove employee</Button>
           <Button variant="accent" icon={Plus} onClick={() => { closeForm(); setForm({ open: true, data: blank }) }}>Add employee</Button>
         </>} />
@@ -226,6 +249,26 @@ function PrivateDetails({ userId }: { userId: string }) {
         </div>
       )}
       {p?.bankAccount && <button className="mt-2 text-xs font-semibold text-brand-ink hover:underline" onClick={() => setReveal(!reveal)}>{reveal ? 'Hide account number' : 'Show account number'}</button>}
+      {(() => {
+        // every other column of HR's sheets (custom employee fields, in the order they were created)
+        const fields = (db.settings.employeeFields ?? []).filter((f) => p?.custom?.[f.key])
+        const uan = (db.pfAccounts ?? []).find((a) => a.userId === userId)?.uan
+        if (!fields.length && !uan) return null
+        const show = (type: string, v: string) => (type === 'date' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? fmtDate(v) : type === 'number' && v !== '' && !Number.isNaN(Number(v)) ? Number(v).toLocaleString('en-IN') : v)
+        return (
+          <div className="mt-3">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-mute">More details · from HR's sheets</p>
+            <div className="mt-1.5 grid grid-cols-2 gap-2 text-sm">
+              {uan && <div className="rounded-xl bg-card2 px-3 py-2"><p className="text-[11px] text-mute">UAN (PF)</p><p className="truncate font-semibold">{uan}</p></div>}
+              {fields.map((f) => (
+                <div key={f.key} className={cx('rounded-xl bg-card2 px-3 py-2', p!.custom![f.key]!.length > 28 && 'col-span-2')}>
+                  <p className="text-[11px] text-mute">{f.label}</p><p className="break-words font-semibold" title={p!.custom![f.key]}>{show(f.type, p!.custom![f.key]!)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
       {marks.length > 0 && (
         <div className="mt-3">
           <p className="text-[11px] font-bold uppercase tracking-wider text-mute">Attendance marks · {month} — P {count('P')} · A {count('A')} · H {count('H')}{count('L') ? ` · L ${count('L')}` : ''}</p>

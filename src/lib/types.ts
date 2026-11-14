@@ -104,7 +104,16 @@ export interface EmployeePrivate {
   bankName?: string; bankAccount?: string; bankIfsc?: string
   /** monthly salary parts from HR's register (₹) */
   ctc?: number; basic?: number; hra?: number; allowance?: number; pf?: number; pt?: number
+  /** every other column of HR's sheets: custom field key (Settings.employeeFields) → value */
+  custom?: Record<string, string>
   updatedAt?: string; updatedBy?: string
+}
+/** A custom employee field, created by itself when an imported sheet has a column the CRM had no place for. */
+export interface EmployeeField {
+  key: string; label: string; type: 'text' | 'number' | 'date' | 'email' | 'phone'
+  /** headings seen for it (normalised), so the same column in another sheet fills the same field */
+  aliases: string[]
+  createdAt?: string; createdBy?: string
 }
 /** A day's attendance set by HR (or imported from HR's register): P present · H half day · A absent · L paid leave. Payroll uses it over sign-ins. */
 export interface AttendanceMark { id: string; userId: string; date: string; mark: 'P' | 'H' | 'A' | 'L'; source?: string; updatedAt?: string; updatedBy?: string }
@@ -1095,6 +1104,8 @@ export interface Settings {
   clientTemplates?: Partial<Record<string, { subject?: string; email?: string; whatsapp?: string; updatedAt?: string; updatedBy?: string }>>
   /** old CRM person map (IT Support): old CRM user id → the new CRM account that holds their old work */
   legacyPeople?: Record<string, string>
+  /** custom employee fields made by HR's sheet imports (values: EmployeePrivate.custom) */
+  employeeFields?: EmployeeField[]
 }
 /** Round robin: `next` is the position in `userIds` that gets the next lead (wraps back to the first person). */
 export interface LeadAssign { on: boolean; userIds: string[]; next: number }

@@ -33,7 +33,8 @@ export async function readGoogleSheet(url: string, purpose: 'users' | 'schemes' 
 /** Reads an .xlsx / .xls / .csv file into sheets of cell rows. */
 export async function readSheets(file: File): Promise<{ name: string; rows: unknown[][] }[]> {
   const XLSX = await import('xlsx')
-  const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' })
+  // a CSV is read as written: the library would read "12/01/2024" as 1 December (US); our rules read dd/mm (India)
+  const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', ...(/\.(csv|txt|tsv)$/i.test(file.name) ? { raw: true } : {}) })
   return wb.SheetNames.map((n) => ({ name: n, rows: XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[n]!, { header: 1, defval: '', blankrows: false }) }))
 }
 

@@ -115,6 +115,8 @@ export function mapAll(backup) {
     { key: 'clientTemplates', value: d.settings.clientTemplates ?? null },
     // old CRM person map (old CRM user id → new account) — the Old CRM sync reads it from here
     { key: 'legacyPeople', value: d.settings.legacyPeople ?? null },
+    // custom employee fields (HR's sheet imports make them); the values are in employee_private.custom
+    { key: 'employeeFields', value: d.settings.employeeFields ?? null },
     { key: 'counters', value: d.counters },
     { key: 'meta', value: { version: d.version, upgrades: d.upgrades ?? [] } },
   ]
@@ -151,6 +153,7 @@ export function mapAll(backup) {
     user_id: p.userId, gender: s(p.gender), personal_phone: s(p.personalPhone), personal_email: s(p.personalEmail),
     bank_name: s(p.bankName), bank_account: s(p.bankAccount), bank_ifsc: s(p.bankIfsc),
     ctc: p.ctc ?? null, basic: p.basic ?? null, hra: p.hra ?? null, allowance: p.allowance ?? null, pf: p.pf ?? null, pt: p.pt ?? null,
+    custom: p.custom ?? {},
     updated_at: s(p.updatedAt), updated_by: uref(p.updatedBy),
   }))
   t.attendance_marks = (d.attendanceMarks ?? []).map((a) => ({ id: a.id, user_id: a.userId, day: a.date, mark: a.mark, source: s(a.source), updated_at: s(a.updatedAt), updated_by: uref(a.updatedBy) }))
@@ -349,7 +352,7 @@ export function rowsToDb(input) {
       maintenance: maintenance && (maintenance.on || maintenance.message || maintenance.by) ? maintenance : undefined,
       sessionsValidAfter: u(session.validAfter), dayLock: setting('attendance')?.dayLock || undefined, loginCode: setting('attendance')?.loginCode === false ? false : undefined, loginCodeOnScreen: setting('attendance')?.loginCodeOnScreen === true || undefined,
       branches: setting('branches')?.length ? setting('branches') : undefined, breakPolicy: u(setting('breaks')), leadAssign: u(setting('leadAssign')), workflow: u(setting('workflow')), accessControl: u(setting('accessControl')), jobs: u(setting('jobs')), dialerCampaigns: u(setting('dialerCampaigns')), clientTemplates: u(setting('clientTemplates')),
-      legacyPeople: u(setting('legacyPeople')),
+      legacyPeople: u(setting('legacyPeople')), employeeFields: u(setting('employeeFields')),
     }),
     counters: setting('counters') ?? { booking: 0, lead: 0, invoice: 0 },
     loginFails: Object.fromEntries(rows('login_attempts').map((r) => [r.login, opt({ count: r.failures, until: u(r.locked_until) })])),
@@ -435,6 +438,7 @@ export function rowsToDb(input) {
       userId: p.user_id, gender: u(p.gender), personalPhone: u(p.personal_phone), personalEmail: u(p.personal_email),
       bankName: u(p.bank_name), bankAccount: u(p.bank_account), bankIfsc: u(p.bank_ifsc),
       ctc: nn(p.ctc), basic: nn(p.basic), hra: nn(p.hra), allowance: nn(p.allowance), pf: nn(p.pf), pt: nn(p.pt),
+      custom: p.custom && Object.keys(p.custom).length ? p.custom : undefined,
       updatedAt: u(p.updated_at), updatedBy: u(p.updated_by),
     })),
     attendanceMarks: rows('attendance_marks').map((a) => opt({ id: a.id, userId: a.user_id, date: String(a.day).slice(0, 10), mark: a.mark, source: u(a.source), updatedAt: u(a.updated_at), updatedBy: u(a.updated_by) })),

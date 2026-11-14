@@ -3,7 +3,7 @@ import { getDb, mutate } from './store'
 import { ActionError } from './actions'
 import { effectivePerms, isMaster } from './rbac'
 import { nowIso, uid } from './format'
-import { branchKeyOf, planEmployees } from '../../supabase/employee-sheet-rules.mjs'
+import { branchKeyOf, planEmployees, planSheet } from '../../supabase/employee-sheet-rules.mjs'
 
 /**
  * HR → Import employees from a sheet (HR's attendance / salary register). The preview (planEmployeeImport) shows every
@@ -16,11 +16,14 @@ function assert(cond: unknown, msg: string): asserts cond { if (!cond) throw new
 export const canImportEmployees = (d: DB, me: User) => isMaster(me) || effectivePerms(d, me).has('employees.manage')
 
 export type EmployeeRow = ReturnType<typeof planEmployees>[number]
+export type EmployeePlan = ReturnType<typeof planSheet>
 const daysIn = (month: string) => new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate()
 
-export function planEmployeeImport(sheets: { name: string; rows: unknown[][] }[], d: DB, month: string): EmployeeRow[] {
+/** The preview: every person, every column and where it goes, and the custom fields (existing + new). */
+export function planEmployeeImport(sheets: { name: string; rows: unknown[][] }[], d: DB, month: string): EmployeePlan {
   const privates = Object.fromEntries((d.employeePrivate ?? []).map((p) => [p.userId, p]))
-  return planEmployees(sheets, { users: d.users, privates, month, monthDays: month ? daysIn(month) : 31 })
+  const uans = Object.fromEntries((d.pfAccounts ?? []).filter((a) => a.uan).map((a) => [a.userId, a.uan]))
+  return planSheet(sheets, { users: d.users, privates, uans, fields: d.settings.employeeFields ?? [], month, monthDays: month ? daysIn(month) : 31 })
 }
 
 /** Branch codes in the sheet → the CRM's branches (a branch not there yet is added: AMD-A, AMD-Y, BRD …). */
@@ -47,13 +50,25 @@ const slug = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]
  * Applies the preview. `roleFor`: the CRM role a new person is given, by department (they can't sign in until IT gives
  * them a password, so the role only matters then). Answers what was done.
  */
-export function applyEmployeeImport(me: User, rows: EmployeeRow[], month: string, roleFor: Record<string, Role>) {
+export function applyEmployeeImport(me: User, plan: EmployeePlan, month: string, roleFor: Record<string, Role>) {
   const d0 = getDb()
   assert(canImportEmployees(d0, me), 'Importing employees is for HR, Super Admin and IT Support.')
-  const todo = rows.filter((r) => r.action === 'new' || r.action === 'update')
+  const todo = plan.rows.filter((r) => r.action === 'new' || r.action === 'update')
   const { found, missing } = branchPlan(d0, todo)
+  // UAN goes to PF Management when the importer may change PF records; otherwise it is kept as a custom field
+  const pfOk = isMaster(me) || effectivePerms(d0, me).has('payroll.manage')
   return mutate((d) => {
     const at = nowIso()
+    // custom fields: the new ones are added, existing ones learn the headings used this time (never duplicated)
+    const fields = [...(d.settings.employeeFields ?? [])]
+    let newFields = 0
+    for (const f of plan.fields) {
+      const cur = fields.find((x) => x.key === f.key)
+      if (cur) { const aliases = [...new Set([...(cur.aliases ?? []), ...f.aliases])]; if (aliases.length !== (cur.aliases ?? []).length) Object.assign(cur, { aliases }) }
+      else { fields.push({ key: f.key, label: f.label, type: f.type, aliases: f.aliases, createdAt: at, createdBy: me.id }); newFields++ }
+    }
+    if (!pfOk && todo.some((r) => r.v.uan) && !fields.some((x) => x.key === 'uan')) { fields.push({ key: 'uan', label: 'UAN (PF)', type: 'text', aliases: ['uan'], createdAt: at, createdBy: me.id }); newFields++ }
+    if (JSON.stringify(fields) !== JSON.stringify(d.settings.employeeFields ?? [])) d.settings.employeeFields = fields
     // branches the sheet names that the CRM doesn't have yet
     if (missing.length) {
       const made: Branch[] = missing.map((k) => ({ id: uid('br-'), code: k, name: BRANCH_NAMES[k] ?? k, address: '', city: (BRANCH_NAMES[k] ?? '').replace(/\s*[-(].*$/, ''), state: BRANCH_NAMES[k] ? 'Gujarat' : '', pin: '', gstin: '', phone: '', email: '' }))
@@ -102,7 +117,15 @@ export function applyEmployeeImport(me: User, rows: EmployeeRow[], month: string
       put('gender', v.gender); put('personalPhone', v.personalPhone); put('personalEmail', v.personalEmail)
       put('bankName', v.bankName); put('bankAccount', v.bankAccount); put('bankIfsc', v.bankIfsc)
       put('ctc', v.ctc); put('basic', v.basic); put('hra', v.hra); put('allowance', v.allowance); put('pf', v.pf); put('pt', v.pt)
+      // every other column of the sheet (custom fields); an empty cell never wipes what is there
+      const extra = { ...v.custom, ...(v.uan && !pfOk ? { uan: v.uan } : {}) }
+      if (Object.keys(extra).length) p.custom = { ...(p.custom ?? {}), ...extra }
       p.updatedAt = at; p.updatedBy = me.id
+      if (v.uan && pfOk) {
+        d.pfAccounts ??= []
+        const a = d.pfAccounts.find((x) => x.userId === u!.id)
+        if (a) a.uan = v.uan; else d.pfAccounts.push({ userId: u.id, uan: v.uan, enrolled: true })
+      }
       // attendance marks of the month (a blank day leaves what is there)
       for (const m of r.marks) {
         const id = `${u.id}|${m.date}`
@@ -111,7 +134,7 @@ export function applyEmployeeImport(me: User, rows: EmployeeRow[], month: string
         else { d.attendanceMarks.push({ id, userId: u.id, date: m.date, mark: m.mark, source: 'import', updatedAt: at, updatedBy: me.id } as AttendanceMark); marks++ }
       }
     }
-    d.audit.unshift({ id: uid('a-'), at, by: me.id, action: 'EMPLOYEE_IMPORT', detail: `Employees from HR's register: ${added} added, ${updated} updated, ${marks} attendance mark(s) for ${month || '—'}${missing.length ? ` · branches added: ${missing.join(', ')}` : ''}` })
-    return { added, updated, marks, branches: missing }
+    d.audit.unshift({ id: uid('a-'), at, by: me.id, action: 'EMPLOYEE_IMPORT', detail: `Employees from HR's register: ${added} added, ${updated} updated, ${marks} attendance mark(s) for ${month || '—'}${newFields ? ` · ${newFields} new employee field(s): ${plan.fields.filter((f) => f.isNew).map((f) => f.label).join(', ')}` : ''}${missing.length ? ` · branches added: ${missing.join(', ')}` : ''}` })
+    return { added, updated, marks, branches: missing, newFields }
   })
 }
