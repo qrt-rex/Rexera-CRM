@@ -6,7 +6,8 @@ import {
   HelpCircle, SlidersHorizontal, Users, CalendarCheck2, CalendarDays, TrendingUp, GraduationCap, FileText, Inbox, PartyPopper, BarChart3,
   Wallet, Receipt, Landmark, Trophy, Briefcase, Wrench, MailPlus, ClipboardList, FilePen, Coffee, Package, PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react'
-import type { Perm, Role, User } from '../lib/types'
+import type { FileRef, Perm, Role, User } from '../lib/types'
+import { useFileUrl } from '../components/ProofGallery'
 import { Rexy } from '../components/hr/Mascots'
 import { getDb, useDb } from '../lib/store'
 import { builtinOn, runScheduledRules, startAutomations } from '../lib/automation'
@@ -217,9 +218,7 @@ export function Shell() {
           )}
           {maintenance?.on && !isMaster(me) ? (
             <div className="grid place-items-center py-16 text-center">
-              {/* the company's maintenance picture: public/maintenance.jpg (hidden until that file is added) */}
-              <img src="/maintenance.jpg" alt="Rexera CRM is under maintenance" className="mb-6 max-h-[45vh] w-auto max-w-full rounded-2xl object-contain"
-                onError={(e) => { e.currentTarget.style.display = 'none' }} />
+              <MaintenancePicture file={maintenance.image} />
               <span className="mb-4 grid size-16 place-items-center rounded-2xl bg-warn-soft text-warn"><Wrench className="size-8" /></span>
               <h2 className="text-xl font-extrabold">We'll be right back</h2>
               <p className="mt-1 max-w-md text-sm text-mute">Rexera CRM is under maintenance{maintenance.message ? `: ${maintenance.message}` : '.'} Your work is saved — please check back shortly.</p>
@@ -405,6 +404,17 @@ function HrSidebar({ mini }: { mini: boolean }) {
       </div>
     </div>
   )
+}
+
+/**
+ * The maintenance screen's picture: the one IT Support uploaded (IT dashboard → Maintenance mode), else the built-in
+ * public/maintenance.jpg (hidden when that file isn't there either).
+ */
+function MaintenancePicture({ file }: { file?: FileRef }) {
+  const { url, error } = useFileUrl(file)
+  const cls = 'mb-6 max-h-[45vh] w-auto max-w-full rounded-2xl object-contain'
+  if (file && !error) return url ? <img src={url} alt="Rexera CRM is under maintenance" className={cls} /> : <div className="mb-6 h-48 w-72 max-w-full animate-pulse rounded-2xl bg-card2" />
+  return <img src="/maintenance.jpg" alt="Rexera CRM is under maintenance" className={cls} onError={(e) => { e.currentTarget.style.display = 'none' }} />
 }
 
 function SideGroup({ label, open, onToggle, children, icon: Icon }: { label: string; open: boolean; onToggle: () => void; children: ReactNode; icon?: typeof Home }) {

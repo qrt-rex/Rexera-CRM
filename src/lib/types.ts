@@ -1017,7 +1017,8 @@ export interface Settings {
   companyName: string
   companyGstin: string
   /** while on, only IT and Super Admin can sign in or use the app */
-  maintenance?: { on: boolean; message: string; by: string; at: string }
+  /** `image`: the picture IT Support uploaded for the maintenance screen (kept when maintenance is switched off and on) */
+  maintenance?: { on: boolean; message: string; by: string; at: string; image?: FileRef; imageBy?: string; imageAt?: string }
   /** sessions started before this moment are signed out ("sign out everyone") */
   sessionsValidAfter?: string
   /** after Logout, no sign-in until the next day (IT / Super Admin always can). Off = testing: people can sign in again. */

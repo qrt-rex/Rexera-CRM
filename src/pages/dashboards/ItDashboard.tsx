@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Activity, AlertTriangle, ArrowLeftRight, Bug, Camera, FileSpreadsheet, GraduationCap, CheckCircle2, DatabaseBackup, DatabaseZap, Download, Eraser, HardDrive, KeyRound, LayoutGrid, Lock, LogOut, RefreshCcw,
-  ScrollText, ShieldAlert, ShieldCheck, Stethoscope, Unlock, UserCog, UserPlus, Users, Wrench, XCircle, type LucideIcon,
+  ScrollText, ShieldAlert, ShieldCheck, Stethoscope, Trash2, Unlock, Upload, UserCog, UserPlus, Users, Wrench, XCircle, Image as ImageIcon, type LucideIcon,
 } from 'lucide-react'
+import { useFileUrl } from '../../components/ProofGallery'
 import type { Role } from '../../lib/types'
 import { approxDataBytes, getDb, storageBackend, useDb } from '../../lib/store'
 import { CLOUD } from '../../lib/cloud'
@@ -13,7 +14,7 @@ import { isPhone, normPhone } from '../../lib/format'
 import { SetPasswordModal } from '../../components/SetPasswordModal'
 import { ROLES, isMaster, roleLabel, rolesOf } from '../../lib/rbac'
 import {
-  autoSnapshotIfDue, cleanupOldData, createSnapshot, downloadBackup, keyStatus, runHealthCheck, setMaintenance, signOutEveryone, unlockAllAccounts,
+  autoSnapshotIfDue, cleanupOldData, createSnapshot, downloadBackup, keyStatus, MAINTENANCE_IMAGE_TYPES, runHealthCheck, setMaintenance, setMaintenanceImage, signOutEveryone, unlockAllAccounts,
   type HealthItem,
 } from '../../lib/itops'
 import { ago, downloadCsv, fmtDateTime, today } from '../../lib/format'
@@ -40,6 +41,40 @@ function Action({ icon: Icon, label, hint, tone, onClick, to, busy, danger }: { 
   return to ? <Link to={to} className={cls}>{inner}</Link> : <button disabled={busy} onClick={onClick} className={cls}>{inner}</button>
 }
 
+/** Maintenance mode → the picture on the maintenance screen: upload, preview, change or remove (IT Support). */
+function MaintenanceImage() {
+  const db = useDb()
+  const me = useMe()
+  const run = useRun()
+  const m = db.settings.maintenance
+  const img = m?.image
+  const { url, error } = useFileUrl(img)
+  const pick = useRef<HTMLInputElement>(null)
+  const [busy, setBusy] = useState(false)
+  const act = async (file: File | null, ok: string) => { setBusy(true); await run(() => setMaintenanceImage(me, file), ok); setBusy(false) }
+  return (
+    <div className="mt-4">
+      <p className="mb-1.5 text-sm font-semibold">Picture on the maintenance screen</p>
+      <div className="grid min-h-36 place-items-center overflow-hidden rounded-xl border border-dashed border-line bg-card2 p-2">
+        {img ? (url ? <img src={url} alt="Maintenance screen picture" className="max-h-48 w-auto max-w-full rounded-lg object-contain" />
+          : error ? <span className="px-3 text-center text-xs text-bad">The picture could not be loaded — upload it again.</span>
+            : <span className="text-xs text-mute">Loading…</span>)
+          : <span className="flex flex-col items-center gap-1 px-3 text-center text-xs text-mute"><ImageIcon className="size-6" />No picture yet — users see the standard maintenance screen.</span>}
+      </div>
+      <input ref={pick} type="file" accept={MAINTENANCE_IMAGE_TYPES} className="hidden" aria-label="Choose the maintenance picture"
+        onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) act(f, img ? 'Picture changed — shown during maintenance' : 'Picture uploaded — shown during maintenance') }} />
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <Button size="sm" icon={Upload} loading={busy} onClick={() => pick.current?.click()}>{img ? 'Change picture' : 'Upload image'}</Button>
+        {img && <Button size="sm" variant="outline" icon={Trash2} disabled={busy} onClick={() => act(null, 'Picture removed')}>Remove</Button>}
+      </div>
+      <p className="mt-1.5 text-[11px] text-mute">
+        JPG, PNG, WebP or GIF, up to 5 MB. Shown automatically whenever maintenance mode is on.
+        {img && <> · {img.name}{m?.imageAt ? ` · ${fmtDateTime(m.imageAt)}` : ''}{m?.imageBy ? ` by ${userName(db, m.imageBy)}` : ''}</>}
+      </p>
+    </div>
+  )
+}
+
 export function ItDashboard() {
   const db = useDb()
   const me = useMe()
@@ -58,6 +93,7 @@ export function ItDashboard() {
   const [resetOpen, setResetOpen] = useState(false)
   const [maintOpen, setMaintOpen] = useState(false)
   const [maintMsg, setMaintMsg] = useState(db.settings.maintenance?.message ?? '')
+  const [picOpen, setPicOpen] = useState(false)
   const autoRan = useRef(false)
 
   const check = async () => { setBusy('health'); setHealth(await runHealthCheck()); setBusy('') }
@@ -96,7 +132,8 @@ export function ItDashboard() {
       {maint?.on && (
         <div className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-warn/40 bg-warn-soft px-4 py-3 text-sm">
           <Wrench className="size-5 text-warn" /><b className="text-warn">Maintenance mode is ON</b><span className="text-mute">since {fmtDateTime(maint.at)} by {userName(db, maint.by)}</span>
-          <Button size="sm" className="ml-auto" onClick={() => doAndRecheck('maint', () => setMaintenance(me, false, ''), 'Maintenance mode off — everyone can sign in')}>Turn off</Button>
+          <Button size="sm" variant="outline" className="ml-auto" icon={ImageIcon} onClick={() => setPicOpen(true)}>{maint.image ? 'Change picture' : 'Upload image'}</Button>
+          <Button size="sm" onClick={() => doAndRecheck('maint', () => setMaintenance(me, false, ''), 'Maintenance mode off — everyone can sign in')}>Turn off</Button>
         </div>
       )}
 
@@ -121,6 +158,7 @@ export function ItDashboard() {
         <Action icon={Unlock} tone="amber" label="Unlock all accounts" hint={`${fails.length} with failed sign-ins`} busy={busy === 'unlock'} onClick={() => doAndRecheck('unlock', () => unlockAllAccounts(me), 'All sign-in locks cleared')} />
         <Action icon={RefreshCcw} tone="blue" label="Set a password" hint="Type a new password for someone" onClick={() => setResetOpen(true)} />
         <Action icon={Wrench} tone={maint?.on ? 'red' : 'amber'} label={maint?.on ? 'End maintenance' : 'Maintenance mode'} hint={maint?.on ? 'Let everyone back in' : 'Only IT & Super Admin can sign in'} onClick={() => maint?.on ? doAndRecheck('maint', () => setMaintenance(me, false, ''), 'Maintenance mode off') : setMaintOpen(true)} />
+        <Action icon={ImageIcon} tone="amber" label="Maintenance picture" hint={maint?.image ? 'Change or remove the maintenance screen picture' : 'Upload the picture shown during maintenance'} onClick={() => setPicOpen(true)} />
         <Action icon={LogOut} tone="red" label="Sign out everyone" hint="Ends every session (you stay in)" danger onClick={async () => {
           if (await confirm('Sign out everyone?', 'Every signed-in person is signed out and must sign in again. You stay signed in.', true)) {
             if (await run(() => signOutEveryone(me), 'Everyone has been signed out')) signIn(me.id)
@@ -213,6 +251,12 @@ export function ItDashboard() {
         footer={<><Button variant="outline" onClick={() => setMaintOpen(false)}>Cancel</Button><Button variant="danger" icon={Wrench} onClick={async () => { if (await run(() => setMaintenance(me, true, maintMsg), 'Maintenance mode on')) { setMaintOpen(false); check() } }}>Turn on</Button></>}>
         <p className="mb-3 text-sm text-mute">Everyone except IT Support and Super Admin sees a maintenance screen and can't sign in until you turn it off.</p>
         <Textarea label="Message shown to users" value={maintMsg} onChange={(e) => setMaintMsg(e.target.value)} placeholder="e.g. Upgrading the system, back by 6 pm" />
+        <MaintenanceImage />
+      </Modal>
+      <Modal open={picOpen} onClose={() => setPicOpen(false)} title="Maintenance screen picture" size="sm"
+        footer={<Button variant="outline" onClick={() => setPicOpen(false)}>Done</Button>}>
+        <p className="mb-1 text-sm text-mute">Everyone except IT Support and Super Admin sees this picture whenever maintenance mode is on. Upload, change or remove it at any time — it is kept for the next maintenance.</p>
+        <MaintenanceImage />
       </Modal>
       {confirmNode}
     </div>

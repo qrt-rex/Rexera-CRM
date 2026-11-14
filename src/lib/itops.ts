@@ -10,7 +10,7 @@ import { listDatasets, saveDatasets, type Dataset } from './imports'
 import { addDays, fmtDate, nowIso, uid, ymd } from './format'
 import { cloudConfig, pingCloud } from './supabase'
 import { CLOUD } from './cloud'
-import { exportFiles, fileRefsIn, importFiles, putFiles, storageRoom, storedLegacyIds, type StoredFile } from './files'
+import { checkFile, deleteFile, exportFiles, fileRefsIn, importFiles, putFiles, saveFile, storageRoom, storedLegacyIds, type StoredFile } from './files'
 
 function needMaster(me: User) {
   if (!isMaster(me)) throw new ActionError('Only IT Support or Super Admin can do that.')
@@ -295,9 +295,30 @@ export function signOutEveryone(me: User) {
 export function setMaintenance(me: User, on: boolean, message: string) {
   needMaster(me)
   mutate((d) => {
-    d.settings.maintenance = { on, message: message.trim(), by: me.id, at: nowIso() }
+    // the uploaded picture stays for the next time maintenance is switched on
+    const { image, imageBy, imageAt } = d.settings.maintenance ?? {}
+    d.settings.maintenance = { on, message: message.trim(), by: me.id, at: nowIso(), ...(image ? { image, imageBy, imageAt } : {}) }
     log(d, me.id, on ? 'MAINTENANCE_ON' : 'MAINTENANCE_OFF', message.trim() || '—')
   })
+}
+export const MAINTENANCE_IMAGE_TYPES = 'image/png,image/jpeg,image/webp,image/gif'
+/**
+ * The picture everyone sees on the maintenance screen (IT Support / Super Admin): upload, replace (the old one is
+ * removed from storage) or remove (`file` null). Shown automatically whenever maintenance mode is on.
+ */
+export async function setMaintenanceImage(me: User, file: File | null) {
+  needMaster(me)
+  if (file) checkFile(file, MAINTENANCE_IMAGE_TYPES, 'The picture')
+  const ref = file ? await saveFile(file) : undefined
+  const old = getDb().settings.maintenance?.image
+  mutate((d) => {
+    const m = d.settings.maintenance ?? { on: false, message: '', by: me.id, at: nowIso() }
+    const { image: _drop, imageBy: _b, imageAt: _a, ...rest } = m
+    d.settings.maintenance = { ...rest, ...(ref ? { image: ref, imageBy: me.id, imageAt: nowIso() } : {}) }
+    log(d, me.id, 'MAINTENANCE_IMAGE', ref ? `${old ? 'Replaced' : 'Uploaded'} the maintenance picture: ${ref.name}` : 'Removed the maintenance picture')
+  })
+  if (old && old.id !== ref?.id) await deleteFile(old.id).catch(() => undefined)
+  return ref
 }
 /** Removes read notifications older than 30 days and activity older than 180 days. */
 export function cleanupOldData(me: User) {
